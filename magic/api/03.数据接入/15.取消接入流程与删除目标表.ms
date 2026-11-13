@@ -36,6 +36,7 @@ import java.util.Map
 import java.util.List
 import log
 import tenantRuntime
+import auditEvents
 import portableDdl
 import com.linewell.dataelement.metautil.jdbc.JdbcDriverPropertyResolver
 
@@ -804,6 +805,18 @@ if (deleteTargetTable) {
     }
 }
 }
+// 只用本次授权范围内已经读取的任务名称。预检和实际删除在审计中分开。
+var auditTaskNames = []
+for (task in (targetUnlinked ? [] : (tasks == null ? [] : tasks))) {
+    if (auditTaskNames.size() >= 10) { break }
+    var auditTaskName = text(first(task, ['taskName', 'task_name']))
+    if (!blank(auditTaskName)) { auditTaskNames.add(auditTaskName) }
+}
+try {
+    auditEvents.requestParameters({taskName:auditTaskNames, dryRun:dryRun, deleteTargetTable:deleteTargetTable})
+} catch (auditUnavailable) {
+    // 滚动更新期间旧运行包仍可执行删除；审计摘要不改变业务结果。
+}
 if (dryRun) {
     return {
         dryRun: true,
@@ -906,6 +919,7 @@ if (deleteTargetTable && targetCleanupPending) {
 
 var now = new Date()
 var completedTaskIds = []
+var completedTaskNames = []
 var completedPipelineIds = []
 var pendingTaskIds = []
 for (task in (targetUnlinked ? [] : (tasks == null ? [] : tasks))) {
@@ -913,17 +927,22 @@ for (task in (targetUnlinked ? [] : (tasks == null ? [] : tasks))) {
     var pipelineId = text(first(task, ['pipelineId', 'pipeline_id']))
     if (pendingProcessGroups.contains(processGroupOf(task))) { pendingTaskIds.add(taskId); continue }
     completedTaskIds.add(taskId)
+    var completedTaskName = text(first(task, ['taskName', 'task_name']))
+    if (completedTaskNames.size() < 10 && !blank(completedTaskName)) {
+        completedTaskNames.add(completedTaskName)
+    }
     if (!blank(pipelineId) && !completedPipelineIds.contains(pipelineId)) { completedPipelineIds.add(pipelineId) }
 }
 var pipelineCount = completedPipelineIds.size()
 // 只结算任务与目标登记，监控历史由独立保留策略清理。
-db.transaction(() => {
+var deletedTaskCount = db.transaction(() => {
+var updatedTaskCount = 0
 if (pendingTaskIds.size() > 0) {
     db.table('data_access_agg_task_t').where().in('tid', pendingTaskIds).eq('is_del', 0).update({task_status:0, updated_time:now})
 }
 if (completedTaskIds.size() > 0) {
     db.table('data_access_field_mapping').where().in('task_id', completedTaskIds).eq('is_del', 0).update({is_del:1, updated_time:now})
-    db.table('data_access_agg_task_t').where().in('tid', completedTaskIds).eq('is_del', 0).update({is_del:1, task_status:0, updated_time:now})
+    updatedTaskCount = db.table('data_access_agg_task_t').where().in('tid', completedTaskIds).eq('is_del', 0).update({is_del:1, task_status:0, updated_time:now})
 }
 if (completedPipelineIds.size() > 0) {
     db.table('nifi_pipeline_t').where().in('id', completedPipelineIds).eq('is_del', 0).update({is_del:1, updated_at:now.getTime()})
@@ -981,7 +1000,17 @@ if (deleteTargetTable && !targetCleanupPending) {
     }
     }
 }
+return updatedTaskCount
 })
+
+// 事务成功后才标记已删除任务；待重试流程和仅预检不会生成此参数。
+if (completedTaskIds.size() > 0 && deletedTaskCount == completedTaskIds.size()) {
+    try {
+        auditEvents.requestParameters({deletedTaskId:completedTaskIds, deletedTaskName:completedTaskNames})
+    } catch (auditUnavailable) {
+        // 审计参数记录与旧运行包兼容。
+    }
+}
 
 return {
     sourceTableId: sourceTableId,

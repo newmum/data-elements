@@ -24,106 +24,134 @@
   "responseBodyDefinition": null
 }
 ================================
-
-// 接口：01.角色分页
-// 路由：POST /sym/role/page
-// 业务说明：角色分页查询（含关联用户数、权限数、用户ID列表）；使用请求参数 appId、pageNum、pageSize、name、codeNum、ids；涉及 rm_role_t、rm_user_role_rela_t、rm_user_t 等业务表。
+import java.util.Collections
+import tableRead
+import tableSort
 import tenantAccounts
 import tenantRuntime
-import cn.hutool.db.PageResult
-import cn.dev33.satoken.stp.StpUtil;
-import cn.hutool.core.util.NumberUtil;
 
-
-// 角色分页查询（含关联用户数、权限数、用户ID列表）
-// 路径: /sym/role/page
-// 方法: POST
-// 参数（均为 body 字段）:
-//   appId     - 应用ID（可选，默认取session中的appId）
-//   pageNum   - 页码（默认1）
-//   pageSize  - 每页条数（默认10）
-//   name      - 角色名称模糊查询（可选）
-//   codeNum   - 角色编码模糊查询（可选）
-//   ids       - 角色ID列表，逗号分隔（可选）
-
-
+/**
+ * POST /sym/role/page 分页读取当前租户应用的有效角色。
+ * appId 为空时使用当前会话的应用，支持角色 ID、名称、编码和排序筛选。
+ * 返回 total 与 list，角色包含有效关联用户数、权限数和逗号分隔的用户 ID。
+ */
+var session = null
 try {
-  tenantAccounts.session();
-} catch (e) {
-  // 参数或业务状态不满足要求时立即终止请求。
-  exit -1, "账号未登入或登入已过期";
+    session = tenantAccounts.session()
+} catch (error) {
+    exit -1, '账号未登入或登入已过期'
 }
 
-// ==================== 从 body 获取查询参数 ====================
-var appId    = body?.appId || tenantAccounts.session().get("appId");
-var pageNum  = Math.max(1,(body?.pageNum || 1).asInt());
-var pageSize = Math.min(100,Math.max(1,(body?.pageSize || 10).asInt()));
-var name     = body?.name;      // POST body 字段需通过 body?. 获取
-var codeNum  = body?.codeNum;
-var ids      = body?.ids;
-
-// 将页码转换为偏移量
-var offset = (pageNum - 1) * pageSize;
-var limit = pageSize;
-
-// ==================== 构建查询条件 ====================
-var result = db.table("rm_role_t").where().eq("deleted", 0).eq("app_id", appId);
-
-// 根据ID列表查询
-if (ids != null && ids != "") {
-    var idList = ids.split(",");
-    result = result.in("id", idList);
-}
-
-// 角色编码模糊查询
-if (codeNum != null && codeNum != "") {
-    result = result.like("code_num", "%" + codeNum + "%");
-}
-
-// 角色名称模糊查询
-if (name != null && name != "") {
-    result = result.like("name", "%" + name + "%");
-}
-
-// Count aggregates participate in ORDER BY before the page is selected.
-import tableSort
 var tenantId = tenantRuntime.id()
-var sortColumn = tableSort.field(body, {
-    name:'r.name', createTime:'r.create_time', userCount:'coalesce(uc.total,0)',
-    permCount:'coalesce(pc.total,0)', sortNum:'r.sort_num'
+var appId = body?.appId || session.get('appId')
+var pageNum = Math.max(1, (body?.pageNum || 1).asInt())
+var pageSize = Math.min(100, Math.max(1, (body?.pageSize || 10).asInt()))
+var sortKey = tableSort.field(body, {
+    name: 'name', createTime: 'createTime', userCount: 'userCount',
+    permCount: 'permCount', sortNum: 'sortNum'
 }, 'sortNum')
-var sortDirection = body?.sortField == null ? 'asc' : tableSort.direction(body)
-var filterSql = ' WHERE r.tenant_id=#{tenantId} AND r.deleted=0 AND r.app_id=#{appId}'
-if (ids != null && ids != '') { filterSql = filterSql + ' AND r.id IN (#{idList})' }
-if (name != null && name != '') { var roleNamePattern='%'+name+'%'; filterSql=filterSql+' AND r.name LIKE #{roleNamePattern}' }
-if (codeNum != null && codeNum != '') { var roleCodePattern='%'+codeNum+'%'; filterSql=filterSql+' AND r.code_num LIKE #{roleCodePattern}' }
-var roleList = db.page("""
-SELECT r.*,COALESCE(uc.total,0) AS userCount,COALESCE(pc.total,0) AS permCount
-FROM rm_role_t r
-LEFT JOIN (SELECT rel.role_id,COUNT(DISTINCT rel.user_id) total
-           FROM rm_user_role_rela_t rel JOIN rm_user_t u ON u.id=rel.user_id
-           AND u.tenant_id=#{tenantId} AND u.deleted=0
-           WHERE rel.tenant_id=#{tenantId} GROUP BY rel.role_id) uc ON uc.role_id=r.id
-LEFT JOIN (SELECT role_id,COUNT(DISTINCT app_resource_id) total FROM rm_role_menu_rela_t
-           WHERE tenant_id=#{tenantId} GROUP BY role_id) pc ON pc.role_id=r.id
-""" + filterSql + ' ORDER BY ' + sortColumn + ' ' + sortDirection + ',r.id ASC', Math.min(limit,100), offset)
-
-// One tenant-scoped batch enriches user IDs; count metrics already come from the page SQL.
-var roleIds=roleList.list.map(role=>role.id)
-var userIdsByRole={}
-if(roleIds.size()>0) {
-    var records=db.lower().select("""
-        SELECT DISTINCT rel.role_id,rel.user_id FROM rm_user_role_rela_t rel
-        JOIN rm_user_t u ON u.id=rel.user_id AND u.tenant_id=rel.tenant_id AND u.deleted=0
-        WHERE rel.tenant_id=#{tenantId} AND rel.role_id IN (#{roleIds})
-    """)
-    for(row in records) {var id=row.role_id;if(userIdsByRole[id]==null){userIdsByRole[id]=[]};userIdsByRole[id].add(row.user_id)}
+var direction = body?.sortField == null ? 'asc' : tableSort.direction(body)
+if (appId == null) {
+    return {total: 0, list: []}
 }
-for(role in roleList.list) {role.userIds=(userIdsByRole[role.id] || []).join(',')}
 
-// ==================== 返回结果 ====================
-if (roleList.list == null) {
-    roleList.list = [];
+// 租户取自可信运行上下文，应用参数只筛选该租户内的有效角色。
+var roles = tableRead.from('rm_role_t', 'role_row', tenantId)
+var roleColumn = (column, kind) => tableRead.column('role_row', column, kind)
+roles.where(tableRead.all([
+    tableRead.equal(roleColumn('deleted', 'NUMBER'), 0),
+    tableRead.equal(roleColumn('app_id', 'TEXT'), appId)
+]))
+var ids = body?.ids
+if (ids != null && ids != '') {
+    var requestedRoleIds = []
+    for (roleId in ids.split(',')) {
+        requestedRoleIds.add(roleId)
+    }
+    roles.where(tableRead.in(roleColumn('id', 'TEXT'), requestedRoleIds))
 }
-// 返回当前业务分支的标准结果。
-return roleList;
+var name = body?.name
+if (name != null && name != '') {
+    roles.where(tableRead.like(roleColumn('name', 'TEXT'), '%' + name + '%'))
+}
+var codeNum = body?.codeNum
+if (codeNum != null && codeNum != '') {
+    roles.where(tableRead.like(roleColumn('code_num', 'TEXT'), '%' + codeNum + '%'))
+}
+
+// 关联数在库内去重后参与排序。分页总数只依赖角色筛选，无需执行这两个聚合关联。
+var userLinks = tableRead.from('rm_user_role_rela_t', 'user_link', tenantId)
+var linkRoleId = tableRead.column('user_link', 'role_id', 'TEXT')
+var linkUserId = tableRead.column('user_link', 'user_id', 'TEXT')
+var userId = tableRead.column('active_user', 'id', 'TEXT')
+userLinks.leftJoin('rm_user_t', 'active_user', 'id', 'user_id', [
+    tableRead.equal(tableRead.column('active_user', 'deleted', 'NUMBER'), 0)
+])
+userLinks.where(tableRead.not(tableRead.isNull(userId)))
+roles.leftJoinGroupedProjection(userLinks, 'user_counts', 'role_id', 'id', {
+    role_id: linkRoleId,
+    total: tableRead.countDistinct(linkUserId)
+}, [linkRoleId])
+
+var menuLinks = tableRead.from('rm_role_menu_rela_t', 'menu_link', tenantId)
+var menuRoleId = tableRead.column('menu_link', 'role_id', 'TEXT')
+var menuId = tableRead.column('menu_link', 'app_resource_id', 'TEXT')
+roles.leftJoinGroupedProjection(menuLinks, 'menu_counts', 'role_id', 'id', {
+    role_id: menuRoleId,
+    total: tableRead.countDistinct(menuId)
+}, [menuRoleId])
+
+var fields = {
+    tenantId: roleColumn('tenant_id', 'TEXT'),
+    id: roleColumn('id', 'TEXT'),
+    createId: roleColumn('create_id', 'TEXT'),
+    updateId: roleColumn('update_id', 'TEXT'),
+    deleted: roleColumn('deleted', 'NUMBER'),
+    createTime: roleColumn('create_time', 'TIME'),
+    updateTime: roleColumn('update_time', 'TIME'),
+    status: roleColumn('status', 'NUMBER'),
+    name: roleColumn('name', 'TEXT'),
+    codeNum: roleColumn('code_num', 'TEXT'),
+    description: roleColumn('description', 'TEXT'),
+    appId: roleColumn('app_id', 'TEXT'),
+    sortNum: roleColumn('sort_num', 'NUMBER'),
+    dataScope: roleColumn('data_scope', 'TEXT'),
+    userCount: tableRead.coalesce([tableRead.column('user_counts', 'total', 'NUMBER'), 0]),
+    permCount: tableRead.coalesce([tableRead.column('menu_counts', 'total', 'NUMBER'), 0])
+}
+// 排序空值统一放在末尾，同值以角色 ID 升序稳定分页。
+var page = roles.page(fields, fields[sortKey], direction, 'id', 'asc', pageNum, pageSize)
+var rows = page.rows
+if (rows.size() == 0) {
+    return {total: page.total, list: []}
+}
+
+// 只对当前页角色批量取用户 ID。重新按有效角色和应用关联，使用主表 ID 兼容历史大小写差异。
+var roleIds = rows.map(role => role.id)
+var visibleRoleId = tableRead.column('page_role', 'id', 'TEXT')
+userLinks.leftJoin('rm_role_t', 'page_role', 'id', 'role_id', [
+    tableRead.equal(tableRead.column('page_role', 'deleted', 'NUMBER'), 0),
+    tableRead.equal(tableRead.column('page_role', 'app_id', 'TEXT'), appId)
+])
+userLinks.where(tableRead.in(visibleRoleId, roleIds))
+var members = userLinks.grouped({roleId: visibleRoleId, userId: userId}, [visibleRoleId, userId])
+var userIdsByRole = {}
+for (member in members) {
+    if (userIdsByRole[member.roleId] == null) {
+        userIdsByRole[member.roleId] = []
+    }
+    userIdsByRole[member.roleId].add(member.userId)
+}
+// 仅返回契约字段，分页适配器附加的列不进入响应。
+var list = []
+for (row in rows) {
+    var role = {}
+    for (key in fields.keySet()) {
+        role[key] = row[key]
+    }
+    var userIds = userIdsByRole[role.id] || []
+    Collections.sort(userIds)
+    role.userIds = userIds.join(',')
+    list.add(role)
+}
+return {total: page.total, list: list}

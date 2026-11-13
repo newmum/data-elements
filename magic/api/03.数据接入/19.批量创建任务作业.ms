@@ -22,14 +22,18 @@
   "responseBodyDefinition" : null
 }
 ================================
-// 接口：19.批量创建任务作业
-// 路由：POST /ods/batchCreateJob
-// 业务说明：按当前租户保存批量作业及逐项结果；领取一项后由调用方执行既有
-// /ods/dataAggTaskEnsure，再携租约回报结果。页面离开时不在后台继续执行。
 import tenantRuntime
 import tableSort
+import tableRead
+import tableWrite
 import cn.hutool.core.util.IdUtil
 import cn.hutool.json.JSONUtil
+
+/**
+ * POST /ods/batchCreateJob。按当前租户预览、保存、查看及处理批量创建作业。
+ * 领取一项后由调用方执行 /ods/dataAggTaskEnsure，再凭租约回报。页面离开后可继续。
+ * 创建按请求键幂等，领取、回报、停止和重试在各自事务内校验归属并更新状态。
+ */
 
 var text = value => value == null ? '' : value + ''
 var blank = value => text(value).trim() == ''
@@ -39,6 +43,14 @@ var action = text(body?.action).trim()
 var jobId = text(body?.jobId).trim()
 var now = new Date()
 var leaseCutoff = new Date(now.getTime() - 10 * 60 * 1000)
+var itemColumn = (field, kind) => tableRead.column('i', field, kind)
+var itemRead = () => tableRead.from('ods_batch_create_item_t', 'i', tenantId)
+var itemIdColumn = itemColumn('item_id', 'TEXT')
+var itemIndexColumn = itemColumn('item_index', 'NUMBER')
+var itemStatusColumn = itemColumn('status', 'TEXT')
+var itemJobColumn = itemColumn('job_id', 'TEXT')
+var itemSourceColumn = itemColumn('source_table_id', 'TEXT')
+var itemClaimedColumn = itemColumn('claimed_time', 'TIME')
 
 var visibleDbIdsFor = ids => {
     if (ids.size() == 0) { return [] }
@@ -62,39 +74,47 @@ var ownedJob = id => {
         .eq('tenant_id', tenantId).eq('job_id', id).selectOne()
     return assertJobVisible(job)
 }
-var publicItem = row => ({
-    itemId: row.itemId, jobId: row.jobId, itemIndex: row.itemIndex,
-    sourceTableId: row.sourceTableId, sourceTableName: row.sourceTableName,
-    sourceCatalogId: row.sourceCatalogId, targetTableId: row.targetTableId,
-    targetTableName: row.targetTableName, status: row.status,
-    attemptCount: row.attemptCount, taskId: row.taskId,
-    wasExisting: row.wasExisting, errorMessage: row.errorMessage,
-    claimedTime: row.claimedTime, completedTime: row.completedTime
-})
-var itemsOf = id => {
-    var itemColumn=tableSort.field(body,{sourceTableName:'source_table_name',attemptCount:'attempt_count',item_index:'item_index'},'item_index')
-    var itemDirection=body?.sortDir==null?'asc':tableSort.direction(body)
-    var rows=db.select('select * from ods_batch_create_item_t where tenant_id=#{tenantId} and job_id=#{id} order by '+itemColumn+' '+itemDirection+',item_index asc,item_id asc limit 501')
-    if(rows.size()>500){exit 413,'作业项超过500，请缩小作业范围';}
-    var result = []
-    for (row in rows) { result.add(publicItem(row)) }
-    return result
+var lockJob = id => {
+    var row = tableWrite.lockRow('ods_batch_create_job_t', tenantId, 'job_id', id,
+        ['source_db_id', 'target_db_id', 'stop_requested'], {})
+    if (row == null) { exit 404, '批量作业不存在或不属于当前租户' }
+    return {sourceDbId: row.source_db_id, targetDbId: row.target_db_id, stopRequested: row.stop_requested}
+}
+var itemProjection = {
+    itemId: itemIdColumn, jobId: itemJobColumn, itemIndex: itemIndexColumn,
+    sourceTableId: itemSourceColumn, sourceTableName: itemColumn('source_table_name', 'TEXT'),
+    sourceCatalogId: itemColumn('source_catalog_id', 'TEXT'), targetTableId: itemColumn('target_table_id', 'TEXT'),
+    targetTableName: itemColumn('target_table_name', 'TEXT'), status: itemStatusColumn,
+    attemptCount: itemColumn('attempt_count', 'NUMBER'), taskId: itemColumn('task_id', 'TEXT'),
+    wasExisting: itemColumn('was_existing', 'NUMBER'), errorMessage: itemColumn('error_message', 'LOB'),
+    claimedTime: itemClaimedColumn, completedTime: itemColumn('completed_time', 'TIME')
+}
+var itemsOf = (id, submissionOrder) => {
+    var sort = submissionOrder ? 'item_index' : tableSort.field(body,
+        {sourceTableName: 'source_table_name', attemptCount: 'attempt_count', item_index: 'item_index'}, 'item_index')
+    var direction = submissionOrder || body?.sortDir == null ? 'asc' : tableSort.direction(body)
+    var primary = sort == 'source_table_name' ? itemProjection.sourceTableName
+        : (sort == 'attempt_count' ? itemProjection.attemptCount : itemIndexColumn)
+    var query = itemRead()
+    query.where(tableRead.equal(itemJobColumn, id))
+    var rows = query.rows(itemProjection, [primary, itemIndexColumn, itemIdColumn], [direction, 'asc', 'asc'], 501)
+    if (rows.size() > 500) { exit 413, '作业项超过500，请缩小作业范围' }
+    return rows
 }
 var detail = id => {
-    var job = ownedJob(id)
-    if (job == null) { exit 404, '批量作业不存在或不属于当前租户' }
-    return {job: job, items: itemsOf(id)}
+    return {job: ownedJob(id), items: itemsOf(id, false)}
 }
 var countsOf = id => {
-    return {
-        pending: db.table('ods_batch_create_item_t').where().eq('tenant_id', tenantId).eq('job_id', id).eq('status', 'PENDING').count(),
-        running: db.table('ods_batch_create_item_t').where().eq('tenant_id', tenantId).eq('job_id', id).eq('status', 'RUNNING').count(),
-        succeeded: db.table('ods_batch_create_item_t').where().eq('tenant_id', tenantId).eq('job_id', id).eq('status', 'SUCCEEDED').count(),
-        failed: db.table('ods_batch_create_item_t').where().eq('tenant_id', tenantId).eq('job_id', id).eq('status', 'FAILED').count()
-    }
+    var query = itemRead()
+    query.where(tableRead.equal(itemJobColumn, id))
+    return query.grouped({
+        pending: tableRead.countIf(tableRead.equal(itemStatusColumn, 'PENDING')),
+        running: tableRead.countIf(tableRead.equal(itemStatusColumn, 'RUNNING')),
+        succeeded: tableRead.countIf(tableRead.equal(itemStatusColumn, 'SUCCEEDED')),
+        failed: tableRead.countIf(tableRead.equal(itemStatusColumn, 'FAILED'))
+    }, [])[0]
 }
-var refreshStatus = id => {
-    var job = ownedJob(id)
+var refreshStatus = (id, job) => {
     var counts = countsOf(id)
     var status = 'RUNNING'
     var finished = null
@@ -105,7 +125,7 @@ var refreshStatus = id => {
         status = counts.failed == 0 ? 'SUCCEEDED' : (counts.succeeded > 0 ? 'PARTIAL' : 'FAILED')
         finished = new Date()
     }
-    db.table('ods_batch_create_job_t').where().eq('tenant_id', tenantId).eq('job_id', id)
+    db.table('ods_batch_create_job_t').withBlank().where().eq('tenant_id', tenantId).eq('job_id', id)
         .update({status: status, finished_time: finished, updated_time: new Date()})
     return status
 }
@@ -195,12 +215,24 @@ if (action == 'preview') {
     if (previewDb == null) {
         exit 403, '来源库不存在或不在当前租户有效记录范围内'
     }
-    var sourceColumn=tableSort.field(body,{tableName:"coalesce(nullif(table_name_cn,''),table_name)"},'tableName')
-    var sourceDirection=tableSort.direction(body)
-    var tablePage=db.page("""select * from db_table_t where tenant_id=#{tenantId} and datasource_id=#{previewDbId} and is_del=0 and asset_status>0 and business_type in ('业务表','日志表','字典表') order by ${sourceColumn} ${sourceDirection},tid asc""",pageSize,(pageNum-1)*pageSize)
-    var tableRows = tablePage == null || tablePage.list == null ? [] : tablePage.list
+    // 保留预览只接受表名排序的接口校验。
+    tableSort.field(body, {tableName: 'tableName'}, 'tableName')
+    var sourceDirection = tableSort.direction(body)
+    var source = tableRead.from('db_table_t', 's', tenantId)
+    var sourceColumn = field => tableRead.column('s', field, 'TEXT')
+    var nameColumn = sourceColumn('table_name')
+    var chineseNameColumn = sourceColumn('table_name_cn')
+    source.where(tableRead.equal(sourceColumn('datasource_id'), previewDbId))
+    source.where(tableRead.equal(tableRead.column('s', 'is_del', 'NUMBER'), 0))
+    source.where(tableRead.greaterThan(tableRead.column('s', 'asset_status', 'NUMBER'), 0))
+    source.where(tableRead.in(sourceColumn('business_type'), ['业务表', '日志表', '字典表']))
+    var sourceName = tableRead.coalesce([tableRead.blankAsNull(chineseNameColumn), nameColumn])
+    var tablePage = source.page({tid: sourceColumn('tid'), tableName: nameColumn, tableNameCn: chineseNameColumn,
+        sourceCatalogId: sourceColumn('source_catalog_id')}, sourceName, sourceDirection, 'tid', 'asc',
+        pageNum, pageSize, true)
+    var tableRows = tablePage.rows
     if (tableRows.size() == 0) {
-        return {list: [], total: tablePage == null ? 0 : tablePage.total}
+        return {list: [], total: tablePage.total}
     }
     var ids = []
     for (row in tableRows) { ids.add(text(row.tid)) }
@@ -298,7 +330,8 @@ if (action == 'create') {
             || text(priorJob.matchRuleJson) != ruleJson) {
             exit 409, '幂等键已用于不同的来源库、目标库或匹配规则'
         }
-        var priorItems = itemsOf(priorJob.jobId)
+        // 幂等比较以提交时顺序为准，详情排序只影响展示。
+        var priorItems = itemsOf(priorJob.jobId, true)
         if (priorItems.size() != requestedPairs.size()) {
             exit 409, '幂等键已用于不同的来源表清单'
         }
@@ -316,7 +349,8 @@ if (action == 'create') {
         .eq('tid', sourceDbId).eq('is_del', 0).selectOne()
     var targetDb = db.table('db_datasource_t').where().eq('tenant_id', tenantId)
         .eq('tid', targetDbId).eq('is_del', 0).selectOne()
-    if (sourceDb == null || targetDb == null || (first(sourceDb, ['assetStatus', 'asset_status']) == null || first(sourceDb, ['assetStatus', 'asset_status'])::int <= 0)) {
+    var sourceStatus = sourceDb?.assetStatus == null ? sourceDb?.asset_status : sourceDb.assetStatus
+    if (sourceDb == null || targetDb == null || sourceStatus == null || sourceStatus::int <= 0) {
         exit 400, '所选数据库不存在、不属于当前租户或来源库尚未完成登记'
     }
     // 当前租户的数据源只批量读取一次，随后每个
@@ -331,88 +365,90 @@ if (action == 'create') {
         .eq('request_key', requestKey).selectOne()
     if (prior != null) { return verifySameRequest(prior) }
     try {
-    return db.transaction(() => {
-        var existing = db.table('ods_batch_create_job_t').where().eq('tenant_id', tenantId)
-            .eq('request_key', requestKey).selectOne()
-        if (existing != null) { return verifySameRequest(existing) }
-        var newJobId = IdUtil.simpleUUID()
-        var jobName = text(body?.jobName).trim()
-        if (blank(jobName)) { jobName = '批量创建任务' }
-        if (jobName.length() > 255) { exit 400, '作业名称不能超过255个字符' }
-        // 每组最多 100 个 ID；查询带当前会话租户和已登记来源库约束。
-        // 关联目标每组只取最多 2N+1 行；超过 N 个唯一目标的请求必定无效，
-        // 因此无需全量装载异常的一对多关系。
-        var sourceRows = {}
-        var targetGroups = {}
-        var offset = 0
-        while (offset < sourceIds.size()) {
-            var end = offset + 100
-            if (end > sourceIds.size()) { end = sourceIds.size() }
-            var chunk = sourceIds.subList(offset::int, end::int)
-            var sourcesInChunk = db.table('db_table_t').where()
-                .eq('tenant_id', tenantId).eq('datasource_id', sourceDbId)
-                .eq('is_del', 0).in('tid', chunk).select()
-            for (sourceRow in sourcesInChunk) {
-                sourceRows['id:' + text(sourceRow.tid)] = sourceRow
+        return db.transaction(() => {
+            var existing = db.table('ods_batch_create_job_t').where().eq('tenant_id', tenantId)
+                .eq('request_key', requestKey).selectOne()
+            if (existing != null) { return verifySameRequest(existing) }
+            var newJobId = IdUtil.simpleUUID()
+            var jobName = text(body?.jobName).trim()
+            if (blank(jobName)) { jobName = '批量创建任务' }
+            if (jobName.length() > 255) { exit 400, '作业名称不能超过255个字符' }
+            // 每组最多 100 个 ID；查询带当前会话租户和已登记来源库约束。
+            // 关联目标每组只取最多 2N+1 行；超过 N 个唯一目标的请求必定无效，
+            // 因此无需全量装载异常的一对多关系。
+            var sourceRows = {}
+            var targetGroups = {}
+            var offset = 0
+            while (offset < sourceIds.size()) {
+                var end = offset + 100
+                if (end > sourceIds.size()) { end = sourceIds.size() }
+                var chunk = sourceIds.subList(offset::int, end::int)
+                var sourcesInChunk = db.table('db_table_t').where()
+                    .eq('tenant_id', tenantId).eq('datasource_id', sourceDbId)
+                    .eq('is_del', 0).in('tid', chunk).select()
+                for (sourceRow in sourcesInChunk) {
+                    sourceRows['id:' + text(sourceRow.tid)] = sourceRow
+                }
+                var maxLinkedRows = chunk.size() * 2 + 1
+                var linkedPage = db.table('db_table_t').where()
+                    .eq('tenant_id', tenantId).eq('is_del', 0)
+                    .in('source_table_id', chunk).page(maxLinkedRows, 0)
+                if (linkedPage == null || linkedPage.total > chunk.size() * 2) {
+                    exit 400, '物化目标表关联过多，请核对来源表后分批重试'
+                }
+                var linkedRows = linkedPage.list == null ? [] : linkedPage.list
+                for (targetRow in linkedRows) {
+                    var linkedSourceId = text(targetRow.sourceTableId)
+                    var linkedTargetId = text(targetRow.tid)
+                    if (linkedTargetId == linkedSourceId) { continue }
+                    var key = 'id:' + linkedSourceId
+                    if (targetGroups[key] == null) { targetGroups[key] = [] }
+                    targetGroups[key].add(targetRow)
+                }
+                offset = offset + 100
             }
-            var maxLinkedRows = chunk.size() * 2 + 1
-            var linkedPage = db.table('db_table_t').where()
-                .eq('tenant_id', tenantId).eq('is_del', 0)
-                .in('source_table_id', chunk).page(maxLinkedRows, 0)
-            if (linkedPage == null || linkedPage.total > chunk.size() * 2) {
-                exit 400, '物化目标表关联过多，请核对来源表后分批重试'
+            // 已批量预取所有来源与关联目标。这里逐 ID 校验只访问内存，
+            // 缺失、跨租户、非本库或一对多任一项都会拒绝整单，不静默跳过。
+            var checkedItems = []
+            for (requestedItem in requested) {
+                var sourceId = text(requestedItem?.sourceTableId).trim()
+                var targetId = text(requestedItem?.targetTableId).trim()
+                var sourceTable = sourceRows['id:' + sourceId]
+                var linkedTargets = targetGroups['id:' + sourceId]
+                var targetTable = linkedTargets == null || linkedTargets.size() != 1 ? null : linkedTargets[0]
+                if (sourceTable == null || (sourceTable.assetStatus == null || sourceTable.assetStatus::int <= 0)
+                    || !['业务表', '日志表', '字典表'].contains(text(sourceTable.businessType))
+                    || targetTable == null || text(targetTable.tid) != targetId
+                    || text(targetTable.datasourceId) != targetDbId) {
+                    exit 400, '来源表或唯一物化目标表已变化，请刷新匹配预览'
+                }
+                checkedItems.add({sourceId: sourceId, sourceTable: sourceTable,
+                    targetId: targetId, targetTable: targetTable})
             }
-            var linkedRows = linkedPage.list == null ? [] : linkedPage.list
-            for (targetRow in linkedRows) {
-                var linkedSourceId = text(targetRow.sourceTableId)
-                var linkedTargetId = text(targetRow.tid)
-                if (linkedTargetId == linkedSourceId) { continue }
-                var key = 'id:' + linkedSourceId
-                if (targetGroups[key] == null) { targetGroups[key] = [] }
-                targetGroups[key].add(targetRow)
-            }
-            offset = offset + 100
-        }
-        // 已批量预取所有来源与关联目标。这里逐 ID 校验只访问内存，
-        // 缺失、跨租户、非本库或一对多任一项都会拒绝整单，不静默跳过。
-        var checkedItems = []
-        for (requestedItem in requested) {
-            var sourceId = text(requestedItem?.sourceTableId).trim()
-            var targetId = text(requestedItem?.targetTableId).trim()
-            var sourceTable = sourceRows['id:' + sourceId]
-            var linkedTargets = targetGroups['id:' + sourceId]
-            var targetTable = linkedTargets == null || linkedTargets.size() != 1 ? null : linkedTargets[0]
-            if (sourceTable == null || (sourceTable.assetStatus == null || sourceTable.assetStatus::int <= 0)
-                || !['业务表', '日志表', '字典表'].contains(text(sourceTable.businessType))
-                || targetTable == null || text(targetTable.tid) != targetId
-                || text(targetTable.datasourceId) != targetDbId) {
-                exit 400, '来源表或唯一物化目标表已变化，请刷新匹配预览'
-            }
-            checkedItems.add({sourceId: sourceId, sourceTable: sourceTable,
-                targetId: targetId, targetTable: targetTable})
-        }
-        db.table('ods_batch_create_job_t').primary('job_id').insert({
-            job_id: newJobId, tenant_id: tenantId, request_key: requestKey,
-            job_name: jobName, source_db_id: sourceDbId, target_db_id: targetDbId,
-            match_rule_json: ruleJson, status: 'RUNNING',
-            stop_requested: 0, total_count: requested.size(),
-            created_time: now, updated_time: now
-        })
-        var index = 0
-        for (checked in checkedItems) {
-            db.table('ods_batch_create_item_t').primary('item_id').insert({
-                item_id: IdUtil.simpleUUID(), job_id: newJobId, tenant_id: tenantId,
-                item_index: index, source_table_id: checked.sourceId,
-                source_table_name: text(checked.sourceTable.tableName),
-                source_catalog_id: checked.sourceTable.sourceCatalogId,
-                target_table_id: checked.targetId, target_table_name: text(checked.targetTable.tableName),
-                status: 'PENDING', attempt_count: 0,
+            db.table('ods_batch_create_job_t').primary('job_id').insert({
+                job_id: newJobId, tenant_id: tenantId, request_key: requestKey,
+                job_name: jobName, source_db_id: sourceDbId, target_db_id: targetDbId,
+                match_rule_json: ruleJson, status: 'RUNNING',
+                stop_requested: 0, total_count: requested.size(),
                 created_time: now, updated_time: now
             })
-            index = index + 1
-        }
-        return detail(newJobId)
-    })
+            var itemRows = []
+            var index = 0
+            for (checked in checkedItems) {
+                itemRows.add({
+                    item_id: IdUtil.simpleUUID(), job_id: newJobId, tenant_id: tenantId,
+                    item_index: index, source_table_id: checked.sourceId,
+                    source_table_name: text(checked.sourceTable.tableName),
+                    source_catalog_id: checked.sourceTable.sourceCatalogId,
+                    target_table_id: checked.targetId, target_table_name: text(checked.targetTable.tableName),
+                    status: 'PENDING', attempt_count: 0,
+                    created_time: now, updated_time: now
+                })
+                index = index + 1
+            }
+            db.table('ods_batch_create_item_t').batchInsert(itemRows)
+            return detail(newJobId)
+        })
     } catch (e) {
         // 同一幂等键的并发首提可能在唯一约束处竞争；事务回滚后回读胜者。
         var winner = db.table('ods_batch_create_job_t').where().eq('tenant_id', tenantId)
@@ -425,8 +461,7 @@ if (action == 'create') {
 if (blank(jobId)) { exit 400, 'jobId不能为空' }
 if (action == 'stop') {
     return db.transaction(() => {
-        var job = db.selectOne('SELECT * FROM ods_batch_create_job_t WHERE tenant_id = #{tenantId} AND job_id = #{jobId} FOR UPDATE')
-        assertJobVisible(job)
+        assertJobVisible(lockJob(jobId))
         db.table('ods_batch_create_job_t').where().eq('tenant_id', tenantId).eq('job_id', jobId)
             .update({stop_requested: 1, status: 'STOPPED', finished_time: new Date(), updated_time: new Date()})
         return detail(jobId)
@@ -434,80 +469,132 @@ if (action == 'stop') {
 }
 if (action == 'retry') {
     return db.transaction(() => {
-        var job = db.selectOne('SELECT * FROM ods_batch_create_job_t WHERE tenant_id = #{tenantId} AND job_id = #{jobId} FOR UPDATE')
-        assertJobVisible(job)
+        assertJobVisible(lockJob(jobId))
         var freshRunning = db.table('ods_batch_create_item_t').where().eq('tenant_id', tenantId)
             .eq('job_id', jobId).eq('status', 'RUNNING').gt('claimed_time', leaseCutoff).selectOne()
         if (freshRunning != null) { exit 409, '仍有创建项正在执行，请稍后重试' }
         var counts = countsOf(jobId)
         if (counts.pending + counts.failed + counts.running == 0) { return detail(jobId) }
-        for (status in ['FAILED', 'RUNNING']) {
-            db.table('ods_batch_create_item_t').where().eq('tenant_id', tenantId)
-                .eq('job_id', jobId).eq('status', status).update({
-                    status: 'PENDING', lease_token: null, claimed_time: null,
-                    error_message: null, updated_time: new Date()
-                })
-        }
-        db.table('ods_batch_create_job_t').where().eq('tenant_id', tenantId).eq('job_id', jobId)
+        // 重试释放旧租约，同时清空上一次错误和作业结束时间。
+        db.table('ods_batch_create_item_t').withBlank().where().eq('tenant_id', tenantId)
+            .eq('job_id', jobId).in('status', ['FAILED', 'RUNNING']).update({
+                status: 'PENDING', lease_token: null, claimed_time: null,
+                error_message: null, updated_time: new Date()
+            })
+        db.table('ods_batch_create_job_t').withBlank().where().eq('tenant_id', tenantId).eq('job_id', jobId)
             .update({stop_requested: 0, status: 'RUNNING', finished_time: null, updated_time: new Date()})
         return detail(jobId)
     })
 }
 if (action == 'claim') {
-    return db.transaction(() => {
-        var job = db.selectOne('SELECT * FROM ods_batch_create_job_t WHERE tenant_id = #{tenantId} AND job_id = #{jobId} FOR UPDATE')
-        assertJobVisible(job)
-        if (job.stopRequested == true || text(job.stopRequested) == '1') {
-            return {done: true, stopped: true, status: 'STOPPED'}
-        }
-        // 只允许同一作业同时执行一项；10 分钟失联租约可重新领取，确保断线可续跑。
-        var running = db.table('ods_batch_create_item_t').where().eq('tenant_id', tenantId)
-            .eq('job_id', jobId).eq('status', 'RUNNING').orderBy('item_index', 'asc').selectOne()
-        if (running != null) {
-            var stale = running.claimedTime == null ? running : db.table('ods_batch_create_item_t').where()
-                .eq('tenant_id', tenantId).eq('item_id', running.itemId)
-                .lte('claimed_time', leaseCutoff).selectOne()
-            if (stale == null) { return {done: false, busy: true, status: 'RUNNING'} }
-            db.table('ods_batch_create_item_t').where().eq('tenant_id', tenantId)
-                .eq('item_id', running.itemId).eq('status', 'RUNNING')
-                .update({status: 'PENDING', lease_token: null, claimed_time: null, updated_time: new Date()})
-        }
-        var item = db.table('ods_batch_create_item_t').where().eq('tenant_id', tenantId)
-            .eq('job_id', jobId).eq('status', 'PENDING').orderBy('item_index', 'asc').selectOne()
-        if (item == null) {
-            var finalStatus = refreshStatus(jobId)
-            return {done: true, status: finalStatus}
-        }
-        // 同一租户同一来源表的不同作业也不能并发调用单项确保接口。
-        // 先锁来源表行，使两个作业的领取事务串行，再检查跨作业租约。
-        var sourceTableId = text(item.sourceTableId)
-        var sourceLock = db.selectOne('SELECT tid FROM db_table_t WHERE tenant_id = #{tenantId} AND tid = #{sourceTableId} AND is_del = 0 FOR UPDATE')
-        if (sourceLock == null) { exit 409, '来源表已失效，请刷新批量作业' }
-        var otherRunning = db.table('ods_batch_create_item_t').where()
-            .eq('tenant_id', tenantId).eq('source_table_id', sourceTableId)
-            .eq('status', 'RUNNING').selectOne()
-        if (otherRunning != null) {
-            if (otherRunning.claimedTime != null && otherRunning.claimedTime.after(leaseCutoff)) {
-                return {done: false, busy: true, status: 'RUNNING'}
-            }
-            db.table('ods_batch_create_item_t').where().eq('tenant_id', tenantId)
-                .eq('item_id', otherRunning.itemId).eq('status', 'RUNNING')
-                .update({status: 'PENDING', lease_token: null, claimed_time: null,
-                    updated_time: new Date()})
-        }
-        var lease = IdUtil.simpleUUID()
-        db.table('ods_batch_create_item_t').where().eq('tenant_id', tenantId)
-            .eq('item_id', item.itemId).eq('status', 'PENDING').update({
-                status: 'RUNNING', lease_token: lease,
-                attempt_count: item.attemptCount + 1, claimed_time: new Date(),
-                updated_time: new Date()
-            })
-        db.table('ods_batch_create_job_t').where().eq('tenant_id', tenantId).eq('job_id', jobId)
-            .update({status: 'RUNNING', updated_time: new Date()})
-        var claimedItem = db.table('ods_batch_create_item_t').where()
-            .eq('tenant_id', tenantId).eq('item_id', item.itemId).selectOne()
-        return {done: false, busy: false, item: publicItem(claimedItem), leaseToken: lease}
+    var leaseColumn = itemColumn('lease_token', 'TEXT')
+    var claimProjection = {itemId: itemIdColumn, itemIndex: itemIndexColumn, sourceTableId: itemSourceColumn,
+        attemptCount: itemProjection.attemptCount, leaseToken: leaseColumn}
+    var runningOf = (column, value) => {
+        var query = itemRead()
+        query.where(tableRead.equal(column, value))
+        query.where(tableRead.equal(itemStatusColumn, 'RUNNING'))
+        return query
+    }
+    var hasFreshLease = (column, value) => {
+        var query = runningOf(column, value)
+        query.where(tableRead.greaterThan(itemClaimedColumn, leaseCutoff))
+        return query.rows({itemId: itemIdColumn}, itemIdColumn, 'asc', 1).size() > 0
+    }
+    var claimPlan = () => {
+        if (hasFreshLease(itemJobColumn, jobId)) { return {busy: true, item: null, stale: null} }
+        var expired = runningOf(itemJobColumn, jobId).rows(claimProjection, itemIndexColumn, 'asc', 1)
+        var pendingQuery = itemRead()
+        pendingQuery.where(tableRead.equal(itemJobColumn, jobId))
+        pendingQuery.where(tableRead.equal(itemStatusColumn, 'PENDING'))
+        var pending = pendingQuery.rows(claimProjection, itemIndexColumn, 'asc', 1)
+        var stale = expired.size() == 0 ? null : expired[0]
+        var item = pending.size() == 0 ? null : pending[0]
+        if (stale != null && (item == null || stale.itemIndex < item.itemIndex)) { item = stale }
+        return {busy: false, item: item, stale: stale}
+    }
+    var lockSource = (id, activeOnly) => tableWrite.lockRow('db_table_t', tenantId, 'tid', id,
+        ['tid'], activeOnly ? {is_del: 0} : {})
+    var expiredItems = () => db.table('ods_batch_create_item_t').withBlank().where()
+        .eq('tenant_id', tenantId).eq('status', 'RUNNING')
+        .and(expiry => expiry.isNull('claimed_time').or().lte('claimed_time', leaseCutoff))
+    var resetExpired = query => query.update({
+        status: 'PENDING', lease_token: null, claimed_time: null, updated_time: new Date()
     })
+    var resetOwn = stale => {
+        var query = expiredItems().eq('job_id', jobId).eq('item_id', stale.itemId)
+        if (stale.leaseToken == null) { query.isNull('lease_token') }
+        else { query.eq('lease_token', stale.leaseToken) }
+        if (resetExpired(query) != 1) { exit 409, '创建项租约已变化，请刷新作业后重试' }
+    }
+    var busy = {done: false, busy: true, status: 'RUNNING'}
+    var before = ownedJob(jobId)
+    var attempts = 0
+    while (attempts < 3) {
+        attempts = attempts + 1
+        // 事务外只预选候选。事务内须先取得主键锁，再用新的读视图确认。
+        var tentative = before.stopRequested == true || text(before.stopRequested) == '1'
+            ? {item: null, stale: null} : claimPlan()
+        var result = db.transaction(() => {
+            var job = lockJob(jobId)
+            var sourceTableId = text(tentative.item?.sourceTableId)
+            var staleSourceId = text(tentative.stale?.sourceTableId)
+            var secondSource = !blank(staleSourceId) && staleSourceId != sourceTableId
+            var staleFirst = secondSource && staleSourceId.compareTo(sourceTableId) < 0
+            // 同时涉及两个来源时统一按主键顺序加锁，避免两作业互等。
+            if (staleFirst) { lockSource(staleSourceId, false) }
+            var sourceLock = blank(sourceTableId) ? null : lockSource(sourceTableId, true)
+            if (secondSource && !staleFirst) { lockSource(staleSourceId, false) }
+
+            // MySQL 的普通读从这里开始，能看到等待来源锁期间提交的其他作业租约。
+            assertJobVisible(job)
+            if (job.stopRequested == true || text(job.stopRequested) == '1') {
+                return {done: true, stopped: true, status: 'STOPPED'}
+            }
+            var plan = claimPlan()
+            if (plan.busy) { return busy }
+            if (plan.item?.itemId != tentative.item?.itemId || plan.stale?.itemId != tentative.stale?.itemId) {
+                return {retryClaim: true}
+            }
+            if (plan.item == null) { return {done: true, status: refreshStatus(jobId, job)} }
+            if (sourceLock == null) { exit 409, '来源表已失效，请刷新批量作业' }
+            if (hasFreshLease(itemSourceColumn, sourceTableId)) {
+                if (plan.stale != null) { resetOwn(plan.stale) }
+                return busy
+            }
+
+            // 无有效租约才回收同源历史失联项。只更新预取的有限主键，避免范围锁。
+            var expired = runningOf(itemSourceColumn, sourceTableId)
+                .rows({itemId: itemIdColumn}, itemIdColumn, 'asc', 501)
+            if (expired.size() > 500) { exit 409, '来源表失联创建项过多，请先核查作业' }
+            var expiredIds = []
+            for (row in expired) { expiredIds.add(row.itemId) }
+            if (plan.stale != null && !expiredIds.contains(plan.stale.itemId)) { resetOwn(plan.stale) }
+            if (expiredIds.size() > 0) {
+                var reset = resetExpired(expiredItems().eq('source_table_id', sourceTableId).in('item_id', expiredIds))
+                if (reset != expiredIds.size()) { exit 409, '创建项租约已变化，请刷新作业后重试' }
+            }
+
+            var item = plan.item
+            var lease = IdUtil.simpleUUID()
+            var claimed = db.table('ods_batch_create_item_t').where().eq('tenant_id', tenantId)
+                .eq('job_id', jobId).eq('item_id', item.itemId).eq('status', 'PENDING').update({
+                    status: 'RUNNING', lease_token: lease, attempt_count: item.attemptCount + 1,
+                    claimed_time: new Date(), updated_time: new Date()
+                })
+            if (claimed != 1) { exit 409, '创建项已变化，请刷新作业后重试' }
+            db.table('ods_batch_create_job_t').where().eq('tenant_id', tenantId).eq('job_id', jobId)
+                .update({status: 'RUNNING', updated_time: new Date()})
+            var claimedQuery = itemRead()
+            claimedQuery.where(tableRead.equal(itemJobColumn, jobId))
+            claimedQuery.where(tableRead.equal(itemIdColumn, item.itemId))
+            var claimedItem = claimedQuery.rows(itemProjection, itemIdColumn, 'asc', 1)[0]
+            return {done: false, busy: false, item: claimedItem, leaseToken: lease}
+        })
+        if (result.retryClaim != true) { return result }
+        if (attempts < 3) { before = ownedJob(jobId) }
+    }
+    exit 409, '作业队列已变化，请刷新作业后重试'
 }
 if (action == 'complete') {
     var itemId = text(body?.itemId).trim()
@@ -521,8 +608,7 @@ if (action == 'complete') {
     if (!success && blank(errorMessage)) { errorMessage = '创建接口未返回成功结果' }
     if (errorMessage.length() > 2000) { errorMessage = errorMessage.substring(0, 2000) }
     return db.transaction(() => {
-        var job = db.selectOne('SELECT * FROM ods_batch_create_job_t WHERE tenant_id = #{tenantId} AND job_id = #{jobId} FOR UPDATE')
-        assertJobVisible(job)
+        var job = assertJobVisible(lockJob(jobId))
         var item = db.table('ods_batch_create_item_t').where().eq('tenant_id', tenantId)
             .eq('job_id', jobId).eq('item_id', itemId).selectOne()
         if (item == null) { exit 404, '创建项不存在或不属于当前租户' }
@@ -536,17 +622,21 @@ if (action == 'complete') {
                 exit 409, '回报的接入任务不存在或与当前来源表、目标表不一致'
             }
         }
-        if (item.status == 'SUCCEEDED' && success && item.taskId == taskId) { return detail(jobId) }
+        // 成功回放须同时匹配原回报令牌和任务。被替换的旧租约不能借同一任务冒充成功。
+        if (item.status == 'SUCCEEDED' && success && item.taskId == taskId && item.leaseToken == leaseToken) {
+            return detail(jobId)
+        }
         if (item.status != 'RUNNING' || item.leaseToken != leaseToken) {
             exit 409, '创建项租约已失效，请刷新作业并按幂等流程重试'
         }
-        db.table('ods_batch_create_item_t').where().eq('tenant_id', tenantId)
-            .eq('job_id', jobId).eq('item_id', itemId).eq('lease_token', leaseToken)
+        var changed = db.table('ods_batch_create_item_t').withBlank().where().eq('tenant_id', tenantId)
+            .eq('job_id', jobId).eq('item_id', itemId).eq('status', 'RUNNING').eq('lease_token', leaseToken)
             .update({status: success ? 'SUCCEEDED' : 'FAILED', task_id: success ? taskId : null,
                 was_existing: success ? (body?.existing == true ? 1 : 0) : null,
                 error_message: success ? null : errorMessage,
                 completed_time: new Date(), updated_time: new Date()})
-        refreshStatus(jobId)
+        if (changed != 1) { exit 409, '创建项租约已失效，请刷新作业并按幂等流程重试' }
+        refreshStatus(jobId, job)
         return detail(jobId)
     })
 }

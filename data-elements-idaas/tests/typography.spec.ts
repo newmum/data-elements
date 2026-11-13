@@ -93,7 +93,8 @@ for(const width of [1440,390]) test(`@typography 浮层、长字段与空结果 
  await page.keyboard.press('Escape');await expect(page.getByRole('dialog')).toHaveCount(0);
  await page.goto('/#/console/workforce/permission-groups');
  await expect(page.getByText('此功能尚未开通',{exact:true})).toBeVisible();await audit(page,info,'permission-group-unavailable');
- await page.goto('/#/console/workforce/audit/operations');
+ await page.goto('/#/console/workforce/audit/logs');
+ await page.getByRole('tab',{name:'操作日志',exact:true}).click();
  const detail=page.getByRole('button',{name:/详\s*情/}).first();
  await expect(detail).toBeVisible();await detail.click();await audit(page,info,'audit-event-detail');
  await page.goto('/#/console/workforce/organization');

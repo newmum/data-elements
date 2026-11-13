@@ -8,14 +8,19 @@ import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient;
 import com.linewell.dataelement.integration.nifi.canvas.pipeline.Pipeline;
 import com.linewell.dataelement.integration.nifi.canvas.pipeline.PipelineRepository;
 import com.linewell.dataelement.integration.nifi.canvas.pipeline.PipelineStatus;
+import com.linewell.dataelement.platform.tenant.domain.TenantContext;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.IntStream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.jdbc.core.ConnectionCallback;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -25,6 +30,35 @@ import static org.mockito.Mockito.when;
 
 class PipelineControllerRuntimeListTest {
     private static final ObjectMapper JSON = new ObjectMapper();
+
+    @ParameterizedTest
+    @ValueSource(ints = {20, 100})
+    void flowListUsesOneCountAndOneTenantScopedPageQuery(int size) {
+        var jdbc = mock(JdbcTemplate.class);
+        var nifi = mock(NifiClient.class);
+        var repo = mock(PipelineRepository.class);
+        var controller = new PipelineController(repo, nifi, null, null, jdbc, null, null, null, null);
+        var rows = IntStream.range(0, size)
+                .mapToObj(i -> Map.<String, Object>of("id", "validation-flow-" + i, "name", "测试流程", "node_count", 1))
+                .toList();
+        when(jdbc.queryForObject(contains("WHERE tenant_id=? AND is_del=0"), eq(Long.class),
+                eq("tenant-a"), eq(""), eq(""))).thenReturn((long) size);
+        when(jdbc.queryForList(contains("WHERE p.tenant_id=? AND p.is_del=0"),
+                eq("tenant-a"), eq("tenant-a"), eq(""), eq(""), eq(size), eq(0L))).thenReturn(rows);
+
+        try (var scope = TenantContext.use("tenant-a")) {
+            var result = controller.listPage(1, size, null, null);
+            assertThat(result).containsEntry("total", (long) size).containsEntry("size", size);
+            assertThat((List<?>) result.get("list")).hasSize(size);
+        }
+        verify(jdbc).execute(org.mockito.ArgumentMatchers.<ConnectionCallback<Boolean>>any());
+        verify(jdbc).queryForObject(contains("WHERE tenant_id=? AND is_del=0"), eq(Long.class),
+                eq("tenant-a"), eq(""), eq(""));
+        verify(jdbc).queryForList(contains("WHERE p.tenant_id=? AND p.is_del=0"),
+                eq("tenant-a"), eq("tenant-a"), eq(""), eq(""), eq(size), eq(0L));
+        verifyNoMoreInteractions(jdbc);
+        verifyNoInteractions(repo, nifi);
+    }
 
     @ParameterizedTest
     @ValueSource(ints = {20, 100})

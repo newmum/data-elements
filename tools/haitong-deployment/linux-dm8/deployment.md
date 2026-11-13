@@ -6,6 +6,8 @@ ZIP 包含完整海通前端、后端、DM8 JDBC 驱动、x86_64 和 ARM64 的 J
 
 将 ZIP 解压到新目录。把现有生产配置的连接值填入新目录 `config/application.yml`，按下表保留原地址、账号和模式。若生产已经启用 NiFi，沿用现有租户库内的 `nifi_node_t` 配置。前端原生 NiFi 入口仍可在 `www/haitong/deployment.js` 的 `nifiUiUrl` 配置。
 
+从上一版无 Nacos DM8 包升级时，可复制原有 `config/application.yml`、`config/ports.env` 和 `www/haitong/deployment.js` 到新目录的同名位置。保留新包的后端 JAR 和前端静态资源，并将旧部署目录留作回退。
+
 | 用途 | 在 `config/application.yml` 修改的字段 |
 |---|---|
 | 达梦控制库 | `spring.datasource.url`、`username`、`password` |

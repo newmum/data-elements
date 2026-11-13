@@ -1,7 +1,7 @@
 {
   "version": 1,
   "application": "data-elements-chengtian",
-  "scope": "实际菜单与组织配置、共享数据源、表/视图目录、字段结构与分页预览；风驰只读工作区",
+  "scope": "实际菜单与组织配置、共享数据源、表/视图目录、字段结构与分页预览；风驰只读工作区；行业日志查询、参数快照及本地导出（宿主传输已接入，待浏览器验证）",
   "interfaces": [
     {
       "operation": "GET /portal/index",
@@ -289,7 +289,7 @@
         "kind": "magic",
         "id": "datapd_save_update_datasource_01",
         "file": "magic/api/02.数据盘点/02.数据库表/04.保存数据源.ms",
-        "reviewedSha256": "d63c6841fe6a4f7ecebbae2b6c733b9d19b2b74f326ea84b683e4fe140448395"
+        "reviewedSha256": "7d7e7eddeb0ffad36e28d3590b230fdabb6ea94547458865f79b1cf29e2e9d06"
       },
       "request": {
         "type": "object"
@@ -300,7 +300,7 @@
           "tid"
         ]
       },
-      "review": "离线 API 抓取保留 API 定义及接入方式，响应继续返回数据源标识。"
+      "review": "普通保存返回数据源标识，离线 API 抓取保留 API 定义及接入方式。已审真实差异远不止新增布尔字段：包括普通dryRun无写入、主记录与连接配置同事务、乐观版本409及代理完成updateIfExists复核；Mock仍有deferIndexRefresh仅接受true、未支持completion等差异。尚未按真实对外影响同步Mock/tests，不声称数据源链已对齐；保留本项原reviewedSha256，待完成同步与回归后再更新，详见implementationNotes.dataSourceSaveOrUpdate。"
     },
     {
       "operation": "POST /dst/database/delete",
@@ -372,7 +372,7 @@
         "kind": "magic",
         "id": "52e398a9f2fc429da79048b9ea719b37",
         "file": "magic/api/02.数据盘点/02.数据库表/01.元数据管理/06.获取表列表.ms",
-        "reviewedSha256": "1b2997d195e3d47235251fb7f6c65104a003b86a947643ebe546897187f108b2"
+        "reviewedSha256": "5e0e5b12541bb0b1477b42551314a6cfcbcf7ec80f1c2ca440a046a465eed508"
       },
       "request": {
         "type": "object"
@@ -380,7 +380,7 @@
       "response": {
         "type": "any"
       },
-      "review": "首阶段按现行澄天调用方与真实实现核对；仅覆盖数据源闭环。内部重构且契约不变时，可保留模拟实现，完成回归后更新本项审阅摘要和说明。"
+      "review": "登记目录分页及历史 annotatedOnly 数组使用结构化数据库查询。现用澄天和风驰调用的默认数组及快照分页契约保持一致，模拟继续覆盖数据源闭环。真实目录关联、分类、两类计数及历史数组的排序、去重和租户隔离由真实接口与脚本回归覆盖。"
     },
     {
       "operation": "POST /dst/application/register-options",
@@ -590,6 +590,277 @@
         "type": "any"
       },
       "review": "元数据平台与风驰共用已授权表 ID、字段快照和分页预览；只读桥复用这些既有契约，不另造业务 API。"
+    },
+    {
+      "operation": "GET /sym/logs/capabilities",
+      "source": { "kind": "java", "file": "data-elements-parent/src/main/java/com/linewell/dataelement/feature/logmanagement/LogController.java", "state": "pending-magic", "reason": "行业日志能力编排属业务，后续按完整链迁Magic；不以必要采集技术保留扩大业务Java范围。", "reviewedSha256": "3006aa447bc11a912771e98dc755527b9aa440fc84d413920da7c354deb6c268" },
+      "request": { "type": "object" }, "response": { "type": "array", "items": { "type": "string" } },
+      "review": "行业auth/operations/requests/security/exports复用当前session范围；具备operations或requests才追加requestParameters。Java可按授权advertise archives/policies，Mock未实现而不advertise，相关请求返回501，保留此差异；不模拟IDAAS。详见implementationNotes.logs。"
+    },
+    {
+      "operation": "GET /sym/logs/components",
+      "source": { "kind": "java", "file": "data-elements-parent/src/main/java/com/linewell/dataelement/feature/logmanagement/LogComponentService.java", "state": "pending-magic", "reason": "组件读取业务待迁Magic；Mock只消费唯一lowcode当前编译包。", "reviewedSha256": "91a70ebd9d5e400cd115976f270317217872045ee4dac88b0fbd5b7720f1d68b" },
+      "request": { "type": "object" }, "response": { "type": "array", "items": { "type": "object", "required": ["tid", "name", "compile_js", "compile_css"] } },
+      "review": "只映射唯一lowcode源码的已编译log-management组件，不复制低代码、不添加菜单；本任务未编译或发布日志组件，额外导航Node回归仅调用既有编译器生成忽略目录临时产物。宿主传输接入不代表页面已验收。"
+    },
+    {
+      "operation": "GET /sym/logs/auth",
+      "source": { "kind": "java", "file": "data-elements-parent/src/main/java/com/linewell/dataelement/feature/logmanagement/LogQueryService.java", "state": "pending-magic", "reason": "日志查询业务待按链迁Magic。", "reviewedSha256": "7ed9b6514fa4a35b27f27f89db831bf3b6cd6ee16544dd6d10e29e4da73e4002" },
+      "request": { "type": "object" }, "response": { "type": "object", "required": ["list", "total", "page", "size", "timeZone", "appliedScopeSummary"], "properties": { "list": { "type": "array" }, "total": { "type": "number" } } },
+      "review": "selection先施加当前租户与ALL/ORG/OWNER范围，再调用共享Magic函数并排序分页；默认7天、最多90天、size<=100。parameterKeyword缺失/null/空字符串无条件，其余非空参数筛选不支持auth；auth表不含参数列，列表不返回参数对象、摘要或状态。时间边界与每SQL 15s限制见implementationNotes.logs。"
+    },
+    {
+      "operation": "GET /sym/logs/auth/statistics",
+      "source": { "kind": "java", "file": "data-elements-parent/src/main/java/com/linewell/dataelement/feature/logmanagement/LogQueryService.java", "state": "pending-magic", "reason": "日志统计业务待迁Magic。", "reviewedSha256": "7ed9b6514fa4a35b27f27f89db831bf3b6cd6ee16544dd6d10e29e4da73e4002" },
+      "request": { "type": "object" }, "response": { "type": "object", "required": ["total", "success_count", "failure_count", "denied_count", "partial_count"] }, "review": "与auth列表及导出复用selection，先租户角色范围再调用共享函数；不支持auth非空参数筛选，统计全部匹配记录而非当前页。15s为单条SQL超时，不是总HTTP期限。"
+    },
+    {
+      "operation": "GET /sym/logs/auth/{id}",
+      "source": { "kind": "java", "file": "data-elements-parent/src/main/java/com/linewell/dataelement/feature/logmanagement/LogQueryService.java", "state": "pending-magic", "reason": "日志详情业务待迁Magic。", "reviewedSha256": "7ed9b6514fa4a35b27f27f89db831bf3b6cd6ee16544dd6d10e29e4da73e4002" },
+      "request": { "type": "object", "required": ["id"] }, "response": { "type": "object", "required": ["tid", "details"] }, "review": "逐ID校验当前租户与角色范围，无默认7天限制；auth表不含参数列，详情不要求也不返回parameter_snapshot、parameter_capture_status或request_parameters，不伪造OMITTED参数对象。"
+    },
+    {
+      "operation": "POST /sym/logs/auth/batch",
+      "source": { "kind": "java", "file": "data-elements-parent/src/main/java/com/linewell/dataelement/feature/logmanagement/LogQueryService.java", "state": "pending-magic", "reason": "日志批量读取业务待迁Magic。", "reviewedSha256": "7ed9b6514fa4a35b27f27f89db831bf3b6cd6ee16544dd6d10e29e4da73e4002" },
+      "request": { "type": "array", "items": { "type": "string" } }, "response": { "type": "array", "items": { "type": "object" } }, "review": "裸数组1..100不同ID，一次批量查询后逐ID校验租户及角色范围并按输入ID顺序返回；混入越权/跨租户/不存在ID整批403，不返回部分；auth摘要不含任何参数字段。Java已拒null/isBlank/超长/重复ID；Mock拒空串并保输入序，纯空白ID的错误分类差异仍见implementationNotes.logs。"
+    },
+    {
+      "operation": "GET /sym/logs/auth/{id}/items",
+      "source": { "kind": "java", "file": "data-elements-parent/src/main/java/com/linewell/dataelement/feature/logmanagement/LogQueryService.java", "state": "pending-magic", "reason": "批次明细读取业务待迁Magic。", "reviewedSha256": "7ed9b6514fa4a35b27f27f89db831bf3b6cd6ee16544dd6d10e29e4da73e4002" },
+      "request": { "type": "object", "required": ["id"] }, "response": { "type": "object", "required": ["list", "total", "page", "size"] }, "review": "先按当前租户与角色范围校验父事件，再按item_no asc分页取明细；父事件不套默认7天，不按明细行补查，不引入auth参数列。"
+    },
+    {
+      "operation": "GET /sym/logs/operations",
+      "source": { "kind": "java", "file": "data-elements-parent/src/main/java/com/linewell/dataelement/feature/logmanagement/LogQueryService.java", "state": "pending-magic", "reason": "操作日志查询业务待迁Magic。", "reviewedSha256": "7ed9b6514fa4a35b27f27f89db831bf3b6cd6ee16544dd6d10e29e4da73e4002" },
+      "request": { "type": "object", "properties": { "parameterKeyword": { "type": "any" }, "parameterName": { "type": "string" }, "parameterValue": { "type": "string" } } }, "response": { "type": "object", "required": ["list", "total", "page", "size", "timeZone", "appliedScopeSummary"] }, "review": "selection先租户角色范围再调用共享Magic函数；parameterKeyword缺失/null/空字符串无条件，其余仅string且<=200 UTF-16单位，原样不trim，纯空格也作完整字面。contains大小写不敏感，与keyword/result/time及旧白名单精确条件AND，计数/分页前过滤CAPTURED/PARTIAL路径=叶值投影。列表只有parameter_capture_status，不含parameter_summary/parameter_snapshot/request_parameters；每条SQL超时15s非HTTP总时限。"
+    },
+    {
+      "operation": "GET /sym/logs/operations/statistics",
+      "source": { "kind": "java", "file": "data-elements-parent/src/main/java/com/linewell/dataelement/feature/logmanagement/LogQueryService.java", "state": "pending-magic", "reason": "操作日志统计业务待迁Magic。", "reviewedSha256": "7ed9b6514fa4a35b27f27f89db831bf3b6cd6ee16544dd6d10e29e4da73e4002" },
+      "request": { "type": "object" }, "response": { "type": "object", "required": ["total", "success_count", "failure_count", "denied_count", "partial_count"] }, "review": "与operations列表和导出复用selection；先租户角色范围，再共享函数的大小写不敏感字面contains与其他条件AND。parameterKeyword不trim、空白不等于空字符串；统计完整匹配集，每SQL 15s不等于总HTTP超时。"
+    },
+    {
+      "operation": "GET /sym/logs/operations/{id}",
+      "source": { "kind": "java", "file": "data-elements-parent/src/main/java/com/linewell/dataelement/feature/logmanagement/LogQueryService.java", "state": "pending-magic", "reason": "操作日志详情业务待迁Magic。", "reviewedSha256": "7ed9b6514fa4a35b27f27f89db831bf3b6cd6ee16544dd6d10e29e4da73e4002" },
+      "request": { "type": "object", "required": ["id"] }, "response": { "type": "object", "required": ["tid", "details", "parameter_snapshot", "parameter_capture_status"], "properties": { "parameter_snapshot": { "type": "object", "required": ["version", "status", "path", "query", "body", "verified", "notices"], "properties": { "version": { "type": "number" }, "status": { "type": "string" }, "path": { "type": "object" }, "query": { "type": "object" }, "body": { "type": "any" }, "verified": { "type": "object" }, "notices": { "type": "array", "items": { "type": "string" } } } }, "parameter_capture_status": { "type": "string" }, "request_parameters": { "type": "object" } } }, "review": "逐ID授权、不套默认7天；新列已读取解析，parameter_snapshot为六态对象，body可为任意安全JSON值，parameter_capture_status与对象status一致。旧request_parameters仅非空时返回，不是required；请求意图不等于已执行事实，不返回parameter_summary。"
+    },
+    {
+      "operation": "POST /sym/logs/operations/batch",
+      "source": { "kind": "java", "file": "data-elements-parent/src/main/java/com/linewell/dataelement/feature/logmanagement/LogQueryService.java", "state": "pending-magic", "reason": "操作日志批量读取业务待迁Magic。", "reviewedSha256": "7ed9b6514fa4a35b27f27f89db831bf3b6cd6ee16544dd6d10e29e4da73e4002" },
+      "request": { "type": "array", "items": { "type": "string" } }, "response": { "type": "array", "items": { "type": "object" } }, "review": "裸数组1..100不同ID，一次批量读取后逐对象ALL/ORG/OWNER与租户校验，整批拒绝越权，按输入ID顺序返回；参数字段仅parameter_capture_status，无parameter_summary/parameter_snapshot/request_parameters。Java已拒null/isBlank/超长/重复ID；Mock拒空串并保输入序，纯空白ID的错误分类差异仍见implementationNotes.logs。"
+    },
+    {
+      "operation": "GET /sym/logs/operations/{id}/items",
+      "source": { "kind": "java", "file": "data-elements-parent/src/main/java/com/linewell/dataelement/feature/logmanagement/LogQueryService.java", "state": "pending-magic", "reason": "操作批次明细业务待迁Magic。", "reviewedSha256": "7ed9b6514fa4a35b27f27f89db831bf3b6cd6ee16544dd6d10e29e4da73e4002" },
+      "request": { "type": "object", "required": ["id"] }, "response": { "type": "object", "required": ["list", "total", "page", "size"] }, "review": "先校验父事件租户与角色范围，不套默认7天，再按item_no asc分页读取虚构已记载事实；预检不标为已删除，不按明细行补查。"
+    },
+    {
+      "operation": "GET /sym/logs/requests",
+      "source": { "kind": "java", "file": "data-elements-parent/src/main/java/com/linewell/dataelement/feature/logmanagement/LogQueryService.java", "state": "pending-magic", "reason": "接口日志查询业务待迁Magic。", "reviewedSha256": "7ed9b6514fa4a35b27f27f89db831bf3b6cd6ee16544dd6d10e29e4da73e4002" },
+      "request": { "type": "object", "properties": { "parameterKeyword": { "type": "any" } } }, "response": { "type": "object", "required": ["list", "total", "page", "size", "timeZone", "appliedScopeSummary"] }, "review": "同operations复用selection，先租户角色范围再共享函数；parameterKeyword缺失/null/空字符串无条件，其余仅string<=200 UTF-16单位、原样不trim，纯空格也是字面过滤。CAPTURED/PARTIAL路径=叶值投影按大小写不敏感contains与其他条件AND；列表参数字段仅状态，无parameter_summary/parameter_snapshot/request_parameters。HTTP200仍可能业务FAILED，duration_ms历史缺失不伪造0；每SQL 15s非总HTTP期限。"
+    },
+    {
+      "operation": "GET /sym/logs/requests/statistics",
+      "source": { "kind": "java", "file": "data-elements-parent/src/main/java/com/linewell/dataelement/feature/logmanagement/LogQueryService.java", "state": "pending-magic", "reason": "接口日志统计业务待迁Magic。", "reviewedSha256": "7ed9b6514fa4a35b27f27f89db831bf3b6cd6ee16544dd6d10e29e4da73e4002" },
+      "request": { "type": "object" }, "response": { "type": "object", "required": ["total", "success_count", "failure_count", "denied_count", "partial_count"] }, "review": "与requests列表及导出复用selection，租户角色范围后调用共享函数；参数关键词原样字面contains与其他条件AND，统计所有匹配记录而非当前页，每SQL 15s并非总HTTP时限。"
+    },
+    {
+      "operation": "GET /sym/logs/requests/{id}",
+      "source": { "kind": "java", "file": "data-elements-parent/src/main/java/com/linewell/dataelement/feature/logmanagement/LogQueryService.java", "state": "pending-magic", "reason": "接口日志详情业务待迁Magic。", "reviewedSha256": "7ed9b6514fa4a35b27f27f89db831bf3b6cd6ee16544dd6d10e29e4da73e4002" },
+      "request": { "type": "object", "required": ["id"] }, "response": { "type": "object", "required": ["tid", "details", "parameter_snapshot", "parameter_capture_status"], "properties": { "parameter_snapshot": { "type": "object", "required": ["version", "status", "path", "query", "body", "verified", "notices"], "properties": { "version": { "type": "number" }, "status": { "type": "string" }, "path": { "type": "object" }, "query": { "type": "object" }, "body": { "type": "any" }, "verified": { "type": "object" }, "notices": { "type": "array", "items": { "type": "string" } } } }, "parameter_capture_status": { "type": "string" }, "request_parameters": { "type": "object" } } }, "review": "逐ID授权后读取解析新列；parameter_snapshot为六态对象而非JSON字符串，body允许中文嵌套、数组、false/0/null，状态与对象一致。request_parameters仅安全白名单非空时返回，已从required移出；不返回parameter_summary或敏感原值。"
+    },
+    {
+      "operation": "POST /sym/logs/requests/batch",
+      "source": { "kind": "java", "file": "data-elements-parent/src/main/java/com/linewell/dataelement/feature/logmanagement/LogQueryService.java", "state": "pending-magic", "reason": "接口日志批量读取业务待迁Magic。", "reviewedSha256": "7ed9b6514fa4a35b27f27f89db831bf3b6cd6ee16544dd6d10e29e4da73e4002" },
+      "request": { "type": "array", "items": { "type": "string" } }, "response": { "type": "array", "items": { "type": "object" } }, "review": "裸数组1..100不同ID，一次批量读取后逐ID授权，混入越权整批403，按输入ID顺序返回；参数字段仅状态，无parameter_summary/parameter_snapshot/request_parameters。Java已拒null/isBlank/超长/重复ID；Mock拒空串并保输入序，纯空白ID的错误分类差异仍见implementationNotes.logs。"
+    },
+    {
+      "operation": "GET /sym/logs/requests/{id}/items",
+      "source": { "kind": "java", "file": "data-elements-parent/src/main/java/com/linewell/dataelement/feature/logmanagement/LogQueryService.java", "state": "pending-magic", "reason": "接口批次明细业务待迁Magic。", "reviewedSha256": "7ed9b6514fa4a35b27f27f89db831bf3b6cd6ee16544dd6d10e29e4da73e4002" },
+      "request": { "type": "object", "required": ["id"] }, "response": { "type": "object", "required": ["list", "total", "page", "size"] }, "review": "父事件按租户与角色范围授权后分页读取，item_no asc，page/size沿用事件分页上限；不套默认7天，不按明细行补查。"
+    },
+    {
+      "operation": "GET /sym/logs/security",
+      "source": { "kind": "java", "file": "data-elements-parent/src/main/java/com/linewell/dataelement/feature/logmanagement/LogQueryService.java", "state": "pending-magic", "reason": "安全事件查询业务待迁Magic。", "reviewedSha256": "7ed9b6514fa4a35b27f27f89db831bf3b6cd6ee16544dd6d10e29e4da73e4002" },
+      "request": { "type": "object" }, "response": { "type": "object", "required": ["list", "total", "page", "size", "timeZone", "appliedScopeSummary"] }, "review": "selection先当前租户角色范围及SECURITY类别再调用共享函数；非空参数关键词拒绝，缺失/null/空字符串无条件。列表参数字段仅parameter_capture_status，无parameter_summary/parameter_snapshot/request_parameters；状态不授予参数检索能力，每SQL 15s非总HTTP超时。"
+    },
+    {
+      "operation": "GET /sym/logs/security/statistics",
+      "source": { "kind": "java", "file": "data-elements-parent/src/main/java/com/linewell/dataelement/feature/logmanagement/LogQueryService.java", "state": "pending-magic", "reason": "安全事件统计业务待迁Magic。", "reviewedSha256": "7ed9b6514fa4a35b27f27f89db831bf3b6cd6ee16544dd6d10e29e4da73e4002" },
+      "request": { "type": "object" }, "response": { "type": "object", "required": ["total", "success_count", "failure_count", "denied_count", "partial_count"] }, "review": "与security列表及导出复用selection，先租户角色范围及类别，再共享函数；不开放非空参数筛选，统计完整匹配集而非当前页，每SQL超时15s。"
+    },
+    {
+      "operation": "GET /sym/logs/security/{id}",
+      "source": { "kind": "java", "file": "data-elements-parent/src/main/java/com/linewell/dataelement/feature/logmanagement/LogQueryService.java", "state": "pending-magic", "reason": "安全事件详情业务待迁Magic。", "reviewedSha256": "7ed9b6514fa4a35b27f27f89db831bf3b6cd6ee16544dd6d10e29e4da73e4002" },
+      "request": { "type": "object", "required": ["id"] }, "response": { "type": "object", "required": ["tid", "details", "parameter_snapshot", "parameter_capture_status"], "properties": { "parameter_snapshot": { "type": "object", "required": ["version", "status", "path", "query", "body", "verified", "notices"], "properties": { "version": { "type": "number" }, "status": { "type": "string" }, "path": { "type": "object" }, "query": { "type": "object" }, "body": { "type": "any" }, "verified": { "type": "object" }, "notices": { "type": "array", "items": { "type": "string" } } } }, "parameter_capture_status": { "type": "string" }, "request_parameters": { "type": "object" } } }, "review": "逐ID授权后读取解析log_system_t新列，parameter_snapshot为六态对象且与parameter_capture_status一致；Mock安全事件使用OMITTED，不扩大IDAAS或安全正文采集。request_parameters仅旧安全白名单非空时返回，非required；不返回parameter_summary。"
+    },
+    {
+      "operation": "POST /sym/logs/security/batch",
+      "source": { "kind": "java", "file": "data-elements-parent/src/main/java/com/linewell/dataelement/feature/logmanagement/LogQueryService.java", "state": "pending-magic", "reason": "安全事件批量读取业务待迁Magic。", "reviewedSha256": "7ed9b6514fa4a35b27f27f89db831bf3b6cd6ee16544dd6d10e29e4da73e4002" },
+      "request": { "type": "array", "items": { "type": "string" } }, "response": { "type": "array", "items": { "type": "object" } }, "review": "裸数组1..100不同ID，一次批量查询后逐ID校验当前session租户、角色与SECURITY范围，混ID整批拒绝，按输入ID顺序返回；参数字段仅状态，不带parameter_summary/parameter_snapshot/request_parameters。Java已拒null/isBlank/超长/重复ID；Mock拒空串并保输入序，纯空白ID的错误分类差异仍见implementationNotes.logs。"
+    },
+    {
+      "operation": "GET /sym/logs/security/{id}/items",
+      "source": { "kind": "java", "file": "data-elements-parent/src/main/java/com/linewell/dataelement/feature/logmanagement/LogQueryService.java", "state": "pending-magic", "reason": "安全事件批次明细业务待迁Magic。", "reviewedSha256": "7ed9b6514fa4a35b27f27f89db831bf3b6cd6ee16544dd6d10e29e4da73e4002" },
+      "request": { "type": "object", "required": ["id"] }, "response": { "type": "object", "required": ["list", "total", "page", "size"] }, "review": "父事件按当前租户、角色及SECURITY范围授权，不套默认7天；再按item_no asc分页读取虚构明细，不按行补查，不造可见菜单或组织。"
+    },
+    {
+      "operation": "GET /sym/logs/exports",
+      "source": { "kind": "java", "file": "data-elements-parent/src/main/java/com/linewell/dataelement/feature/logmanagement/LogLifecycleService.java", "state": "pending-magic", "reason": "导出任务列表与生命周期业务待迁Magic。", "reviewedSha256": "de820300d7841f20d2af9b202623eb518be9c89798ff1838a3d0cd434f7fe72d" },
+      "request": { "type": "object" }, "response": { "type": "object", "required": ["list", "total", "page", "size"] }, "review": "只列当前租户本人任务，不按ALL扩大所有人；Mock两次合法列表读取推进RUNNING/SUCCESS，生成文件时复用冻结条件与参数投影筛选，故也关联共享函数依赖。真实GET不驱动后台任务；Mock一次筛选后每500行编码，Java每500行offset重读，都不是ID或事务一致性快照。"
+    },
+    {
+      "operation": "POST /sym/logs/exports",
+      "source": { "kind": "java", "file": "data-elements-parent/src/main/java/com/linewell/dataelement/feature/logmanagement/LogLifecycleService.java", "state": "pending-magic", "reason": "在线导出筛选、提交及编排业务待迁Magic。", "reviewedSha256": "de820300d7841f20d2af9b202623eb518be9c89798ff1838a3d0cd434f7fe72d" },
+      "request": { "type": "object", "required": ["kind"], "properties": { "kind": { "type": "string" }, "format": { "type": "string" }, "parameterKeyword": { "type": "any" } } }, "response": { "type": "object", "required": ["id", "status"] }, "review": "返回PENDING；CSV/JSONL、rowLimit<=100000，真实导出复用列表统计selection及共享参数函数。冻结end=min(userEnd,submitCutoff)，事件<end、received_time<=cutoff或null；缺省start从冻结end减7天，不存在默认起点漂移。不是ID/事务快照，提交后迟可见但满足截止条件的记录仍可入选；默认列表end=now+1s与导出end=submitNow不完全同窗。本地Java已补CSV前导空白公式防护及已normalize的created_time回退；JSONL安全快照与旧归档不改，尚未发布本次新源码。"
+    },
+    {
+      "operation": "GET /sym/logs/exports/{id}/download",
+      "source": { "kind": "java", "file": "data-elements-parent/src/main/java/com/linewell/dataelement/feature/logmanagement/LogLifecycleService.java", "state": "pending-magic", "reason": "下载前本人及范围再校验、有效期与文件完整性业务待迁Magic；二进制传输本身为必要技术适配。", "reviewedSha256": "de820300d7841f20d2af9b202623eb518be9c89798ff1838a3d0cd434f7fe72d" },
+      "request": { "type": "object", "required": ["id"] }, "response": { "type": "string" }, "review": "原始CSV(BOM)或JSONL文件，非JSON成功信封；Content-Type、attachment及no-store；本人同租户、源模块和exports授权、范围未缩窄、24小时及SHA256校验。公共宿主已接parseMockBody/mockResponse，待浏览器验证；本地Java与Mock均在控制符清洗后检查前导空白后的=+@-并加单引号，保留普通文本、逗号和双引号转义；历史时间回退已归一created_time，不用当前时间补造。本次未发布新类，不改已有导出文件或旧归档。"
+    }
+  ],
+  "dependencies": [
+    {
+      "operations": [
+        "GET /sym/logs/auth",
+        "GET /sym/logs/auth/statistics",
+        "GET /sym/logs/auth/{id}",
+        "POST /sym/logs/auth/batch",
+        "GET /sym/logs/auth/{id}/items",
+        "GET /sym/logs/operations",
+        "GET /sym/logs/operations/statistics",
+        "GET /sym/logs/operations/{id}",
+        "POST /sym/logs/operations/batch",
+        "GET /sym/logs/operations/{id}/items",
+        "GET /sym/logs/requests",
+        "GET /sym/logs/requests/statistics",
+        "GET /sym/logs/requests/{id}",
+        "POST /sym/logs/requests/batch",
+        "GET /sym/logs/requests/{id}/items",
+        "GET /sym/logs/security",
+        "GET /sym/logs/security/statistics",
+        "GET /sym/logs/security/{id}",
+        "POST /sym/logs/security/batch",
+        "GET /sym/logs/security/{id}/items",
+        "POST /sym/logs/exports",
+        "GET /sym/logs/exports"
+      ],
+      "source": {
+        "kind": "magic-function",
+        "file": "magic/function/01.通用函数/34.日志参数关键词条件.ms",
+        "id": "log_parameter_condition_v1",
+        "path": "/common/log-parameter-keyword-condition",
+        "reviewedSha256": "6f888400e6e8aea4a27923b01f127697df92d7816ad7c1582ce1dcfc5e891ecb"
+      },
+      "review": "非HTTP共享函数依赖，不增加56项HTTP接口数；关联全部20项LogQueryService来源operation及导出提交、Mock任务列表驱动生成。Java selection先施加可信租户与角色范围，再调用函数取得结构化contains谓词并按AND编译为大小写不敏感的字面包含；函数不查库、不接受客户端权限范围。缺失/null/空字符串无条件，其余仅string<=200 UTF-16单位、原样不trim；纯空格也是过滤。checkFunctionDependency实际读取源码摘要与function group.json链，校验元数据ID和完整函数路径；此校验不代替语义、SQL执行或浏览器验收。"
+    }
+  ],
+  "implementationNotes": {
+    "dataSourceSaveOrUpdate": {
+      "state": "blocked-pending-mock-test-alignment",
+      "reviewedChanges": "POST /dst/database/saveOrUpdate真实差异不止新增布尔字段：普通dryRun不得写入、主表与连接配置同事务、乐观版本冲突409、代理完成updateIfExists的范围与版本复核均影响行为。",
+      "blocker": "Mock仍有deferIndexRefresh仅接受true、未支持completion等差异；须按真实对外影响同步Mock及调用/行为测试，覆盖无写入、事务失败、版本冲突与代理完成复核后再更新source.reviewedSha256。本任务保留原摘要作为未同步阻碍，不以日志契约更新虚构数据源同步已完成。"
+    },
+    "logs": {
+      "reviewDate": "2026-11-13",
+      "scope": "共56项HTTP契约，其中25项日志：四类事件各5项，加能力、组件和3项导出；不改变原31项接口数量。顶层dependencies另登记1项非HTTP共享函数依赖，关联20项查询来源operation及2项导出operation，不增加HTTP接口。查询、组件读取及导出业务仍为pending-magic，不因采集技术保留而扩大Java业务保留范围。当前发布与行为状态以本说明为准，operation.review中旧的未发布及空白ID分类差异不代表现状；本说明不变更HTTP契约或任何source.reviewedSha256。",
+      "schemaCompatibility": "request描述归一后的query/path参数或原始JSON请求体，GET分页数字在HTTP中以十进制query字符串传递；response描述成功信封的data，下载例外为原始文件正文。只使用validateShape支持的object/array/string/number/boolean/any及required/properties/items，不使用未支持的$ref、类型数组、oneOf或假装生效的enum/maxLength等字段。parameterKeyword用any兼容null，但仅null或string的约束、200 UTF-16单位、六态、范围及唯一性仍须行为测试验证；any不是允许任意参数类型。checkContracts只校验HTTP来源身份/摘要及dependencies的operation关联、函数摘要、元数据ID与分组完整路径，不自动验证本说明、禁止响应字段或SQL执行语义。",
+      "envelope": {
+        "success": "HTTP 200，{code:0,success:true,data:业务结果}；契约response是data，不是二次包裹的信封。",
+        "errors": "参数及状态错误沿用真实日志错误语义：HTTP 200、code=500、success=false、data=null，error.code分别为API-PARAM-001/MAGIC-RUNTIME-001；权限错误为HTTP 200、code=403；未覆盖接口为HTTP 501，明确拒绝且不穿透真实服务。缺失会话、缓存损坏、存储不足等保留对应Mock错误。"
+      },
+      "access": "仅行业可信会话；租户来自当前session，ALL/ORG/OWNER在筛选、统计、详情、items、批量和导出一致生效。Java selection先施加可信租户、角色与类别范围，再以可信tenantId/kind调用Magic函数；客户端actorId/orgId只能缩小范围，函数不授予权限。批量1..100个不同字符串ID，一次批量预取后仍逐ID校验租户、类别与角色，任一不存在/跨租户/越权整体拒绝，在内存恢复输入序而不逐行补查。Java与Mock均在读取前拒null/空串/纯空白/超长/重复ID，参数错误为HTTP200、业务code500；纯空白ID不再是Mock授权错误403。真实不同物理库的既存记录详情及混合ID整批拒绝已有独立证据，当前租户不变，未写业务数据或修改授权。无平台跨身份域授权，不修改菜单或机构。",
+      "timeAndPagination": "事件列表、统计及导出使用严格带offset的ISO时间，支持Z或±HH:mm与最多9位小数，以纳秒比较；Mock不以Date的宽松日期归一化代替校验。普通事件时间参数missing/null/空白采用默认值，start inclusive、end exclusive，start<end且最大90天；列表默认end=now+1s、start=end-7天，导出默认end=submitNow，默认窗口并不完全相同。receivedBefore含边界；event_time缺失时fallback created_time，两者均空排除。Mock历史种子已为UTC ISO，不再减8小时；Java仅对数据库历史本地时间兼容转换，不对已归一ISO二次偏移。page默认1、1..10000；size默认20、1..100。详情、items与batch按ID授权，不套默认7天。导出任务列表仅同时传startTime/endTime时按创建时间筛选，无默认7天，不将事件窗口规则机械套到任务列表。",
+      "ordering": "事件支持event_time/actor_name/action_code/duration_ms/total_count/success_count/failure_count，默认event_time desc；任务支持created_time/finished_at/name/row_count/actor_name，默认created_time desc。sortDir为asc|desc；先完整筛选再排序分页，同值tid asc，Mock非时间空值后置；Java非时间列显式null后置，事件时间按归一时间轴coalesce排序。时间筛选已排除event_time/created_time双空，不能以此声称所有方言空值排序均经过执行验证。legacy事件以created_time作发生时间，显示Asia/Shanghai；Mock UTC ISO历史时间不重复减8小时，items按item_no asc。",
+      "summaryProjection": "列表与batch仅返回展示摘要：tid、event_time/created_time、legacy、category、actor_kind/actor_id/actor_account/actor_name/actor_org_id/actor_org_name、menu_id/menu_path/page_route/operation_name/function_code、action_code、target_type/target_id/target_name、result/reason_code、ip/user_agent/duration_ms、trace_id/request_id/session_ref/http_status/business_code、total_count/success_count/failure_count、source_app/batch_id/task_id/route_path。operations/requests/security参数字段只有parameter_capture_status；auth表不含任何参数列，摘要也无参数状态。所有列表/batch均无parameter_summary/parameter_snapshot/request_parameters/details/items/parameter_search_text或租户内部字段；Mock已删除种子parameter_summary并对齐此投影，不逐行请求详情。",
+      "parameterContract": {
+        "state": "local-86-published-verified-with-boundaries",
+        "capability": "requestParameters仅在当前行业会话具备operations或requests时追加；不是独立日志模块，不授予auth/security参数检索，也不扩展IDAAS平台身份域。LogController当前已具备此能力追加条件。",
+        "parameterKeyword": "missing/null/空字符串返回无条件；其余必须string且<=200 UTF-16单位，原样不trim，纯空格也作一个完整字面过滤。非空仅支持行业operations/requests及对应导出；不拆词，contains大小写不敏感，中文、引号、反斜杠、空格、%、_、!不解释为SQL通配符或正则。Java selection先施加租户角色范围再调用顶层dependencies登记的Magic函数，将结构化contains谓词与keyword/result/时间及旧精确条件AND组合，在count/statistics/排序/分页及导出截断前筛选。CAPTURED/PARTIAL按安全path/query/body/verified的路径=叶值换行投影，不搜JSON.stringify；排除[REDACTED]/[OMITTED]、notices/状态/摘要及未采集的顶层null。LEGACY不伪造新搜索内容，仍支持旧参数精确白名单。",
+        "legacyExactMatch": {
+          "names": ["id", "tid", "taskId", "sourceTableId", "targetTableId", "targetDbId", "tableId", "datasourceId", "pipelineId", "dryRun", "batchDryRun", "deleteTargetTable", "confirmUnlinkedTarget", "checkPhysicalExistence", "taskName", "deletedTaskId", "deletedTaskName"],
+          "booleans": ["dryRun", "batchDryRun", "deleteTargetTable", "confirmUnlinkedTarget", "checkPhysicalExistence"],
+          "semantics": "旧parameterName+parameterValue成对保留，精确匹配白名单，不改为模糊。名称<=64；值读取上限510个UTF-16单位且有效值<=255个Unicode码点；标识类必须[a-zA-Z0-9_-]{1,64}，布尔值只接受小写true/false；taskName/deletedTaskName为安全文本。敏感原文在检索前拒绝，不能先掩码再命中安全旧索引；已脱敏合法值仍可按旧契约匹配，该旁路修正已有断言并部署本机86。与新parameterKeyword及普通筛选同时使用时仍为AND。taskName/deletedTaskId/deletedTaskName属于服务端核实事实，删除结果不能由请求中的ID或dryRun推断；预检不声称删除已执行。"
+        },
+        "snapshot": "operations/requests/security详情已读取解析新列，parameter_snapshot必须为对象而非JSON字符串：version=1、status六态EMPTY/CAPTURED/PARTIAL/OMITTED/FAILED/LEGACY、path/query/verified对象、body任意合法JSON（含数组、中文嵌套、false、0、null）、notices字符串数组。EMPTY无参数，CAPTURED已采集，PARTIAL仅保留安全部分，OMITTED策略省略，FAILED采集失败，LEGACY历史未采集；不伪造未采集正文，采集失败不等于业务失败。Mock security使用OMITTED且不开放参数检索；auth表无参数列，详情不要求也不返回参数对象或状态，不伪造OMITTED对象。",
+        "legacyRebuild": "AuditParameterSnapshot.fromLegacy(Object)技术入口只读取旧details.requestParameters，经display白名单后再次统一递归脱敏；安全内容仅放额外legacy对象，明确LEGACY/来源未记录，不伪造path/query/body/verified。入口及带legacy对象的往返解析有测试，但不表示现行读取自动重建，当前没有历史回填。",
+        "display": "operations/requests/security的列表、batch、详情parameter_capture_status使用同一六态，详情与parameter_snapshot.status一致；parameter_summary不返回，Mock种子已删除该字段。request_parameters仅在详情旧安全白名单对象非空时返回，不在required中；auth无此参数对象。verified只存服务端核实事实，Mock虚构样例已脱敏，不读取真实请求、口令或凭据。"
+      },
+      "javaReview": {
+        "state": "local-86-published-verified-with-global-blockers",
+        "verified": "已授权本机86后端换包重启，所选31个class字节与当前Maven classes全部相等；新增Magic /common/log-parameter-keyword-condition（ID log_parameter_condition_v1）、所选日志Magic及唯一日志组件已发布，两级缓存刷新、运行回读及函数脚本冷加载通过，所选资源无未发布差异。最终后端完整415套/3304项、7跳过、0失败/错误；共享页面Mock与澄天125/125、IDAAS117/117（含无window请求头兼容）、日志/排版/紧凑布局浏览器34/34及静态UI6397/6397、海通142/142，四前端生产构建及澄天Mock构建通过。真实1440/390无横向滚动、20/100各一次列表请求，nested/false/0/null/businessCode可查，测试敏感原值详情不含且搜索0，当前请求策略排除采集时明确为OMITTED；相同显式筛选CSV摘要与JSONL安全snapshot各1条。真实跨物理库详情/混IDs整批拒绝，未写业务数据或授权。三方言四库124/124、24列DDL及五库export通过。证据分别在logs/audit-parameters的real-validation.json、real-isolation.json、resource-verification.json、native-86/result.json及回归/构建日志；不代表14/生产发布、Mock整页E2E、新快照真实归档或全仓门禁通过。",
+        "implemented": [
+          "LogController已按operations/requests追加requestParameters；四类事件GET列表/统计/详情/items和POST batch、导出路由均真实存在。",
+          "LogQueryService的GET、统计及真实导出复用selection，先租户与角色范围再调用共享Magic函数，结构化contains按AND编译为大小写不敏感字面包含；旧parameterName/parameterValue精确白名单继续保留。每条读取SQL配置15s超时，不是总HTTP时限。",
+          "projection/normalize已读取解析operations/requests/security的parameter_capture_status及详情parameter_snapshot；列表/batch仅参数状态、无parameter_summary/parameter_snapshot/request_parameters。auth表不含参数列，不返回参数对象或状态；详情request_parameters只在非空时返回。Mock已删除种子parameter_summary并对齐投影。",
+          "authorizedEvents已在读库前拒null/isBlank/重复/超长/超100项ID，一次当前范围查询后完整校验ID集合并按输入序返回；20/100项、ALL/ORG/OWNER及摘要/详情均各一次事件SQL，混越权/跨租户仍整批拒绝，不改变正常业务权限。",
+          "LogLifecycleService具备本人任务分页、有界工作线程导出、文件摘要/24h/范围重新校验。提交冻结end=min(userEnd,submitCutoff)、receivedBefore=cutoff；缺省start由冻结end减7天，后台再次selection仍不漂移，但这不是冻结ID或事务快照。",
+          "CSV统一清洗控制符、转义双引号并给前导空白（含NBSP/BOM）后的=+@-加单引号，普通文本保留；历史event_time为null时仅从已normalize的created_time回退，不二次偏移或以当前时间补造。JSONL安全快照、新归档编码及旧归档字节/形状原断言保留。",
+          "AuditParameterSnapshot/AuditRequestParameters及采集入口提供结构化安全快照与同源搜索投影；AuditRecorder为行业REQUEST/OPERATION写三列，已在本机86完成结构及应用发布。fromLegacy只做旧display白名单与再次脱敏，额外legacy明确来源未记录，不伪造来源或执行事实、不回填历史。旧精确参数敏感原文先拒绝，不允许先mask再命中，测试与部署均已包含。"
+        ],
+        "gaps": [
+          "Java能力可按真实授权advertise archives/policies，Mock未实现而不advertise，相关请求501；不写成真实端与Mock已完全对齐。",
+          "范围仅已授权本机86，不含14/生产；IDAAS身份域及参数能力不扩大。所选资源一致，但其他9条历史/并发差异、远端44个Magic与3个lowcode新资源未覆盖或删除。",
+          "Java每500行offset读，Mock一次筛选后分块编码，均非ID/事务一致性快照；提交后迟可见且满足事件及接收截止条件的记录仍可入选，不保证并发变更下强快照。默认列表end=now+1s与默认导出end=submitNow不完全同窗。",
+          "15s仅为每条SQL超时配置，不是整个请求/任务时限或性能达标证据；20/100行两事件SQL、batch20/100一次SQL由后端针对性测试验证，身份/范围解析另有固定开销，Mock零SQL及三方言原生功能验证不替代大数据性能/超时验收。",
+          "Node实际MSW传输与真实编译SFC浏览器fixture通过，但未将真实Mock应用壳、登录/路由、MSW、批量与浏览器文件下载作为整页全栈E2E独立运行。新安全快照归档编码及旧归档兼容test通过、未改旧文件，但真实新快照归档尚未运行，不能声称VERIFIED。",
+          "全仓非本批门禁保留：check-db澄天既有53项（缺43表/9列/1索引），before/after一致、本批新增0；Mock全局saveOrUpdate唯一源码摘要漂移，不刷新摘要掩盖；导航人工智能中心基线不一致；万象主题hash基线不一致且HEAD原字节对照已排除本批改动。不擅自改实现、补库或更新任何source hash，不把专项通过写成全仓通过。"
+        ]
+      },
+      "exports": "POST成功data={id,status:PENDING}；GET只列当前租户当前人员任务，不暴露query/scope/content/sha256/owner内部数据。Mock按两次合法任务列表读取依次PENDING->RUNNING->SUCCESS（失败为FAILED），不是定时后台队列；Java用有界ThreadPoolExecutor及租约异步执行，GET列表不驱动任务。真实导出复用selection；冻结end=min(userEnd,submitCutoff)、receivedBefore=cutoff，事件时间<end且received_time<=cutoff或null；缺省start从冻结end减7天，本就不会随后台执行漂移。默认列表end=now+1s与默认导出end=submitNow不完全同窗。冻结的是条件，不是ID/事务快照：提交后迟可见且满足截止条件的记录仍可入选；Java每500行offset读，Mock一次筛选排序后每500行编码，不夸口并发强一致。默认最多100000行、256MiB上限，Mock每行业最多32项缓存；按场景串行读写，浏览器支持时用同源Web Locks，否则同一Storage对象共享本进程锁。生成取提交与当前范围交集；成功后24h有效，下载要求本人、exports及事件类别权限、当前范围不比原范围窄且SHA256一致，范围缩小/过期/摘要不符拒绝重导。CSV UTF-8 BOM、控制字符清洗/双引号转义；Java与Mock均防前导空白后的=+@-公式、保留普通文本，历史发生时间从已归一created_time回退，不从当前时间补造或二次偏移。JSONL逐行安全快照，不改旧归档；下载为原始文件而非JSON成功信封。本机86当前真实相同显式筛选CSV/JSONL各1条已验证；Mock浏览器下载和真实新快照归档仍未独立运行。",
+      "unsupported": "本批Mock能力不advertise archives/policies；相关所有方法、子路径和动作均HTTP 501明确拒绝，不虚构归档/策略成功，不穿透真实后端。它们不计入25项HTTP契约。",
+      "transportGap": {
+        "state": "msw-and-component-fixture-verified-mock-full-page-unverified",
+        "host": "data-elements-chengtian/src/mock/browser.ts",
+        "plannedTransport": "mock/core/transport.mjs",
+        "observed": "公共browser.ts已接parseMockBody(path,text)及mockResponse(result,HttpResponse)，原始数组正文与raw文件/headers在公共层适配，不另设页面Mock分支；transport.d.mts以泛型Response构造签名兼容MSW。Node实际MSW HttpResponse已验证裸数组、CSV BOM/字节、JSONL字节、状态/响应头与JSON信封。真实编译SFC浏览器fixture覆盖shared/element/platform宿主、1440/390、提交查询/导出条件、参数详情及复制，但使用注入的fixture接口，不是MSW或真实Mock应用整页。真实本机86页面/API/下载另有独立证据，不能替代Mock全栈E2E。",
+        "handoff": "尚需独立验证现有3000端口真实Mock应用整页、裸数组batch与浏览器CSV/JSONL下载，不改端口或新增页面Mock分支。普通列表/详情/统计保持JSON成功信封，下载保留HTTP状态、原始文件字节和响应头；组件fixture和Node传输通过不宣称此链路已完成。"
+      }
+    }
+  },
+  "technicalRetention": [
+    {
+      "kind": "java", "state": "technical-retained",
+      "file": "data-elements-parent/src/main/java/com/linewell/dataelement/platform/audit/AuditMagicRequestInterceptor.java",
+      "reviewedSha256": "73c1aafe8b3e805efc770de9119cb35d0433ff0747df72d55579bdb58b700afe",
+      "reason": "Magic请求生命周期元数据和已解析path/query/body的技术采集入口，跳过编辑器测试/调试，不重读请求流；不是查询/导出业务HTTP条目。"
+    },
+    {
+      "kind": "java", "state": "technical-retained",
+      "file": "data-elements-parent/src/main/java/com/linewell/dataelement/platform/audit/AuditWebInterceptor.java",
+      "reviewedSha256": "198ac943cb7dedf67439fc67a2a7e2d9e7956521034d890f42564555e7e36909",
+      "reason": "MVC前后置生命周期采集、耗时/HTTP结果及失败不覆盖业务错误的技术兜底；不据此保留日志筛选、权限决策或导出编排。"
+    },
+    {
+      "kind": "java", "state": "technical-retained",
+      "file": "data-elements-parent/src/main/java/com/linewell/dataelement/platform/audit/AuditRecorder.java",
+      "reviewedSha256": "be1b100b8b8572ef66a9ef605c1c9e38c8bc3ac75ed58987f4b487b2d314d463",
+      "reason": "可信主体事件封装、脱敏快照写入、追加审计及有界异步采集/异常补偿为必要技术原语；当前请求因既有策略排除参数时记OMITTED，不误记为历史LEGACY，仍不采集正文或扩大IDAAS范围。该状态修正补充录制器回归和只读运行验证，不改变既有Mock六态模型。仅保留这些技术职责，查询、统计、组件读取、导出提交/状态业务仍pending-magic。"
+    },
+    {
+      "kind": "java", "state": "technical-retained",
+      "file": "data-elements-parent/src/main/java/com/linewell/dataelement/platform/audit/AuditParameterSnapshot.java",
+      "reviewedSha256": "559f5125d7e89ef34f399841cbf5b1305db59c5892e8d6ac1d731635f582e37b",
+      "reason": "不可变安全JSON与同源搜索投影、六态及不可信持久化内容再脱敏的技术值对象；其存在不等于LogQueryService已返回该对象。"
+    },
+    {
+      "kind": "java", "state": "technical-retained",
+      "file": "data-elements-parent/src/main/java/com/linewell/dataelement/platform/audit/AuditRequestParameters.java",
+      "reviewedSha256": "a596577a8e5d284fcec9eecfbe059f97ba864fba955db4a410b40cdd286ced56",
+      "reason": "请求线程内安全采集、旧精确白名单兼容及仅服务端可补充的verified事实；不读取/消费原始请求流，不把请求意图当执行结果，不承担日志查询业务。"
+    },
+    {
+      "kind": "java", "state": "technical-retained",
+      "file": "data-elements-parent/src/main/java/com/linewell/dataelement/platform/audit/AuditRequestBodyAdvice.java",
+      "reviewedSha256": "1fe85fb790eedc32b752520af64214b2aa1539f94ecf2efbe1e83094ae268225",
+      "reason": "观察Spring已完成转换的正文、空正文及失败状态，文件只取元数据；不包装/缓存/重读流，不替换业务参数或原业务异常。"
+    },
+    {
+      "kind": "java", "state": "technical-retained",
+      "file": "data-elements-parent/src/main/java/com/linewell/dataelement/platform/audit/AuditParameterSanitizer.java",
+      "reviewedSha256": "56d17702d6c865835b11e8defad48f98e9f9bfcfc8ff72c0632be48e775c5a41",
+      "reason": "有界安全遍历和凭据/个人信息脱敏，限制深度、节点、集合及UTF-8字节，拒绝流/任意序列化副作用；属采集安全适配，不是业务保留理由。"
     }
   ],
   "configurationSource": "mock/scenarios/configuration.json"

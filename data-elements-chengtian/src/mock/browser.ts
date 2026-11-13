@@ -2,6 +2,8 @@ import { setupWorker } from "msw/browser";
 import { http, HttpResponse } from "msw/http";
 import { delay, passthrough } from "msw";
 import { ChengtianMockRuntime } from "../../../mock/core/runtime.mjs";
+import { parseMockBody, mockResponse, type MockBody } from "../../../mock/core/transport.mjs";
+import { MockError } from "../../../mock/core/data.mjs";
 import componentBundlePath from "virtual:data-elements-mock-lowcode";
 import { mockScenario, mockRole, mockLatency } from "./config";
 import { fengchiCenterBase } from "@/utils/capabilityCenters";
@@ -50,32 +52,30 @@ export async function startMock(bridgeOnly = false) {
           { status: 501 }
         );
       }
-      let body: Record<string, unknown> = {};
+      const path = url.pathname.replace(/^\/(?:dev-api|prod-api)(?=\/)/, "");
+      let body: MockBody = {};
       if (!["GET", "HEAD"].includes(request.method)) {
-        const text = await request.text();
-        if (text) {
-          try {
-            body = JSON.parse(text);
-            if (!body || typeof body !== "object" || Array.isArray(body))
-              throw new Error("JSON object required");
-          } catch {
-            return HttpResponse.json(
-              { code: 400, message: "首阶段只支持 JSON 请求", data: null },
-              { status: 400 }
-            );
-          }
+        try {
+          body = parseMockBody(path, await request.text());
+        } catch (error) {
+          return mockResponse({
+            status: error instanceof MockError ? error.status : 400,
+            body: { code: 400, message: error instanceof MockError ? error.message : "Mock 请求正文读取失败", data: null },
+          }, HttpResponse);
         }
       }
       if (Number.isFinite(mockLatency) && mockLatency > 0) await delay(Math.min(mockLatency, 2000));
       try {
+        const query: Record<string, string> = {};
+        url.searchParams.forEach((value, key) => { query[key] = value; });
         const result = await runtime.handle({
           method: request.method,
-          path: url.pathname.replace(/^\/(?:dev-api|prod-api)(?=\/)/, ""),
-          query: Object.fromEntries(url.searchParams),
+          path,
+          query,
           body,
           token: request.headers.get("token") || "",
         });
-        return HttpResponse.json(result.body, { status: result.status });
+        return mockResponse(result, HttpResponse);
       } catch {
         return HttpResponse.json(
           { code: 500, message: "本地模拟接口执行失败，请检查控制台", data: null },

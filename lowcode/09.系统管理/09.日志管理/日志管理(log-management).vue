@@ -100,7 +100,7 @@
             :aria-label="eventMode ? '执行结果' : '任务状态'"
             :placeholder="eventMode ? '全部结果' : '全部状态'"
             class="log-result"
-            @change="searchNow"
+            @change="reloadFirstPage"
             ><el-option
               v-for="(label, value) in eventMode ? results : taskStates"
               :key="value"
@@ -113,8 +113,8 @@
             :aria-label="'搜索' + activeLabel"
             :placeholder="searchPlaceholder"
             class="log-search"
-            @clear="searchNow"
-            @keydown.enter="searchNow"
+            @clear="clearKeyword"
+            @keydown.enter.prevent="searchNow"
             ><template #suffix
               ><el-button
                 class="keyword-search-trigger"
@@ -136,6 +136,21 @@
                     ></path></svg></el-icon></el-button></template
           ></el-input>
         </div>
+      </div>
+      <div v-if="canFilterParameters" class="log-parameter-filter">
+        <label for="log-parameter-keyword">参数关键词</label>
+        <el-input
+          id="log-parameter-keyword"
+          v-model="parameterKeyword"
+          aria-label="参数关键词"
+          placeholder="输入参数名、对象 ID 或参数内容"
+          clearable
+          class="log-parameter-keyword"
+          @clear="clearParameterKeyword"
+          @keydown.enter.prevent="searchNow"
+        />
+        <el-button type="primary" @click="searchNow">查询</el-button>
+        <el-button v-if="submittedParameterKeyword || parameterKeyword" @click="clearParameterKeyword">清空</el-button>
       </div>
       <el-alert
         v-if="failure"
@@ -457,7 +472,7 @@
           :total="total"
           :page-sizes="[20, 50, 100]"
           layout="prev, pager, next, sizes, jumper"
-          @size-change="searchNow"
+          @size-change="reloadFirstPage"
           @current-change="load"
         />
       </footer>
@@ -475,18 +490,71 @@
           :title="detailFailure"
           :closable="false"
         />
-        <template v-if="detail"
-          ><section v-for="group in detailGroups" :key="group.title">
-            <h3>{{ group.title }}</h3>
-            <dl>
-              <template v-for="field in group.fields" :key="field[0]"
-                ><dt>{{ field[1] }}</dt>
-                <dd>
-                  {{ detailFieldText(field[0]) }}
-                </dd></template
+        <template v-if="detail">
+          <template v-for="group in detailGroups" :key="group.key">
+            <section>
+              <h3>{{ group.title }}</h3>
+              <dl>
+                <template v-for="field in group.fields" :key="field[0]">
+                  <dt>{{ field[1] }}</dt>
+                  <dd>{{ detailFieldText(field[0]) }}</dd>
+                </template>
+              </dl>
+            </section>
+            <template v-if="group.key === 'overview' && canFilterParameters">
+              <section class="log-parameter-status">
+                <h3>参数采集</h3>
+                <el-tag effect="plain">{{ parameterStatuses[parameterCaptureStatus] }}</el-tag>
+                <p>{{ parameterCaptureNotice }}</p>
+                <p v-if="!parameterSnapshot && detailParameters.length" class="log-parameter-empty">
+                  以下仅为历史实际保存的安全参数，不完整；不补造路径、查询、正文或已核验信息。
+                </p>
+                <p class="log-parameter-empty">
+                  请求参数不代表业务已执行或删除完成；已核验业务信息仅展示独立 verified，执行结果以原记录为准。
+                </p>
+                <pre v-if="parameterSnapshot?.notices?.length">{{ formatParameterJson(parameterSnapshot.notices) }}</pre>
+                <el-alert
+                  v-if="parameterCopyFailure"
+                  :title="parameterCopyFailure"
+                  type="error"
+                  :closable="false"
+                  show-icon
+                />
+              </section>
+              <section
+                v-for="parameterGroup in parameterGroups"
+                :key="parameterGroup.key"
+                class="log-parameter-group"
               >
-            </dl>
-          </section>
+                <header class="log-parameter-heading">
+                  <h3>{{ parameterGroup.title }}</h3>
+                  <el-button
+                    v-if="parameterGroup.present"
+                    link
+                    type="primary"
+                    :aria-label="'复制' + parameterGroup.title + '脱敏内容'"
+                    @click="copyParameterContent(parameterGroup.value)"
+                  >复制脱敏内容</el-button>
+                </header>
+                <template v-if="parameterGroup.present">
+                  <el-tree
+                    :data="parameterTree(parameterGroup.value)"
+                    :expand-on-click-node="false"
+                    class="log-parameter-tree"
+                  >
+                    <template #default="{ data }">
+                      <span class="log-parameter-node"><template v-for="(part, index) in parameterTextParts(data.label)" :key="index"><mark v-if="part.match">{{ part.text }}</mark><template v-else>{{ part.text }}</template></template></span>
+                    </template>
+                  </el-tree>
+                  <details class="log-parameter-json" open>
+                    <summary>只读格式化 JSON</summary>
+                    <pre tabindex="0" :aria-label="parameterGroup.title + '只读 JSON'"><template v-for="(part, index) in parameterTextParts(formatParameterJson(parameterGroup.value))" :key="index"><mark v-if="part.match">{{ part.text }}</mark><template v-else>{{ part.text }}</template></template></pre>
+                  </details>
+                </template>
+                <p v-else class="log-parameter-empty">此记录未采集此分组</p>
+              </section>
+            </template>
+          </template>
           <section v-if="detail.batch_id">
             <h3>批量执行明细</h3>
             <ElTable :data="batchRows"
@@ -734,12 +802,28 @@
 <script setup lang="ts">
 import {
   ref,
+  shallowRef,
   computed,
   getCurrentInstance,
   onMounted,
   onBeforeUnmount,
 } from "vue";
 import { ElTable, ElMessage, ElMessageBox } from "element-plus";
+type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
+type ParameterCaptureStatus = "EMPTY" | "CAPTURED" | "PARTIAL" | "OMITTED" | "FAILED" | "LEGACY";
+interface ParameterSnapshot {
+  version: 1;
+  status: ParameterCaptureStatus;
+  path: Record<string, JsonValue>;
+  query: Record<string, JsonValue>;
+  body: JsonValue;
+  verified: Record<string, JsonValue>;
+  notices: JsonValue[];
+}
+interface ParameterTreeNode {
+  label: string;
+  children?: ParameterTreeNode[];
+}
 type LogRow = Partial<
   Record<
     | "actor_name"
@@ -783,6 +867,9 @@ type LogRow = Partial<
   row_count?: number;
   record_count?: number;
   details?: Record<string, unknown>;
+  request_parameters?: Record<string, JsonValue>;
+  parameter_snapshot?: ParameterSnapshot | null;
+  parameter_capture_status?: ParameterCaptureStatus;
   [key: string]: unknown;
 };
 interface PolicyRow {
@@ -976,11 +1063,17 @@ const rows = ref<LogRow[]>([]),
   loading = ref(false),
   failure = ref(""),
   keyword = ref(""),
+  submittedKeyword = ref(""),
   result = ref(""),
   page = ref(1),
   size = ref(20),
   sorting = ref<Record<string, string>>({}),
   capabilities = ref<string[]>([]);
+const parameterKeyword = ref("");
+const submittedParameterKeyword = ref("");
+const canFilterParameters = computed(() =>
+  capabilities.value.includes("requestParameters") && ["operations", "requests"].includes(kind.value),
+);
 // 澄天使用接入任务同一套全局表格和分页；只注册 Element Plus 的其他宿主保留兼容渲染。
 // 当前页仍由日志接口分页，不允许公共表格再次对当前页切片或自动补查。
 const registeredComponents = getCurrentInstance()?.appContext.components;
@@ -1011,7 +1104,8 @@ const manualRange = ref(false),
   detailOpen = ref(false),
   detailLoading = ref(false),
   detailFailure = ref(""),
-  detail = ref<LogRow | null>(null),
+  // 详情按响应整体替换，避免对任意嵌套 JSON 做 Vue 深层类型展开。
+  detail = shallowRef<LogRow | null>(null),
   policyOpen = ref(false),
   archiveOpen = ref(false);
 const policy = ref<PolicyDraft>({
@@ -1082,7 +1176,8 @@ const dateShortcuts = [1, 7, 30].map((days) => ({
   value: () => [new Date(Date.now() - days * 86400000), new Date()],
 }));
 const hasFilters = computed(() =>
-  Boolean(keyword.value || result.value || manualRange.value),
+  Boolean(submittedKeyword.value || result.value || manualRange.value ||
+    (canFilterParameters.value && submittedParameterKeyword.value)),
 );
 const archiveBrowseOpen = ref(false),
   archivedRows = ref<LogRow[]>([]),
@@ -1136,17 +1231,13 @@ function clientOS(userAgent?: string): string {
 }
 const detailGroups = computed(() => [
   {
-    title: "人员与部门",
+    key: "overview",
+    title: "执行概况",
     fields: [
       ["actor_name", "姓名"],
       ["actor_account", "账号"],
       ["actor_org_name", "所属部门"],
       ["source_app", "来源应用"],
-    ],
-  },
-  {
-    title: "操作与结果",
-    fields: [
       ["event_time", "发生时间"],
       ...(kind.value === "auth" ? [] : [["menu_path", "功能路径"]]),
       ["operation_name", "具体操作"],
@@ -1155,19 +1246,20 @@ const detailGroups = computed(() => [
       ["target_name", "操作对象"],
       ["result", "执行结果"],
       ["reason_code", "原因编码"],
+      ...(kind.value === "requests" ? [["duration_ms", "接口耗时"]] : []),
+      ["http_status", "HTTP状态"],
+      ["business_code", "业务编码"],
     ],
   },
   {
-    title: "请求与链路",
+    key: "related",
+    title: "关联信息",
     fields: [
       ["ip", "来源IP"],
       ["browser", "浏览器 / 客户端"],
       ["client_os", "操作系统"],
       ["user_agent", "User-Agent"],
       ["route_path", "请求路由"],
-      ...(kind.value === "requests" ? [["duration_ms", "接口耗时"]] : []),
-      ["http_status", "HTTP状态"],
-      ["business_code", "业务编码"],
       ["request_id", "请求号"],
       ["trace_id", "链路号"],
       ["session_ref", "会话引用"],
@@ -1183,6 +1275,101 @@ function detailFieldText(field: string): string | number {
   if (field === "client_os") return clientOS(row.user_agent) || "历史未记录";
   if (field === "duration_ms") return row.duration_ms == null ? "历史未记录" : `${row.duration_ms} ms`;
   return row[field] == null || row[field] === "" ? "历史未记录" : String(row[field]);
+}
+// 展示及复制同一份脱敏 JSON；不以参数名白名单丢弃历史中正常的未知字段。
+function redactParameterValue(value: JsonValue): JsonValue {
+  if (Array.isArray(value)) return value.map(redactParameterValue);
+  if (value !== null && typeof value === "object")
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [
+      key,
+      /^(?:password|passwd|pwd|token|accessToken|refreshToken|idToken|authorization|cookie|setCookie|secret|clientSecret|apiKey|privateKey|credential|credentials)$/i.test(key.replace(/[-_\s]/g, ""))
+        ? "[已脱敏]" : redactParameterValue(item),
+    ]));
+  return value;
+}
+const parameterSnapshot = computed(() => {
+  const snapshot = detail.value?.parameter_snapshot;
+  return snapshot && typeof snapshot === "object" && !Array.isArray(snapshot) && snapshot.version === 1
+    ? redactParameterValue(snapshot as unknown as JsonValue) as unknown as ParameterSnapshot
+    : null;
+});
+const detailParameters = computed(() => Object.entries(
+  redactParameterValue(detail.value?.request_parameters ?? {}) as Record<string, JsonValue>,
+));
+const parameterStatuses: Record<ParameterCaptureStatus, string> = {
+  EMPTY: "无参数",
+  CAPTURED: "已采集",
+  PARTIAL: "部分采集",
+  OMITTED: "按策略省略",
+  FAILED: "采集失败",
+  LEGACY: "历史未采集",
+};
+const parameterCaptureStatus = computed<ParameterCaptureStatus>(() => {
+  const status = detail.value?.parameter_capture_status ?? parameterSnapshot.value?.status;
+  return status && Object.hasOwn(parameterStatuses, status) ? status : "LEGACY";
+});
+const parameterCaptureNotice = computed(() => ({
+  EMPTY: "本次请求无参数。",
+  CAPTURED: "以下为服务端已采集并脱敏的参数。",
+  PARTIAL: "仅采集部分安全参数，请结合采集说明查看，不能还原完整请求。",
+  OMITTED: "参数已按策略省略，不表示本次请求没有参数。",
+  FAILED: "参数采集失败，不表示请求执行失败或本次请求没有参数。",
+  LEGACY: "历史未采集完整参数快照；如有历史安全参数，仅供参考且不完整。",
+})[parameterCaptureStatus.value]);
+const parameterGroups = computed(() => {
+  const snapshot = parameterSnapshot.value;
+  if (!snapshot || snapshot.status === "LEGACY") return detailParameters.value.length ? [{
+    key: "legacy", title: "历史安全参数（不完整）", present: true,
+    value: Object.fromEntries(detailParameters.value) as JsonValue,
+  }] : [];
+  return ([
+    ["path", "路径参数（path）"],
+    ["query", "查询参数（query）"],
+    ["body", "请求正文（body）"],
+    ["verified", "已核验业务信息（verified）"],
+  ] as const).map(([key, title]) => ({
+    key, title, present: Object.hasOwn(snapshot, key), value: snapshot[key],
+  }));
+});
+function formatParameterJson(value: JsonValue): string {
+  return JSON.stringify(redactParameterValue(value), null, 2);
+}
+function parameterTree(value: JsonValue, label = "$"): ParameterTreeNode[] {
+  if (value === null || typeof value !== "object")
+    return [{ label: `${label}: ${JSON.stringify(value)}` }];
+  const entries = Object.entries(value);
+  return [{
+    label: `${label}: ${Array.isArray(value) ? "数组" : "对象"}（${entries.length} 项）`,
+    children: entries.flatMap(([key, item]) => parameterTree(item, Array.isArray(value) ? `[${key}]` : JSON.stringify(key))),
+  }];
+}
+function parameterTextParts(text: string): { text: string; match: boolean }[] {
+  // JSON 中引号、反斜杠等有转义表示；以完整字面量匹配，不编译正则或 HTML。
+  const needle = canFilterParameters.value
+    ? JSON.stringify(submittedParameterKeyword.value).slice(1, -1) : "";
+  if (!needle) return [{ text, match: false }];
+  const parts: { text: string; match: boolean }[] = [];
+  let start = 0, index = text.indexOf(needle);
+  while (index !== -1) {
+    if (index > start) parts.push({ text: text.slice(start, index), match: false });
+    parts.push({ text: text.slice(index, index + needle.length), match: true });
+    start = index + needle.length;
+    index = text.indexOf(needle, start);
+  }
+  if (start < text.length) parts.push({ text: text.slice(start), match: false });
+  return parts;
+}
+const parameterCopyFailure = ref("");
+async function copyParameterContent(value: JsonValue) {
+  parameterCopyFailure.value = "";
+  try {
+    if (!globalThis.navigator?.clipboard?.writeText) throw new Error("剪贴板不可用");
+    await globalThis.navigator.clipboard.writeText(formatParameterJson(value));
+    ElMessage.success("已复制脱敏内容");
+  } catch {
+    parameterCopyFailure.value = "复制失败，请检查浏览器剪贴板权限或手动复制只读 JSON。";
+    ElMessage.error(parameterCopyFailure.value);
+  }
 }
 let revision = 0,
   policyRevision = 0;
@@ -1209,7 +1396,9 @@ const request = async <T = void,>(
 const filters = () => ({
   page: page.value,
   size: size.value,
-  keyword: keyword.value,
+  keyword: submittedKeyword.value,
+  ...(canFilterParameters.value && submittedParameterKeyword.value
+    ? { parameterKeyword: submittedParameterKeyword.value } : {}),
   ...(eventMode.value ? { result: result.value } : { status: result.value }),
   ...sorting.value,
   ...(dates.value?.length === 2
@@ -1250,22 +1439,37 @@ async function load() {
     if (current === revision) loading.value = false;
   }
 }
-const searchNow = () => {
+const reloadFirstPage = () => {
   page.value = 1;
-  load();
+  return load();
 };
+function searchNow() {
+  submittedKeyword.value = keyword.value;
+  // 单一字面关键词原样提交：不拆词、不拼 SQL/正则、不截断或逐字请求。
+  if (canFilterParameters.value) submittedParameterKeyword.value = parameterKeyword.value;
+  return reloadFirstPage();
+}
+function clearKeyword() {
+  keyword.value = submittedKeyword.value = "";
+  return reloadFirstPage();
+}
+function clearParameterKeyword() {
+  parameterKeyword.value = submittedParameterKeyword.value = "";
+  return reloadFirstPage();
+}
 
 const sortChanged = ({ prop, order }: SortChange) => {
   sorting.value =
     order && prop
       ? { sortField: prop, sortDir: order === "ascending" ? "asc" : "desc" }
       : {};
-  searchNow();
+  return reloadFirstPage();
 };
 async function showDetail(row: LogRow) {
   detailOpen.value = true;
   detail.value = null;
   detailFailure.value = "";
+  parameterCopyFailure.value = "";
   detailLoading.value = true;
   try {
     detail.value = await request<LogRow>(
@@ -1515,19 +1719,21 @@ function archiveSort({ prop, order }: SortChange) {
 }
 function resetFilters() {
   manualRange.value = false;
-  keyword.value = "";
+  keyword.value = submittedKeyword.value = "";
   result.value = "";
+  parameterKeyword.value = submittedParameterKeyword.value = "";
   dates.value = [new Date(Date.now() - 7 * 86400000), new Date()];
-  searchNow();
+  return reloadFirstPage();
 }
 function dateChanged() {
   manualRange.value = true;
-  searchNow();
+  return reloadFirstPage();
 }
 const tabContexts = new Map<
   string,
   {
     keyword: string;
+    parameterKeyword: string;
     result: string;
     page: number;
     manualRange: boolean;
@@ -1539,7 +1745,8 @@ let previousKind = "auth";
 function changeTab() {
   if (!initialized.value || kind.value === previousKind) return;
   tabContexts.set(previousKind, {
-    keyword: keyword.value,
+    keyword: submittedKeyword.value,
+    parameterKeyword: submittedParameterKeyword.value,
     result: result.value,
     page: page.value,
     manualRange: manualRange.value,
@@ -1551,7 +1758,8 @@ function changeTab() {
   manualRange.value = context?.manualRange ?? false;
   ++revision;
   page.value = context?.page ?? 1;
-  keyword.value = context?.keyword ?? "";
+  keyword.value = submittedKeyword.value = context?.keyword ?? "";
+  parameterKeyword.value = submittedParameterKeyword.value = context?.parameterKeyword ?? "";
   result.value = context?.result ?? "";
   sorting.value = context?.sorting ?? {};
   rows.value = [];
@@ -1561,7 +1769,7 @@ function changeTab() {
     new Date(Date.now() - 7 * 86400000),
     new Date(),
   ];
-  load();
+  return load();
 }
 const initialFailure = ref("");
 async function loadCapabilities() {
@@ -1684,6 +1892,28 @@ onBeforeUnmount(() => {
   min-width: 0;
   margin-left: auto;
 }
+.log-parameter-filter {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+  min-width: 0;
+}
+.log-parameter-filter :deep(.el-button + .el-button) {
+  margin-left: 0;
+}
+.log-parameter-filter label {
+  flex: none;
+}
+.log-parameter-keyword {
+  flex: 0 1 420px;
+  width: min(420px, 100%);
+  min-width: 0;
+}
+.log-parameter-empty {
+  color: var(--el-text-color-secondary);
+}
 .log-search {
   flex: 0 1 280px;
   width: 280px;
@@ -1777,6 +2007,11 @@ onBeforeUnmount(() => {
   .log-search {
     flex: 1;
     max-width: none;
+    min-width: 0;
+  }
+  .log-parameter-keyword {
+    flex-basis: 100%;
+    width: 100%;
   }
   .log-pager :deep(.el-pagination) {
     flex-wrap: wrap;
@@ -1833,6 +2068,56 @@ onBeforeUnmount(() => {
   overflow-wrap: anywhere;
   font-size: 13px;
   line-height: 1.8;
+}
+.log-parameter-heading {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  border-bottom: 1px solid var(--el-border-color-light);
+  margin-bottom: 12px;
+}
+.log-parameter-heading h3 {
+  flex: 1;
+  border-bottom: 0;
+  margin-bottom: 0;
+}
+.log-parameter-heading .el-button {
+  margin: 0 0 8px;
+}
+.log-parameter-status p {
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.log-parameter-tree {
+  min-width: 0;
+  max-height: 320px;
+  overflow: auto;
+}
+.log-parameter-tree :deep(.el-tree-node__content) {
+  height: auto;
+  min-height: 28px;
+  align-items: flex-start;
+}
+.log-parameter-node {
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 28px;
+}
+.log-parameter-json summary {
+  margin-top: 12px;
+  color: var(--el-text-color-secondary);
+  cursor: pointer;
+}
+.log-parameter-json pre {
+  max-height: 420px;
+  overflow: auto;
+}
+.log-parameter-group mark {
+  background: var(--el-color-warning-light-7, #faecd8);
+  color: var(--el-text-color-primary, #303133);
+  border-radius: 2px;
 }
 
 .policy-intro {

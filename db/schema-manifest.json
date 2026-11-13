@@ -4,6 +4,29 @@
   "routingSource": "private current Nacos API/runtime snapshot and configured independent projects",
   "schemas": [
     {
+      "dataSourceKey": "haitong-data-pull",
+      "schema": "haitong",
+      "dialect": "mysql",
+      "file": "haitong/init.sql",
+      "objects": {
+        "tables": 15,
+        "views": 0,
+        "indexes": 51,
+        "foreignKeys": 5,
+        "triggers": 0,
+        "procedures": 0,
+        "functions": 0,
+        "events": 0
+      },
+      "sha256": "7b4cfbe4b66e6ee7636ef91ce7374e3f79f4e4e192dd013044234797605da449",
+      "exportNotes": {
+        "definitions": "SHOW CREATE",
+        "routineDefiners": "omitted",
+        "autoIncrementCounters": "omitted"
+      },
+      "project": "haitong-data-pull"
+    },
+    {
       "dataSourceKey": "control",
       "schema": "baseline",
       "dialect": "mysql",
@@ -31,17 +54,17 @@
       "dialect": "dameng",
       "file": "baseline_beijing_gd/init.sql",
       "objects": {
-        "tables": 176,
+        "tables": 219,
         "views": 5,
-        "indexes": 722,
-        "explicitIndexes": 365,
+        "indexes": 920,
+        "explicitIndexes": 477,
         "foreignKeys": 2,
         "triggers": 20,
         "procedures": 0,
         "functions": 0,
         "sequences": 0
       },
-      "sha256": "3423680350eb25bff43577e4e999f3ce8b39168381c23126f611493b71b9b279",
+      "sha256": "5c9fe58fefa3ec7b526345bca0584d674e91fff5bc1593d7d9193214f950291e",
       "exportNotes": {
         "definitions": "DBMS_METADATA.GET_DDL",
         "comments": "DBA_TAB_COMMENTS/DBA_COL_COMMENTS",
@@ -56,14 +79,14 @@
       "objects": {
         "tables": 176,
         "views": 0,
-        "indexes": 625,
+        "indexes": 624,
         "foreignKeys": 2,
         "triggers": 20,
         "functions": 49,
         "procedures": 0,
         "events": 0
       },
-      "sha256": "78edcd721400cbc189262951e2766a9eaf0203a26be753afdfea3e1067dfa9dd",
+      "sha256": "ccef50f76033fff4573741cc5a649fe928f547a57c2d9c5e343cbe8b48e92c51",
       "exportNotes": {
         "definitions": "Kingbase native catalogs and pg_get_*def",
         "sqlSchema": "public",
@@ -76,16 +99,16 @@
       "dialect": "mysql",
       "file": "baseline_ga/init.sql",
       "objects": {
-        "tables": 176,
+        "tables": 219,
         "views": 5,
-        "indexes": 625,
+        "indexes": 780,
         "foreignKeys": 2,
         "triggers": 0,
         "procedures": 0,
         "functions": 0,
         "events": 0
       },
-      "sha256": "aa3465eeb7406a98cf11c48dec89a2d78ac65f8c2e8ac1b6b380d6bec43d2174",
+      "sha256": "d877f544ce749d2cff8cb84f567a81043ca73a8aa9434acec300e3ac3d2d60c4",
       "exportNotes": {
         "definitions": "SHOW CREATE",
         "routineDefiners": "omitted",
@@ -98,44 +121,21 @@
       "dialect": "mysql",
       "file": "baseline_sea_fishery/init.sql",
       "objects": {
-        "tables": 176,
+        "tables": 219,
         "views": 5,
-        "indexes": 625,
+        "indexes": 780,
         "foreignKeys": 2,
         "triggers": 0,
         "procedures": 0,
         "functions": 0,
         "events": 0
       },
-      "sha256": "7870897830cdc9d831e9d88271d2b4fe55aab482707876d80ab886aeae642549",
+      "sha256": "015e7cd2dc329597286d2bfdd295f190cf7cce712ef6d451b6b17ce5d51850fb",
       "exportNotes": {
         "definitions": "SHOW CREATE",
         "routineDefiners": "omitted",
         "autoIncrementCounters": "omitted"
       }
-    },
-    {
-      "dataSourceKey": "haitong-data-pull",
-      "schema": "haitong",
-      "dialect": "mysql",
-      "file": "haitong/init.sql",
-      "objects": {
-        "tables": 15,
-        "views": 0,
-        "indexes": 51,
-        "foreignKeys": 5,
-        "triggers": 0,
-        "procedures": 0,
-        "functions": 0,
-        "events": 0
-      },
-      "sha256": "7b4cfbe4b66e6ee7636ef91ce7374e3f79f4e4e192dd013044234797605da449",
-      "exportNotes": {
-        "definitions": "SHOW CREATE",
-        "routineDefiners": "omitted",
-        "autoIncrementCounters": "omitted"
-      },
-      "project": "haitong-data-pull"
     }
   ]
 }

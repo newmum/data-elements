@@ -38,9 +38,9 @@ function setup(role = "admin", code = "police") {
   return { runtime, storage, sessionStorage };
 }
 
-test("31 项契约指向真实实现及当前审阅版本", async () => {
+test("56 项契约指向真实实现及当前审阅版本", async () => {
   const result = await checkContracts();
-  assert.equal(result.interfaces, 31);
+  assert.equal(result.interfaces, 56);
   assert.deepEqual(result.errors, []);
 });
 

@@ -22,128 +22,205 @@
   "responseBodyDefinition" : null
 }
 ================================
-// 接口：多表任务编组分页（POST /ods/task/multi/page）
-// 服务端分页后一次关联读取本页全部成员，按来源数据源角色范围过滤整组。
-import tenantRuntime
-import dataScope
-import tableSort
 import cn.hutool.core.util.NumberUtil
+import dataScope
+import tableRead
+import tableSort
+import tenantRuntime
 
+/**
+ * POST /ods/task/multi/page 分页读取当前租户可见的多表编组及成员任务状态。
+ * 支持编组搜索、编组排序和成员排序。按本页一次批量读取成员，最多返回 10000 条。
+ * 当前范围必须覆盖编组的全部来源。查询期间成员或授权发生变化时，请求方需刷新重试。
+ */
 var text = value => value == null ? '' : ('' + value).trim()
-// 不同 JDBC 驱动可能把未加引号的别名保留原样、转小写或转大写。
-var field = (row, name) => row == null ? null :
-    (row[name] != null ? row[name] :
-     (row[name.toLowerCase()] != null ? row[name.toLowerCase()] : row[name.toUpperCase()]))
 var tenantId = text(tenantRuntime.id())
-if (tenantId == '') { exit 401, '当前租户无效' }
+if (tenantId == '') {
+    exit 401, '当前租户无效'
+}
 var pageNum = text(body?.pageNum).matches('^[0-9]+$') ? NumberUtil.parseInt(text(body.pageNum)) : 1
 var pageSize = text(body?.pageSize).matches('^[0-9]+$') ? NumberUtil.parseInt(text(body.pageSize)) : 20
-if (pageNum < 1 || pageNum > 100000) { pageNum = 1 }
-if (pageSize < 1 || pageSize > 100) { pageSize = 20 }
+if (pageNum < 1 || pageNum > 100000) {
+    pageNum = 1
+}
+if (pageSize < 1 || pageSize > 100) {
+    pageSize = 20
+}
 var keyword = text(body?.keyword)
-if (keyword.length() > 100) { exit 400, '搜索词过长' }
-var likeKeyword = '%' + keyword + '%'
+if (keyword.length() > 100) {
+    exit 400, '搜索词过长'
+}
 
 var scope = dataScope.dataSource()
 var scopeMode = text(scope?.scope)
 var scopeUserId = text(scope?.userId)
 var scopeOrgIds = scope?.organizationIds == null ? [] : scope.organizationIds
-if (!['ALL', 'ORG', 'OWNER'].contains(scopeMode) || scopeUserId == '') { exit 403, '无法确定当前数据范围' }
-// SQL 片段只由服务端角色枚举决定；身份、部门和租户值均使用参数绑定。
-var visibleSql = scopeMode == 'ALL' ? '1=1' :
-    (scopeMode == 'OWNER' ? 'd.created_by=#{scopeUserId}' :
-     (scopeOrgIds.size() == 0 ? '1=0' :
-      'd.org_id in <foreach collection="scopeOrgIds" item="orgId" open="(" close=")" separator=",">#{orgId}</foreach>'))
-
-// 一组任一来源超出范围时隐藏整组，不返回部分成员造成信息泄露。
-var tableCountSql='(select count(*) from data_access_multi_group_item_t cm where cm.tenant_id=g.tenant_id and cm.group_id=g.tid)'
-var runningCountSql='(select count(*) from data_access_multi_group_item_t cm join data_access_agg_task_t ca on ca.tid=cm.access_task_id and ca.source_table_id=cm.source_table_id and ca.tenant_id=cm.tenant_id and ca.is_del=0 where cm.tenant_id=g.tenant_id and cm.group_id=g.tid and ca.task_status=1)'
-var errorCountSql='(select count(*) from data_access_multi_group_item_t cm left join data_access_agg_task_t ca on ca.tid=cm.access_task_id and ca.source_table_id=cm.source_table_id and ca.tenant_id=cm.tenant_id and ca.is_del=0 where cm.tenant_id=g.tenant_id and cm.group_id=g.tid and (ca.tid is null or ca.task_status=2))'
-var sortColumn=tableSort.field(body,{groupName:'g.group_name',createdTime:'g.created_time',tableCount:tableCountSql,runningCount:runningCountSql,errorCount:errorCountSql},'createdTime')
-var sortDirection=tableSort.direction(body)
-var memberColumn=tableSort.field({sortField:body?.itemSortField},{sourceTableName:'coalesce(t.table_name_cn,t.table_name)',lastRunning:'a.last_running',endRunning:'a.end_running'},'sourceTableName')
-var memberDirection=tableSort.direction({sortDir:body?.itemSortDir})
-var groupSql = """
-    select g.tid as groupId, g.group_name as groupName, g.created_by as createdBy,
-           g.created_time as createdTime, g.updated_time as updatedTime,
-           ${tableCountSql} as tableCount,${runningCountSql} as runningCount,${errorCountSql} as errorCount
-      from data_access_multi_group_t g
-     where g.tenant_id=#{tenantId} and g.is_del=0
-       and (#{keyword}='' or g.group_name like #{likeKeyword})
-       and not exists (
-           select 1 from data_access_multi_group_item_t m
-           left join db_table_t t on t.tid=m.source_table_id
-                and t.tenant_id=g.tenant_id and t.is_del=0
-           left join db_datasource_t d on d.tid=t.datasource_id
-                and d.tenant_id=g.tenant_id and d.is_del=0
-           where m.group_id=g.tid and m.tenant_id=g.tenant_id
-             and (t.tid is null or d.tid is null or not (${visibleSql}))
-       )
-     order by case when ${sortColumn} is null then 1 else 0 end asc,${sortColumn} ${sortDirection},g.tid asc
-"""
-var groupPage = db.page(groupSql, pageSize, (pageNum - 1) * pageSize)
-var groupRows = groupPage?.list == null ? [] : groupPage.list
-var groupIds = []
-var itemMap = {}
-for (group in groupRows) {
-    var id = text(field(group, 'groupId'))
-    groupIds.add(id)
-    itemMap[id] = []
+if (!['ALL', 'ORG', 'OWNER'].contains(scopeMode) || scopeUserId == '') {
+    exit 403, '无法确定当前数据范围'
 }
-if (groupIds.size() > 0) {
-    var members = db.select("""
-        select m.tid as itemId, m.group_id as groupId, m.source_table_id as sourceTableId,
-               m.access_task_id as taskId, m.sort_no as sortNo,
-               t.table_name as sourceTableName, t.table_name_cn as sourceTableNameCn,
-               a.tid as availableTaskId, a.task_name as taskName, a.task_status as taskStatus,
-               a.pipeline_id as pipelineId, a.monitor_status as monitorStatus,
-               a.monitor_msg as monitorMessage, a.last_running as lastRunning,
-               a.end_running as endRunning
-          from data_access_multi_group_item_t m
-          join db_table_t t on t.tid=m.source_table_id
-               and t.tenant_id=#{tenantId} and t.is_del=0
-          join db_datasource_t d on d.tid=t.datasource_id
-               and d.tenant_id=#{tenantId} and d.is_del=0
-          left join data_access_agg_task_t a on a.tid=m.access_task_id
-               and a.source_table_id=m.source_table_id
-               and a.tenant_id=#{tenantId} and a.is_del=0
-         where m.tenant_id=#{tenantId}
-           and m.group_id in <foreach collection="groupIds" item="id" open="(" close=")" separator=",">#{id}</foreach>
-           and ${visibleSql}
-         order by m.group_id,case when ${memberColumn} is null then 1 else 0 end asc,${memberColumn} ${memberDirection},m.sort_no,m.tid
-         limit 10001
-    """)
-    if(members.size()>10000){exit 413,'本页编组成员超过10000，请缩小分页范围';}
-    for (member in members) {
-        var id = text(field(member, 'groupId'))
-        if (itemMap[id] != null) {
-            itemMap[id].add({
-                itemId: field(member, 'itemId'),
-                sourceTableId: field(member, 'sourceTableId'),
-                taskId: field(member, 'taskId'),
-                sortNo: field(member, 'sortNo'),
-                taskAvailable: text(field(member, 'availableTaskId')) != '',
-                taskName: field(member, 'taskName'),
-                taskStatus: field(member, 'taskStatus'),
-                pipelineId: field(member, 'pipelineId'),
-                monitorStatus: field(member, 'monitorStatus'),
-                monitorMessage: field(member, 'monitorMessage'),
-                lastRunning: field(member, 'lastRunning'),
-                endRunning: field(member, 'endRunning'),
-                sourceTableName: field(member, 'sourceTableName'),
-                sourceTableNameCn: field(member, 'sourceTableNameCn')
-            })
-        }
+var groupSort = tableSort.field(body, {
+    groupName: 'groupName', createdTime: 'createdTime', tableCount: 'tableCount',
+    runningCount: 'runningCount', errorCount: 'errorCount'
+}, 'createdTime')
+var groupDirection = tableSort.direction(body)
+var itemSort = tableSort.field({sortField: body?.itemSortField}, {
+    sourceTableName: 'sourceTableName', lastRunning: 'lastRunning', endRunning: 'endRunning'
+}, 'sourceTableName')
+var itemDirection = tableSort.direction({sortDir: body?.itemSortDir})
+
+var memberColumn = (column, kind) => tableRead.column('member_row', column, kind)
+var tableColumn = (column, kind) => tableRead.column('source_table', column, kind)
+var sourceColumn = (column, kind) => tableRead.column('source_config', column, kind)
+var taskColumn = (column, kind) => tableRead.column('single_task', column, kind)
+var memberGroupId = memberColumn('group_id', 'TEXT')
+var members = tableRead.from('data_access_multi_group_item_t', 'member_row', tenantId)
+members.leftJoin('db_table_t', 'source_table', 'tid', 'source_table_id', [
+    tableRead.equal(tableColumn('is_del', 'NUMBER'), 0)
+])
+members.leftJoin('db_datasource_t', 'source_config', 'tenant_id', 'tenant_id', [
+    tableRead.equal(sourceColumn('tid', 'TEXT'), tableColumn('datasource_id', 'TEXT')),
+    tableRead.equal(sourceColumn('is_del', 'NUMBER'), 0)
+])
+members.leftJoin('data_access_agg_task_t', 'single_task', 'tid', 'access_task_id', [
+    tableRead.equal(taskColumn('source_table_id', 'TEXT'), memberColumn('source_table_id', 'TEXT')),
+    tableRead.equal(taskColumn('is_del', 'NUMBER'), 0)
+])
+
+// 空归属和失效来源均计为不可见，先按整组范围过滤再计算分页总数。
+var deniedConditions = [
+    tableRead.isNull(tableColumn('tid', 'TEXT')),
+    tableRead.isNull(sourceColumn('tid', 'TEXT'))
+]
+if (scopeMode == 'OWNER') {
+    var creatorColumn = sourceColumn('created_by', 'TEXT')
+    deniedConditions.add(tableRead.isNull(creatorColumn))
+    deniedConditions.add(tableRead.not(tableRead.equal(creatorColumn, scopeUserId)))
+} else if (scopeMode == 'ORG') {
+    var organizationColumn = sourceColumn('org_id', 'TEXT')
+    deniedConditions.add(tableRead.isNull(organizationColumn))
+    deniedConditions.add(tableRead.not(tableRead.in(organizationColumn, scopeOrgIds)))
+}
+var denied = tableRead.any(deniedConditions)
+var availableTaskId = taskColumn('tid', 'TEXT')
+var taskStatus = taskColumn('task_status', 'NUMBER')
+var missingTask = tableRead.isNull(availableTaskId)
+var groupFacts = {
+    group_id: memberGroupId,
+    denied_count: tableRead.countIf(denied),
+    table_count: tableRead.count(),
+    running_count: tableRead.countIf(tableRead.equal(taskStatus, 1)),
+    error_count: tableRead.countIf(tableRead.any([missingTask, tableRead.equal(taskStatus, 2)]))
+}
+
+var groupsQuery = tableRead.from('data_access_multi_group_t', 'group_row', tenantId)
+var groupColumn = (column, kind) => tableRead.column('group_row', column, kind)
+var factCount = name => tableRead.coalesce([tableRead.column('group_facts', name, 'NUMBER'), 0])
+groupsQuery.leftJoinGrouped(members, 'group_facts', 'group_id', 'tid', groupFacts, [memberGroupId])
+groupsQuery.where(tableRead.all([
+    tableRead.equal(groupColumn('is_del', 'NUMBER'), 0),
+    tableRead.equal(factCount('denied_count'), 0)
+]))
+if (keyword != '') {
+    groupsQuery.where(tableRead.like(groupColumn('group_name', 'TEXT'), '%' + keyword + '%'))
+}
+var groupFields = {
+    groupId: groupColumn('tid', 'TEXT'),
+    groupName: groupColumn('group_name', 'TEXT'),
+    createdBy: groupColumn('created_by', 'TEXT'),
+    createdTime: groupColumn('created_time', 'TIME'),
+    updatedTime: groupColumn('updated_time', 'TIME'),
+    tableCount: factCount('table_count'),
+    runningCount: factCount('running_count'),
+    errorCount: factCount('error_count')
+}
+var page = groupsQuery.page(groupFields, groupFields[groupSort], groupDirection, 'tid', pageNum, pageSize)
+var groupRows = page.rows
+if (groupRows.size() == 0) {
+    return {list: [], total: page.total, pageNum: pageNum, pageSize: pageSize}
+}
+
+// 分组聚合已保留查询快照。成员读取重新按当前页和活动编组约束，并同步核验每个来源。
+var groupIds = groupRows.map(group => group.groupId)
+var currentGroupId = tableRead.column('active_group', 'tid', 'TEXT')
+members.leftJoin('data_access_multi_group_t', 'active_group', 'tid', 'group_id', [
+    tableRead.equal(tableRead.column('active_group', 'is_del', 'NUMBER'), 0)
+])
+members.where(tableRead.in(currentGroupId, groupIds))
+var memberFields = {
+    itemId: memberColumn('tid', 'TEXT'),
+    groupId: currentGroupId,
+    sourceTableId: memberColumn('source_table_id', 'TEXT'),
+    taskId: memberColumn('access_task_id', 'TEXT'),
+    sortNo: memberColumn('sort_no', 'NUMBER'),
+    sourceTableName: tableColumn('table_name', 'TEXT'),
+    sourceTableNameCn: tableColumn('table_name_cn', 'TEXT'),
+    availableTaskId: availableTaskId,
+    taskName: taskColumn('task_name', 'TEXT'),
+    taskStatus: taskStatus,
+    pipelineId: taskColumn('pipeline_id', 'TEXT'),
+    monitorStatus: taskColumn('monitor_status', 'TEXT'),
+    monitorMessage: taskColumn('monitor_msg', 'TEXT'),
+    lastRunning: taskColumn('last_running', 'TEXT'),
+    endRunning: taskColumn('end_running', 'TEXT'),
+    deniedItemId: tableRead.when(denied, memberColumn('tid', 'TEXT'), null)
+}
+var memberSorts = {
+    sourceTableName: tableRead.coalesce([memberFields.sourceTableNameCn, memberFields.sourceTableName]),
+    lastRunning: memberFields.lastRunning,
+    endRunning: memberFields.endRunning
+}
+// 只多读一条判断上限，数据库完成组内排序，成员 ID 作为最后的稳定顺序。
+var memberRows = members.rows(memberFields,
+    [currentGroupId, memberSorts[itemSort], memberFields.sortNo, memberFields.itemId],
+    ['asc', itemDirection, 'asc', 'asc'], 10001)
+for (member in memberRows) {
+    if (member.deniedItemId != null) {
+        exit 409, '编组成员或数据权限已变化，请刷新后重试'
     }
 }
-var groups = []
-for (group in groupRows) {
-    var id = text(field(group, 'groupId'))
-    var creator = text(field(group, 'createdBy'))
-    groups.add({groupId: id, groupName: field(group, 'groupName'),
-        createdBy: creator, canManage: creator == scopeUserId,
-        createdTime: field(group, 'createdTime'),
-        updatedTime: field(group, 'updatedTime'),tableCount:field(group,'tableCount'),runningCount:field(group,'runningCount'),errorCount:field(group,'errorCount'), items: itemMap[id]})
+if (memberRows.size() > 10000) {
+    exit 413, '本页编组成员超过10000，请缩小分页范围'
 }
-return {list: groups, total: groupPage?.total == null ? 0 : groupPage.total,
-    pageNum: pageNum, pageSize: pageSize}
+var itemsByGroup = {}
+for (group in groupRows) {
+    itemsByGroup[group.groupId] = []
+}
+for (member in memberRows) {
+    itemsByGroup[member.groupId].add({
+        itemId: member.itemId,
+        sourceTableId: member.sourceTableId,
+        taskId: member.taskId,
+        sortNo: member.sortNo,
+        taskAvailable: text(member.availableTaskId) != '',
+        taskName: member.taskName,
+        taskStatus: member.taskStatus,
+        pipelineId: member.pipelineId,
+        monitorStatus: member.monitorStatus,
+        monitorMessage: member.monitorMessage,
+        lastRunning: member.lastRunning,
+        endRunning: member.endRunning,
+        sourceTableName: member.sourceTableName,
+        sourceTableNameCn: member.sourceTableNameCn
+    })
+}
+var list = []
+for (group in groupRows) {
+    var items = itemsByGroup[group.groupId]
+    if (items.size() != group.tableCount) {
+        exit 409, '编组成员或数据权限已变化，请刷新后重试'
+    }
+    var creator = text(group.createdBy)
+    list.add({
+        groupId: text(group.groupId),
+        groupName: group.groupName,
+        createdBy: creator,
+        canManage: creator == scopeUserId,
+        createdTime: group.createdTime,
+        updatedTime: group.updatedTime,
+        tableCount: group.tableCount,
+        runningCount: group.runningCount,
+        errorCount: group.errorCount,
+        items: items
+    })
+}
+return {list: list, total: page.total, pageNum: pageNum, pageSize: pageSize}

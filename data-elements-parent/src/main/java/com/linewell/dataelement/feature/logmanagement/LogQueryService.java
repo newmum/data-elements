@@ -2,17 +2,33 @@ package com.linewell.dataelement.feature.logmanagement;
 
 import com.linewell.dataelement.platform.audit.*;
 import com.linewell.dataelement.platform.persistence.jdbc.JdbcValueNormalizer;
+import com.linewell.dataelement.platform.persistence.jdbc.StructuredContainsPredicateAdapter;
 import java.sql.Timestamp;
 import java.time.*;
 import java.util.*;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.ssssssss.magicapi.core.service.MagicAPIService;
 
 /** One count + one page; names and departments are stored snapshots, never row-by-row lookups. */
 @Service
 public class LogQueryService {
+    public static final int QUERY_TIMEOUT_SECONDS = 15;
+    public static final String PARAMETER_CONDITION_FUNCTION = "/common/log-parameter-keyword-condition";
     private final AuditStore store;
     private final AuditSanitizer sanitizer;
-    public LogQueryService(AuditStore store,AuditSanitizer sanitizer) { this.store=store; this.sanitizer=sanitizer; }
+    private final ObjectProvider<MagicAPIService> magic;
+    private final StructuredContainsPredicateAdapter predicates;
+    public LogQueryService(AuditStore store,AuditSanitizer sanitizer,ObjectProvider<MagicAPIService> magic,
+            StructuredContainsPredicateAdapter predicates) {
+        this.store=store; this.sanitizer=sanitizer; this.magic=magic; this.predicates=predicates;
+    }
+    private NamedParameterJdbcTemplate reader(LogScope scope) {
+        var reader = store.named(scope.tenantId());
+        reader.getJdbcTemplate().setQueryTimeout(QUERY_TIMEOUT_SECONDS);
+        return reader;
+    }
     public record View(String table,String actor,String account,String name,String org,String orgName,String action,String path,String detail) { }
     public View view(LogScope scope,String kind) {
         if(scope.platform()) return new View("iam_audit_event_t","actor_id","actor_account","actor_name","actor_org_id","actor_org_name","action","request_path","snapshot_json");
@@ -56,6 +72,29 @@ public class LogQueryService {
             params.put("keyword","%"+keyword.replace("!","!!").replace("%","!%").replace("_","!_")+"%");
             where+=" and ("+String.join(" or ",List.of(v.account(),v.name(),v.orgName(),v.action(),"target_name","trace_id","menu_path","operation_name","function_code","page_route",v.path()).stream().distinct().map(c->c+" like :keyword escape '!' ").toList())+")";
         }
+        // Only trusted scope identity is passed to the rule function. Client scope/tenant filters are never forwarded.
+        var context = new LinkedHashMap<String,Object>();
+        context.put("tenantId", scope.tenantId());
+        context.put("kind", kind);
+        context.put("keyword", input.get("parameterKeyword"));
+        Object condition = magic.getObject().invoke(PARAMETER_CONDITION_FUNCTION, context);
+        if (condition != null) {
+            if (!(condition instanceof Map<?,?> predicate)) throw new IllegalStateException("日志参数条件格式无效");
+            var compiled = predicates.compile(store.dataSource(scope.tenantId()), predicate,
+                    Map.of("parameter_search_text", "LOB"), "parameterKeyword");
+            where += " and (" + compiled.sql() + ")";
+            params.putAll(compiled.parameters());
+        }
+        String parameterName = text(input.get("parameterName"), 64).strip();
+        String parameterValue = text(input.get("parameterValue"), 510).strip();
+        if (!parameterName.isEmpty() || !parameterValue.isEmpty()) {
+            if (scope.platform() || !Set.of("operations", "requests").contains(kind)
+                    || parameterName.isEmpty() || parameterValue.isEmpty()) {
+                throw new IllegalArgumentException("请选择操作日志或接口日志，并同时填写参数名称和参数值");
+            }
+            params.put("auditParameter", AuditRequestParameters.exactMatchPattern(parameterName, parameterValue));
+            where += " and " + v.detail() + " like :auditParameter";
+        }
         Instant end=parseTime(input.get("endTime"),Instant.now().plusSeconds(1));
         Instant start=parseTime(input.get("startTime"),end.minus(Duration.ofDays(7)));
         if(!start.isBefore(end)||Duration.between(start,end).compareTo(Duration.ofDays(90))>0) throw new IllegalArgumentException("请选择不超过90天的有效时间区间");
@@ -69,7 +108,7 @@ public class LogQueryService {
     public Map<String,Object> page(LogScope scope,String kind,Map<String,Object> input) {
         Selection s=selection(scope,kind,input); long page=number(input.get("page"),1,1,10000);long size=number(input.get("size"),20,1,100);
         var params=new LinkedHashMap<>(s.params());params.put("size",size);params.put("offset",(page-1)*size);
-        Long total=store.named(scope.tenantId()).queryForObject("select count(*) from "+s.view().table()+s.where(),params,Long.class);
+        Long total=reader(scope).queryForObject("select count(*) from "+s.view().table()+s.where(),params,Long.class);
         var rows=read(scope,s,params,order(input),false);
         return Map.of("list",rows,"total",total==null?0:total,"page",page,"size",size,"timeZone","Asia/Shanghai","appliedScopeSummary",scope.mode());
     }
@@ -79,15 +118,27 @@ public class LogQueryService {
         if(order.startsWith("event_time "))order="coalesce(event_time,created_time - interval '8' hour)"+order.substring("event_time".length());
         else {String column=order.split(" ",2)[0];if(column.equals("actor_name"))column=s.view().name();else if(column.equals("action_code"))column=s.view().action();order="case when "+column+" is null then 1 else 0 end,"+order;}
         String sql="select "+projection(s.view(),detail)+" from "+s.view().table()+s.where()+" order by "+order+" limit :size offset :offset";
-        var rows=store.named(scope.tenantId()).queryForList(sql,params);
+        var rows=reader(scope).queryForList(sql,params);
         return rows.stream().map(row->normalize(row,detail)).toList();
     }
     private String projection(View v,boolean detail) {
         boolean platform=v.table().equals("iam_audit_event_t");
-        return "tid,event_time,created_time,category,actor_kind,menu_id,menu_path,page_route,operation_name,function_code,"+v.actor()+" actor_id,"+v.account()+" actor_account,"+v.name()+" actor_name,"+v.org()+" actor_org_id,"+v.orgName()+" actor_org_name,"+v.action()+" action_code,"+(platform?"object_type target_type,object_id target_id,":"target_type,target_id,")+"target_name,result,reason_code,ip,user_agent,duration_ms,trace_id,request_id,session_ref,http_status,business_code,total_count,success_count,failure_count,source_app,batch_id,task_id,"+v.path()+" route_path"+(detail?","+v.detail()+" details":"");
+        boolean parameters=Set.of("log_system_t","log_request_t").contains(v.table());
+        return "tid,event_time,created_time,category,actor_kind,menu_id,menu_path,page_route,operation_name,function_code,"+v.actor()+" actor_id,"+v.account()+" actor_account,"+v.name()+" actor_name,"+v.org()+" actor_org_id,"+v.orgName()+" actor_org_name,"+v.action()+" action_code,"+(platform?"object_type target_type,object_id target_id,":"target_type,target_id,")+"target_name,result,reason_code,ip,user_agent,duration_ms,trace_id,request_id,session_ref,http_status,business_code,total_count,success_count,failure_count,source_app,batch_id,task_id,"+v.path()+" route_path"+(parameters?",parameter_capture_status"+(detail?",parameter_snapshot":""):"")+(detail?","+v.detail()+" details":"");
     }
     private Map<String,Object> normalize(Map<String,Object> input,boolean detail) {
         Map<String,Object> row=AuditStore.lower(JdbcValueNormalizer.map(input));
+        row.remove("parameter_search_text");
+        if (detail && (row.containsKey("parameter_snapshot") || row.containsKey("parameter_capture_status"))) {
+            var snapshot = AuditParameterSnapshot.parse(row.get("parameter_snapshot"));
+            row.put("parameter_snapshot", snapshot);
+            row.put("parameter_capture_status", snapshot.get("status"));
+        } else if (row.containsKey("parameter_capture_status")) {
+            Object status = row.get("parameter_capture_status");
+            row.put("parameter_capture_status", status != null
+                    && Set.of("EMPTY","CAPTURED","PARTIAL","OMITTED","FAILED","LEGACY").contains(status)
+                    ? status : "LEGACY");
+        }
         row.put("legacy",row.get("event_time")==null);
         Object time=row.get("event_time");if(time!=null)row.put("event_time",LogTimes.instant(time).toString());
         if(row.get("created_time")!=null) {
@@ -97,14 +148,25 @@ public class LogQueryService {
             else row.put("created_time",LogTimes.instant(created).toString());
         }
         if(detail && row.get("details")!=null) {
-            try { row.put("details",sanitizer.clean(new com.fasterxml.jackson.databind.ObjectMapper().readValue(String.valueOf(row.get("details")),Object.class))); }
+            try {
+                Object details = new com.fasterxml.jackson.databind.ObjectMapper()
+                        .readValue(String.valueOf(row.get("details")), Object.class);
+                if (details instanceof Map<?, ?> values) {
+                    var parameters = AuditRequestParameters.display(values.get(AuditRequestParameters.DETAILS_KEY));
+                    if (!parameters.isEmpty()) row.put("request_parameters", parameters);
+                    row.put("details", sanitizer.clean(details));
+                } else {
+                    // A historical JSON string/array may be raw request content, not an allowlisted event summary.
+                    row.put("details", Map.of("phase","LEGACY_DETAIL_NOT_EXPOSED"));
+                }
+            }
             catch(Exception ignored) { row.put("details",Map.of("phase","LEGACY_DETAIL_NOT_EXPOSED")); }
         }
         return row;
     }
     public Map<String,Object> statistics(LogScope scope,String kind,Map<String,Object> input) {
         var s=selection(scope,kind,input);
-        return AuditStore.lower(store.named(scope.tenantId()).queryForMap("select count(*) total,sum(case when result='SUCCESS' then 1 else 0 end) success_count,sum(case when result='FAILED' then 1 else 0 end) failure_count,sum(case when result='DENIED' then 1 else 0 end) denied_count,sum(case when result='PARTIAL' then 1 else 0 end) partial_count from "+s.view().table()+s.where(),s.params()));
+        return AuditStore.lower(reader(scope).queryForMap("select count(*) total,sum(case when result='SUCCESS' then 1 else 0 end) success_count,sum(case when result='FAILED' then 1 else 0 end) failure_count,sum(case when result='DENIED' then 1 else 0 end) denied_count,sum(case when result='PARTIAL' then 1 else 0 end) partial_count from "+s.view().table()+s.where(),s.params()));
     }
     public Map<String,Object> detail(LogScope scope,String kind,String id) {
         var rows=authorizedEvents(scope,kind,List.of(id),true);
@@ -119,25 +181,31 @@ public class LogQueryService {
         }
         String field=text(input.getOrDefault("sortField","category"),40),dir=text(input.getOrDefault("sortDir","asc"),4);
         if(!Set.of("category","total","success_count","failure_count","denied_count","last_event_time").contains(field)||!Set.of("asc","desc").contains(dir))throw new IllegalArgumentException("排序参数无效");
-        var rows=store.named(scope.tenantId()).queryForList("select * from ("+String.join(" union all ",fragments)+") summary_events order by "+field+" "+dir,params).stream().map(AuditStore::lower).map(row->{if(row.get("last_event_time")!=null)row.put("last_event_time",LogTimes.instant(row.get("last_event_time")).toString());return row;}).toList();
+        var rows=reader(scope).queryForList("select * from ("+String.join(" union all ",fragments)+") summary_events order by "+field+" "+dir,params).stream().map(AuditStore::lower).map(row->{if(row.get("last_event_time")!=null)row.put("last_event_time",LogTimes.instant(row.get("last_event_time")).toString());return row;}).toList();
         return Map.of("list",rows,"total",rows.size());
     }
     public List<Map<String,Object>> authorizedEvents(LogScope scope,String kind,List<String> ids,boolean detail) {
-        if(ids==null||ids.isEmpty()||ids.size()>100||new HashSet<>(ids).size()!=ids.size()||ids.stream().anyMatch(id->id==null||id.length()>64)) throw new IllegalArgumentException("一次最多查询100个不同事件");
+        if(ids==null||ids.isEmpty()||ids.size()>100||new HashSet<>(ids).size()!=ids.size()||ids.stream().anyMatch(id->id==null||id.isBlank()||id.length()>64)) throw new IllegalArgumentException("一次最多查询100个不同事件");
         var s=selection(scope,kind,Map.of(),false);
         String where=s.where()+" and tid in (:ids)";
         var params=new LinkedHashMap<>(s.params());params.put("ids",ids);
-        var rows=store.named(scope.tenantId()).queryForList("select "+projection(s.view(),detail)+" from "+s.view().table()+where,params);
+        var rows=reader(scope).queryForList("select "+projection(s.view(),detail)+" from "+s.view().table()+where,params);
         if(rows.size()!=ids.size()) throw new SecurityException("事件不存在或超出当前授权范围");
-        return rows.stream().map(row->normalize(row,detail)).toList();
+        var byId=new HashMap<String,Map<String,Object>>();
+        for(var row:rows) {
+            var event=normalize(row,detail);byId.put((String)event.get("tid"),event);
+        }
+        // 一次范围内批量查询后逐 ID 完整校验，在内存恢复输入序，不补查或静默丢弃缺项。
+        if(!byId.keySet().equals(new HashSet<>(ids)))throw new SecurityException("事件不存在或超出当前授权范围");
+        return ids.stream().map(byId::get).toList();
     }
     public Object batchItems(LogScope scope,String kind,String id,Map<String,Object> input){
         authorizedEvents(scope,kind,List.of(id),false);
         var p=new LinkedHashMap<String,Object>();p.put("scopeKind",scope.scopeKind());p.put("scopeId",scope.scopeId());p.put("domain",scope.platform()?scope.domain():"global");p.put("eventId",id);p.put("store",kind);
         long page=number(input.get("page"),1,1,10000),size=number(input.get("size"),20,1,100);p.put("size",size);p.put("offset",(page-1)*size);
         String where=" where scope_kind=:scopeKind and scope_id=:scopeId and identity_domain=:domain and event_id=:eventId and event_store=:store";
-        Long total=store.named(scope.tenantId()).queryForObject("select count(*) from log_batch_item_t"+where,p,Long.class);
-        var rows=store.named(scope.tenantId()).queryForList("select item_no,target_type,target_id,target_name,action_code,result,reason_code from log_batch_item_t"+where+" order by item_no limit :size offset :offset",p).stream().map(JdbcValueNormalizer::map).map(AuditStore::lower).toList();
+        Long total=reader(scope).queryForObject("select count(*) from log_batch_item_t"+where,p,Long.class);
+        var rows=reader(scope).queryForList("select item_no,target_type,target_id,target_name,action_code,result,reason_code from log_batch_item_t"+where+" order by item_no limit :size offset :offset",p).stream().map(JdbcValueNormalizer::map).map(AuditStore::lower).toList();
         return Map.of("list",rows,"total",total==null?0:total,"page",page,"size",size);
     }
     public String order(Map<String,Object> input) {

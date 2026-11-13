@@ -20,6 +20,7 @@ import kafka from '../icons/kafka.svg';
 import kingbase from '../icons/kingbase8.svg';
 import mariadb from '../icons/mariadb.png';
 import minio from '../icons/minio.svg';
+import mongodb from '../icons/mongodb.svg';
 import mysql from '../icons/mysql.svg';
 import oceanbase from '../icons/oceanbasemysql.svg';
 import oracle from '../icons/oracle.svg';
@@ -29,6 +30,7 @@ import sqlserver from '../icons/sqlserver.png';
 import sftp from '../icons/sftp.svg';
 import starrocks from '../icons/starrocks.svg';
 import tdsql from '../icons/tdsql.png';
+import vertica from '../icons/vertica.svg';
 
 interface ProcessIconSpec {
   bg: string;
@@ -102,6 +104,7 @@ export const DATA_SOURCE_ICONS: Record<string, ReactNode> = {
   'source.kingbase': <DatabaseBrandIcon src={kingbase} name="人大金仓" />,
   'source.mariadb': <DatabaseBrandIcon src={mariadb} name="MariaDB" />,
   'source.minio': <DatabaseBrandIcon src={minio} name="MinIO" />,
+  'source.mongodb': <DatabaseBrandIcon src={mongodb} name="MongoDB" />,
   'source.mysql': <DatabaseBrandIcon src={mysql} name="MySQL" />,
   'source.oceanbase': <DatabaseBrandIcon src={oceanbase} name="OceanBase" />,
   'source.oracle': <DatabaseBrandIcon src={oracle} name="Oracle" />,
@@ -111,6 +114,7 @@ export const DATA_SOURCE_ICONS: Record<string, ReactNode> = {
   'source.starrocks': <DatabaseBrandIcon src={starrocks} name="StarRocks" />,
   'source.tdsql-mysql': <DatabaseBrandIcon src={tdsql} name="Tencent TDSQL MySQL" />,
   'source.tdsql-pg': <DatabaseBrandIcon src={tdsql} name="Tencent TDSQL PostgreSQL" />,
+  'source.vertica': <DatabaseBrandIcon src={vertica} name="Vertica" />,
 };
 
 export const COMPONENT_ICONS: Record<string, ReactNode> = {
@@ -123,6 +127,7 @@ export const COMPONENT_ICONS: Record<string, ReactNode> = {
   'transform.java': <ProcessSvgIcon bg="#b45309" kind="code" label="JAVA" />,
   'transform.shell': <ProcessSvgIcon bg="#475569" kind="code" label="SH" />,
   'sink.hive': <DatabaseBrandIcon src={hive} name="Apache Hive" />,
+  'sink.mongodb': DATA_SOURCE_ICONS['source.mongodb'],
   'sink.jdbc': <ProcessSvgIcon bg="#16a34a" kind="sink" label="JDBC" />,
   transform: <ProcessSvgIcon bg="#6366f1" kind="transform" label="TRANS" />,
   sink: <ProcessSvgIcon bg="#16a34a" kind="sink" label="SINK" />,

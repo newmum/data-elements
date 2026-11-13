@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient;
 import com.linewell.dataelement.integration.nifi.canvas.pipeline.Pipeline;
+import com.linewell.dataelement.integration.nifi.canvas.pipeline.PipelineStatus;
 import com.linewell.dataelement.model.nifi.NifiEntity;
 import com.linewell.dataelement.platform.tenant.domain.TenantContext;
 import java.util.*;
@@ -54,6 +55,18 @@ class PipelineGroupOrganizerTest {
             verify(nifi, times(2)).createProcessGroup(anyString(), anyString(), anyDouble(), anyDouble(), anyString());
             assertThat(tree.values().stream().flatMap(List::stream).map(g -> g.path("component").path("name").asText()))
                     .containsExactlyInAnyOrder("所属部门", "业务系统");
+        }
+    }
+
+    @Test
+    void undeployedDraftWithoutTaskGroupDoesNotContactNifi() {
+        Pipeline draft = new Pipeline("draft", "流程草稿", null, 1L, 1L, null, null,
+                PipelineStatus.SAVED, null, null, null, null, null);
+        try (var scope = TenantContext.use("tenant1")) {
+            when(jdbc.queryForList(anyString(), eq("tenant1"), eq(draft.id()))).thenReturn(List.of());
+            assertThat(new PipelineGroupOrganizer(nifi, jdbc).existingIds(draft)).isEmpty();
+            verify(jdbc).queryForList(anyString(), eq("tenant1"), eq(draft.id()));
+            verifyNoInteractions(nifi);
         }
     }
 

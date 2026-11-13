@@ -11,9 +11,11 @@ export interface HttpOptions {
 export async function request<T>(path: string, options: HttpOptions = {}): Promise<T> {
     let response: Response;
     try {
+        // 菜单上下文仅来自真实浏览器路由；Node/预渲染不伪造入口，也不能阻断正常请求。
+        const route = typeof window === 'undefined' ? '' : window.location?.hash?.slice(1).split('?')[0] || '';
         response = await fetch(`/api${path}`, {
             method: options.method || 'GET',
-            headers: { 'X-Audit-Route':window.location.hash.slice(1).split('?')[0], Accept: 'application/json', ...(options.body !== undefined ? { 'Content-Type': 'application/json' } : {}), ...(options.token ? { token: options.token } : {}) },
+            headers: { ...(route.startsWith('/') ? { 'X-Audit-Route': route } : {}), Accept: 'application/json', ...(options.body !== undefined ? { 'Content-Type': 'application/json' } : {}), ...(options.token ? { token: options.token } : {}) },
             body: options.body === undefined ? undefined : JSON.stringify(options.body),
             signal: options.signal,
             credentials: 'same-origin',

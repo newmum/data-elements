@@ -30,12 +30,16 @@ test('address edits regenerate ordinary JDBC URLs and reject stale custom URLs',
  assert.throws(()=>ds.draftFromForm({...custom,connection:{...custom.connection,host:'new.local'}},custom),/同步更新自定义 JDBC/);
  assert.equal(ds.draftFromForm({...custom,connection:{...custom.connection,host:'new.local',jdbcURL:''}},custom).jdbcURL,'jdbc:mysql://new.local:3306/business');
 });
-test('pending index synchronization does not replace confirmed edits with a stale row',()=>{
- const confirmed=ds.sourceRow({...source,assetDesc:'saved description',storageDomain:'政务外网'});
- assert.equal(ds.matchesSourceProjection(ds.sourceRow(source),confirmed),false);
- assert.equal(ds.matchesSourceProjection({...confirmed,fieldCount:1},confirmed),true);
+test('the saved source refreshes its database page independently of index retries',()=>{
  const page=fs.readFileSync('src/features/platform/SourcesPage.tsx','utf8');
- assert.match(page,/confirmedSources/);assert.match(page,/readSource\(saved.tid\)/);assert.match(page,/syncingIndexes.current.has/);
+ const indexSync=page.slice(page.indexOf('const syncIndex='),page.indexOf('const saveRegistration='));
+ const afterSave=page.match(/onSaved=\{\s*result\s*=>\s*\{([^}]*)\}\}/)?.[1]??'';
+ assert.match(page,/readSource\(saved\.tid\)/);
+ assert.equal((afterSave.match(/q\.refresh\(\)/g)??[]).length,1);
+ assert.match(afterSave,/q\.refresh\(\);\s*void syncIndex\(saved\.tid\)/);
+ assert.match(indexSync,/syncingIndexes\.current\.has\(id\)/);
+ assert.match(indexSync,/sharedSourceApi\.refreshIndex\(id\)/);
+ assert.doesNotMatch(indexSync,/q\.refresh\(/);
 });
 test('drawer field remounts retain initial values without returning stored passwords',()=>{
  assert.match(fs.readFileSync('src/features/platform/common.tsx','utf8'),/<Form form=\{form\} initialValues=\{initial\}/);
@@ -44,23 +48,31 @@ test('drawer field remounts retain initial values without returning stored passw
 });
 test('existing passwords are neither returned in editor fields nor erased on empty edit',()=>{const draft=registration.draftFromDetail({...source,password:'existing-secret',host:'db.local',port:3306,database:'business'});assert.equal(draft.password,undefined);const form=ds.formFromDraft(draft,source.tid);assert.equal(form.connection.password,'');const props=registration.sourceProperties({...ds.draftFromForm(form,form),password:''});assert.equal('password' in props,false);assert.equal('tenantId' in props,false);});
 test('backend auth and mutation errors do not fall back to local seeds',async()=>{
- const previous={fetch:globalThis.fetch,location:globalThis.location,localStorage:globalThis.localStorage,sessionStorage:globalThis.sessionStorage};
- const calls=[];globalThis.location={href:'http://localhost:3000/',origin:'http://localhost:3000',replace:()=>{}};
+ const previous={fetch:globalThis.fetch,location:globalThis.location,window:globalThis.window,localStorage:globalThis.localStorage,sessionStorage:globalThis.sessionStorage};
+ const calls=[];let savedSource=source;globalThis.location={href:'http://localhost:3000/#/governance/metadata/sources?sort=asc',origin:'http://localhost:3000',hash:'#/governance/metadata/sources?sort=asc',replace:()=>{}};
+ globalThis.window={location:globalThis.location};
  globalThis.localStorage={getItem:()=>null,setItem:()=>{},removeItem:()=>{}};globalThis.sessionStorage={getItem:()=>JSON.stringify('test-only-token')};
  globalThis.fetch=async(url,init)=>{calls.push({url,init});const path=String(url);let data;
  if(path.endsWith('/sym/user/me'))data={id:'real-user',realName:'真实账号',orgName:'真实部门',roles:['admin']};
  else if(path.endsWith('/sym/tenant/current'))data={tid:'tenant-from-session',name:'真实租户'};
- else if(path.endsWith('/dst/database/page'))data={list:[source],total:1};
- else if(path.endsWith('/saveOrUpdate'))data={tid:'saved-source',indexRefreshPending:true};
+ else if(path.endsWith('/dst/database/page'))data={list:[savedSource],total:1};
+ else if(path.endsWith('/saveOrUpdate')){
+  savedSource={...source,tid:'saved-source',dbName:JSON.parse(init.body).propList.dbName};
+  data={tid:savedSource.tid,indexRefreshPending:true};
+ }
+ else if(path.endsWith('/maintenance/refresh'))data={refreshed:false};
  else if(path.endsWith('/test-connection'))data={connected:false,error:'连接被拒绝'};
  else throw new Error('offline');
  return new Response(JSON.stringify({code:0,data}));};
  try{
   assert.equal(ds.canManageSources(),false);const session=await auth.loadSession();assert.equal(session.name,'真实账号');assert.equal(ds.canManageSources(),true);
   assert.equal((await ds.listSources())[0].id,'canonical-source');assert.equal(calls.filter(c=>c.url.includes('/dst/database/')).length,1);
+  assert.ok(calls.every(({init})=>init.headers['X-Audit-Route']==='/governance/metadata/sources'));
   await ds.saveSource({name:'保存测试',engine:'MYSQL',orgId:'org-1',connection:{host:'db.local',port:3306,database:'business',username:'reader'}});
   const saved=JSON.parse(calls.find(c=>c.url.endsWith('/saveOrUpdate')).init.body);assert.equal(saved.deferIndexRefresh,true);assert.equal(saved.assetType,'db');assert.equal(saved.propList.preserveSourceOrg,true);assert.equal('tenantId' in saved,false);
   assert.equal(calls.some(c=>c.url.includes('/maintenance/refresh')),false);
+  await assert.rejects(ds.sharedSourceApi.refreshIndex('saved-source'),/索引接口未确认同步成功/);
+  assert.deepEqual((await ds.sourcesPage({pageNum:1,pageSize:20})).list.map(({id,name})=>({id,name})),[{id:'saved-source',name:'保存测试'}]);
   await assert.rejects(ds.testSource('canonical-source'),/数据库连接失败，请检查地址/);
   await assert.rejects(shared.platformApi('/unavailable'),/无法连接数据中台/);
  }finally{Object.assign(globalThis,previous);}

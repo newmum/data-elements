@@ -114,6 +114,147 @@ class StructuredTableReadMagicModuleTest {
     }
 
     @Test
+    void rankAndPageCanFollowTheDatabaseNullOrdering() {
+        var fixture = new Fixture();
+        JdbcTemplate jdbc = new JdbcTemplate(fixture.source());
+        jdbc.execute("CREATE TABLE inventory (tid VARCHAR, tenant_id VARCHAR, group_key VARCHAR, title VARCHAR, priority INT)");
+        jdbc.update("INSERT INTO inventory VALUES ('null-winner', ?, 'shared', NULL, NULL)", TENANT);
+        jdbc.update("INSERT INTO inventory VALUES ('nonnull-winner', ?, 'shared', 'z', 1)", TENANT);
+        jdbc.update("INSERT INTO inventory VALUES ('other', ?, 'other', 'a', 1)", TENANT);
+
+        TenantContext.run(TENANT, () -> {
+            var module = fixture.module();
+            var query = module.from("inventory", "t", TENANT);
+            var rootId = module.column("t", "tid", "TEXT");
+            var rankedColumns = Map.of("tid", rootId, "title", module.column("t", "title", "TEXT"));
+            var partition = List.of(module.column("t", "group_key", "TEXT"));
+            var priorities = List.of(module.column("t", "priority", "NUMBER"), rootId);
+            var directions = List.of("asc", "asc");
+            var nativeRank = query.ranked("r", rankedColumns, partition, priorities, directions, true);
+            var defaultRank = query.ranked("r", rankedColumns, partition, priorities, directions);
+            var projection = Map.of("id", module.column("r", "tid", "TEXT"));
+            var sort = module.column("r", "title", "TEXT");
+
+            assertEquals(List.of(Map.of("id", "null-winner"), Map.of("id", "other")),
+                    nativeRank.page(projection, sort, "asc", "tid", "asc", 1, 20, true).get("rows"));
+            assertEquals(List.of(Map.of("id", "other"), Map.of("id", "null-winner")),
+                    nativeRank.page(projection, sort, "asc", "tid", "asc", 1, 20).get("rows"));
+            assertEquals(List.of(Map.of("id", "other"), Map.of("id", "nonnull-winner")),
+                    defaultRank.page(projection, sort, "asc", "tid", "asc", 1, 20, true).get("rows"));
+
+            var sorts = List.of(sort, projection.get("id"));
+            fixture.source().reads = 0;
+            assertEquals(List.of(Map.of("id", "null-winner"), Map.of("id", "other")),
+                    nativeRank.rankedRows(projection, sorts, directions, true));
+            assertEquals(List.of(Map.of("id", "other"), Map.of("id", "null-winner")),
+                    nativeRank.rankedRows(projection, sorts, directions, false));
+            assertThrows(IllegalArgumentException.class,
+                    () -> nativeRank.rankedRows(projection, sorts, List.of("asc"), true));
+            assertThrows(IllegalArgumentException.class,
+                    () -> nativeRank.rankedRows(projection, sorts, List.of("asc", "unsupported"), true));
+            assertEquals(2, fixture.source().reads);
+        });
+    }
+
+    @Test
+    void multiKeyRowsKeepNullsLastAndUseOneScopedQuery() {
+        var fixture = new Fixture();
+        JdbcTemplate jdbc = new JdbcTemplate(fixture.source());
+        jdbc.execute("CREATE TABLE inventory (tid VARCHAR, tenant_id VARCHAR, group_id VARCHAR, label VARCHAR, sort_no INT)");
+        jdbc.update("INSERT INTO inventory VALUES ('group-b', ?, 'b', 'highest', 1)", TENANT);
+        jdbc.update("INSERT INTO inventory VALUES ('null-label', ?, 'a', NULL, 1)", TENANT);
+        jdbc.update("INSERT INTO inventory VALUES ('lower-label', ?, 'a', 'a', 1)", TENANT);
+        jdbc.update("INSERT INTO inventory VALUES ('later-sort', ?, 'a', 'z', 2)", TENANT);
+        jdbc.update("INSERT INTO inventory VALUES ('tie-b', ?, 'a', 'z', 1)", TENANT);
+        jdbc.update("INSERT INTO inventory VALUES ('tie-a', ?, 'a', 'z', 1)", TENANT);
+        jdbc.update("INSERT INTO inventory VALUES ('foreign', ?, 'a', 'z', 0)", OTHER_TENANT);
+
+        TenantContext.run(TENANT, () -> {
+            var module = fixture.module();
+            var query = module.from("inventory", "r", TENANT);
+            var id = module.column("r", "tid", "TEXT");
+            var label = module.column("r", "label", "TEXT");
+            var sorts = List.of(module.column("r", "group_id", "TEXT"), label,
+                    module.column("r", "sort_no", "NUMBER"), id);
+            var directions = List.of("asc", "desc", "asc", "asc");
+            var projection = Map.of("id", id);
+
+            fixture.source().reads = 0;
+            var rows = query.rows(projection, sorts, directions, 6);
+            assertEquals(List.of("tie-a", "tie-b", "later-sort", "lower-label", "null-label", "group-b"),
+                    rows.stream().map(row -> row.get("id")).toList());
+            assertEquals(1, fixture.source().reads);
+            assertEquals(rows.subList(0, 2), query.rows(projection, sorts, directions, 2));
+            assertEquals(2, fixture.source().reads);
+
+            assertEquals(List.of(Map.of("id", "null-label")), query.rows(projection, label, "asc", 1));
+            assertThrows(IllegalArgumentException.class, () -> query.rows(projection, sorts, List.of("asc"), 6));
+            assertThrows(IllegalArgumentException.class,
+                    () -> query.rows(projection, sorts, List.of("asc", "unsupported", "asc", "asc"), 6));
+            assertEquals(3, fixture.source().reads);
+        });
+    }
+
+    @Test
+    void multiKeyReadSupportsABoundedOverflowProbeWithoutChangingTheOriginalLimit() {
+        var fixture = new Fixture();
+        JdbcTemplate jdbc = new JdbcTemplate(fixture.source());
+        jdbc.execute("CREATE TABLE inventory (tid BIGINT, tenant_id VARCHAR)");
+        jdbc.update("INSERT INTO inventory SELECT n, ? FROM system_range(1, 10002) AS numbers(n)", TENANT);
+        jdbc.update("INSERT INTO inventory VALUES (10003, ?)", OTHER_TENANT);
+
+        TenantContext.run(TENANT, () -> {
+            var module = fixture.module();
+            var query = module.from("inventory", "r", TENANT);
+            var id = module.column("r", "tid", "NUMBER");
+            var projection = Map.of("id", id);
+            var sorts = List.of(id);
+            var directions = List.of("asc");
+
+            fixture.source().reads = 0;
+            var rows = query.rows(projection, sorts, directions, 10_001);
+            assertEquals(10_001, rows.size());
+            assertEquals(10_001L, rows.getLast().get("id"));
+            assertThrows(IllegalArgumentException.class, () -> query.rows(projection, sorts, directions, 10_002));
+            assertThrows(IllegalArgumentException.class, () -> query.rows(projection, id, "asc", 1_001));
+            assertEquals(1, fixture.source().reads);
+
+            assertThrows(IllegalArgumentException.class, () -> query.rankedRows(projection, sorts, directions, true));
+            var ranked = query.ranked("picked", Map.of("tid", id), List.of(id), sorts, directions);
+            var rankedId = module.column("picked", "tid", "NUMBER");
+            var complete = ranked.rankedRows(Map.of("id", rankedId), List.of(rankedId), directions, true);
+            assertEquals(10_002, complete.size());
+            assertEquals(1L, complete.getFirst().get("id"));
+            assertEquals(10_002L, complete.getLast().get("id"));
+            assertEquals(2, fixture.source().reads);
+        });
+    }
+
+    @Test
+    void regexMatchesAndReplacesAllOccurrencesWithoutTruncatingLongText() {
+        var fixture = new Fixture();
+        JdbcTemplate jdbc = new JdbcTemplate(fixture.source());
+        jdbc.execute("CREATE TABLE inventory (tid VARCHAR, tenant_id VARCHAR, body CLOB)");
+        String middle = "数".repeat(48_000);
+        String body = "!?" + middle + "?!带'引号42";
+        jdbc.update("INSERT INTO inventory VALUES ('matching', ?, ?)", TENANT, body);
+        jdbc.update("INSERT INTO inventory VALUES ('not-matching', ?, ?)", TENANT, body + "extra");
+        jdbc.update("INSERT INTO inventory VALUES ('foreign', ?, ?)", OTHER_TENANT, body);
+
+        TenantContext.run(TENANT, () -> {
+            var module = fixture.module();
+            var query = module.from("inventory", "r", TENANT);
+            var id = module.column("r", "tid", "TEXT");
+            var replaced = module.regexReplace(module.column("r", "body", "LOB"), "[?!]+", "'_");
+            var joined = module.concat("开头:", replaced);
+            query.where(module.regexLike(joined, "带'引号[0-9]+$"));
+
+            assertEquals(List.of(Map.of("id", "matching", "body", "开头:'_" + middle + "'_带'引号42")),
+                    query.grouped(Map.of("id", id, "body", joined), List.of()));
+        });
+    }
+
+    @Test
     void concatenatedSearchKeepsNullEmptyAndLongTextSemantics() {
         var fixture = new Fixture();
         JdbcTemplate jdbc = new JdbcTemplate(fixture.source());

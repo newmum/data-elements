@@ -39,4 +39,12 @@ test('dashboard recent-task text uses business presentation, not raw run IDs',()
 test('dashboard rows share thirds with two-plus-one panels',()=>{const css=source('src/styles/refined.css');assert.match(css,/\.wx-dashboard-charts\{display:grid;grid-template-columns:1fr 1fr 1fr/);assert.match(css,/\.wx-dashboard-work,\.wx-dashboard-bottom\{grid-template-columns:repeat\(3,minmax\(0,1fr\)\)\}/);assert.match(css,/\.wx-dashboard-work>\.wx-insight-panel:first-child,\.wx-dashboard-bottom>\.wx-insight-panel:first-child\{grid-column:span 2\}/);});
 test('model previews do not fabricate relationship edges',()=>assert.doesNotMatch(source('src/design/Visuals.tsx'),/sourceEntityId|targetEntityId|curveTo/));
 test('forms use explicit edit state rather than programmatic touched state',()=>{assert.match(source('src/features/platform/common.tsx'),/dirty.current = false/);assert.doesNotMatch(source('src/features/platform/common.tsx'),/isFieldsTouched/);});
-test('ER canvas is accessed through models rather than a separate menu',()=>{const routes=source('src/app/routes.ts');assert.equal((routes.match(/key:'\/governance/g)||[]).length,18);assert.doesNotMatch(routes,/key:'\/governance\/metadata\/er'/);});
+test('ER canvas is accessed through models rather than a separate menu',()=>{
+ const {navigation}=require('../.test-build/src/app/routes.js');
+ const {MODEL_PATH,isCanvasPath}=require('../.test-build/src/app/canvasNavigation.js');
+ const menuItems=navigation.flatMap(group=>group.children);
+ assert.equal(menuItems.filter(item=>item.key===MODEL_PATH).length,1);
+ assert.ok(menuItems.every(item=>!isCanvasPath(item.key)));
+ assert.match(source('src/app/App.tsx'),/<Route path="\/governance\/metadata\/models" element=\{<ModelsPage\s*\/>\}/);
+ assert.match(source('src/features/platform/ModelsPage.tsx'),/switchDiagram\(r\.id\)/);
+});

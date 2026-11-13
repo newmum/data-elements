@@ -6,6 +6,7 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -89,6 +90,27 @@ public class StructuredTableReadMagicModule {
         return call("TRIM", List.of(term), term.kind);
     }
 
+    @Comment("拼接两个值，沿用当前数据库的空值语义并保留长文本")
+    public Expression concat(Object left, Object right) {
+        List<?> values = Arrays.asList(left, right);
+        Kind type = values.stream().anyMatch(value -> value instanceof Expression term && term.kind == Kind.LOB)
+                ? Kind.LOB : Kind.TEXT;
+        Expression nativeConcat = call("CONCAT", values, type);
+        if (type != Kind.LOB) {
+            return nativeConcat;
+        }
+        return new Expression(context -> {
+            if (!context.dameng) {
+                return nativeConcat.sql(context);
+            }
+            // Dameng CONCAT can coerce a LOB to VARCHAR; the LOB operator keeps its full value and NULL rules.
+            return values.stream().map(operand -> {
+                String sql = value(context, operand);
+                return operand instanceof Expression term && term.kind == Kind.LOB ? sql : "TO_CLOB(" + sql + ")";
+            }).collect(Collectors.joining(" || ", "(", ")"));
+        }, Kind.LOB);
+    }
+
     @Comment("用分隔符拼接文本表达式，跳过数据库 NULL，保留非 NULL 空值和长文本")
     public Expression concatWs(String separator, List<Expression> terms) {
         if (separator == null || terms.isEmpty()) {
@@ -131,6 +153,14 @@ public class StructuredTableReadMagicModule {
             throw new IllegalArgumentException("结构化文本替换参数无效");
         }
         return call("REPLACE", List.of(term, search, replacement), term.kind);
+    }
+
+    @Comment("按数据库正则规则替换全部匹配，模式与替换文本均绑定")
+    public Expression regexReplace(Expression term, String pattern, String replacement) {
+        List<?> values = List.of(term, pattern, replacement);
+        Expression nativeReplace = call("REGEXP_REPLACE", values, term.kind);
+        Expression globalReplace = call("REGEXP_REPLACE", List.of(term, pattern, replacement, "g"), term.kind);
+        return new Expression(context -> (context.postgres ? globalReplace : nativeReplace).sql(context), term.kind);
     }
 
     @Comment("将 Unix 毫秒数转换为当前数据库的时间值，保留空值")
@@ -233,6 +263,21 @@ public class StructuredTableReadMagicModule {
         });
     }
 
+    public record CompiledCondition(String sql, List<Object> parameters) { }
+
+    /** Render only a whitelisted column predicate; callers retain authorization, execution and timeout control. */
+    public CompiledCondition compileContains(Connection connection, String column, String type, String value)
+            throws SQLException {
+        String field = name(column);
+        Kind kind = Kind.valueOf(type);
+        // A single LOB already preserves its full value; no text concatenation or VARCHAR coercion is needed.
+        // The flag reuses the existing overlapping-chunk renderer for Dameng long text.
+        Expression term = new Expression(context -> context.quote(field), kind, kind == Kind.LOB);
+        Render context = new Render(connection);
+        String sql = contains(term, value).sql(context);
+        return new CompiledCondition(sql, List.copyOf(context.boundParameters()));
+    }
+
     public Condition contains(Expression term, String value) {
         return new Condition(context -> {
             if (context.dameng && term.joinedClob && (value == null || value.length() <= DAMENG_SEARCH_CHUNK_SIZE)) {
@@ -260,6 +305,21 @@ public class StructuredTableReadMagicModule {
 
     public Condition like(Expression term, String pattern) {
         return new Condition(context -> searchableText(context, term) + " LIKE " + context.parameter(pattern));
+    }
+
+    @Comment("判断文本中是否存在符合正则的内容，模式使用绑定参数")
+    public Condition regexLike(Expression term, String pattern) {
+        return new Condition(context -> {
+            String text = searchableText(context, term);
+            String boundPattern = context.parameter(pattern);
+            if (context.postgres && !context.kingbase) {
+                return text + " ~ " + boundPattern;
+            }
+            if (context.mysql) {
+                return text + " REGEXP " + boundPattern;
+            }
+            return "REGEXP_LIKE(" + text + ", " + boundPattern + ")";
+        });
     }
 
     public Condition not(Condition condition) {
@@ -367,6 +427,7 @@ public class StructuredTableReadMagicModule {
         private static final int MAX_WALK_DEPTH = 16;
         private static final int MAX_PAGE_SIZE = 100;
         private static final int MAX_READ_ROWS = 1000;
+        private static final int MAX_MULTI_SORT_READ_ROWS = 10_001;
         private final JdbcTemplate jdbc;
         private final String table;
         private final String alias;
@@ -437,6 +498,12 @@ public class StructuredTableReadMagicModule {
         @Comment("先按分组和明确顺序选择第一行，再以新别名施加外层筛选和分页")
         public Query ranked(String rankedAlias, Map<String, Expression> projection, List<Expression> partitions,
                 List<Expression> orders, List<String> directions) {
+            return ranked(rankedAlias, projection, partitions, orders, directions, false);
+        }
+
+        @Comment("分组首行可沿用数据库原生空值顺序；默认统一将空值排在末尾")
+        public Query ranked(String rankedAlias, Map<String, Expression> projection, List<Expression> partitions,
+                List<Expression> orders, List<String> directions, boolean nativeNullOrder) {
             requireTenant();
             if (partitions.isEmpty() || orders.isEmpty() || orders.size() != directions.size()
                     || directions.stream().anyMatch(direction -> !validDirection(direction))) {
@@ -449,7 +516,7 @@ public class StructuredTableReadMagicModule {
             }
             columns.put("tenant_id", expression(context -> context.column(alias, "tenant_id")));
             var rank = new Ranked(snapshot(), columns, List.copyOf(partitions), List.copyOf(orders),
-                    List.copyOf(directions));
+                    List.copyOf(directions), nativeNullOrder);
             return new Query(jdbc, null, name(rankedAlias), tenantId, rank, null);
         }
 
@@ -492,12 +559,53 @@ public class StructuredTableReadMagicModule {
             if (limit < 1 || limit > MAX_READ_ROWS || !validDirection(direction)) {
                 throw new IllegalArgumentException("结构化查询读取窗口无效");
             }
+            return readRows(projection, List.of(sort), List.of(direction), limit, true);
+        }
+
+        @Comment("按多个排序键读取一个受限窗口，空值排在末尾，无需额外统计总数")
+        public List<Map<String, Object>> rows(Map<String, Expression> projection, List<Expression> sorts,
+                List<String> directions, int limit) {
+            if (limit < 1 || limit > MAX_MULTI_SORT_READ_ROWS || !validSortOrder(sorts, directions)) {
+                throw new IllegalArgumentException("结构化查询多键读取窗口无效");
+            }
+            return readRows(projection, List.copyOf(sorts), List.copyOf(directions), limit, false);
+        }
+
+        @Comment("完整读取分组代表行，按多个排序键排序，可沿用数据库原生空值顺序")
+        public List<Map<String, Object>> rankedRows(Map<String, Expression> projection, List<Expression> sorts,
+                List<String> directions, boolean nativeNullOrder) {
+            if (ranked == null || !validSortOrder(sorts, directions)) {
+                throw new IllegalArgumentException("完整排序读取需要已分组去重的查询和有效排序");
+            }
             return execute((connection, reader) -> {
                 Render context = new Render(connection);
-                String sql = select(context, projection) + from(context, true)
-                        + " ORDER BY " + sort.sql(context) + " " + direction;
+                String sql = orderedRowsSql(context, projection, sorts, directions, nativeNullOrder);
+                return JdbcValueNormalizer.maps(reader.queryForList(context.statement(sql), context.boundParameters().toArray()));
+            });
+        }
+
+        private List<Map<String, Object>> readRows(Map<String, Expression> projection, List<Expression> sorts,
+                List<String> directions, int limit, boolean nativeNullOrder) {
+            return execute((connection, reader) -> {
+                Render context = new Render(connection);
+                String sql = orderedRowsSql(context, projection, sorts, directions, nativeNullOrder);
                 return queryWindow(connection, reader, context, sql, 0, limit);
             });
+        }
+
+        private String orderedRowsSql(Render context, Map<String, Expression> projection, List<Expression> sorts,
+                List<String> directions, boolean nativeNullOrder) {
+            String sql = select(context, projection) + from(context, true);
+            var orders = new ArrayList<String>(sorts.size());
+            for (int index = 0; index < sorts.size(); index++) {
+                orders.add(orderBy(context, sorts.get(index), directions.get(index), nativeNullOrder));
+            }
+            return sql + " ORDER BY " + String.join(", ", orders);
+        }
+
+        private static boolean validSortOrder(List<Expression> sorts, List<String> directions) {
+            return !sorts.isEmpty() && sorts.size() == directions.size()
+                    && directions.stream().allMatch(Query::validDirection);
         }
 
         public Map<String, Object> page(Map<String, Expression> projection, Expression sort, String direction,
@@ -507,7 +615,14 @@ public class StructuredTableReadMagicModule {
 
         public Map<String, Object> page(Map<String, Expression> projection, Expression sort, String direction,
                 String tieBreaker, String tieDirection, int pageNum, int pageSize) {
-            return readPage(projection, sort, direction, tieBreaker, tieDirection, pageNum, pageSize, false, false);
+            return page(projection, sort, direction, tieBreaker, tieDirection, pageNum, pageSize, false);
+        }
+
+        @Comment("分页可沿用数据库原生空值顺序；默认统一将空值排在末尾")
+        public Map<String, Object> page(Map<String, Expression> projection, Expression sort, String direction,
+                String tieBreaker, String tieDirection, int pageNum, int pageSize, boolean nativeNullOrder) {
+            return readPage(projection, sort, direction, tieBreaker, tieDirection, pageNum, pageSize,
+                    false, false, nativeNullOrder);
         }
 
         @Comment("分页保留主表原始列，并增加显式投影的计算列")
@@ -516,17 +631,18 @@ public class StructuredTableReadMagicModule {
             if (table == null) {
                 throw new IllegalArgumentException("原始列分页必须使用物理主表");
             }
-            return readPage(extra, sort, direction, tieBreaker, "asc", pageNum, pageSize, false, true);
+            return readPage(extra, sort, direction, tieBreaker, "asc", pageNum, pageSize, false, true, false);
         }
 
         @Comment("请求页超过最后一页时读取最后一页，返回实际页码")
         public Map<String, Object> pageClamped(Map<String, Expression> projection, Expression sort, String direction,
                 String tieBreaker, String tieDirection, int pageNum, int pageSize) {
-            return readPage(projection, sort, direction, tieBreaker, tieDirection, pageNum, pageSize, true, false);
+            return readPage(projection, sort, direction, tieBreaker, tieDirection, pageNum, pageSize, true, false, false);
         }
 
         private Map<String, Object> readPage(Map<String, Expression> projection, Expression sort, String direction,
-                String tieBreaker, String tieDirection, int pageNum, int pageSize, boolean clamp, boolean includeRoot) {
+                String tieBreaker, String tieDirection, int pageNum, int pageSize, boolean clamp, boolean includeRoot,
+                boolean nativeNullOrder) {
             if (pageNum < 1 || pageSize < 1 || pageSize > MAX_PAGE_SIZE || !validDirection(direction)
                     || !validDirection(tieDirection)) {
                 throw new IllegalArgumentException("结构化查询分页参数无效");
@@ -548,8 +664,8 @@ public class StructuredTableReadMagicModule {
                 }
                 Render context = new Render(connection);
                 String ordered = select(context, projection, includeRoot) + from(context, true)
-                        + " ORDER BY CASE WHEN " + sort.sql(context) + " IS NULL THEN 1 ELSE 0 END, "
-                        + sort.sql(context) + " " + direction + ", " + context.column(alias, tieBreaker)
+                        + " ORDER BY " + orderBy(context, sort, direction, nativeNullOrder)
+                        + ", " + context.column(alias, tieBreaker)
                         + " " + tieDirection;
                 result.put("rows", queryWindow(connection, reader, context, ordered, offset, pageSize));
                 return result;
@@ -568,6 +684,11 @@ public class StructuredTableReadMagicModule {
 
         private static boolean validDirection(String direction) {
             return "asc".equals(direction) || "desc".equals(direction);
+        }
+
+        private static String orderBy(Render context, Expression sort, String direction, boolean nativeNullOrder) {
+            String nullOrder = nativeNullOrder ? "" : "CASE WHEN " + sort.sql(context) + " IS NULL THEN 1 ELSE 0 END, ";
+            return nullOrder + sort.sql(context) + " " + direction;
         }
 
         private void requireTenant() {
@@ -653,9 +774,7 @@ public class StructuredTableReadMagicModule {
                     .collect(Collectors.joining(", "));
             List<String> orders = new ArrayList<>();
             for (int i = 0; i < ranked.orders().size(); i++) {
-                Expression order = ranked.orders().get(i);
-                orders.add("CASE WHEN " + order.sql(context) + " IS NULL THEN 1 ELSE 0 END");
-                orders.add(order.sql(context) + " " + ranked.directions().get(i));
+                orders.add(orderBy(context, ranked.orders().get(i), ranked.directions().get(i), ranked.nativeNullOrder()));
             }
             return "(" + projection + ", ROW_NUMBER() OVER (PARTITION BY " + partitions + " ORDER BY "
                     + String.join(", ", orders) + ") AS " + context.quote(RANK_COLUMN)
@@ -723,7 +842,7 @@ public class StructuredTableReadMagicModule {
     private record Grouped(Query child, Map<String, Expression> projection, List<Expression> groups,
                            boolean compareKeysAsText) { }
     private record Ranked(Query child, Map<String, Expression> projection, List<Expression> partitions,
-                          List<Expression> orders, List<String> directions) { }
+                          List<Expression> orders, List<String> directions, boolean nativeNullOrder) { }
     private record Ancestors(Query seed, String nodeTable, String parentAlias, String nodeKey, String parentKey,
                              Expression seedNode, Expression seedParent, Map<String, Expression> payload,
                              List<Condition> parentConditions, int maxDepth) { }

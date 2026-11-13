@@ -21,5 +21,5 @@ export function DraftTable<T extends {id:string}>({dataSource = [], columns, fie
         return()=>{active=false;};
     },[serialized,enabled,version]);
     const byId=new Map(dataSource.map(row=>[row.id,row]));
-    return <>{error&&<Alert showIcon type="error" title={error} action={<Button onClick={()=>setVersion(v=>v+1)}>重试</Button>}/>}<Table<T> {...props} rowKey="id" loading={loading} dataSource={keys.flatMap(id=>byId.has(id)?[byId.get(id)!]:[])} columns={columns?.map(column=>{const key=String(column.key??('dataIndex' in column?column.dataIndex:''));return {...column,...(fields[key]?order.column(key):{sorter:undefined})};})} onChange={order.onChange} pagination={order.pagination(total)}/></>;
+    return <>{error&&<Alert showIcon type="error" title={error} action={<Button onClick={()=>setVersion(v=>v+1)}>重试</Button>}/>}<Table<T> {...props} size="small" rowKey="id" loading={loading} dataSource={keys.flatMap(id=>byId.has(id)?[byId.get(id)!]:[])} columns={columns?.map(column=>{const key=String(column.key??('dataIndex' in column?column.dataIndex:''));return {...column,...(fields[key]?order.column(key):{sorter:undefined})};})} onChange={order.onChange} pagination={order.pagination(total)}/></>;
 }

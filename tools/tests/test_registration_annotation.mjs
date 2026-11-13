@@ -31,6 +31,7 @@ let requests = 0;
 const catalogs = new Map();
 const context = vm.createContext({
   dbId: { value: 'current-source' },
+  detailMode: { value: false },
   tableRows: { value: [] },
   catalogAllowedBusinessTypes: { value: ['字典表'] },
   computed: getter => ({ get value() { return getter(); } }),

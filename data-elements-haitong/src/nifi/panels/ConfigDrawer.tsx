@@ -40,6 +40,7 @@ import FilterEditor from './FilterEditor';
 import BranchEditor, { type BranchRoute } from './BranchEditor';
 import type { BusinessCondition } from './ConditionBuilder';
 import { COMPONENT_ICONS, getComponentIcon } from './databaseIcons';
+import { compareCanvasManifests } from './manifestOrder';
 import ProbeColumnsModal, { type ProbeColumnsSummary } from './ProbeColumnsModal';
 import ScriptProcessEditor, { isScriptProcess, scriptProcessError } from './ScriptProcessEditor';
 
@@ -635,7 +636,8 @@ export default function ConfigDrawer() {
   // 获取同类别下的所有组件列表，用于切换数据源类型。
   const sameCategoryManifests = useMemo(() => {
     if (!manifests || !node) return [];
-    return manifests.filter((m) => m.category === node.category && m.key !== 'transform.field-mapping');
+    const options = manifests.filter((m) => m.category === node.category && m.key !== 'transform.field-mapping');
+    return node.category === 'source' ? options.sort(compareCanvasManifests) : options;
   }, [manifests, node?.category]);
 
   // 切换组件类型。

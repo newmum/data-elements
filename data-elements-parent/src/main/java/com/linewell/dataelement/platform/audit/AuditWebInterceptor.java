@@ -13,6 +13,7 @@ public class AuditWebInterceptor implements HandlerInterceptor {
     public AuditWebInterceptor(AuditIdentityResolver identities,AuditRecorder recorder) { this.identities=identities; this.recorder=recorder; }
     @Override public boolean preHandle(HttpServletRequest request,HttpServletResponse response,Object handler) {
         request.setAttribute("audit.started",System.nanoTime());
+        if (!excluded(request)) AuditRequestParameters.captureMvc(request, handler);
         if(!excluded(request) && !request.getRequestURI().equals("/portal/login") && !request.getRequestURI().equals("/idaas/auth/login")) {
             var actor=identities.current();if(actor!=null){if(actor.tenantId()!=null)org.slf4j.MDC.put("tenant_id",actor.tenantId());if(actor.id()!=null)org.slf4j.MDC.put("actor_id",actor.id());}
         }
@@ -20,6 +21,7 @@ public class AuditWebInterceptor implements HandlerInterceptor {
     }
     @Override public void afterCompletion(HttpServletRequest request,HttpServletResponse response,Object handler,Exception exception) {
         if(excluded(request)) return;
+        AuditRequestParameters.complete(request);
         var actor=request.getAttribute(AuditIdentityResolver.ATTRIBUTE) instanceof AuditIdentity i?i:null;
         String result=String.valueOf(request.getAttribute(BUSINESS_RESULT));
         if(!AuditRecorder.RESULTS.contains(result)) result=exception!=null||response.getStatus()>=400?"FAILED":"SUCCESS";

@@ -14,6 +14,7 @@ import {
 import { useComponentManifests } from '@/api/manifests';
 import type { ComponentCategory, ComponentManifest } from '@/types/manifest';
 import { COMPONENT_ICONS } from './databaseIcons';
+import { compareCanvasManifests } from './manifestOrder';
 import { getNifiOverlayContainer } from './overlayContainer';
 
 const CAT_ICON: Record<ComponentCategory, React.ReactNode> = {
@@ -29,37 +30,6 @@ const MANIFEST_ICON: Record<string, React.ReactNode> = {
   'transform.field-enrichment': <SwapOutlined />,
   'transform.sql': <ConsoleSqlOutlined />,
 };
-
-const SOURCE_POPULARITY_ORDER: Record<string, number> = {
-  'source.mysql': 10,
-  'source.dameng': 20,
-  'source.gaussdb': 30,
-  'source.kingbase': 40,
-  'source.postgresql': 50,
-  'source.sqlserver': 60,
-  'source.oracle': 70,
-  'source.mariadb': 70,
-  'source.kafka': 80,
-  'source.elasticsearch': 90,
-  'source.clickhouse': 100,
-  'source.db2': 110,
-  'source.oceanbase': 120,
-  'source.tdsql-mysql': 130,
-  'source.tdsql-pg': 140,
-  'source.highgo': 160,
-  'source.gbase8s': 170,
-  'source.gbase8a': 180,
-  'source.oscar': 190,
-};
-
-function manifestSort(a: ComponentManifest, b: ComponentManifest) {
-  if (a.category === 'source' && b.category === 'source') {
-    const ia = SOURCE_POPULARITY_ORDER[a.key] ?? 999;
-    const ib = SOURCE_POPULARITY_ORDER[b.key] ?? 999;
-    if (ia !== ib) return ia - ib;
-  }
-  return a.label.localeCompare(b.label, 'zh-CN');
-}
 
 interface NodeSelectorContentProps {
   onSelect: (manifest: ComponentManifest) => void;
@@ -92,7 +62,7 @@ function SelectorContent({ onSelect, defaultCategory = 'source' }: NodeSelectorC
             m.label.toLowerCase().includes(keyword.toLowerCase()) ||
             m.key.toLowerCase().includes(keyword.toLowerCase()),
         )
-        .sort(manifestSort),
+        .sort(compareCanvasManifests),
     [manifests, tab, keyword],
   );
 

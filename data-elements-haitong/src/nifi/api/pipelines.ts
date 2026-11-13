@@ -261,10 +261,14 @@ export function useDeletePipeline() {
   return useMutation({
     mutationFn: async (id: string) => {
       requireEditableTask(id);
-      await api.post(`/pipelines/delete/${id}`);
+      await api.post(`/pipelines/delete/${encodeURIComponent(id)}`, undefined, BACKGROUND_REQUEST_OPTIONS);
       return id;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: KEY }),
+    onSuccess: (id) => {
+      qc.removeQueries({ queryKey: ['pipeline', id] });
+      qc.removeQueries({ queryKey: ['task-chain', id] });
+      return qc.invalidateQueries({ queryKey: KEY });
+    },
   });
 }
 

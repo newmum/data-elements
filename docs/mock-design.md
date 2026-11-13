@@ -6,7 +6,7 @@
 
 ## 1. 新窗口先掌握的结论
 
-1. 根 `mock/` 已建立，澄天的数据源闭环和风驰共享只读工作区已接入。当前只有这一批功能完成，不能宣称所有前端、所有接口都已支持 Mock。
+1. 根 `mock/` 已建立，澄天的数据源闭环和风驰共享只读工作区已接入；行业日志列表、详情、批量、统计及本地导出已接入统一 runtime。公共浏览器宿主已复用 `parseMockBody`／`mockResponse`，支持裸数组及原始 CSV／JSONL；Node 已使用实际 MSW 响应验证字节和响应头，尚未做本批浏览器验收，不能宣称日志整页已验收或所有业务都支持 Mock。数据源保存仍有真实契约同步阻碍，见 7.2。
 2. 澄天仍使用 **3000**，风驰仍使用 **3020**。切换真实模式与 Mock 模式时停止同一端口的当前前端，再使用对应命令启动。不能为绕过端口占用改成 3006 等新端口。
 3. 菜单、组织机构、行业及品牌配置来自实际数据库的公开配置白名单；数据源、表及预览记录是虚构业务样例。两类数据的来源和维护方式不同。
 4. 风驰与澄天元数据平台使用同一组数据源和表 ID、同一字段定义、同一预览处理器以及同一份浏览器业务状态。风驰原独立模式的 `commerce_db` 不参与共享模式。
@@ -14,7 +14,7 @@
 6. **真实导航尚未发布。** 用户已明确要求同时发布真实导航，并表示会提供更新后的有效本地发布会话。源码合并、编译与 Mock 页面验证已完成，待有效会话后继续发布、刷新及运行回读；不能将构建成功当成已发布。
 7. 本次没有完成真实 Java 迁 Magic，没有修改真实业务表结构，也没有将 Mock 业务数据写入实际租户库。
 
-以上完成状态依据本次已执行验证，最近核对日期为 2026-11-08。新窗口必须先检查工作区、运行进程和资源比较结果，再继续写入；文中的端口、数量及发布状态不能替代现场核对。
+数据源与风驰原批次的验证日期为 2026-11-08；日志核心本批核对日期为 2026-11-13。新窗口必须先检查工作区、运行进程和资源比较结果，再继续写入；文中的端口、数量及发布状态不能替代现场核对。
 
 ## 2. 用户目标与固定要求
 
@@ -44,7 +44,7 @@
 | 内容 | 可维护来源 | 运行方式 |
 | --- | --- | --- |
 | 行业、公开门户、菜单、组织配置 | `mock/scenarios/configuration.json` | 从当前运行配置和实际租户绑定只读导出白名单，Mock 运行时读取本地文件 |
-| 虚构业务样例 | `mock/scenarios/index.mjs`、`forms.mjs` | 首次生成场景，后续编辑保存到专用浏览器状态 |
+| 虚构业务样例 | `mock/scenarios/index.mjs`、`forms.mjs`、`logs.mjs` | 数据源编辑保存到专用状态；日志按行业惰性生成，不接触真实请求 |
 | 模拟接口与权限、分页行为 | `mock/core/` | 统一处理原有接口契约，不执行 SQL 或真实 Magic/Java |
 | 接口与真实实现的关联 | `mock/contracts/chengtian.json` | 记录方法、路由、必要 action、实现位置、资源身份及已审阅源码摘要 |
 | 共享低代码 Vue | 根 `lowcode/` 及 `.manifest.json` | Mock 编译成本地组件包；真实模式按所选资源发布到控制库 |
@@ -129,7 +129,7 @@ python tools/export-mock-config.py --with-structure --check
 | 真实实现内部重构、Java 迁 Magic，对外契约不变 | 核查影响，更新实现关联、已审阅摘要及说明，通过原契约回归 |
 | 菜单、组织等配置在数据库中变化 | 审阅后只读刷新配置镜像，并验证实际层级、隐藏状态与行业隔离 |
 
-`node tools/check-mock-contracts.mjs` 校验身份、路由和已审阅源码摘要。摘要变化是要求人工核查契约影响的提醒；不能只替换摘要来绕过同步。该检查器不是自动生成真实接口，也不能替代业务回归。
+`node tools/check-mock-contracts.mjs` 校验身份、路由和已审阅源码摘要。顶层 `dependencies` 用 `operations` 关联现有 HTTP 项，`source.kind=magic-function` 单独核对函数源码摘要、元数据 ID 和分组完整路径，不把非 HTTP 函数伪造成接口，也不只把依赖写进不执行的说明字段。摘要变化要求人工核查契约影响，不能只替换摘要绕过同步；检查器不自动生成接口，也不能替代业务回归。
 
 业务优先指向根 `magic/` 的实际实现。仍由 Java 提供的接口先关联真实 Java 文件，不能为了目录对应关系额外造一个 Magic 脚本：
 
@@ -137,7 +137,7 @@ python tools/export-mock-config.py --with-structure --check
 - 必要认证、会话或框架能力可标为 `technical-retained`，须写具体原因，不能扩大日常 Java 业务保留范围。
 - 不创建只转发 Java 的空壳 Magic 来声称完成迁移。
 
-当前 31 项契约中，25 项指向 Magic，6 项指向 Java。其中租户登录选项、登录配置、当前租户、可用租户、租户切换这 5 项属于 `TenantController.java` 的认证／会话技术能力，记录为 `technical-retained`；表元数据采集状态指向 `TableMetadataCollectionController.java`，记录为 `pending-magic`。本次只模拟已保存快照，未迁移真实采集启动、后台执行及补偿链路。
+当前 56 项 HTTP 契约中，25 项指向 Magic，31 项指向 Java。其中租户登录选项、登录配置、当前租户、可用租户、租户切换这 5 项属于 `TenantController.java` 的认证／会话技术能力，记录为 `technical-retained`；表元数据采集状态与新增 25 项日志查询／导出业务均为 `pending-magic`。日志路由关联 `LogController`，查询／统计／详情关联 `LogQueryService`，组件读取关联 `LogComponentService`，任务／下载关联 `LogLifecycleService`。契约另以非 HTTP 条目的 `technicalRetention` 说明请求生命周期、脱敏、安全快照及可靠写入等必要采集技术保留，不将查询或导出编排算作技术保留。没有创建真实 Magic 样例或转发空壳，也没有迁移真实采集启动、后台执行及补偿链路。
 
 用户曾要求本窗口承担遇到的 Java 业务迁移，但随后缩小为先看一批效果。接手时保留这个迁移方向，同时明确当前交付没有完成迁移；不把整套异步采集系统混入已验收的只读范围。与其他窗口协作时核对实际代码和任务范围，不假设已读取或同步了名为“肖烨辉”的窗口。
 
@@ -147,11 +147,13 @@ python tools/export-mock-config.py --with-structure --check
 | --- | --- |
 | `mock/vite-plugin.mjs` | 根低代码组件编译与 Mock 资源接入 |
 | `mock/core/runtime.mjs` | 模拟路由、会话、持久状态、原接口处理 |
+| `mock/core/logs.mjs`、`mock/scenarios/logs.mjs` | 四行业日志种子、同一权限与筛选、批量／统计、六态详情及本地导出 |
+| `mock/core/transport.mjs`、`transport.d.mts` | 公共宿主已复用的裸数组解析、JSON／原始文件响应及 Fetch／MSW 类型声明 |
 | `mock/core/configuration.mjs` | 实际菜单转换与组织树 |
 | `mock/core/data.mjs` | 数据范围、逐 ID 校验、筛选与分页 |
 | `mock/core/metadata.mjs` | 表／视图、字段、预览与抽样公共行为 |
 | `mock/scenarios/` | 配置镜像、四行业业务种子与动态表单样例 |
-| `mock/contracts/chengtian.json` | 当前 31 项契约及真实实现关联 |
+| `mock/contracts/chengtian.json` | 56 项 HTTP 契约、1 项共享函数依赖、已审阅真实实现及明确未同步差异 |
 | `data-elements-chengtian/src/main.ts`、`src/bootstrap.ts` | 先 Mock 后应用初始化 |
 | `data-elements-chengtian/src/mock/` | 环境入口、存储隔离、MSW、跨应用只读桥 |
 | `data-elements-chengtian/src/utils/capabilityCenters.ts` | 风驰导航地址，保持真实认证信任边界 |
@@ -162,7 +164,9 @@ python tools/export-mock-config.py --with-structure --check
 | `data-elements-fengchi/src/App.tsx` 等 | 通过可选共享 workspace 接入现有界面，限制共享模式写操作 |
 | `tools/export-mock-config.py` | 实际公开配置、菜单、组织的只读导出／比较 |
 | `tools/check-mock-contracts.mjs` | 契约关联和审阅摘要检查 |
+| `tools/check-mock-types.mjs`、`data-elements-chengtian/tests/mock-transport.types.ts` | 真实 tsconfig 下公共传输正反向类型验证及宿主入口诊断基线比较 |
 | `tools/tests/chengtian-mock.test.mjs` | 场景、契约、权限、分页与共享数据回归 |
+| `tools/tests/log-mock.test.mjs` | 日志大数据、20／100 固定请求、对象授权、参数、导出一致性与并发回归 |
 | `data-elements-fengchi/tests/sharedWorkspace.test.ts` | 风驰共享适配与接口复用回归 |
 
 ## 7. 已完成与边界
@@ -180,13 +184,42 @@ python tools/export-mock-config.py --with-structure --check
 
 尚未完成：
 
-- 全部前端或全部业务接口的 Mock；当前覆盖以 31 项清单和页面验证为限。
+- 全部前端或全部业务接口的 Mock；当前覆盖以 56 项清单和分批验证为限，日志浏览器完整链路尚未验收。
 - 完整登记后续步骤、真实采集执行、NiFi、治理、服务、审批等未覆盖流程。
 - 风驰真实后端接入、统一真实认证、SQL 执行、结构与记录写入、DDL 编辑。
 - 表元数据异步采集业务的 Java → Magic 迁移。
 - **真实服务中的全局导航发布和发布后的实际验证。**
 
 没有结构变更，因此本次未生成数据库结构增量。后续真实结构修改仍须同步完整 `db/` 定义及方言增量，不能用 Mock 验证代替真实数据库验证。
+
+### 7.1 行业日志：核心、公共宿主及组件 fixture，整页验证边界
+
+日志 Mock 复用 `ChengtianMockRuntime` 当前模拟会话、行业切换和 `ALL/ORG/OWNER`，不新建认证模型，不补菜单、机构或第二份低代码。无机构配置的行业，ORG 返回空范围；OWNER 只读本人，ALL 不跨租户。模块授权只收窄角色，不能由请求 `tenantId/scope/orgId` 提权。当前真实实现与验证边界以本节及 7.2 为准，其他历史分批记录不代表当前日志尚未发布。
+
+- 每行业惰性生成 **5760 条**虚构日志，四类各 **1440 条**，跨 96 天、三名虚构人员和现有实际机构；默认七天每类 105 条，足以验证 20／100 行。各机构与采集状态独立轮换，避免只有某部门才存在历史或某状态。没有机构的行业保持空归属。日志种子仅保留内存，不混入数据源编辑快照，不读取真实请求或向真实 Magic／租户库写样例。
+- 能力数组为当前授权的 `auth/operations/requests/security/exports`；有 `operations` 或 `requests` 才追加 `requestParameters`。不模拟 IDAAS，不展示未实现的 `archives/policies` 能力；对应路由／动作明确 501，不伪造成功，不回退真实。
+- 四类原路由各有 GET 列表、统计、详情、批次明细及 POST 裸 ID 数组批量读取；列表／批量只返回展示摘要，operations／requests／security 的参数字段只有状态，auth 表无参数列，不伪造参数状态。均无 `parameter_summary`、大快照、旧参数或搜索正文。明细先鉴权父事件；批量限 1–100 个不同非空字符串 ID，纯空白 ID 在读取前按参数错误拒绝（HTTP 200、业务码 500），与 Java 一致，不再保留 403 分类差异。一次预取后逐 ID 校验，混入跨租户、越部门／本人、错误类别或不存在 ID 整批拒绝，按输入顺序返回；不逐项补查。详情／批量不套默认七天。
+- 事件选择默认最近七天、最大九十天，起点含／终点不含，时区输入必须明确；普通空白时间按默认处理。Mock 严格检查日期、offset 与最多 9 位小数，纳秒比较边界；双空时间排除，历史种子本已是 UTC ISO，不再次减 8 小时。`page=1..10000`、`size=1..100`；授权及完整筛选先于统计、排序、分页和导出截断，同值 `tid asc`。历史按 `created_time` 替代缺失发生时间，不用当前时间补历史事实。扩展年份、24:00、闰秒等 Java Instant 特殊输入未作等价性认证。
+- 新 `parameterKeyword` 已对齐真实查询：缺失／null／空字符串不附条件，其余必须是 **≤200 UTF-16 单位字符串，完整原样、不 trim**；纯空白也是字面筛选。大小写不敏感包含，不拆词、不解释 `%/_/!` 或正则，与 `keyword/result/time` 及其他条件 AND。按安全 `path/query/body/verified` 的“路径=叶值”投影搜索，保留中文、引号、反斜杠、数组、false／0／嵌套 null，不搜脱敏占位、notices、状态；LEGACY 不伪造新索引。旧成对精确白名单及小写布尔继续兼容，新旧条件 AND；敏感原文在检索前拒绝，禁止先掩码再命中旧索引，修正已有测试并部署本机。实际服务先应用可信租户／角色范围，再通过共享 Magic 函数产生 contains 条件；每条读取 SQL 配置 15 秒超时，不是 HTTP 或整个导出总期限，Mock 零 SQL 不证明真实超时已执行验收。
+- operations／requests／security 详情 `parameter_snapshot` 为对象 `{version:1,status,path,query,body,verified,notices}`，六态 `EMPTY/CAPTURED/PARTIAL/OMITTED/FAILED/LEGACY`，`body` 可为任意安全 JSON；状态与对象一致，`request_parameters` 仅旧安全白名单非空时返回。auth 详情无参数对象或状态；Mock security 使用 OMITTED，不开放参数能力。敏感字段只有 `[REDACTED]`，无原值；历史六态、正文 false／0／null 与无采集状态分开，采集 FAILED 不推断业务失败。
+- 预检意图与执行事实分开。只有非 dryRun 且明细实际 SUCCESS 才进入 `verified.deletedTaskId/deletedTaskName` 和旧删除事实白名单；PARTIAL 仅保存成功项，失败项不冒充已删除。批次计数与明细一致；HTTP 200 的虚构接口事件仍可能为业务 FAILED，不能据 HTTP 状态改写业务结果。
+
+真实端 `AuditParameterSnapshot.fromLegacy(Object)` 只对白名单旧 `details.requestParameters` 再统一脱敏，安全内容放额外 `legacy` 对象，明确 `LEGACY`／来源未记录，不伪造 `path/query/body/verified`。技术入口与解析兼容已有测试，但没有自动重建或回填历史，不能把 Mock 的虚构六态当作历史补采结果。
+
+### 7.2 本地导出、真实对齐与验证边界
+
+- 使用真实任务路由 `POST/GET /sym/logs/exports` 与 `GET /sym/logs/exports/{id}/download`，提交只返回 `{id,status:'PENDING'}`；两次合法列表读取分别推进 RUNNING、实际生成文件并计算摘要后 SUCCESS，失败为 FAILED。这个确定性 Mock 调度不是 Java 后台队列。任务列表仅当前租户当前人员可见，即使 ALL 也不看他人；不暴露内部过滤快照、内容或摘要。
+- CSV／JSONL 共用列表和统计的完整选择条件；冻结 `end=min(用户终点,提交截止)`、`receivedBefore=提交截止`，事件 `<end`、接收 `<=cutoff` 或为空。默认起点从冻结终点减七天，真实端本就不会随后台执行漂移。默认列表终点是 `now+1s`，导出是提交当前，不无条件断言两者严格同窗。冻结的是条件，**不是 ID／事务一致性快照**：提交后迟可见但满足截止的记录仍可入选；Java 每 500 行 offset 重读，Mock 一次选择后每 500 行编码，不认证并发强一致。忽略列表页码／大小，发生时间升序／ID 升序，上限 100000 行／256 MiB、本地 32 项。24 小时有效，下载复核本人、模块与导出权限、范围及 SHA256。按场景串行，浏览器支持时用 Web Locks，否则仅同一 Storage 对象内串行，不声称不支持 Web Locks 的跨标签页原子性。
+- CSV 带 UTF-8 BOM，清洗控制字符、双引号转义，防止首字符或前导空白后的 `=+@-` 公式注入；JSONL 每行安全详情。CSV 历史发生时间使用 `created_time`，不丢弃页面上的历史时间。下载保留真实 MIME、attachment 和 no-store，为原始正文而非 JSON 成功包装。
+- 模拟导出另用隔离键 `data-elements:mock:chengtian:logs:v1:<场景>`，保存虚构任务和文件供刷新恢复；不清理真实存储或其他行业，存储失败明确报错。日志状态独立于共享数据源状态，不给风驰复制业务种子。
+- **传输与组件 fixture 已验证，Mock 整页未验证：**唯一公共拦截器调用 `parseMockBody(path,text)` 与 `mockResponse(result,HttpResponse)`，不增加页面分支。裸数组只允许既有四类 batch 路由，下载保留 raw 字节、HTTP 状态及响应头；普通结果仍 JSON。`transport.d.mts` 区分 JSON／raw，runtime 签名接受对象或数组。Node 实际 MSW 已验证数组、BOM／CSV／JSONL 字节及响应头。浏览器 fixture 使用唯一真实 SFC 的编译产物，覆盖共享、Element Plus、平台宿主的 1440／390 布局、查询、参数详情与复制，但接口由 fixture 注入，没有接入真实 Mock 应用壳、登录／路由及 MSW 全链路。真实 Mock 整页及浏览器下载尚未独立运行，不冒称全栈 E2E。
+- **真实日志已在本机 86 发布：**后端已授权换包重启，所选 31 个 class 字节与当前 Maven classes 全部相等；新增共享函数 `log_parameter_condition_v1`（`/common/log-parameter-keyword-condition`）、所选日志 Magic 和唯一日志组件已发布，两级缓存刷新、运行回读及函数脚本冷加载通过，所选资源无未发布差异。仍为 56 项 HTTP 加 1 项非 HTTP 函数依赖；查询／导出继续 `pending-magic`，不扩大 Java 技术保留或 IDAAS 参数范围。范围不含 14／生产；另有 9 条历史／并发差异及远端 44 个 Magic／3 个低代码新资源未覆盖。
+- **CSV／批量既有差异已闭合：**Java 与 Mock 均先清洗控制符，再防前导空白后的公式；CSV 历史时间只回退已归一化的 `created_time`，不二次偏移。空白 ID 参数错误及输入顺序也已对齐，不再列作遗留差异。JSONL 与新归档安全快照编码、旧归档字节／形状兼容有测试，未改旧归档文件；真实新快照归档尚未运行，不称 VERIFIED。Java 可按授权开放 archives／policies，Mock 仍明确 501，此能力差异继续保留。
+- **数据源保存摘要阻碍保留：**已查 `git diff`，`POST /dst/database/saveOrUpdate` 不只是新增布尔兼容，还含普通 dryRun 无写入、主表／连接同事务、乐观版本 409、代理完成的范围／版本复核；Mock 又仅对 deferIndexRefresh 严格 true、未覆盖 completion。未在本批实现并验证整条保存／完成链，因此不刷新该项摘要，不跳过红色契约检查；契约中原位记录阻碍，不以日志接入冒充数据源同步完成。
+
+当前限定回归为共享页面、Mock 与澄天 **125/125**，IDAAS **117/117**（含无 `window` 请求头兼容）、日志／排版／紧凑布局浏览器 **34/34**、静态 UI **6397/6397**，海通 **142/142**；后端完整 **415 套／3304 项，跳过 7 项，失败及错误为 0**，四前端生产构建和澄天 Mock 构建通过。Mock 列表及批量 20／100 各一次请求、零 SQL 只说明模拟路径；真实列表 20／100 各一次请求由[真实页面／API／导出报告](../logs/audit-parameters/real-validation.json)确认，两条事件 SQL 与一次批量 SQL 由后端针对性测试确认，身份／范围解析另有固定开销。真实 API 保留嵌套、`false/0/null`、`businessCode`，敏感测试值详情无原值且搜索 0；同一显式筛选 CSV 摘要与 JSONL 安全快照各 1 条，当前请求按策略排除采集时明确为 `OMITTED`。[跨物理库隔离](../logs/audit-parameters/real-isolation.json)确认既存外租户详情及混 ID 整批拒绝，未写业务数据或授权；[所选资源](../logs/audit-parameters/resource-verification.json)与[三方言四库 124/124、24 列 DDL 及五库导出](../logs/audit-parameters/native-86/result.json)分别核验，不相互代替。
+
+上述专项通过不等于全仓通过：全库检查澄天既有 53 项（缺 43 表／9 列／1 索引）前后相同、本批新增 0；Mock 全局仍有数据源 `saveOrUpdate` 唯一源码摘要漂移，不能刷新摘要掩盖尚未闭合的同步阻碍；导航“人工智能中心”预期与源码不一致，万象主题 hash 基线不一致且 HEAD 原字节对照已排除本批改动。保持这些红灯，不擅自改实现、补库或改摘要；Mock 整页／浏览器下载与真实新快照归档仍须独立验证。
 
 ## 8. 启动、验证与验收方法
 
@@ -225,7 +258,9 @@ VITE_APP_NIFI_API=/nifi/api
 ```powershell
 # 工程根目录
 node tools/check-mock-contracts.mjs
+node tools/check-mock-types.mjs
 node --test tools/tests/chengtian-mock.test.mjs
+node --test tools/tests/log-mock.test.mjs
 node data-elements-chengtian/scripts/test-capability-navigation.mjs
 node data-elements-chengtian/scripts/test-login-input.mjs
 
@@ -239,7 +274,11 @@ pnpm --dir data-elements-chengtian run build:mock
 pnpm --dir data-elements-chengtian run build
 ```
 
-最近已执行的结果：Mock 22 项通过；契约 31 项检查通过；风驰 31 个测试文件共 432 项通过；澄天现有回归 70 项通过；导航 87 项检查通过；登录输入检查通过。两端 Mock 构建及澄天普通构建通过。澄天完整类型检查仍有 66 条既有诊断，与当时基线按文件和诊断代码比较没有新增；不能声称全仓 TypeScript 检查通过。修改后需按实际影响重新运行必要检查，历史数字不是当前通过证明。
+数据源／风驰原批次的历史结果：Mock 22 项通过；当时契约 31 项检查通过；风驰 31 个测试文件共 432 项通过；澄天现有回归 70 项通过；导航 87 项检查通过；登录输入检查通过。两端 Mock 构建及澄天普通构建通过。澄天完整类型检查仍有 66 条既有诊断，与当时基线按文件和诊断代码比较没有新增；不能声称全仓 TypeScript 检查通过。修改后需按实际影响重新运行必要检查，历史数字不是当前通过证明。
+
+日志收尾本批实际结果：日志专项 **27／27 通过**，与原澄天 Mock 合跑 **48／49 通过**；唯一失败为上述数据源保存摘要阻碍，56 项 HTTP／1 项函数依赖检查也只报此项。首次专项运行的 MSW 私有文件路径与较早截止预期两项测试错误已修正，重新专项与合跑均无这些失败。登录输入回归通过。额外导航 Node 回归失败：当前唯一导航源码无“人工智能中心”，现有测试仍要求该项；对应源码／测试均无本任务修改，不因本任务禁止低代码修改而恢复旧菜单。该测试调用现有编译器生成忽略的临时产物，不是发布或前端完整构建。
+
+局部 TypeScript 由 `tools/check-mock-types.mjs` 使用真实应用 tsconfig 和已安装 TypeScript 验证：Fetch／MSW 正反向类型样例 **0 诊断**；宿主入口依赖图当前 **24**、只读替换为 HEAD 入口的同依赖基线 **25**，新增 **0**、Mock 范围 **0**（修正原入口依赖 DOM.Iterable 的用法）。24 条既有依赖诊断位于 `src/plugins/common.ts`、`src/store/modules/detail-store.ts`、`src/store/modules/setting-store.ts`，不是全仓类型检查通过。初期未加载完整配置的 CLI 探查及类型样例缺 HttpResponse 泛型的问题均已修正后复验。全部本批文件编辑器诊断无错误，限定范围 `git diff --check` 通过。未运行 Maven、前端完整构建、服务起停、发布或浏览器验收。
 
 ### 8.3 页面验收与请求／权限证据
 
@@ -290,4 +329,4 @@ python tools/resource-sync.py plan --kind lowcode --file 'lowcode/10.通用组�
 
 可以直接把以下内容交给新的 Codex 窗口：
 
-> 请先阅读工程根 `AGENTS.md` 和 `docs/mock-design.md`，按链接查阅公共 Mock 规约及澄天、风驰主文档。接管现有实现，先核对工作区和运行状态，保留其他窗口改动。当前澄天 3000 与风驰 3020 的共享 Mock 已完成目录、字段和预览这一批；真实全局导航尚待有效本地会话后发布。用户已授权该导航发布，请优先重新比较所选资源、编译、发布、刷新和运行验证，随后原位更新完成状态。后续接口契约变化同步真实实现、Mock、调用方和验证；不要改原端口、增加悬浮演示入口、复制菜单组织配置或另存一份风驰业务数据，也不要把未完成的 Java 迁移或全部业务 Mock 标记为完成。
+> 请先阅读工程根 `AGENTS.md` 和 `docs/mock-design.md`，按链接查阅公共 Mock 规约及澄天、风驰主文档。接管时先核对工作区和运行状态，保留并行改动。澄天 3000 与风驰 3020 的共享 Mock 已完成目录、字段和预览；日志公共宿主已接裸数组／原始文件，27 项 Node 专项通过，新参数查询本地契约已核对并登记函数依赖，仍无本批浏览器整页／下载验收。数据源保存契约摘要、CSV 真实端差异和导航旧测试仍有明确阻碍，见 7.2／8.2，不只刷新摘要消除失败。真实导航发布是另一待办，仅在当前任务包含该授权范围时继续，不能因本文旧授权在本次明确“不发布”的任务中写服务器。后续对外变化同任务同步真实实现、Mock、调用方和验证；不改端口、不补造菜单机构、不另存风驰业务状态，不把未完成 Java 迁移或全部业务 Mock 标记完成。

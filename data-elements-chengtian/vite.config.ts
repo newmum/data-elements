@@ -9,7 +9,6 @@ import UnoCSS from "unocss/vite";
 import { extname, resolve } from "path";
 import { existsSync, readFileSync, statSync } from "fs";
 import { name, version, engines, dependencies, devDependencies } from "./package.json";
-import VueDevTools from "vite-plugin-vue-devtools";
 import { chengtianMockPlugin } from "../mock/vite-plugin.mjs";
 
 // 平台的名称、版本、运行所需的 node 版本、依赖、构建时间的类型提示
@@ -75,11 +74,13 @@ function serveYuntuDist(): PluginOption {
 }
 
 // Vite配置  https://cn.vitejs.dev/config
-export default defineConfig(({ mode, command }: ConfigEnv): UserConfig => {
+export default defineConfig(async ({ mode, command }: ConfigEnv): Promise<UserConfig> => {
   const env = loadEnv(mode, process.cwd());
   const isProduction = command === "build";
   const mockEnabled = env.VITE_MOCK_ENABLED === "true";
   if (mode === "production" && mockEnabled) throw new Error("常规生产构建禁止开启 mock，请显式使用 build:mock");
+
+  const devTools = isProduction ? [] : [(await import("vite-plugin-vue-devtools")).default()];
 
   return {
     base: "./", // 生产环境按 nginx 二级路径发布
@@ -147,7 +148,7 @@ export default defineConfig(({ mode, command }: ConfigEnv): UserConfig => {
       },
     },
     plugins: [
-      ...(isProduction ? [] : [VueDevTools()]),
+      ...devTools,
       vue(),
       chengtianMockPlugin({ enabled: mockEnabled }),
       serveYuntuDist(),

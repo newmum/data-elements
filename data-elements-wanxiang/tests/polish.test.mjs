@@ -6,7 +6,33 @@ const {qualityRuleLabel,dataTypeLabel}=from('shared/businessLabels');
 const {sourceAnnotations}=from('mocks/sourceAnnotations'),{stableId,WORKSPACE,STORAGE_KEY}=from('mocks/types'),{LocalMockEngine}=from('mocks/engine');
 const text=p=>fs.readFileSync(p,'utf8');
 function local(){let clock=Date.parse('2026-09-27T08:00:00Z');const map=new Map();const storage={getItem:k=>map.get(k)??null,setItem:(k,v)=>map.set(k,v)};const engine=new LocalMockEngine({storage,clock:()=>clock});const request=(p,body,version,method)=>engine.request(`/workspaces/${WORKSPACE}/${p}`,{method:method??(body===undefined?'GET':'POST'),body,version});return{request,storage,advance:async()=>{clock+=2200;await engine.tick();}};}
-test('each visible menu entry has its own module visual and product icon',()=>{const items=navigation.flatMap(g=>g.children);assert.equal(items.length,18);assert.equal(new Set(items.map(i=>i.icon)).size,18);for(const item of items){assert.ok(moduleIconPaths[item.icon]);assert.equal(getModuleVisual(item.label)?.id,item.icon);}});
+test('governance module menu entries keep distinct visuals and logs use a single shared page',()=>{
+ const logPath='/governance/logs';
+ const items=navigation.flatMap(group=>group.children);
+ const modules=items.filter(item=>item.key!==logPath);
+ assert.equal(modules.length,18);
+ assert.equal(new Set(modules.map(item=>item.icon)).size,modules.length);
+ for(const item of modules){
+  assert.ok(moduleIconPaths[item.icon]);
+  assert.equal(getModuleVisual(item.label)?.id,item.icon);
+ }
+ const logs=items.filter(item=>item.key===logPath);
+ assert.equal(logs.length,1);
+ assert.equal(logs[0].label,'日志管理');
+ assert.ok(moduleIconPaths[logs[0].icon]);
+ assert.equal(getModuleVisual(logs[0].label),undefined);
+ const nav=text('src/app/ProductNavigation.tsx');
+ assert.match(nav,/useState<string\[\]>\(\[\]\)/);
+ assert.match(nav,/platformApi<string\[\]>\('\/sym\/logs\/capabilities'\)/);
+ assert.match(nav,/item\.key\s*!==\s*'\/governance\/logs'\s*\|\|\s*logCapabilities\.length\s*>\s*0/);
+ assert.match(nav,/\{visible\.map\(group/);
+ const app=text('src/app/App.tsx');
+ assert.equal((app.match(/element=\{<LowcodeLogs\s*\/>\}/g)||[]).length,1);
+ assert.match(app,/<Route path="\/governance\/logs" element=\{<LowcodeLogs\s*\/>\}/);
+ const host=text('src/components/LowcodeLogs.tsx');
+ assert.match(host,/client\.request\('GET','\/components'/);
+ assert.match(host,/compiled\.get\('log-management'\)/);
+});
 test('all 19 semantic icon geometries differ, not recoloured duplicates',()=>assert.equal(new Set(Object.values(moduleIconPaths).map(x=>JSON.stringify(x))).size,19));
 test('every module has meaningful description and three concise highlights',()=>{assert.equal(moduleVisuals.length,19);for(const m of moduleVisuals){assert.ok(m.description.length>=25);assert.ok(m.promise.length>=7);assert.equal(m.highlights.length,3);assert.equal(new Set(m.highlights).size,3);assert.ok(m.highlights.every(s=>s.length>=4&&s.length<=12));}});
 for(const mode of ['light','dark'])test(`all module assets exist and contain no remote resource: ${mode}`,()=>{for(const m of moduleVisuals){const s=text(`src/assets/heroes/${m.id}-${mode}.svg`);assert.match(s,/<svg/);assert.doesNotMatch(s,/<script|<foreignObject|href="https?:/);}});
@@ -35,5 +61,15 @@ test('technical labels keep stable codes but add business meaning',()=>{assert.e
 test('polish CSS is the final imported layer and contains no page scaling',()=>{const s=text('src/main.tsx');assert.ok(s.lastIndexOf('studio-polish.css')>s.lastIndexOf('refined.css'));assert.doesNotMatch(text('src/styles/studio-polish.css'),/\bzoom\s*:/);});
 
 
-test('live review displays real definitions and uses the shared publish status',()=>{const s=text('src/features/platform/StandardPages.tsx');assert.match(s,/filter\(r=>!published\(r\)\)/);assert.match(s,/ElementInformation row=\{item\}/);assert.match(s,/setElementPublished\(item!,true\)/);assert.doesNotMatch(s,/review-members|applicant_id|frozen/);});
+test('live review pages pending definitions on the server and uses the shared publish status',()=>{
+ const review=text('src/features/platform/StandardPages.tsx').split('export function ReviewPage() {')[1]?.split('export function ')[0];
+ assert.ok(review);
+ assert.match(review,/query=\{pageNum:page,pageSize:size,metaName:keyword,publishStatus:0,/);
+ assert.match(review,/elementPage\(query,signal\)/);
+ assert.match(review,/rows=\{q\.data\?\.list\|\|\[\]\}\s+serverSort=\{serverSort\}\s+serverPagination=\{\{page,size,total:q\.data\?\.total\|\|0/);
+ assert.match(review,/readElement\(r\.id\)/);
+ assert.match(review,/ElementInformation row=\{item\}/);
+ assert.match(review,/setElementPublished\(item!,true\)/);
+ assert.doesNotMatch(review,/review-members|applicant_id|frozen/);
+});
 test('live mapping resolves authoritative standard names without invented revision identity',()=>{const s=text('src/features/platform/StandardPages.tsx');assert.match(s,/已发布的数据元标准/);assert.match(s,/standardIndex\.get\(id\)/);assert.match(s,/expectedStandardId/);assert.doesNotMatch(s,/publishedRevisionId|绑定具体修订/);});

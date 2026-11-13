@@ -69,7 +69,7 @@ export function SourcesPage() {
  const q=useWorkspaceQuery('platform-sources:'+JSON.stringify(query),signal=>sourcesPage(query,signal));
  useEffect(()=>setPage(1),[engineFilter,stateFilter,domainFilter,collectionFilter]);
  const [browse,setBrowse]=useState<Row|null>(null),[connectionError,setConnectionError]=useState(''),[pendingIndexes,setPendingIndexes]=useState<string[]>([]);
- const [,setConfirmedSources]=useState<Row[]>([]);const syncingIndexes=useRef(new Set<string>());
+ const syncingIndexes=useRef(new Set<string>());
  const detailsQuery=useWorkspaceQuery('platform-source-detail-'+(details||''),async()=>details?draftFromDetail(await datasourceRegistrationApi.detail(details)):null);
  const metadataQuery=useWorkspaceQuery('platform-source-metadata-'+(details||''),async()=>details?collectionStatus(details):null);
  const [detailTablePage,setDetailTablePage]=useState(1),[detailTableSize,setDetailTableSize]=useState(15),[detailTableKeyword,setDetailTableKeyword]=useState('');
@@ -86,18 +86,40 @@ export function SourcesPage() {
  const distributions=q.data?.distributions||[],categories=[...new Set(distributions.map(d=>d.dbType))].map(t=>({dameng:'DM8',mysql:'MYSQL',postgres:'POSTGRESQL',oracle:'ORACLE',sqlserver:'SQLSERVER'}[String(t)]||String(t).toUpperCase()));
  const rows=sources;
  const initial=edit??{engine:'MYSQL',orgId:getSession()?.user?.orgId||choices.organizations.find(o=>o.label===getSession()?.user?.orgName)?.value,connection:{host:'',port:3306,database:'',schema:'',username:'',password:''}};
- const syncIndex=async(id:string,_confirmed?:Row)=>{if(syncingIndexes.current.has(id))return;syncingIndexes.current.add(id);setPendingIndexes(ids=>[...new Set([...ids,id])]);q.refresh();try{await sharedSourceApi.refreshIndex(id);setPendingIndexes(ids=>ids.filter(v=>v!==id));setConfirmedSources(rows=>rows.filter(row=>row.id!==id));}catch{message.warning('记录已保存，检索索引同步失败，请重试同步。',8);}finally{q.refresh();syncingIndexes.current.delete(id);}};
+ const syncIndex=async(id:string)=>{
+  if(syncingIndexes.current.has(id))return;
+  syncingIndexes.current.add(id);
+  setPendingIndexes(ids=>[...new Set([...ids,id])]);
+  try{
+   await sharedSourceApi.refreshIndex(id);
+   setPendingIndexes(ids=>ids.filter(value=>value!==id));
+  }catch{
+   message.warning('记录已保存，检索索引同步失败，请重试同步。',8);
+  }finally{
+   syncingIndexes.current.delete(id);
+  }
+ };
+ const saveRegistration=async(values:Row)=>{
+  const saved=await saveSource(values,edit);
+  if(!saved.tid)throw new Error('保存接口未返回数据源标识，请刷新核对后再操作');
+  try{
+   await readSource(saved.tid);
+  }catch{
+   message.warning('保存已完成，暂未能读取主记录，请勿重复登记');
+  }
+  return saved;
+ };
  const openEditor=(r:Row)=>run(async()=>{await sourceChoices();setConnectionError('');setEdit(await editSource(r.id));},'');
  const create=()=>{if(choicesQuery.error){message.error('无法读取登记选项，请重试');choicesQuery.refresh();return;}setConnectionError('');setEdit(null);};
  const inspect=(r:Row)=>run(async()=>{try{await testSource(r.id);setConnectionError('');message.success('数据库连接测试通过');q.refresh();}catch(e){setConnectionError(e instanceof Error?e.message:String(e));throw e;}},'');
  const openDetails=(r:Row,tab='summary')=>{setDetailsTab(tab);setDetails(r.id);};
  const copyConnection=async(value:string)=>{try{await copyText(value);message.success('已复制到剪贴板');}catch{message.warning('复制失败，请手动选择文本复制');}};
  const viewTables=(r:Row)=>{setDetails(undefined);setBrowse(r);};
- const remove=(r:Row)=>run(async()=>{const preview=await sharedSourceApi.deletePreview(r.id);if(preview.exists===false)throw new Error('数据源已不存在，请刷新列表');modal.confirm({title:'删除数据源登记？',content:<div><p>将删除“{r.name}”的登记记录及关联元数据；不会删除源数据库或其中的业务记录。</p>{preview.cleanup&&<p>影响范围：{Object.entries(preview.cleanup).map(([k,v])=>k+' '+v).join('，')}</p>}</div>,okText:'删除登记',okButtonProps:{danger:true},onOk:async()=>{const result=await sharedSourceApi.remove(r.id);if(!result.deleted&&!result.alreadyDeleted)throw new Error('后端未确认删除成功');message.success('数据源登记已删除');setConfirmedSources(rows=>rows.filter(row=>row.id!==r.id));setPendingIndexes(ids=>ids.filter(id=>id!==r.id));q.refresh();}});},'');
+ const remove=(r:Row)=>run(async()=>{const preview=await sharedSourceApi.deletePreview(r.id);if(preview.exists===false)throw new Error('数据源已不存在，请刷新列表');modal.confirm({title:'删除数据源登记？',content:<div><p>将删除“{r.name}”的登记记录及关联元数据；不会删除源数据库或其中的业务记录。</p>{preview.cleanup&&<p>影响范围：{Object.entries(preview.cleanup).map(([k,v])=>k+' '+v).join('，')}</p>}</div>,okText:'删除登记',okButtonProps:{danger:true},onOk:async()=>{const result=await sharedSourceApi.remove(r.id);if(!result.deleted&&!result.alreadyDeleted)throw new Error('后端未确认删除成功');message.success('数据源登记已删除');setPendingIndexes(ids=>ids.filter(id=>id!==r.id));q.refresh();}});},'');
  const batchInspect=()=>run(async()=>{let success=0,skipped=0;const errors:string[]=[];for(const s of sources.filter(s=>selectedSources.includes(s.id))){if(s.status==='DISABLED'){skipped++;continue;}try{await testSource(s.id);success++;}catch(e){errors.push(s.name+'：'+(e instanceof Error?e.message:String(e)));}}modal.info({title:'批量连接测试结果',content:<div><p>通过 {success} 项 · 已停用跳过 {skipped} 项 · 失败 {errors.length} 项</p>{errors.map(e=><p key={e}>{e}</p>)}</div>});q.refresh();},'');
  const menu=(r:Row)=>({items:[{key:'details',label:'数据源详情',icon:<EyeOutlined/>},{key:'tables',label:'查看数据表',icon:<FolderOpenOutlined/>},{type:'divider' as const},{key:'edit',label:'编辑信息',icon:<EditOutlined/>,disabled:!canManage()||busy},{key:'delete',label:'删除登记',icon:<DeleteOutlined/>,danger:true,disabled:!canManage()||busy}],onClick:({key}:{key:string})=>{if(key==='details')openDetails(r);if(key==='tables')viewTables(r);if(key==='edit')void openEditor(r);if(key==='delete')void remove(r);}});
  return <Page title="数据源管理" actions={<Space>{assetReturnTo&&<Button icon={<ArrowLeftOutlined/>} onClick={()=>nav(assetReturnTo)}>返回皓月资产中心</Button>}{canManage()&&<Button type="primary" icon={<PlusOutlined/>} disabled={choicesQuery.loading} onClick={create}>登记数据源</Button>}</Space>}>
-  {pendingIndexes.length>0&&<Alert className="mb16" type="warning" showIcon title="数据已保存，列表同步待完成" action={<Button onClick={()=>pendingIndexes.forEach(id=>void syncIndex(id))}>重试列表同步</Button>}/>}
+  {pendingIndexes.length>0&&<Alert className="mb16" type="warning" showIcon title="数据已保存，检索索引待同步" action={<Button onClick={()=>pendingIndexes.forEach(id=>void syncIndex(id))}>重试索引同步</Button>}/>}
   <div className="wx-source-kpis">
    {[
     {label:'数据源总数',value:q.data?sourceCount:'—',note:`${categories.length} 种数据库类型`,icon:'sources',tone:'purple'},
@@ -124,7 +146,11 @@ export function SourcesPage() {
    <Panel title="采集覆盖情况" description="统计当前租户已采集的真实结构"><div className="wx-coverage-number"><strong>{sourceCount?Math.round(collected/sourceCount*100):0}<small>%</small></strong><span>{collected} / {sourceCount} 个来源已采集</span></div><div className="wx-coverage-track"><span style={{width:`${sourceCount?collected/sourceCount*100:0}%`}}/></div><div className="wx-coverage-split"><div><b>{entityCount}</b><span>数据对象</span></div><div><b>{fieldCount}</b><span>结构字段</span></div><div><b>{'—'}</b><span>集合与索引</span></div></div></Panel>
    <Panel title="从来源到业务模型" description="把分散的结构组织为可读的业务关系"><ol className="source-workflow"><li><span>01</span><div><b>登记与检查</b><small>明确来源类型、地址与业务归属</small></div></li><li><span>02</span><div><b>采集表与字段</b><small>复用登记流程的异步元数据采集</small></div></li><li><span>03</span><div><b>跨来源全屏建模</b><small>在同一画布中维护字段关联</small></div></li></ol><Button type="link" onClick={()=>nav('/governance/metadata/models')}>进入数据模型 <ArrowRightOutlined/></Button></Panel>
   </div>
-  <EditorModal width={600} presentation="drawer" open={edit!==undefined} title={edit?'编辑数据源':'登记数据源'} initial={initial} onCancel={()=>setEdit(undefined)} saveMessage="数据源已保存到数据中台" storageHint="配置与元数据管理平台共享" onTest={async v=>{setConnectionError('');try{const result=await sharedSourceApi.test(draftFromForm(v,edit),edit?.id);if(result.connected!==true)throw new Error(connectionFailureMessage(result.error||result.message));}catch(e){const detail=connectionFailureMessage(e);setConnectionError(detail);throw new Error(detail);}}} onSave={async v=>{const saved=await saveSource(v,edit);if(!saved.tid)throw new Error('保存接口未返回数据源标识，请刷新核对后再操作');let confirmed:Row|undefined;try{confirmed=await readSource(saved.tid);if(edit){confirmed.entityCount=sources.find(s=>s.id===saved.tid)?.entityCount??confirmed.entityCount;confirmed.fieldCount=sources.find(s=>s.id===saved.tid)?.fieldCount??confirmed.fieldCount;}}catch{message.warning('保存已完成，暂未能读取主记录，请勿重复登记');}return {...saved,confirmed};}} onSaved={result=>{const saved=result as Row;if(saved.confirmed)setConfirmedSources(rows=>[...rows.filter(row=>row.id!==saved.tid),saved.confirmed]);void syncIndex(saved.tid,saved.confirmed);}}><>{connectionError&&<Alert className="wx-source-connection-alert" showIcon type="error" title="连接测试未通过" description={connectionError}/>}<SourceFields editing={!!edit} choices={choices}/></></EditorModal>
+  <EditorModal width={600} presentation="drawer" open={edit!==undefined} title={edit?'编辑数据源':'登记数据源'} initial={initial} onCancel={()=>setEdit(undefined)} saveMessage="数据源已保存到数据中台" storageHint="配置与元数据管理平台共享" onTest={async v=>{setConnectionError('');try{const result=await sharedSourceApi.test(draftFromForm(v,edit),edit?.id);if(result.connected!==true)throw new Error(connectionFailureMessage(result.error||result.message));}catch(e){const detail=connectionFailureMessage(e);setConnectionError(detail);throw new Error(detail);}}}
+   onSave={saveRegistration} onSaved={result=>{const saved=result as Row;q.refresh();void syncIndex(saved.tid);}}>
+   {connectionError&&<Alert className="wx-source-connection-alert" showIcon type="error" title="连接测试未通过" description={connectionError}/>}
+   <SourceFields editing={!!edit} choices={choices}/>
+  </EditorModal>
   <Drawer className="wx-source-detail-drawer" open={!!source} width={820} title="数据源详情" onClose={()=>setDetails(undefined)} extra={source&&canManage()&&<Button onClick={()=>{void openEditor(source);setDetails(undefined);}} icon={<EditOutlined/>}>编辑信息</Button>}>
    {detailsQuery.error&&<Alert type="error" showIcon title="数据源详情读取失败" description={String(detailsQuery.error)} action={<Button onClick={detailsQuery.refresh}>重试</Button>}/>}
    {source&&<><div className="wx-source-drawer-heading"><SourceIcon engine={source.engine}/><div><h2>{source.name}</h2><p>{engineLabel(source.engine)} · 数据源 ID：{source.code}</p></div><Status value={source.status}/></div><Tabs activeKey={detailsTab} onChange={setDetailsTab} items={[

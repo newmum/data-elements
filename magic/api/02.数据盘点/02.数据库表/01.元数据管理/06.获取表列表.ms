@@ -161,7 +161,7 @@
   "headers": [],
   "paths": [],
   "responseBody": "[]",
-  "description": "获取当前数据源已保存的数据表快照（GET /dst/database/metadata/tables）。默认返回数组兼容步骤三至五；paged=true 时按租户、数据源、业务类型和名称关键词在数据库侧去重分页，供登记第二步右侧列表使用；不连接物理数据源；涉及 db_datasource_t、metadata_table_collection_job_t、db_table_t、da_catalog_t 等业务表。",
+  "description": "读取当前租户数据源的已保存表快照（GET /dst/database/metadata/tables）。默认返回数组。paged=true 用于登记第二步和来源详情，catalogPaged=true 按有效目录关联状态分页并返回两类登记数量。仅查询平台登记快照，不连接物理来源库。",
   "requestBodyDefinition": null,
   "responseBodyDefinition": null
 }
@@ -174,6 +174,8 @@ import tenantRuntime
 /**
  * GET /dst/database/metadata/tables 读取当前租户数据源的已保存表快照。
  * dbId 必填。默认返回数组，paged=true 返回去重后的分页、筛选总数和筛选前统计。
+ * catalogPaged=true 按当前租户的有效目录关联分页，返回筛选前的待登记和已登记数量。
+ * annotatedOnly=true 保留历史完整数组，按数据源和标注状态选取同名代表快照。
  * includeGovernance=false 省略治理大字段。此接口只读取登记快照，不连接物理来源库。
  */
 var tenantId = tenantRuntime.id()
@@ -209,9 +211,7 @@ var tableItem = (row, datasource) => {
         dbId: datasourceId,
         tableName: tableName,
         tableNameEn: firstValue(row, ['tableNameEn', 'table_name_en', 'tableName', 'table_name']),
-        // This endpoint is the persisted registration snapshot used by the
-        // right pane, so its resource name must not be replaced by a physical
-        // database comment returned from a later exploration.
+        // 右侧列表展示已持久化的登记名称，后续物理探查返回的注释不能覆盖它。
         registeredResourceName: firstValue(row, ['tableComment', 'table_comment', 'tableNameCn', 'table_name_cn']),
         tableNameCn: firstValue(row, ['tableNameCn', 'table_name_cn', 'tableComment', 'table_comment']),
         tableComment: firstValue(row, ['tableComment', 'table_comment', 'tableNameCn', 'table_name_cn']),
@@ -261,6 +261,36 @@ var tableItem = (row, datasource) => {
     return item
 }
 
+var snapshotProjection = (alias, legacyArray) => {
+    var columnKinds = {
+        tid: 'TEXT', datasource_id: 'TEXT', table_name: 'TEXT', table_name_en: 'TEXT', table_name_cn: 'TEXT',
+        table_comment: 'LOB', table_type: 'TEXT', business_type: 'TEXT', business_type_reason: 'TEXT',
+        annotated: 'NUMBER', record_count: 'NUMBER', field_count: 'NUMBER', storage_size: 'TEXT',
+        total_size_bytes: 'NUMBER', total_size_formatted: 'TEXT', org_id: 'TEXT', org_path: 'LOB',
+        related_directory: 'TEXT', data_source_type: 'TEXT', timestamp_field: 'TEXT',
+        dictionary_structure_type: 'TEXT', dictionary_table_flag: 'NUMBER', source_catalog_id: 'TEXT',
+        source_table_id: 'TEXT', source_table_name: 'TEXT', manage_unit: 'TEXT', asset_status: 'NUMBER',
+        flow_status: 'NUMBER', reg_time: 'TIME', created_time: 'TIME', updated_time: 'TIME', tenant_id: 'TEXT'
+    }
+    // 历史数组优先返回快照上的描述和目录名，再由 tableItem 应用兼容回退。
+    if (legacyArray) {
+        columnKinds.asset_desc = 'LOB'
+        columnKinds.catalog_name = 'TEXT'
+        columnKinds.catalog_name_en = 'TEXT'
+    }
+    if (includeGovernanceFlag) {
+        columnKinds.field_governance_config = 'LOB'
+        columnKinds.dictionary_profiles = 'LOB'
+        columnKinds.dictionary_profile = 'LOB'
+        columnKinds.dictionary_categories = 'LOB'
+    }
+    var projection = {}
+    for (name in columnKinds.keySet()) {
+        projection[name] = tableRead.column(alias, name, columnKinds[name])
+    }
+    return projection
+}
+
 if (blank(dbId)) {
     exit 400, 'dbId 不能为空'
 }
@@ -274,23 +304,34 @@ if (datasource == null) {
     exit 404, '数据源不存在或已删除'
 }
 
-/* 登记目录抽屉：复用同一 db_table_t 采集快照，按目录关联状态真分页。
- * 只读、不连接源库、不写资产；不传 catalogPaged 时保持第二步原有接口行为。
- */
+// 登记目录抽屉复用第二步的已保存快照，按有效目录关联状态在库内分页。
 if (textOf(catalogPaged) == '1' || textOf(catalogPaged).toLowerCase() == 'true') {
-    if (datasource == null) { exit 404, '数据源不存在或无访问权限' }
     var safePageNo = pageNo == null || pageNo::int < 1 ? 1 : pageNo::int
     var safePageSize = pageSize == null || pageSize::int < 1 ? 20 : Math.min(pageSize::int, 100)
     var registeredMode = textOf(catalogStatus) == 'registered'
     var selectedBusinessType = blank(businessType) || textOf(businessType) == '全部' ? null : textOf(businessType)
-    var tableKeywords = []
-    for (word in textOf(tableNames).split('\n')) {
-        if (!blank(word)) { tableKeywords.add('%' + textOf(word).trim().toLowerCase() + '%') }
-    }
-    var catalogKeywords = []
-    for (word in textOf(catalogNames).split('\n')) {
-        if (!blank(word)) { catalogKeywords.add('%' + textOf(word).trim().toLowerCase() + '%') }
-    }
+    var snapshotAlias = 'catalog_snapshot'
+    var catalogAlias = 'linked_catalog'
+    var rankedAlias = 'ranked_catalog'
+    var snapshotColumn = (name, kind) => tableRead.column(snapshotAlias, name, kind)
+    var rankedColumn = (name, kind) => tableRead.column(rankedAlias, name, kind)
+    var catalogId = tableRead.column(catalogAlias, 'tid', 'TEXT')
+    var linked = tableRead.not(tableRead.isNull(catalogId))
+    var tableName = snapshotColumn('table_name', 'TEXT')
+    var annotated = snapshotColumn('annotated', 'NUMBER')
+    var isAnnotated = tableRead.equal(annotated, 1)
+    var nameKey = tableRead.lower(tableRead.trim(tableName))
+
+    // 目录关联必须在当前租户且未删除，失效引用按待登记处理。
+    var snapshots = tableRead.from('db_table_t', snapshotAlias, tenantId)
+    snapshots.leftJoin('da_catalog_t', catalogAlias, 'tid', 'source_catalog_id', [
+        tableRead.equal(tableRead.column(catalogAlias, 'is_del', 'NUMBER'), 0)
+    ])
+    snapshots.where(tableRead.all([
+        tableRead.equal(snapshotColumn('datasource_id', 'TEXT'), dbId),
+        tableRead.equal(snapshotColumn('is_del', 'NUMBER'), 0)
+    ]))
+
     // 与第二步一致：采集未匹配的未标注行不回到待登记；已标注和目录关联行保留。
     var missingNames = []
     if (textOf(checkCollectionMissing) == '1') {
@@ -306,75 +347,117 @@ if (textOf(catalogPaged) == '1' || textOf(catalogPaged).toLowerCase() == 'true')
             }
         }
     }
-    var catalogBaseSql = """
-        select * from (
-            select t.tid, t.datasource_id, t.table_name, t.table_name_en, t.table_name_cn,
-                   t.table_comment, t.table_type,
-                   case
-                     when (t.annotated=1 or t.business_type_reason like '%人工调整%')
-                          and t.business_type is not null and t.business_type<>'' then t.business_type
-                     when t.business_type in ('不确定', '暂不处理') then t.business_type
-                     when regexp_like(regexp_replace(lower(t.table_name), '[^a-z0-9]+', '_'), '(^|_)(bak|backup|bk|old|copy|his|history|archive|arch|dump)(_|$)')
-                       or regexp_like(regexp_replace(lower(t.table_name), '[^a-z0-9]+', '_'), '(^|_)(19|20)[0-9]{6,12}($|_)')
-                       or regexp_like(concat(concat(lower(t.table_name), ' '), lower(coalesce(t.table_comment, t.table_name_cn, ''))), '备份|历史|归档|副本') then '备份表'
-                     when regexp_like(regexp_replace(lower(t.table_name), '[^a-z0-9]+', '_'), '(^|_)(log|logs|audit|trace|access|operate|operation|login)(_|$)')
-                       or regexp_like(concat(concat(lower(t.table_name), ' '), lower(coalesce(t.table_comment, t.table_name_cn, ''))), '日志|审计|轨迹|访问记录|操作记录|登录记录') then '日志表'
-                     when regexp_like(regexp_replace(lower(t.table_name), '[^a-z0-9]+', '_'), '(^|_)(dict|dictionary|code|enum|lookup|type|param|params|config|constant)(_|$)')
-                       or regexp_like(concat(concat(lower(t.table_name), ' '), lower(coalesce(t.table_comment, t.table_name_cn, ''))), '字典|码表|代码表|枚举|参数|配置|常量|类型') then '字典表'
-                     when regexp_like(regexp_replace(lower(t.table_name), '[^a-z0-9]+', '_'), '(^|_)(flow|workflow|process|proc|task|approval|approve|node|todo|bpm)(_|$)')
-                       or regexp_like(concat(concat(lower(t.table_name), ' '), lower(coalesce(t.table_comment, t.table_name_cn, ''))), '流程|过程|审批|工单|任务|节点|待办') then '过程表'
-                     else coalesce(nullif(t.business_type, ''), '业务表')
-                   end as business_type, t.business_type_reason,
-                   t.annotated, t.field_count, t.org_id, t.org_path, t.tenant_id,
-                   t.asset_status, t.flow_status, t.created_time, t.updated_time,
-                   c.tid as source_catalog_id, c.catalog_name, c.catalog_name_en,
-                   row_number() over (
-                       partition by lower(trim(t.table_name))
-                       order by case when c.tid is not null then 1 else 0 end desc, coalesce(t.annotated, 0) desc,
-                                t.updated_time desc, coalesce(t.field_count, 0) desc, t.tid desc
-                   ) as row_rank
-              from db_table_t t
-              left join da_catalog_t c on c.tid=t.source_catalog_id
-                   and c.tenant_id=#{tenantId} and c.is_del=0
-             where t.tenant_id=#{tenantId} and t.datasource_id=#{dbId} and t.is_del=0
-               <if test="missingNames.size() > 0">
-                 and (t.annotated=1 or c.tid is not null or lower(trim(t.table_name)) not in
-                   <foreach collection="missingNames" item="missingName" open="(" close=")" separator=",">#{missingName}</foreach>)
-               </if>
-        ) ranked where ranked.row_rank=1
-    """
-    var counts = db.select('select case when ranked.source_catalog_id is not null then 1 else 0 end as registered, count(1) as total from (' + catalogBaseSql + ') ranked group by case when ranked.source_catalog_id is not null then 1 else 0 end')
-    var pendingTotal = 0
-    var registeredTotal = 0
-    for (count in counts) {
-        if (textOf(rowValue(count, ['registered'])) == '1' || textOf(rowValue(count, ['registered'])) == 'true') {
-            registeredTotal = rowValue(count, ['total'])::long
-        } else { pendingTotal = rowValue(count, ['total'])::long }
+    if (missingNames.size() > 0) {
+        snapshots.where(tableRead.any([isAnnotated, linked, tableRead.not(tableRead.in(nameKey, missingNames))]))
     }
-    var catalogFilterSql = """
-        <if test="registeredMode">and ranked.source_catalog_id is not null</if>
-        <if test="!registeredMode">and ranked.source_catalog_id is null</if>
-        <if test="selectedBusinessType != null and selectedBusinessType != ''">
-          and ranked.business_type=#{selectedBusinessType}
-        </if>
-        <if test="tableKeywords.size() > 0">
-          and <foreach collection="tableKeywords" item="word" open="(" close=")" separator=" or ">lower(ranked.table_name) like #{word}</foreach>
-        </if>
-        <if test="catalogKeywords.size() > 0">
-          and <foreach collection="catalogKeywords" item="word" open="(" close=")" separator=" or ">lower(coalesce(ranked.catalog_name, '')) like #{word}</foreach>
-        </if>
-    """
-    var page = db.page(catalogBaseSql + catalogFilterSql + ' order by ranked.table_name, ranked.tid', safePageSize, (safePageNo - 1) * safePageSize)
+
+    // 先确定同名快照的代表行，再施加界面筛选。沿用原库的空值排序，避免改变历史代表行。
+    var rankOrder = [
+        tableRead.when(linked, 1, 0),
+        tableRead.coalesce([annotated, 0]),
+        snapshotColumn('updated_time', 'TIME'),
+        tableRead.coalesce([snapshotColumn('field_count', 'NUMBER'), 0]),
+        snapshotColumn('tid', 'TEXT')
+    ]
+    var rankSnapshots = projection => snapshots.ranked(rankedAlias, projection, [nameKey], rankOrder,
+        ['desc', 'desc', 'desc', 'desc', 'desc'], true)
+    var rankedCatalogId = rankedColumn('source_catalog_id', 'TEXT')
+    var unlinked = tableRead.isNull(rankedCatalogId)
+    var counts = rankSnapshots({source_catalog_id: catalogId}).grouped({
+        pending_total: tableRead.countIf(unlinked),
+        registered_total: tableRead.countIf(tableRead.not(unlinked))
+    }, [])
+
+    // 自动规则从低到高构造。人工标注、人工调整及显式保留的类型优先于推断。
+    var storedType = snapshotColumn('business_type', 'TEXT')
+    var nonBlankType = tableRead.blankAsNull(storedType)
+    var reason = snapshotColumn('business_type_reason', 'TEXT')
+    var nameTokens = tableRead.regexReplace(tableRead.lower(tableName), '[^a-z0-9]+', '_')
+    var description = tableRead.coalesce([
+        snapshotColumn('table_comment', 'LOB'), snapshotColumn('table_name_cn', 'TEXT'), ''
+    ])
+    // 中文关键词无需大小写转换，保留长注释全文供数据库匹配。
+    var classificationText = tableRead.concat(tableRead.concat(tableName, ' '), description)
+    var rules = [
+        ['过程表', '(^|_)(flow|workflow|process|proc|task|approval|approve|node|todo|bpm)(_|$)',
+            '流程|过程|审批|工单|任务|节点|待办'],
+        ['字典表', '(^|_)(dict|dictionary|code|enum|lookup|type|param|params|config|constant)(_|$)',
+            '字典|码表|代码表|枚举|参数|配置|常量|类型'],
+        ['日志表', '(^|_)(log|logs|audit|trace|access|operate|operation|login)(_|$)',
+            '日志|审计|轨迹|访问记录|操作记录|登录记录'],
+        ['备份表', '(^|_)(bak|backup|bk|old|copy|his|history|archive|arch|dump)(_|$)|(^|_)(19|20)[0-9]{6,12}($|_)',
+            '备份|历史|归档|副本']
+    ]
+    var displayType = tableRead.coalesce([nonBlankType, '业务表'])
+    for (rule in rules) {
+        var matches = tableRead.any([
+            tableRead.regexLike(nameTokens, rule[1]), tableRead.regexLike(classificationText, rule[2])
+        ])
+        displayType = tableRead.when(matches, rule[0], displayType)
+    }
+    var explicitType = tableRead.any([
+        tableRead.in(storedType, ['不确定', '暂不处理']),
+        tableRead.all([
+            tableRead.any([isAnnotated, tableRead.like(reason, '%人工调整%')]),
+            tableRead.not(tableRead.isNull(nonBlankType))
+        ])
+    ])
+
+    // 仅返回抽屉所需的快照与目录字段，治理大字段仍不在该分页分支投影。
+    var columnKinds = {
+        tid: 'TEXT', datasource_id: 'TEXT', table_name: 'TEXT', table_name_en: 'TEXT', table_name_cn: 'TEXT',
+        table_comment: 'LOB', table_type: 'TEXT', business_type: 'TEXT', business_type_reason: 'TEXT',
+        annotated: 'NUMBER', field_count: 'NUMBER', org_id: 'TEXT', org_path: 'LOB', tenant_id: 'TEXT',
+        asset_status: 'NUMBER', flow_status: 'NUMBER', created_time: 'TIME', updated_time: 'TIME',
+        source_catalog_id: 'TEXT', catalog_name: 'TEXT', catalog_name_en: 'TEXT'
+    }
+    var snapshotFields = {}
+    var pageFields = {}
+    for (name in columnKinds.keySet()) {
+        snapshotFields[name] = snapshotColumn(name, columnKinds[name])
+        pageFields[name] = rankedColumn(name, columnKinds[name])
+    }
+    snapshotFields.business_type = tableRead.when(explicitType, storedType, displayType)
+    snapshotFields.source_catalog_id = catalogId
+    snapshotFields.catalog_name = tableRead.column(catalogAlias, 'catalog_name', 'TEXT')
+    snapshotFields.catalog_name_en = tableRead.column(catalogAlias, 'catalog_name_en', 'TEXT')
+    var ranked = rankSnapshots(snapshotFields)
+    ranked.where(registeredMode ? tableRead.not(unlinked) : unlinked)
+    if (selectedBusinessType != null) {
+        ranked.where(tableRead.equal(pageFields.business_type, selectedBusinessType))
+    }
+    var filterKeywords = (keywords, column) => {
+        var matches = []
+        var searchColumn = tableRead.lower(column)
+        for (word in textOf(keywords).split('\n')) {
+            if (!blank(word)) {
+                matches.add(tableRead.like(searchColumn, '%' + textOf(word).trim().toLowerCase() + '%'))
+            }
+        }
+        if (matches.size() > 0) {
+            ranked.where(tableRead.any(matches))
+        }
+    }
+    filterKeywords(tableNames, pageFields.table_name)
+    filterKeywords(catalogNames, tableRead.coalesce([pageFields.catalog_name, '']))
+    var page = ranked.page(pageFields, pageFields.table_name, 'asc', 'tid', 'asc', safePageNo, safePageSize, true)
     var rows = []
-    for (row in page.list == null ? [] : page.list) {
+    for (row in page.rows) {
         var item = tableItem(row, datasource)
         item.catalogId = item.sourceCatalogId
         item.catalogName = rowValue(row, ['catalogName', 'catalog_name'])
         item.catalogNameEn = rowValue(row, ['catalogNameEn', 'catalog_name_en'])
         rows.add(item)
     }
-    return {pageNo: safePageNo, pageSize: safePageSize, total: page.total,
-        pendingTotal: pendingTotal, registeredTotal: registeredTotal, rows: rows, list: rows}
+    return {
+        pageNo: safePageNo,
+        pageSize: safePageSize,
+        total: page.total,
+        pendingTotal: rowValue(counts[0], ['pending_total']),
+        registeredTotal: rowValue(counts[0], ['registered_total']),
+        rows: rows,
+        list: rows
+    }
 }
 
 /*
@@ -441,32 +524,9 @@ if (pagedMode) {
         total: tableRead.count()
     }, [statsBusinessType, statsAnnotated])
 
-    var columnKinds = {
-        tid: 'TEXT', datasource_id: 'TEXT', table_name: 'TEXT', table_name_en: 'TEXT', table_name_cn: 'TEXT',
-        table_comment: 'LOB', table_type: 'TEXT', business_type: 'TEXT', business_type_reason: 'TEXT',
-        annotated: 'NUMBER', record_count: 'NUMBER', field_count: 'NUMBER', storage_size: 'TEXT',
-        total_size_bytes: 'NUMBER', total_size_formatted: 'TEXT', org_id: 'TEXT', org_path: 'LOB',
-        related_directory: 'TEXT', data_source_type: 'TEXT', timestamp_field: 'TEXT',
-        dictionary_structure_type: 'TEXT', dictionary_table_flag: 'NUMBER', source_catalog_id: 'TEXT',
-        source_table_id: 'TEXT', source_table_name: 'TEXT', manage_unit: 'TEXT', asset_status: 'NUMBER',
-        flow_status: 'NUMBER', reg_time: 'TIME', created_time: 'TIME', updated_time: 'TIME', tenant_id: 'TEXT'
-    }
-    // 摘要请求不从数据库读取治理配置及字典大字段。
-    if (includeGovernanceFlag) {
-        columnKinds.field_governance_config = 'LOB'
-        columnKinds.dictionary_profiles = 'LOB'
-        columnKinds.dictionary_profile = 'LOB'
-        columnKinds.dictionary_categories = 'LOB'
-    }
-    var projectColumns = alias => {
-        var fields = {}
-        for (name in columnKinds.keySet()) {
-            fields[name] = tableRead.column(alias, name, columnKinds[name])
-        }
-        return fields
-    }
-    var ranked = rankSnapshots(projectColumns(snapshotAlias))
-    var projection = projectColumns(rankedAlias)
+    // 摘要请求只投影分页所需字段，按 includeGovernance 决定是否读取治理配置。
+    var ranked = rankSnapshots(snapshotProjection(snapshotAlias, false))
+    var projection = snapshotProjection(rankedAlias, false)
 
     // 先选代表行，再过滤类型和关键词，避免匹配到已被去重的旧快照。
     if (selectedBusinessType != null) {
@@ -518,30 +578,33 @@ if (pagedMode) {
     }
 }
 
-// datasource_id 必须下推到数据库查询，禁止读取整个租户的表后在 Magic 内存过滤。
+// 数据源范围和标注条件在数据库内处理，避免读取其他来源或未标注的快照。
 var tableRows = []
-// 审查页只传输已标注表及其持久化治理配置，不传输上万张未标注表，
-// 也不探查源端字段。排序/去重与第二步右侧已标注列表完全一致。
-if (textOf(annotatedOnly).trim().toLowerCase() == 'true' || textOf(annotatedOnly) == '1') {
-    tableRows = db.select("""
-        select * from (
-            select t.*, row_number() over (
-                partition by lower(t.table_name)
-                order by coalesce(t.field_count, 0) desc, t.updated_time desc, t.tid desc
-            ) as row_rank
-            from db_table_t t
-            where t.tenant_id = #{tenantId} and t.datasource_id = #{dbId}
-              and t.is_del = 0 and t.annotated = 1
-        ) ranked where ranked.row_rank = 1
-        order by ranked.updated_time desc, ranked.tid desc
-    """)
+var annotatedOnlyMode = textOf(annotatedOnly).trim().toLowerCase() == 'true' || textOf(annotatedOnly) == '1'
+if (annotatedOnlyMode) {
+    var snapshotAlias = 'annotated_snapshot'
+    var rankedAlias = 'ranked_annotated'
+    var snapshot = snapshotProjection(snapshotAlias, true)
+    var snapshots = tableRead.from('db_table_t', snapshotAlias, tenantId)
+    snapshots.where(tableRead.all([
+        tableRead.equal(snapshot.datasource_id, dbId),
+        tableRead.equal(tableRead.column(snapshotAlias, 'is_del', 'NUMBER'), 0),
+        tableRead.equal(snapshot.annotated, 1)
+    ]))
+
+    // 首次去重按数据库的表名小写和排序规则，空时间沿用当前方言的原生顺序。
+    var ranked = snapshots.ranked(rankedAlias, snapshot, [tableRead.lower(snapshot.table_name)], [
+        tableRead.coalesce([snapshot.field_count, 0]), snapshot.updated_time, snapshot.tid
+    ], ['desc', 'desc', 'desc'], true)
+    var projection = snapshotProjection(rankedAlias, true)
+    // 旧客户端取得同一语句快照的完整数组，按更新时间和 ID 保持原返回顺序。
+    tableRows = ranked.rankedRows(projection, [projection.updated_time, projection.tid], ['desc', 'desc'], true)
 } else {
     tableRows = db.table('db_table_t').where().eq('tenant_id', tenantId)
         .eq('datasource_id', dbId).eq('is_del', 0)
         .orderBy('updated_time', 'desc').select()
 }
-// One physical table can have historical registration snapshots.  Keep the latest
-// persisted snapshot so an older dictionary classification cannot mask a newer process-table edit.
+// 再按去首尾空白、小写后的表名去重，更新时间缺失时沿用创建时间。
 var latestByTableName = {}
 var updatedValue = (row) => {
     var value = firstValue(row, ['updatedTime', 'updated_time', 'createdTime', 'created_time'])

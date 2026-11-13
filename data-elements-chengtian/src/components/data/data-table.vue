@@ -243,7 +243,7 @@
                   trigger="click"
                 >
                   <template #reference>
-                    <el-icon :class="{ active: !!columnFilters[column.prop] }">
+                    <el-icon :class="{ active: !!columnFilters[column.prop] }" @click.stop>
                       <Icon v-if="column.filterOptions" icon="filter" />
                       <Icon v-else icon="el-icon-search" />
                     </el-icon>

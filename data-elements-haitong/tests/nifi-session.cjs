@@ -16,7 +16,9 @@ function loadTypeScript(file, dependencies, environment={ DEV:true }) {
     if (name === './platformError') {
       return platformError ??= loadTypeScript('src/api/platformError.ts', {}, environment);
     }
-    if(name.endsWith('/platformLocation'))return loadTypeScript('src/services/platformLocation.ts',{},environment);
+    if (name.endsWith('/platformLocation')) return loadTypeScript('src/services/platformLocation.ts', {}, environment);
+    if (name === '../app/deployment') return loadTypeScript('src/app/deployment.ts', {}, environment);
+    if (name === './routes') return loadTypeScript('src/app/routes.ts', {}, environment);
     throw new Error(`Unexpected dependency in session test: ${name}`);
   };
   new Function('require', 'module', 'exports', 'viteEnv', compiled)(localRequire, result, result.exports, environment);
@@ -33,6 +35,24 @@ test('production platform adapter returns root home and keeps a configured sourc
     const prefixed=loadTypeScript('src/services/platformSession.ts',dependencies,{DEV:false,VITE_SOURCE_PLATFORM_HOME_URL:'/source-platform/#/home'});
     assert.equal(prefixed.getPlatformHomeUrl(),'http://validation-platform.test:82/source-platform/#/');
   }finally{global.window=previousWindow;}
+});
+
+test('standalone platform adapter returns the enabled HaiTong landing route', () => {
+  const previousWindow = global.window;
+  global.window = {
+    location: { href: 'http://validation-platform.test:82/haitong/#/overview' },
+    haitongDeployment: {
+      tenantId: 'validation-tenant',
+      appId: 'validation-app',
+      enabledRoutes: ['/overview', '/development/nifi-flows'],
+    },
+  };
+  try {
+    const session = loadTypeScript('src/services/platformSession.ts', { '../nifi/api/bridgeSession': {} }, { DEV: false });
+    assert.equal(session.getPlatformHomeUrl(), 'http://validation-platform.test:82/haitong/#/development/nifi-flows');
+  } finally {
+    global.window = previousWindow;
+  }
 });
 
 test('tenant credential rotation clears NiFi and platform query data but retains local workspace data', () => {
@@ -156,7 +176,7 @@ test('expired platform session redirects once to the existing login and preserve
   const cleared = [];
   const windowMock = {
     location: {
-      href: 'http://localhost:3002/#/development/tasks?token=secret',
+      href: 'http://localhost:3002/?token=validation-query-token&panel=active#/development/tasks?access_token=validation-hash-token&job=validation-job',
       origin: 'http://localhost:3002',
       replace: (value) => navigations.push(value),
     },
@@ -168,18 +188,25 @@ test('expired platform session redirects once to the existing login and preserve
     setItem: (key, value) => values.set(key, value),
   };
   try {
-    const session = loadTypeScript('src/services/platformSession.ts', {
+    const dependencies = {
       '../nifi/api/bridgeSession': { setBridgeToken: (token) => cleared.push(token) },
-    });
+    };
+    const session = loadTypeScript('src/services/platformSession.ts', dependencies);
     assert.equal(session.redirectToPlatformLogin(), true);
     assert.equal(session.redirectToPlatformLogin(), false);
+    const reloaded = loadTypeScript('src/services/platformSession.ts', dependencies);
+    assert.equal(reloaded.redirectToPlatformLogin(), false);
     assert.deepEqual(cleared, [null]);
     assert.equal(navigations.length, 1);
     const login = new URL(navigations[0]);
     assert.equal(login.origin, 'http://localhost:3000');
     assert.equal(login.hash.split('?')[0], '#/login');
     assert.equal(new URLSearchParams(login.hash.split('?')[1]).get('redirect'),
-      'http://localhost:3002/#/development/tasks');
+      'http://localhost:3002/?panel=active#/development/tasks?job=validation-job');
+    assert.deepEqual([...values.keys()], ['haitong:platform-login-redirect']);
+    const redirectRecord = values.get('haitong:platform-login-redirect');
+    assert.doesNotMatch(redirectRecord, /validation-(?:query|hash)-token/);
+    assert.deepEqual(Object.keys(JSON.parse(redirectRecord)), ['at']);
   } finally {
     global.window = previousWindow;
     global.sessionStorage = previousSessionStorage;

@@ -132,7 +132,16 @@ public class LogLifecycleService {
                 var rows=query.read(scope,selection,params,"event_time asc,tid asc",format.equals("JSONL"));if(rows.isEmpty())break;
                 for(var row:rows) {
                     if(format.equals("JSONL"))writer.write(json(row)+"\n");
-                    else {List<String> cells=new ArrayList<>();for(String key:List.of("event_time","actor_name","actor_account","actor_org_name","menu_path","operation_name","action_code","target_name","result","ip","request_id","trace_id"))cells.add(csv(row.get(key)));writer.write(String.join(",",cells)+"\n");}
+                    else {
+                        List<String> cells=new ArrayList<>();
+                        for(String key:List.of("event_time","actor_name","actor_account","actor_org_name","menu_path","operation_name","action_code","target_name","result","ip","request_id","trace_id")) {
+                            Object value=row.get(key);
+                            // 查询结果中的历史 created_time 已归一化；只回退展示值，不改 JSONL 快照。
+                            if(key.equals("event_time")&&value==null)value=row.get("created_time");
+                            cells.add(csv(value));
+                        }
+                        writer.write(String.join(",",cells)+"\n");
+                    }
                 }
                 count+=rows.size();
             }
@@ -238,6 +247,11 @@ public class LogLifecycleService {
     private String kind(Map<String,Object> input) {String kind=LogQueryService.text(input.get("kind"),20);if(!Set.of("auth","operations","requests","security").contains(kind))throw new IllegalArgumentException("请选择日志类别");return kind;}
     private String json(Object value) {try{return mapper.writeValueAsString(value);}catch(Exception error){throw new IllegalArgumentException("日志任务内容无效",error);}}
     private String hash(Path path) throws Exception {MessageDigest md=MessageDigest.getInstance("SHA-256");try(var in=Files.newInputStream(path)){byte[] buffer=new byte[65536];int n;while((n=in.read(buffer))>0)md.update(buffer,0,n);}return HexFormat.of().formatHex(md.digest());}
-    private String csv(Object value) {String text=Objects.toString(value,"").replaceAll("[\\r\\n\\p{Cntrl}]"," ");if(text.matches("^[=+@-].*"))text="'"+text;return "\""+text.replace("\"","\"\"")+"\"";}
+    private String csv(Object value) {
+        String text=Objects.toString(value,"").replaceAll("[\\r\\n\\p{Cntrl}]"," ");
+        // 保留普通文本与前导空白；控制符清洗后仍须识别空白（含 NBSP/BOM）之后的公式。
+        if(text.matches("(?s)^[\\s\\p{Z}\\uFEFF]*[=+@-].*"))text="'"+text;
+        return "\""+text.replace("\"","\"\"")+"\"";
+    }
     @PreDestroy public void close() {workers.shutdown();try{workers.awaitTermination(10,TimeUnit.SECONDS);}catch(InterruptedException e){Thread.currentThread().interrupt();}}
 }

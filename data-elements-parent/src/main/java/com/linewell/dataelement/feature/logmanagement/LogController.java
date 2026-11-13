@@ -16,7 +16,11 @@ public class LogController {
     }
     private Map<String,Object> response(Object value) { return Map.of("code",0,"success",true,"data",value); }
     @GetMapping("/components") public Object components(@RequestParam(defaultValue="auth") String kind) { if(access.capabilities().isEmpty())throw new SecurityException("没有日志访问权限");return response(components.components()); }
-    @GetMapping("/capabilities") public Object capabilities() {return response(access.capabilities());}
+    @GetMapping("/capabilities") public Object capabilities() {
+        var modules = new ArrayList<>(access.capabilities());
+        if (modules.contains("operations") || modules.contains("requests")) modules.add("requestParameters");
+        return response(modules);
+    }
     @GetMapping("/{kind:auth|operations|requests|security}") public Object page(@PathVariable String kind,@RequestParam Map<String,Object> input) { return response(queries.page(access.current(kind),kind,input)); }
     @GetMapping("/{kind:auth|operations|requests|security}/statistics") public Object statistics(@PathVariable String kind,@RequestParam Map<String,Object> input) { return response(queries.statistics(access.current(kind),kind,input)); }
     @GetMapping("/{kind:auth|operations|requests|security}/{id}") public Object detail(@PathVariable String kind,@PathVariable String id) { return response(queries.detail(access.current(kind),kind,id)); }

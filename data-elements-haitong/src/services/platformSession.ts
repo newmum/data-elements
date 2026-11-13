@@ -37,12 +37,10 @@ let loginRedirectPending = false;
 /** Avoid a redirect loop if the platform sends us straight back with the same invalid session. */
 export function redirectToPlatformLogin(): boolean {
   if (loginRedirectPending || window.parent !== window) return false;
-  const destination = new URL(window.location.href);
-  const route = `${destination.pathname}${destination.search}${destination.hash}`;
   try {
-    const previous = JSON.parse(sessionStorage.getItem(LOGIN_REDIRECT_KEY) || 'null') as { route?: string; at?: number } | null;
+    const previous = JSON.parse(sessionStorage.getItem(LOGIN_REDIRECT_KEY) || 'null') as { at?: number } | null;
     if (previous && Date.now() - Number(previous.at) < 60_000) return false;
-    sessionStorage.setItem(LOGIN_REDIRECT_KEY, JSON.stringify({ route, at: Date.now() }));
+    sessionStorage.setItem(LOGIN_REDIRECT_KEY, JSON.stringify({ at: Date.now() }));
   } catch { /* Storage may be disabled; the in-memory guard still prevents repeated redirects. */ }
   loginRedirectPending = true;
   const loginUrl = getPlatformLoginUrl();

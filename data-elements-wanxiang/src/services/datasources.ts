@@ -75,9 +75,6 @@ export async function editSource(id:string):Promise<Row> {
 export async function readSource(id:string):Promise<Row> {
  return sourceRow(await datasourceRegistrationApi.detail(id));
 }
-export function matchesSourceProjection(projected:Row,confirmed:Row) {
- return ['id','name','orgId','appId','network','description'].every(key=>String(projected[key]||'')===String(confirmed[key]||''));
-}
 export const saveSource=(v:Row,existing?:Row|null)=>datasourceRegistrationApi.save(draftFromForm(v,existing),existing?.id);
 export async function testSource(id:string):Promise<void> {
  try {

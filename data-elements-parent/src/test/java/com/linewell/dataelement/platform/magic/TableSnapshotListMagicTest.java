@@ -2,6 +2,7 @@ package com.linewell.dataelement.platform.magic;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import com.linewell.dataelement.platform.magic.module.JsonModule;
 import com.linewell.dataelement.platform.tenant.domain.TenantContext;
 import com.linewell.dataelement.utils.StructuredValues;
 import java.lang.reflect.InvocationTargetException;
@@ -10,12 +11,14 @@ import java.lang.reflect.Proxy;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.IntStream;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
@@ -145,6 +148,289 @@ class TableSnapshotListMagicTest {
         assertEquals(4, f.source.reads.size());
     }
 
+    @Test
+    void legacyArraysKeepTenantIsolationAndFixedReads() throws Exception {
+        for (int count : List.of(20, 100)) {
+            var f = new Fixture("MySQL");
+            var marked = IntStream.range(0, count).mapToObj(i -> "marked-" + i).toList();
+            for (String id : marked) {
+                f.table(id, id, "已标注", "业务表", 1, 1, "2026-10-24");
+            }
+            f.table("unmarked", "unmarked", "待处理", "暂不处理", 0, 1, "2026-10-25");
+            f.jdbc.update("""
+                    insert into db_table_t(tid, tenant_id, datasource_id, table_name, annotated, is_del)
+                    values ('foreign-pending','other','source','foreign-pending',0,0)
+                    """);
+            var all = new ArrayList<>(marked);
+            all.add("unmarked");
+
+            assertLegacyRows(f, Map.of("paged", false, "tenantId", "other"), all);
+            assertLegacyRows(f, Map.of("paged", false, "pending", true), List.of("unmarked"));
+            assertLegacyRows(f, Map.of("paged", false, "annotatedOnly", true), marked);
+        }
+    }
+
+    @Test
+    void annotatedArrayPreservesDatabaseRankNativeNullsAndTheSecondNamePass() throws Exception {
+        for (String dialect : List.of("MySQL", "PostgreSQL")) {
+            var f = new Fixture(dialect);
+            boolean nullsFirst = dialect.equals("PostgreSQL");
+            f.jdbc.execute("set default_null_ordering " + (nullsFirst ? "HIGH" : "LOW"));
+
+            f.table("field-count-old", "RANKED", "Rank winner", "业务表", 1, 10, "2026-01-02");
+            f.table("field-count-new", "ranked", "More recent", "业务表", 1, 9, "2026-01-09");
+            f.table("unmarked-ranked", "ranked", "Unmarked", "日志表", 0, 1000, "2026-01-20");
+            f.table("native-timed", "NATIVE", null, "业务表", 1, 7, "2026-01-05");
+            f.table("native-null", "native", null, "业务表", 1, 7, null);
+            f.table("tie-a", "TIE", null, "业务表", 1, null, "2026-01-03");
+            f.table("tie-z", "tie", null, "业务表", 1, 0, "2026-01-03");
+            f.table("outer-z", "outer", null, "业务表", 1, 2, "2026-01-03");
+            f.table("trim-plain", "trimmed", null, "业务表", 1, 100, "2026-01-08");
+            f.table("trim-winner", " trimmed", "Fallback comment", "业务表", 1, 0, null);
+            f.table("equal-plain", "equal", null, "业务表", 1, 1, "2026-01-06");
+            f.table("equal-null", " equal", null, "业务表", 1, 1, null);
+            f.table("blank-name", "   ", null, "业务表", 1, 10, "2026-01-21");
+            f.table("null-name", null, null, "业务表", 1, 10, "2026-01-21");
+            f.jdbc.execute("""
+                    insert into db_table_t(tid,tenant_id,datasource_id,table_name,annotated,field_count,is_del) values
+                        ('foreign-ranked','other','source','ranked',1,1000,0),
+                        ('deleted-ranked','police','source','ranked',1,1000,1),
+                        ('other-source-ranked','police','different','ranked',1,1000,0);
+                    update db_table_t set created_time=timestamp '2026-01-12 00:00:00',
+                        catalog_name='Stored catalog',catalog_name_en='stored_catalog',asset_desc='Stored asset',
+                        field_governance_config='{"fields":[]}',dictionary_profiles='[]',
+                        dictionary_profile='{}',dictionary_categories='["test"]' where tid='trim-winner';
+                    update db_table_t set created_time=timestamp '2026-01-06 00:00:00' where tid='equal-null';
+                    """);
+
+            // Body tenant and page filters do not override the legacy current-tenant array contract.
+            f.scope.denied = true;
+            var rows = StructuredValues.objectRows(f.read(1, Map.of("paged", false, "annotatedOnly", " TrUE ",
+                    "tenantId", "other", "pageNo", 8, "keyword", "no such table", "businessType", "暂不处理",
+                    "sortField", "tableName", "sortDir", "asc", "includeGovernance", true)));
+            var expected = nullsFirst
+                    ? List.of("trim-winner", "native-null", "equal-null", "tie-z", "outer-z", "field-count-old")
+                    : List.of("equal-plain", "native-timed", "tie-z", "outer-z", "field-count-old", "trim-winner");
+            assertEquals(expected, rows.stream().map(row -> row.get("tid")).toList(), dialect);
+            assertTrue(rows.stream().allMatch(row -> "police".equals(row.get("tenantId")) && number(row, "annotated") == 1));
+            var trim = rows.stream().filter(row -> "trim-winner".equals(row.get("tid"))).findFirst().orElseThrow();
+            assertEquals(" trimmed", trim.get("tableName"));
+            assertEquals("app", trim.get("appId"));
+            assertEquals("org", trim.get("orgId"));
+            assertEquals("Stored catalog", trim.get("catalogName"));
+            assertEquals("stored_catalog", trim.get("catalogNameEn"));
+            assertEquals("Stored asset", trim.get("assetDesc"));
+            assertEquals(List.of("{\"fields\":[]}", "[]", "{}", "[\"test\"]"),
+                    GOVERNANCE_KEYS.stream().map(trim::get).toList());
+            assertEquals(2, f.source.reads.size());
+            assertEquals(0, f.source.writes);
+        }
+    }
+
+    @Test
+    void annotatedArrayKeepsTheCompleteResultBeyondTheBoundedRowsLimit() throws Exception {
+        var f = new Fixture("MySQL");
+        f.jdbc.update("""
+                insert into db_table_t(tid,tenant_id,datasource_id,table_name,annotated,field_count,updated_time,is_del)
+                select 'marked-' || lpad(cast(n as varchar),5,'0'),'police','source',
+                    'name_' || lpad(cast(n as varchar),5,'0'),1,1,timestamp '2026-01-01 00:00:00',0
+                from system_range(1,10002) as entries(n)
+                """);
+        var rows = StructuredValues.objectRows(f.read(1, Map.of("paged", false, "annotatedOnly", "1", "pageNo", 999)));
+        assertEquals(10002, rows.size());
+        assertEquals("marked-10002", rows.getFirst().get("tid"));
+        assertEquals("marked-00001", rows.getLast().get("tid"));
+        assertEquals(10002, rows.stream().map(row -> row.get("tid")).distinct().count());
+        assertEquals(2, f.source.reads.size());
+        assertEquals(0, f.source.writes);
+    }
+
+    @Test
+    void annotatedArrayYieldsToCatalogPendingAndPagedModes() throws Exception {
+        var f = new Fixture("MySQL");
+        f.table("marked", "marked", "Marked", "业务表", 1, 3, "2026-01-03");
+        f.table("unmarked", "unmarked", "Pending", "业务表", 0, 2, "2026-01-02");
+        f.table("linked", "linked", "Linked", "业务表", 0, 1, "2026-01-01");
+        f.catalog("catalog", "police", "Existing catalog", "catalog", 0);
+        f.link("linked", "catalog");
+
+        var catalog = f.page(20, Map.of("catalogPaged", true, "pending", true, "paged", true, "annotatedOnly", true));
+        assertCatalogTotals(catalog, 2, 1, 2);
+        assertEquals(List.of("marked", "unmarked"), ids(catalog));
+        assertLegacyRows(f, Map.of("pending", true, "paged", true, "annotatedOnly", true), List.of("unmarked", "linked"));
+
+        var paged = f.page(20, Map.of("annotatedOnly", true, "allSnapshots", true));
+        assertEquals(List.of("marked", "unmarked", "linked"), ids(paged));
+        assertStats(paged, 3, 1, 3, 0);
+        assertLegacyRows(f, Map.of("paged", false, "annotatedOnly", true), List.of("marked"));
+    }
+
+    @Test
+    void annotatedArrayOptOutDoesNotSelectGovernanceColumns() throws Exception {
+        var f = new Fixture("MySQL");
+        f.table("marked", "table", null, "业务表", 1, 1, null);
+        f.jdbc.update("update db_table_t set field_governance_config='{}',dictionary_categories='[]' where tid='marked'");
+
+        var included = StructuredValues.objectRows(f.read(20, Map.of("paged", false, "annotatedOnly", true, "includeGovernance", true)));
+        assertEquals("{}", included.getFirst().get("fieldGovernanceConfig"));
+        assertEquals("[]", included.getFirst().get("dictionaryCategories"));
+        assertTrue(GOVERNANCE_COLUMNS.stream().allMatch(f.source.reads.getLast()::contains));
+        var excluded = StructuredValues.objectRows(f.read(20, Map.of("paged", false, "annotatedOnly", true, "includeGovernance", "0")));
+        assertTrue(GOVERNANCE_KEYS.stream().noneMatch(excluded.getFirst()::containsKey));
+        assertTrue(f.source.reads.stream().noneMatch(sql -> GOVERNANCE_COLUMNS.stream().anyMatch(sql::contains)));
+        assertEquals(2, f.source.reads.size());
+        assertEquals(0, f.source.writes);
+    }
+
+    @Test
+    void catalogPaginationKeepsTabTotalsAndReadCountsAtTwentyAndHundred() throws Exception {
+        for (String dialect : List.of("MySQL", "PostgreSQL")) {
+            var f = new Fixture(dialect);
+            var expected = IntStream.range(0, 120).mapToObj(i -> "pending-%03d".formatted(i)).toList();
+            for (String name : expected) {
+                f.table(name, name, null, "业务表", 0, 1, "2026-10-24");
+            }
+            f.catalog("own-catalog", "police", "现用目录", "current_catalog", 0);
+            f.table("registered", "registered", null, "业务表", 0, 1, "2026-10-24");
+            f.link("registered", "own-catalog");
+
+            for (int size : List.of(20, 100)) {
+                var page = f.catalogPage(size, Map.of("sortField", "fieldCount", "sortDir", "desc"));
+                assertCatalogTotals(page, 120, 1, 120);
+                assertEquals(1, number(page, "pageNo"));
+                assertEquals(size, number(page, "pageSize"));
+                assertEquals(expected.subList(0, size), ids(page));
+                assertEquals(page.get("rows"), page.get("list"));
+                assertEquals(4, f.source.reads.size());
+                assertTrue(f.source.reads.stream().noneMatch(sql -> GOVERNANCE_COLUMNS.stream().anyMatch(sql::contains)));
+
+                var second = f.catalogPage(size, Map.of("pageNo", 2));
+                assertEquals(expected.subList(size, Math.min(size * 2, expected.size())), ids(second));
+                assertCatalogTotals(second, 120, 1, 120);
+                assertEquals(4, f.source.reads.size());
+
+                var missing = f.catalogPage(size, Map.of("tableNames", "not_found"));
+                assertCatalogTotals(missing, 120, 1, 0);
+                assertEquals(List.of(), ids(missing));
+                assertEquals(3, f.source.reads.size());
+            }
+        }
+    }
+
+    @Test
+    void catalogRanksScopedActiveLinksBeforeFiltersAndKeepsCatalogAliases() throws Exception {
+        var f = new Fixture("MySQL");
+        f.catalog("live-catalog", "police", "现用目录", "live_catalog", 0);
+        f.catalog("foreign-catalog", "other", "外租户目录", "foreign_catalog", 0);
+        f.catalog("deleted-catalog", "police", "已删除目录", "deleted_catalog", 1);
+        f.table("linked", "ALPHA", "已登记表名", "业务表", 0, 1, "2026-10-20");
+        f.link("linked", "live-catalog");
+        f.table("new-unlinked", "alpha ", "未登记快照", "字典表", 1, 99, "2026-10-25");
+        f.table("old-link", "alpha", "更旧的已登记表名", "字典表", 0, 100, "2026-10-19");
+        f.link("old-link", "live-catalog");
+        f.table("foreign-reference", "foreign_reference", null, "业务表", 1, 2, "2026-10-21");
+        f.link("foreign-reference", "foreign-catalog");
+        f.table("deleted-reference", "deleted_reference", null, "业务表", 1, 2, "2026-10-21");
+        f.link("deleted-reference", "deleted-catalog");
+
+        var registered = f.catalogPage(20, Map.of("catalogStatus", "registered", "catalogNames", "不存在\n现用",
+                "tableNames", "nobody\nALPHA"));
+        assertCatalogTotals(registered, 2, 1, 1);
+        assertEquals(List.of("linked"), ids(registered));
+        var row = StructuredValues.objectRows(registered.get("rows")).getFirst();
+        assertEquals("linked", row.get("id"));
+        assertEquals("source", row.get("dbId"));
+        assertEquals("police", row.get("tenantId"));
+        assertEquals("live-catalog", row.get("catalogId"));
+        assertEquals("live-catalog", row.get("sourceCatalogId"));
+        assertEquals("现用目录", row.get("catalogName"));
+        assertEquals("live_catalog", row.get("catalogNameEn"));
+        assertEquals("已登记表名", row.get("registeredResourceName"));
+
+        var pending = f.catalogPage(20, Map.of());
+        assertCatalogTotals(pending, 2, 1, 2);
+        assertEquals(List.of("deleted-reference", "foreign-reference"), ids(pending));
+        for (var item : StructuredValues.objectRows(pending.get("rows"))) {
+            assertNull(item.get("catalogId"));
+            assertNull(item.get("catalogName"));
+            assertNull(item.get("catalogNameEn"));
+        }
+        var rejectedLoser = f.catalogPage(20, Map.of("catalogStatus", "registered", "businessType", "字典表"));
+        assertCatalogTotals(rejectedLoser, 2, 1, 0);
+        assertEquals(List.of(), ids(rejectedLoser));
+        for (String sourceId : List.of("foreign-source", "deleted-source", "unknown-source")) {
+            var rejected = assertInstanceOf(ExitValue.class, f.read(100, Map.of("catalogPaged", true, "dbId", sourceId)));
+            assertEquals(404, rejected.getValues()[0]);
+            assertEquals(1, f.source.reads.size());
+        }
+    }
+
+    @Test
+    void catalogMissingCollectionKeepsAnnotatedAndLinkedRowsAndClassifiesBeforePaging() throws Exception {
+        var f = new Fixture("MySQL");
+        f.catalog("live-catalog", "police", "现用目录", "live_catalog", 0);
+        f.table("missing", " missing_tbl ", null, null, 0, 1, "2026-10-24");
+        f.table("missing-marked", "missing_marked", null, "业务表", 1, 1, "2026-10-24");
+        f.table("missing-linked", "missing_linked", null, "业务表", 0, 1, "2026-10-24");
+        f.link("missing-linked", "live-catalog");
+        f.table("backup", "validation-history", "优先识别为备份，即使包含审计日志", null, 0, 1, "2026-10-24");
+        f.table("dated-backup", "validation_20261024", null, null, 0, 1, "2026-10-24");
+        f.table("log", "validation_audit", null, null, 0, 1, "2026-10-24");
+        f.table("dictionary", "validation_config", null, null, 0, 1, "2026-10-24");
+        f.table("process", "validation_process", null, null, 0, 1, "2026-10-24");
+        f.table("fallback-comment", "validation_detail", null, null, 0, 1, "2026-10-24");
+        f.table("empty-comment", "validation_empty", "", null, 0, 1, "2026-10-24");
+        f.jdbc.update("update db_table_t set table_name_cn=? where tid in (?,?)", "流程明细", "fallback-comment", "empty-comment");
+        f.table("manual", "validation_workflow", null, "业务表", 0, 1, "2026-10-24");
+        f.jdbc.update("update db_table_t set business_type_reason=? where tid=?", "上次人工调整后保留", "manual");
+        f.table("uncertain", "validation_backup", null, "不确定", 0, 1, "2026-10-24");
+        f.job("older", "police", "source", "SUCCEEDED", 0, "2026-10-23", "[{\"tableName\":\"validation_audit\"}]");
+        f.job("newest-failed", "police", "source", "FAILED", 0, "2026-10-26", "[{\"tableName\":\"validation_config\"}]");
+        f.job("newest-foreign", "other", "source", "SUCCEEDED", 0, "2026-10-26", "[{\"tableName\":\"validation_process\"}]");
+        f.job("newest-deleted", "police", "source", "SUCCEEDED", 1, "2026-10-26", "[{\"tableName\":\"validation_detail\"}]");
+        f.job("current", "police", "source", "SUCCEEDED", 0, "2026-10-25", """
+                [{"tableName":" MISSING_TBL "},{"table_name":"MISSING_MARKED"},{"tableName":"MISSING_LINKED"}]
+                """);
+
+        var enabled = Map.<String, Object>of("checkCollectionMissing", 1);
+        var pending = f.catalogPage(20, enabled);
+        assertCatalogTotals(pending, 10, 1, 10);
+        assertFalse(ids(pending).contains("missing"));
+        assertTrue(ids(pending).contains("missing-marked"));
+        assertEquals(5, f.source.reads.size());
+        assertCatalogTotals(f.catalogPage(100, enabled), 10, 1, 10);
+        assertEquals(5, f.source.reads.size());
+        assertCatalogTotals(f.catalogPage(100, Map.of()), 11, 1, 11);
+
+        var categories = Map.of("备份表", List.of("backup", "dated-backup"), "日志表", List.of("log"),
+                "字典表", List.of("dictionary"), "过程表", List.of("fallback-comment", "process"),
+                "业务表", List.of("missing-marked", "empty-comment", "manual"), "不确定", List.of("uncertain"));
+        for (var category : categories.entrySet()) {
+            var filtered = f.catalogPage(20, Map.of("checkCollectionMissing", 1, "businessType", category.getKey()));
+            assertCatalogTotals(filtered, 10, 1, category.getValue().size());
+            assertEquals(category.getValue(), ids(filtered));
+            assertEquals(5, f.source.reads.size());
+        }
+        var registered = f.catalogPage(20, Map.of("checkCollectionMissing", 1, "catalogStatus", "registered"));
+        assertCatalogTotals(registered, 10, 1, 1);
+        assertEquals(List.of("missing-linked"), ids(registered));
+    }
+
+    private static void assertCatalogTotals(Map<String, Object> page, long pending, long registered, long filtered) {
+        assertEquals(pending, number(page, "pendingTotal"));
+        assertEquals(registered, number(page, "registeredTotal"));
+        assertEquals(filtered, number(page, "total"));
+    }
+
+    private static void assertLegacyRows(Fixture fixture, Map<String, Object> options, List<String> expected)
+            throws Exception {
+        var response = assertInstanceOf(List.class, fixture.read(20, options));
+        var ids = StructuredValues.objectRows(response).stream().map(row -> (String) row.get("tid")).sorted().toList();
+        assertEquals(expected.stream().sorted().toList(), ids);
+        assertEquals(2, fixture.source.reads.size());
+        assertEquals(0, fixture.source.writes);
+    }
+
     private static long number(Map<String, Object> row, String key) {
         return assertInstanceOf(Number.class, row.get(key), key).longValue();
     }
@@ -194,7 +480,8 @@ class TableSnapshotListMagicTest {
                         dictionary_structure_type varchar(64), dictionary_table_flag int, source_catalog_id varchar(64),
                         field_governance_config varchar(500), dictionary_profiles varchar(500), dictionary_profile varchar(500),
                         dictionary_categories varchar(500), source_table_id varchar(64), source_table_name varchar(255),
-                        manage_unit varchar(64), asset_status int, flow_status int, reg_time timestamp, created_time timestamp,
+                        manage_unit varchar(64), asset_desc varchar(500), catalog_name varchar(255), catalog_name_en varchar(255),
+                        asset_status int, flow_status int, reg_time timestamp, created_time timestamp,
                         updated_time timestamp, tenant_id varchar(64), field_count int, annotated int, is_del int)
                     """);
             jdbc.execute("""
@@ -203,6 +490,15 @@ class TableSnapshotListMagicTest {
                         ('deleted-table','police','source','table_0','日志表',1,1000,1),
                         ('wrong-source-table','police','different','table_0','日志表',1,1000,0),
                         ('deleted-source-table','police','deleted-source','deleted-source-table','业务表',1,1000,0)
+                    """);
+            jdbc.execute("""
+                    create table da_catalog_t(tid varchar(64), tenant_id varchar(64), catalog_name varchar(255),
+                        catalog_name_en varchar(255), is_del int)
+                    """);
+            jdbc.execute("""
+                    create table metadata_table_collection_job_t(tid varchar(64), tenant_id varchar(64),
+                        datasource_id varchar(64), status varchar(32), is_del int, created_time timestamp,
+                        deleted_detail varchar(16000))
                     """);
             var sources = new MagicDynamicDataSource();
             sources.setDefault(source);
@@ -226,7 +522,26 @@ class TableSnapshotListMagicTest {
                     insert into db_table_t(tid, tenant_id, datasource_id, table_name, table_comment, business_type,
                         annotated, field_count, updated_time, is_del) values (?,'police','source',?,?,?,?,?,?,0)
                     """, id, name, comment, type, annotated, fields,
-                    updated == null ? null : java.sql.Timestamp.valueOf(updated + " 00:00:00"));
+                    updated == null ? null : Timestamp.valueOf(updated + " 00:00:00"));
+        }
+
+        void catalog(String id, String tenant, String name, String englishName, int deleted) {
+            jdbc.update("insert into da_catalog_t values (?,?,?,?,?)", id, tenant, name, englishName, deleted);
+        }
+
+        void link(String table, String catalog) {
+            jdbc.update("update db_table_t set source_catalog_id=? where tid=?", catalog, table);
+        }
+
+        void job(String id, String tenant, String source, String status, int deleted, String created, String detail) {
+            jdbc.update("insert into metadata_table_collection_job_t values (?,?,?,?,?,?,?)", id, tenant, source,
+                    status, deleted, Timestamp.valueOf(created + " 00:00:00"), detail);
+        }
+
+        Map<String, Object> catalogPage(int size, Map<String, Object> options) throws Exception {
+            var arguments = new HashMap<String, Object>(options);
+            arguments.put("catalogPaged", true);
+            return page(size, arguments);
         }
 
         Map<String, Object> page(int size, Map<String, Object> options) throws Exception {
@@ -240,6 +555,7 @@ class TableSnapshotListMagicTest {
             vars.put("db", db);
             vars.put("tableRead", new StructuredTableReadMagicModule(jdbc));
             vars.put("tenantRuntime", scope);
+            vars.put("jsons", new JsonModule());
             vars.put("dataScope", scope);
             vars.put("dbId", "source");
             vars.put("paged", true);
@@ -249,12 +565,14 @@ class TableSnapshotListMagicTest {
             vars.put("includeGovernance", false);
             vars.putAll(options);
             source.reads.clear();
+            source.writes = 0;
             return TenantContext.call(scope.tenant, () -> script.execute(new MagicScriptContext(vars)));
         }
     }
 
     private static final class CountedSource extends DriverManagerDataSource {
         final List<String> reads = new ArrayList<>();
+        int writes;
         private final String dialectUrl;
 
         CountedSource(String dialect) {
@@ -276,7 +594,11 @@ class TableSnapshotListMagicTest {
                         }
                         if (method.getName().equals("prepareStatement")) {
                             String sql = ((String) args[0]).stripLeading().toLowerCase(Locale.ROOT);
-                            if (sql.startsWith("select") || sql.startsWith("with")) reads.add(sql);
+                            if (sql.startsWith("select") || sql.startsWith("with")) {
+                                reads.add(sql);
+                            } else {
+                                writes++;
+                            }
                         }
                         return invoke(connection, method, args);
                     });

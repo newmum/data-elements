@@ -8,6 +8,7 @@ import static org.mockito.Mockito.mockStatic;
 import cn.dev33.satoken.stp.StpUtil;
 import com.linewell.dataelement.platform.tenant.domain.TenantContext;
 import java.io.IOException;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -43,7 +44,9 @@ import org.ssssssss.script.runtime.ExitValue;
 class MultiTableGroupMagicTest {
     private static final String ACTOR = "operator";
     private static final String GROUP = "108ca78f224b4a51b7ab2d564d1b341b";
+    private static final String GROUP_PAGE = "c562ecb2777d466f8ce04907409b70a7";
     private static final String TENANT = "tenant-a";
+    private static final LocalDateTime TIME = LocalDateTime.of(2026, 1, 1, 0, 0);
     private static final Scope OWNER = new Scope("OWNER", ACTOR, List.of());
     private static final Scope ALL = new Scope("ALL", ACTOR, List.of());
 
@@ -257,6 +260,261 @@ class MultiTableGroupMagicTest {
         assertThat(fixture.writes.get()).isZero();
     }
 
+    @Test
+    void groupPageKeepsGlobalSortAndFixedReadsAtTwentyAndOneHundred() throws Exception {
+        var fixture = new Fixture();
+        fixture.tasks(2);
+        fixture.enableGroupPage();
+        fixture.jdbc.update("update data_access_agg_task_t set task_status=1 where tid='task-001'");
+        fixture.jdbc.update("update data_access_agg_task_t set task_status=2 where tid='task-002'");
+        var ids = IntStream.rangeClosed(1, 105).mapToObj(i -> "group-%03d".formatted(i)).toList();
+        for (int i = 0; i < ids.size(); i++) {
+            var group = ids.get(i);
+            fixture.group(group, TENANT, "Batch group %03d".formatted(i + 1), ACTOR, 0);
+            fixture.member(group + "-a", TENANT, group, "table-001", "task-001", 1);
+            if (i >= 100) {
+                fixture.member(group + "-b", TENANT, group, "table-002", "task-002", 2);
+            }
+        }
+        var aggregateOrder = new ArrayList<>(ids.subList(100, 105));
+        aggregateOrder.addAll(ids.subList(0, 100));
+
+        for (int size : List.of(20, 100)) {
+            var page = fixture.groupPage(OWNER, Map.of("pageSize", size, "sortField", "tableCount"), 3);
+            assertThat(page.get("pageNum")).isEqualTo(1);
+            assertThat(page.get("pageSize")).isEqualTo(size);
+            assertThat(number(page, "total")).isEqualTo(105);
+            assertThat(groupIds(page)).containsExactlyElementsOf(aggregateOrder.subList(0, size));
+            var first = groups(page).getFirst();
+            assertThat(number(first, "tableCount")).isEqualTo(2);
+            assertThat(number(first, "runningCount")).isEqualTo(1);
+            assertThat(number(first, "errorCount")).isEqualTo(1);
+            assertThat(items(first)).hasSize(2);
+            assertThat(first.get("canManage")).isEqualTo(true);
+        }
+        var second = fixture.groupPage(OWNER, Map.of("pageNum", 2, "pageSize", 100, "sortField", "errorCount"), 3);
+        assertThat(groupIds(second)).containsExactlyElementsOf(aggregateOrder.subList(100, 105));
+        assertThat(number(second, "total")).isEqualTo(105);
+        var defaultOrder = fixture.groupPage(OWNER, Map.of("pageSize", 2), 3);
+        assertThat(groupIds(defaultOrder)).containsExactlyElementsOf(ids.subList(0, 2));
+        var filtered = fixture.groupPage(OWNER, Map.of("keyword", "  group 10_  ", "sortField", "groupName", "sortDir", "asc"), 3);
+        assertThat(groupIds(filtered)).containsExactlyElementsOf(ids.subList(99, 105));
+        assertThat(number(filtered, "total")).isEqualTo(6);
+        var outOfRange = fixture.groupPage(OWNER, Map.of("pageNum", 3, "pageSize", 100), 1);
+        assertThat(number(outOfRange, "total")).isEqualTo(105);
+        assertThat(groups(outOfRange)).isEmpty();
+        var none = fixture.groupPage(OWNER, Map.of("keyword", "unknown"), 1);
+        assertThat(number(none, "total")).isZero();
+        assertThat(groups(none)).isEmpty();
+    }
+
+    @Test
+    void groupPageDeniesWholeGroupsWithAnyUnauthorizedOrInvalidSource() throws Exception {
+        var fixture = new Fixture();
+        fixture.tasks(1);
+        fixture.enableGroupPage();
+        fixture.jdbc.execute("""
+                insert into db_datasource_t values
+                    ('other-owner','tenant-a','Other owner','someone-else','org-a',0),
+                    ('other-org','tenant-a','Other organization','operator','org-b',0),
+                    ('no-owner','tenant-a','No owner',NULL,'org-a',0),
+                    ('no-org','tenant-a','No organization','operator',NULL,0),
+                    ('deleted-db','tenant-a','Deleted','operator','org-a',1),
+                    ('foreign-db','tenant-b','Foreign','operator','org-a',0);
+                insert into db_table_t values
+                    ('other-owner-table','tenant-a','other-owner','table',NULL,0),
+                    ('other-org-table','tenant-a','other-org','table',NULL,0),
+                    ('no-owner-table','tenant-a','no-owner','table',NULL,0),
+                    ('no-org-table','tenant-a','no-org','table',NULL,0),
+                    ('deleted-db-table','tenant-a','deleted-db','table',NULL,0),
+                    ('foreign-db-table','tenant-a','foreign-db','table',NULL,0),
+                    ('deleted-table','tenant-a','owned-db','table',NULL,1),
+                    ('foreign-table','tenant-b','owned-db','table',NULL,0)
+                """);
+        fixture.group("empty", TENANT, "Empty group", null, 0);
+        fixture.group("visible", TENANT, "Visible group", ACTOR, 0);
+        fixture.member("visible-own", TENANT, "visible", "table-001", "task-001", 1);
+        fixture.member("visible-foreign", "tenant-b", "visible", "foreign-table", "task-foreign", 1);
+        fixture.group("deleted", TENANT, "Deleted group", ACTOR, 1);
+        fixture.member("deleted-own", TENANT, "deleted", "table-001", "task-001", 1);
+        fixture.group("foreign", "tenant-b", "Foreign group", ACTOR, 0);
+        fixture.member("foreign-own", "tenant-b", "foreign", "table-001", "task-001", 1);
+        for (var name : List.of("other-owner", "other-org", "no-owner", "no-org", "deleted-db", "foreign-db", "deleted", "foreign", "missing")) {
+            var group = "mixed-" + name;
+            fixture.group(group, TENANT, group, "someone-else", 0);
+            fixture.member(group + "-own", TENANT, group, "table-001", "task-001", 1);
+            fixture.member(group + "-test", TENANT, group, name + "-table", "missing-task", 2);
+        }
+
+        var forged = Map.<String, Object>of("tenantId", "tenant-b", "scope", "ALL", "userId", "someone-else",
+                "organizationIds", List.of("org-b"));
+        var owner = fixture.groupPage(OWNER, forged, 3);
+        assertThat(groupIds(owner)).containsExactly("empty", "mixed-no-org", "mixed-other-org", "visible");
+        assertThat(number(owner, "total")).isEqualTo(4);
+        assertThat(groups(owner).get(1).get("canManage")).isEqualTo(false);
+        var org = new Scope("ORG", ACTOR, List.of("org-a"));
+        assertThat(groupIds(fixture.groupPage(org, forged, 3)))
+                .containsExactly("empty", "mixed-no-owner", "mixed-other-owner", "visible");
+        assertThat(groupIds(fixture.groupPage(new Scope("ORG", ACTOR, List.of()), forged, 3))).containsExactly("empty");
+        var all = fixture.groupPage(ALL, forged, 3);
+        assertThat(groupIds(all)).containsExactly("empty", "mixed-no-org", "mixed-no-owner", "mixed-other-org",
+                "mixed-other-owner", "visible");
+        var empty = groups(all).getFirst();
+        assertThat(number(empty, "tableCount")).isZero();
+        assertThat(number(empty, "runningCount")).isZero();
+        assertThat(number(empty, "errorCount")).isZero();
+        assertThat(empty.get("createdBy")).isEqualTo("");
+        assertThat(empty.get("canManage")).isEqualTo(false);
+        assertThat(items(empty)).isEmpty();
+        assertThat(items(groups(all).getLast())).hasSize(1);
+        fixture.resetCounts();
+        assertThat(exitCode(fixture.rawGroupPage(new Scope("OWNER", "", List.of()), Map.of()))).isEqualTo(403);
+        assertThat(exitCode(fixture.rawGroupPage(ALL, Map.of("keyword", "x".repeat(101))))).isEqualTo(400);
+        assertThat(fixture.reads.get()).isZero();
+    }
+
+    @Test
+    void groupPageKeepsInvalidTaskLinksAsErrorsAndSortsMembersWithNullsLast() throws Exception {
+        var fixture = new Fixture();
+        fixture.tasks(8);
+        fixture.enableGroupPage();
+        fixture.group("group", TENANT, "Mixed task state", ACTOR, 0);
+        fixture.jdbc.execute("""
+                update db_table_t set table_name='Alpha' where tid='table-001';
+                update db_table_t set table_name_cn='Beta' where tid in ('table-002','table-003');
+                update db_table_t set table_name=NULL where tid='table-004';
+                update db_table_t set table_name='Gamma' where tid in ('table-005','table-006','table-007','table-008');
+                update data_access_agg_task_t set task_status=1,monitor_status='healthy',monitor_msg='Current',
+                    pipeline_id='validation-pipeline',last_running='2026-01-02',end_running='2026-01-03' where tid='task-001';
+                update data_access_agg_task_t set task_status=2,last_running='2026-01-02',end_running='2026-01-01' where tid='task-002';
+                update data_access_agg_task_t set task_status=0,last_running='2026-01-03',end_running='2026-01-02' where tid='task-003';
+                update data_access_agg_task_t set task_status=NULL where tid='task-004';
+                update data_access_agg_task_t set source_table_id='table-001' where tid='task-006';
+                update data_access_agg_task_t set tenant_id='tenant-b' where tid='task-007';
+                update data_access_agg_task_t set is_del=1 where tid='task-008'
+                """);
+        for (int i = 1; i <= 8; i++) {
+            var task = i == 5 ? "missing-task" : "task-%03d".formatted(i);
+            fixture.member("item-" + i, TENANT, "group", "table-%03d".formatted(i), task, 9 - i);
+        }
+        var byName = fixture.groupPage(OWNER, Map.of("itemSortField", "sourceTableName", "itemSortDir", "asc"), 3);
+        var group = groups(byName).getFirst();
+        assertThat(group.keySet().stream().map(Object::toString)).containsExactlyInAnyOrder(
+                "groupId", "groupName", "createdBy", "canManage", "createdTime", "updatedTime",
+                "tableCount", "runningCount", "errorCount", "items");
+        assertThat(number(group, "tableCount")).isEqualTo(8);
+        assertThat(number(group, "runningCount")).isEqualTo(1);
+        assertThat(number(group, "errorCount")).isEqualTo(5);
+        assertThat(itemIds(group)).containsExactly("item-1", "item-3", "item-2", "item-8", "item-7", "item-6", "item-5", "item-4");
+        var first = items(group).getFirst();
+        assertThat(first.keySet().stream().map(Object::toString)).containsExactlyInAnyOrder(
+                "itemId", "sourceTableId", "taskId", "sortNo", "taskAvailable", "taskName", "taskStatus",
+                "pipelineId", "monitorStatus", "monitorMessage", "lastRunning", "endRunning",
+                "sourceTableName", "sourceTableNameCn");
+        assertThat(first.get("taskAvailable")).isEqualTo(true);
+        assertThat(first.get("taskStatus")).isEqualTo(1);
+        assertThat(first.get("monitorMessage")).isEqualTo("Current");
+        assertThat(first.get("pipelineId")).isEqualTo("validation-pipeline");
+        assertThat(items(group).getLast().get("taskAvailable")).isEqualTo(true);
+        assertThat(items(group).getLast().get("taskStatus")).isNull();
+        for (var member : items(group).subList(3, 7)) {
+            assertThat(member.get("taskAvailable")).isEqualTo(false);
+            assertThat(member.get("taskId")).isIn("task-008", "task-007", "task-006", "missing-task");
+            assertThat(member.get("taskStatus")).isNull();
+            assertThat(member.get("taskName")).isNull();
+            assertThat(member.get("pipelineId")).isNull();
+        }
+        var byLast = fixture.groupPage(OWNER, Map.of("itemSortField", "lastRunning", "itemSortDir", "desc"), 3);
+        assertThat(itemIds(groups(byLast).getFirst()))
+                .containsExactly("item-3", "item-2", "item-1", "item-8", "item-7", "item-6", "item-5", "item-4");
+        var byEnd = fixture.groupPage(OWNER, Map.of("itemSortField", "endRunning", "itemSortDir", "asc"), 3);
+        assertThat(itemIds(groups(byEnd).getFirst()))
+                .containsExactly("item-2", "item-3", "item-1", "item-8", "item-7", "item-6", "item-5", "item-4");
+    }
+
+    @Test
+    void groupPageReadsTenThousandMembersAndRejectsTheNextInOneBoundedRead() throws Exception {
+        var fixture = new Fixture();
+        fixture.enableGroupPage();
+        fixture.group("large", TENANT, "Large group", ACTOR, 0);
+        fixture.jdbc.execute("""
+                insert into db_table_t
+                select 'table-' || lpad(cast(n as varchar),5,'0'),'tenant-a','owned-db','table',NULL,0
+                from system_range(1,10001) as numbers(n);
+                insert into data_access_multi_group_item_t
+                select 'item-' || lpad(cast(n as varchar),5,'0'),'tenant-a','large',
+                    'table-' || lpad(cast(n as varchar),5,'0'),'missing-task',n,current_timestamp,current_timestamp
+                from system_range(1,10000) as numbers(n)
+                """);
+        var page = fixture.groupPage(ALL, Map.of("pageSize", 20), 3);
+        assertThat(number(page, "total")).isEqualTo(1);
+        var group = groups(page).getFirst();
+        assertThat(number(group, "tableCount")).isEqualTo(10000);
+        assertThat(number(group, "errorCount")).isEqualTo(10000);
+        assertThat(items(group)).hasSize(10000);
+        assertThat(items(group).getFirst().get("itemId")).isEqualTo("item-00001");
+        assertThat(items(group).getLast().get("itemId")).isEqualTo("item-10000");
+
+        fixture.member("item-10001", TENANT, "large", "table-10001", "missing-task", 10001);
+        fixture.resetCounts();
+        var rejected = assertInstanceOf(ExitValue.class, fixture.rawGroupPage(ALL, Map.of("pageSize", 100)));
+        assertThat(rejected.getValues()).containsExactly(413, "本页编组成员超过10000，请缩小分页范围");
+        assertThat(fixture.reads.get()).isEqualTo(3);
+        assertThat(fixture.writes.get()).isZero();
+        assertThat(fixture.groupPageStatements.getLast().toLowerCase(Locale.ROOT)).contains("limit");
+    }
+
+    @Test
+    void groupPageRejectsWholeResponseIfMemberAccessChangesBeforeBatchRead() throws Exception {
+        var fixture = new Fixture();
+        fixture.tasks(2);
+        fixture.enableGroupPage();
+        fixture.group("changed", TENANT, "Changed group", ACTOR, 0);
+        fixture.member("item-a", TENANT, "changed", "table-001", "task-001", 1);
+        fixture.member("item-b", TENANT, "changed", "table-002", "task-002", 2);
+        fixture.jdbc.update("insert into db_datasource_t values ('denied-db','tenant-a','Other owner',NULL,'org-a',0)");
+        fixture.beforeGroupMemberRead = () -> fixture.jdbc.update(
+                "update db_table_t set datasource_id='denied-db' where tid='table-002'");
+
+        var rejected = assertInstanceOf(ExitValue.class, fixture.rawGroupPage(OWNER, Map.of()));
+        assertThat(rejected.getValues()).containsExactly(409, "编组成员或数据权限已变化，请刷新后重试");
+        assertThat(fixture.reads.get()).isEqualTo(3);
+        assertThat(fixture.writes.get()).isZero();
+        fixture.beforeGroupMemberRead = null;
+        assertThat(groups(fixture.groupPage(OWNER, Map.of(), 1))).isEmpty();
+
+        fixture.group("initially-empty", TENANT, "Initially empty group", ACTOR, 0);
+        fixture.beforeGroupMemberRead = () -> fixture.member(
+                "inserted-hidden-member", TENANT, "initially-empty", "table-002", "task-002", 1);
+        fixture.resetCounts();
+        var inserted = assertInstanceOf(ExitValue.class, fixture.rawGroupPage(OWNER, Map.of()));
+        assertThat(inserted.getValues()).containsExactly(409, "编组成员或数据权限已变化，请刷新后重试");
+        assertThat(fixture.reads.get()).isEqualTo(3);
+        assertThat(fixture.writes.get()).isZero();
+    }
+
+    private static long number(Map<?, ?> row, String key) {
+        return assertInstanceOf(Number.class, row.get(key)).longValue();
+    }
+
+    private static List<Map<?, ?>> groups(Map<?, ?> page) {
+        return ((List<?>) page.get("list")).stream().map(MultiTableGroupMagicTest::map).toList();
+    }
+
+    private static List<Map<?, ?>> items(Map<?, ?> group) {
+        return ((List<?>) group.get("items")).stream().map(MultiTableGroupMagicTest::map).toList();
+    }
+
+    private static List<String> groupIds(Map<?, ?> page) {
+        return groups(page).stream().map(row -> (String) row.get("groupId")).toList();
+    }
+
+    private static List<String> itemIds(Map<?, ?> group) {
+        return items(group).stream().map(row -> (String) row.get("itemId")).toList();
+    }
+
+
+
     private static Map<String, Object> relinkRequest(String taskId) {
         return Map.of("groupId", GROUP, "sourceTableId", "table-001", "taskId", taskId, "tenantId", "tenant-b");
     }
@@ -303,6 +561,9 @@ class MultiTableGroupMagicTest {
         final MagicScript delete;
         final MagicScript relink;
         final MagicScript editQuery;
+        final List<String> groupPageStatements = new ArrayList<>();
+        MagicScript groupPage;
+        Runnable beforeGroupMemberRead;
         CyclicBarrier concurrentReads;
 
         Fixture() throws IOException {
@@ -392,6 +653,40 @@ class MultiTableGroupMagicTest {
             return run(candidates, scope, body, false);
         }
 
+        void enableGroupPage() throws IOException {
+            jdbc.execute("""
+                    alter table data_access_agg_task_t add monitor_status varchar;
+                    alter table data_access_agg_task_t add monitor_msg varchar;
+                    alter table data_access_agg_task_t add last_running varchar;
+                    alter table data_access_agg_task_t add end_running varchar
+                    """);
+            groupPage = script(CanonicalMagicSources.byId(GROUP_PAGE));
+        }
+
+        void group(String id, String tenant, String name, String creator, int deleted) {
+            jdbc.update("insert into data_access_multi_group_t values (?,?,?,?,?,?,?)",
+                    id, tenant, name, creator, TIME, TIME, deleted);
+        }
+
+        void member(String id, String tenant, String group, String sourceTable, String task, int order) {
+            jdbc.update("insert into data_access_multi_group_item_t values (?,?,?,?,?,?,?,?)",
+                    id, tenant, group, sourceTable, task, order, TIME, TIME);
+        }
+
+        Object rawGroupPage(Scope scope, Map<String, Object> body) {
+            return run(groupPage, scope, body, false);
+        }
+
+        Map<?, ?> groupPage(Scope scope, Map<String, Object> body, int expectedReads) {
+            resetCounts();
+            var page = map(rawGroupPage(scope, body));
+            assertThat(page.keySet().stream().map(Object::toString))
+                    .containsExactlyInAnyOrder("list", "total", "pageNum", "pageSize");
+            assertThat(reads.get()).isEqualTo(expectedReads);
+            assertThat(writes.get()).isZero();
+            return page;
+        }
+
         Object save(Scope scope, Map<String, Object> body) {
             return write(save, scope, body);
         }
@@ -416,6 +711,12 @@ class MultiTableGroupMagicTest {
             var reader = TaskRuntimeMagicFixture.structuredReads(jdbc, sql -> {
                 assertThat(TransactionSynchronizationManager.hasResource(source)).isEqualTo(transactional);
                 reads.incrementAndGet();
+                if (script == groupPage) {
+                    groupPageStatements.add(sql);
+                    if (groupPageStatements.size() == 3 && beforeGroupMemberRead != null) {
+                        beforeGroupMemberRead.run();
+                    }
+                }
             });
             Function<Object[], Object> query = arguments -> visibleQuery.execute(new MagicScriptContext(Map.of(
                     "tenantId", arguments[0], "scopeMode", arguments[1], "scopeUserId", arguments[2],
@@ -442,6 +743,7 @@ class MultiTableGroupMagicTest {
         void resetCounts() {
             reads.set(0);
             writes.set(0);
+            groupPageStatements.clear();
         }
     }
 }

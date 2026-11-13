@@ -41,6 +41,9 @@ public class AuditMagicModule {
     }
     public String requestId() { return AuditTrace.requestId(); }
     public String traceId() { return AuditTrace.traceId(); }
+    public void requestParameters(Map<String,Object> verified) {
+        AuditRequestParameters.enrich(AuditIdentityResolver.request(), verified);
+    }
     public List<Map<String,Object>> batchRows(Map<String,Object> parent,Map<String,Object> details){
         if(details==null)return List.of();Object ids=details.getOrDefault("targetIds",details.get("orgIds"));
         if(!(ids instanceof Collection<?> values)||values.isEmpty())return List.of();

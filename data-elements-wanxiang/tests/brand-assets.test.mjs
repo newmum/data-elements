@@ -39,6 +39,10 @@ test('unmigrated page visuals, navigation, artwork and mock logic retain the app
  migrated.add('src/shared/sourcePresentation.ts'); // Source type descriptions now cover the platform's registered connector types.
  migrated.add('src/features/er/components/RelationActions.tsx'); // Shared ER relationship actions were migrated before this dashboard change.
  migrated.add('src/app/routes.ts'); // ER canvases are now opened from a chosen data model, not a standalone menu.
+ migrated.add('src/app/ProductNavigation.tsx');
+ // The documented shared log menu only added capability gating to the approved rail in a2adc608.
+ // Keep the reviewed navigation bytes pinned across Git checkout newline settings.
+ assert.equal(sha256(read('src/app/ProductNavigation.tsx').replace(/\r\n/g,'\n')),'aa4241686f7ae8b79fc2585ff18d851437fb8d03f1f28fd6f918162d42ca3312','src/app/ProductNavigation.tsx');
  migrated.add('src/features/er/styles/wanxiang.css'); // Large source models expose bounded canvas groups.
  migrated.add('src/features/er/core/model.ts'); // Shared canvas group size is part of the model-view workflow.
  migrated.add('src/features/er/workers/layout.worker.ts'); // ELK now uses an explicit browser worker and height-aware connected-component layout.

@@ -176,7 +176,7 @@ export default function BatchCreatePage() {
     <PageHero kicker="任务开发" title="批量创建任务" description="批量核验并保存待创建队列；现有确保接口仅支持单表，需在此页逐项主动创建。作业和结果按当前租户持久保存。" kind="batch" tags={['表级批量匹配', '作业持久记录', '逐项创建']} />
     {loadError && <Alert type="error" showIcon message="批量任务接口异常" description={loadError} closable onClose={() => setLoadError('')} style={{ marginBottom: 16 }} />}
     <div className="two-col-config"><Panel title="匹配策略"><Form layout="vertical">
-      <Form.Item label="来源库" extra="按当前角色数据范围读取，最多展示 200 个已登记来源库；超出上限时请先缩小范围。"><Select value={source || undefined} loading={loadingOptions} options={sourceOptions} placeholder="选择已登记来源库" onChange={value => { setSourcePage(1); setSource(value); }} /></Form.Item>
+      <Form.Item label="来源库" extra="显示当前租户已登记的来源库，最多 200 个。"><Select value={source || undefined} loading={loadingOptions} options={sourceOptions} placeholder="选择已登记来源库" onChange={value => { setSourcePage(1); setSource(value); }} /></Form.Item>
       <Form.Item label="目标库"><Select value={target || undefined} loading={loadingOptions} options={targetOptions} placeholder="选择目标库" onChange={setTarget} /></Form.Item>
       <div className="form-grid"><Form.Item label="去掉来源前缀"><Input value={remove} placeholder="例如 ods_" onChange={event => setRemove(event.target.value)} /></Form.Item><Form.Item label="添加目标前缀"><Input value={prefix} onChange={event => setPrefix(event.target.value)} /></Form.Item></div>
       <Form.Item label="添加目标后缀"><Input value={suffix} placeholder="选填" onChange={event => setSuffix(event.target.value)} /></Form.Item>
@@ -200,7 +200,7 @@ export default function BatchCreatePage() {
           { title: '目标表', render: (_, match) => match.target ? <div className="entity-name"><b>{targetName(match.target)}</b><small>{String(match.target.targetDbName ?? '')}{match.reason ? ` · ${match.reason}` : ''}</small></div> : <Tag color="warning">{match.targetName} {match.reason || '未找到'}</Tag> },
           { title: '字段治理', render: (_, match) => match.eligible ? '由现有创建接口生成' : '—' },
         ]} />
-        <Alert type="info" message="仅提交已物化、唯一关联且表名匹配的目标表。" description="保存队列时服务端按当前租户和角色数据范围批量复核。现有单表创建接口尚无真正批量契约，因此不会自动连续创建；请逐项点击创建，后续批量执行能力待接口改造。失联单项的租约满 10 分钟后可重试。" style={{ marginTop: 16 }} />
+        <Alert type="info" message="仅提交已物化、唯一关联且表名匹配的目标表。" description="保存队列时，服务端会批量核对当前租户的来源表、物化目标及其关联。现有单表创建接口尚无真正批量契约，因此不会自动连续创建；请逐项点击创建，后续批量执行能力待接口改造。失联单项的租约满 10 分钟后可重试。" style={{ marginTop: 16 }} />
       </Panel></div>
     <Panel title="批量作业与逐项结果" extra={<Space><Select value={activeJobId || undefined} loading={loadingJobs} placeholder="暂无作业" style={{ width: 300 }} onChange={setActiveJobId} options={jobs.map(row => ({ value: row.jobId, label: `${row.jobName} / ${formatTime(row.createdTime)}${row.status === 'RUNNING' && executingJobId !== row.jobId ? ' / 待逐项创建' : ''}` }))} />{jobState}{job?.status === 'RUNNING' && <><Button disabled={submitting} onClick={() => void runOne(job.jobId)}>创建下一项</Button><Button onClick={() => void stop()}>停止后续创建</Button></>}{job && job.status !== 'RUNNING' && items.some(item => item.status !== 'SUCCEEDED') && <Button disabled={submitting} onClick={() => void retry()}>重试未完成项</Button>}<Button onClick={() => void refreshJobs(activeJobId)}>刷新</Button></Space>}>
       {job ? <><div className="inline-stats"><span>成功 <b>{countOf(items, 'SUCCEEDED')}</b></span><span>失败 <b>{countOf(items, 'FAILED')}</b></span><span>已领取待回报 <b>{countOf(items, 'RUNNING')}</b></span><span>待创建 <b>{countOf(items, 'PENDING')}</b></span></div>

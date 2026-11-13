@@ -48,6 +48,7 @@ class HuaweiHiveTargetDeletionMagicTest {
     private Fixture fixture;
     private QueryCounter queryCounter;
     private NifiClient nifi;
+    private final AuditParameterProbe audit = new AuditParameterProbe();
 
     @BeforeEach
     void setUp() {
@@ -83,7 +84,8 @@ class HuaweiHiveTargetDeletionMagicTest {
         jdbc.execute("""
                 create table data_access_agg_task_t(tid varchar(32),tenant_id varchar(32),
                     source_table_id varchar(32),target_table_id varchar(32),target_db_id varchar(32),
-                    pipeline_id varchar(32),process_group_id varchar(32),task_status int,is_del int,updated_time timestamp)
+                    pipeline_id varchar(32),process_group_id varchar(32),task_status int,is_del int,updated_time timestamp,
+                    task_name varchar(255))
                 """);
         jdbc.execute("create table data_access_field_mapping(tid varchar(32),task_id varchar(32),is_del int,updated_time timestamp)");
         jdbc.execute("create table data_access_task_monitor_snap_t(tid varchar(32),task_id varchar(32),is_del int)");
@@ -96,12 +98,39 @@ class HuaweiHiveTargetDeletionMagicTest {
         jdbc.update("insert into db_datasource_t values('source-db','police','mysql','{}',0)");
         jdbc.update("insert into db_datasource_t values('target-db','police','hive','{\"database\":\"target_db\",\"metadataAccessMode\":\"server-managed-mrs\",\"hiveConnectionMode\":\"huawei-mrs\"}',0)");
         jdbc.update("insert into data_access_agg_task_t(tid,tenant_id,source_table_id,target_table_id,target_db_id,is_del) values('task-1','police','source-1','target-1','target-db',0)");
+        jdbc.update("update data_access_agg_task_t set task_name='验证接入任务' where tid='task-1'");
         jdbc.update("insert into data_access_field_mapping(tid,task_id,is_del) values('mapping-1','task-1',0)");
         jdbc.update("insert into db_table_column_t(tid,table_id,is_del) values('target-column','target-1',0),('source-column','source-1',0)");
         hive = mock(HiveModule.class);
         explorer = mock(MetadataExplorerService.class);
         fixture = new Fixture(hive);
         nifi = mock(NifiClient.class);
+    }
+
+    @Test
+    void authorizedTaskNameIsCapturedButOnlyAnActualDeleteGetsDeletedTaskParameters() throws Exception {
+        var input = new LinkedHashMap<String, Object>(Map.of("sourceTableId", "source-1",
+                "taskId", "task-1", "taskName", "伪造名称", "dryRun", true, "deleteTargetTable", false));
+        assertInstanceOf(Map.class, run(input));
+        assertEquals(List.of("验证接入任务"), audit.parameters.get("taskName"));
+        assertEquals(true, audit.parameters.get("dryRun"));
+        assertFalse(audit.parameters.containsKey("deletedTaskName"));
+        assertEquals(0, deleted("data_access_agg_task_t", "task-1"));
+
+        audit.parameters.clear();
+        input.put("dryRun", false);
+        assertInstanceOf(Map.class, run(input));
+        assertEquals(List.of("task-1"), audit.parameters.get("deletedTaskId"));
+        assertEquals(List.of("验证接入任务"), audit.parameters.get("deletedTaskName"));
+        assertEquals(1, deleted("data_access_agg_task_t", "task-1"));
+        assertEquals(0, deleted("db_table_t", "target-1"));
+    }
+
+    public static final class AuditParameterProbe {
+        final Map<String, Object> parameters = new LinkedHashMap<>();
+        public void requestParameters(Map<String, Object> values) {
+            parameters.putAll(values);
+        }
     }
 
     @Test
@@ -774,6 +803,7 @@ class HuaweiHiveTargetDeletionMagicTest {
         inputs.put("esCommonService", mock(EsCommonService.class));
         inputs.put("nifiClient", nifi);
         inputs.put("log", LoggerFactory.getLogger(getClass()));
+        inputs.put("auditEvents", audit);
         return MagicScript.create(prefix + script, null).execute(new MagicScriptContext(inputs));
     }
 

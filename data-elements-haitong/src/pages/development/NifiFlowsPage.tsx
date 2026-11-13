@@ -1,11 +1,12 @@
-import { Alert, Button, Space } from 'antd';
+import { Alert, App, Button, Space } from 'antd';
+import { isAxiosError } from 'axios';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useServerSort } from '../../components/serverSort';
 import PageHero from '../../components/PageHero';
 import { DataTable, EmptyState, Panel } from '../../components/Common';
-import { usePipelinePage, type PipelineSummary } from '../../nifi/api/pipelines';
+import { useDeletePipeline, usePipelinePage, type PipelineSummary } from '../../nifi/api/pipelines';
 import { getBridgeToken, useSessionRevision, useTokenReady } from '../../nifi/api/bridgeSession';
 import { getPlatformLoginUrl, redirectToPlatformLogin, syncNifiPlatformSession } from '../../services/platformSession';
 import { preloadCanvasReadiness, preloadCanvasWhenIdle } from '../../app/preloadCanvas';
@@ -38,16 +39,41 @@ export function NifiSessionPrompt({ redirectOnMissing = false }: { redirectOnMis
 
 export default function NifiFlowsPage() {
  const navigate = useNavigate();
+ const { message, modal } = App.useApp();
  const tokenReady = useTokenReady();
  const sessionRevision = useSessionRevision();
  const queryClient = useQueryClient();
  const [page,setPage]=useState(1),[size,setSize]=useState(20);
  const order=useServerSort(()=>setPage(1));
  const list = usePipelinePage(page,size,order.sort);
+ const deletePipeline = useDeletePipeline();
  const [showSession, setShowSession] = useState(false);
  const warmCanvas = () => { if (tokenReady) preloadCanvasReadiness(queryClient,sessionRevision); };
  useEffect(() => tokenReady ? preloadCanvasWhenIdle(() => preloadCanvasReadiness(queryClient,sessionRevision)) : undefined, [tokenReady,queryClient,sessionRevision]);
  const open = (pipelineId?: string) => navigate(`/development/canvas${pipelineId?`?pipelineId=${encodeURIComponent(pipelineId)}`:''}`, {state:{returnTo:'/development/nifi-flows'}});
+ const confirmDelete = (item: PipelineSummary) => {
+  modal.confirm({
+   title: `删除流程“${item.name}”？`,
+   content: item.nifiProcessGroupId
+    ? '删除会移除平台流程、关联接入任务及对应的 NiFi 流程组，并清理组内队列。'
+    : '删除后，该流程将从列表中移除。',
+   okText: '删除',
+   cancelText: '取消',
+   okButtonProps: { danger: true },
+   onOk: async () => {
+    const wasLastOnPage = list.data?.list.length === 1;
+    try {
+     await deletePipeline.mutateAsync(item.id);
+     if (page > 1 && wasLastOnPage) setPage(current => current === page ? current - 1 : current);
+     message.success('流程已删除');
+    } catch (error) {
+     const detail = isAxiosError(error) ? error.response?.data?.message || error.response?.data?.error : undefined;
+     message.error(typeof detail === 'string' ? detail : '删除流程失败，请刷新列表后重试。');
+     throw error;
+    }
+   },
+  });
+ };
  return <div className="ht-page">
   <PageHero kicker="任务开发" title="NiFi 流程" description="在海通集成中心管理真实 NiFi 流程，使用完整画布配置、部署和监控。" kind="nifi" tags={['真实流程','完整画布','部署运行']}/>
   <Panel title="真实流程" extra={<Space><Button onClick={()=>{setShowSession(v=>!v);}}>同步会话</Button><Button disabled={!tokenReady} loading={list.isFetching} onClick={()=>void list.refetch()}>刷新</Button><Button type="primary" disabled={!tokenReady} onClick={()=>open()}>新建流程</Button></Space>}>
@@ -62,7 +88,11 @@ export default function NifiFlowsPage() {
      {title:'流程 ID',dataIndex:'id',key:'id',ellipsis:true},
      {title:'组件数',dataIndex:'nodeCount',key:'nodeCount',width:100,render:(value:number|undefined)=>value??'—'},
      {title:'NiFi Process Group',dataIndex:'nifiProcessGroupId',key:'nifiProcessGroupId',ellipsis:true,render:(value:string|null|undefined)=>value||'未部署'},
-     {title:'操作',key:'action',width:110,render:(_:unknown,item:PipelineSummary)=><Button onMouseEnter={warmCanvas} onFocus={warmCanvas} onClick={()=>open(item.id)}>打开画布</Button>},
+     {title:'操作',key:'action',width:190,render:(_:unknown,item:PipelineSummary)=><Space>
+      <Button onMouseEnter={warmCanvas} onFocus={warmCanvas} onClick={()=>open(item.id)}>打开画布</Button>
+      <Button danger disabled={deletePipeline.isPending} loading={deletePipeline.isPending && deletePipeline.variables === item.id}
+       onClick={()=>confirmDelete(item)}>删除</Button>
+     </Space>},
     ]}
     locale={{emptyText:<EmptyState title="暂无 NiFi 流程" text="可以新建一个流程并在画布中配置组件。" compact/>}}
    />}

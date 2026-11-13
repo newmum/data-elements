@@ -2,6 +2,7 @@ import { createScenario, scenarios } from "../scenarios/index.mjs";
 import { organizationTree, menuRoutes } from "./configuration.mjs";
 import { requireTable, tableColumns, previewTable } from "./metadata.mjs";
 import { detailForms } from "../scenarios/forms.mjs";
+import { LogMockService, logErrorResponse } from "./logs.mjs";
 import {
   configuration,
   tenantConfiguration,
@@ -22,13 +23,14 @@ const now = () => new Date().toISOString().replace("T", " ").slice(0, 19);
 
 /** 应用层接口模拟。状态只存在于专用浏览器键，不读取数据库或执行 Magic/Java。 */
 export class ChengtianMockRuntime {
-  /** @param {{scenario?:string,role?:string,storage?:Storage,sessionStorage?:Storage,components?:Array<Record<string, unknown>>}} options */
+  /** @param {{scenario?:string,role?:string,storage?:Storage,sessionStorage?:Storage,components?:Array<Record<string, unknown>>,clock?:()=>number}} options */
   constructor({
     scenario = "police",
     role = "admin",
     storage,
     sessionStorage,
     components = [],
+    clock = Date.now,
   } = {}) {
     assert(Object.hasOwn(scenarios, scenario), 400, "未知 mock 场景");
     assert(
@@ -41,6 +43,7 @@ export class ChengtianMockRuntime {
     this.storage = storage;
     this.sessionStorage = sessionStorage;
     this.components = components;
+    this.logs = new LogMockService({ storage, clock });
     this.databases = new Map();
     this.requests = [];
     this.session = null;
@@ -386,11 +389,12 @@ export class ChengtianMockRuntime {
       versionNo: row.versionNo + 1,
     });
     if (!existing) database.sources.push(row);
-    if (!body.dryRun && !props.dryRun) this.persist(database);
+    const dryRun = body.dryRun || props.dryRun;
+    if (!dryRun) this.persist(database);
     return {
       tid: row.tid,
       assetStatus: row.assetStatus,
-      indexRefreshPending: body.deferIndexRefresh === true,
+      indexRefreshPending: !dryRun && body.deferIndexRefresh === true,
     };
   }
 
@@ -439,6 +443,10 @@ export class ChengtianMockRuntime {
     };
   }
 
+  /**
+   * @param {{method?:string,path:string,query?:Record<string,unknown>,body?:import("./transport.mjs").MockBody,token?:string}} request
+   * @returns {Promise<import("./transport.mjs").MockResult>}
+   */
   async handle({ method = "GET", path, query = {}, body = {}, token = "" }) {
     // 主页面与风驰的同源桥每次请求回读同一份场景状态，避免跨窗口缓存分叉。
     this.databases.clear();
@@ -448,9 +456,11 @@ export class ChengtianMockRuntime {
     if (this.requests.length > 500) this.requests.shift();
     try {
       const data = await this.dispatch(key, query, body || {}, token);
-      return { status: 200, body: { code: 0, message: "操作成功", data } };
+      if (path.startsWith("/sym/logs/") && data?.raw === true) return data;
+      return { status: 200, body: { code: 0, message: "操作成功", ...(path.startsWith("/sym/logs/") ? { success: true } : {}), data } };
     } catch (error) {
       if (!(error instanceof MockError)) throw error;
+      if (path.startsWith("/sym/logs/")) return logErrorResponse(error);
       return {
         status: error.status,
         body: {
@@ -488,6 +498,8 @@ export class ChengtianMockRuntime {
       401,
       "本地场景会话无效，请重新登录",
     );
+    if (/^[A-Z]+ \/sym\/logs(?:\/|$)/.test(key))
+      return this.logs.handle(key, query, body, this.database, clone(this.session), this.components);
     if (key === "POST /portal/logout") {
       this.session = null;
       this.sessionStorage?.removeItem("data-elements:mock:session:v3");

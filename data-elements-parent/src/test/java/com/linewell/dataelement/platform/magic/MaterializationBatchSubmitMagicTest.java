@@ -344,7 +344,6 @@ class MaterializationBatchSubmitMagicTest {
 
         Fixture(int targetCount) throws Exception {
             super(1);
-            jdbc.execute("ALTER TABLE db_table_t ADD access_request_status INT");
             jdbc.update("UPDATE db_table_t SET access_request_status=1 WHERE tid='source-1'");
             for (int index = 0; index < targetCount; index++) {
                 jdbc.update("""

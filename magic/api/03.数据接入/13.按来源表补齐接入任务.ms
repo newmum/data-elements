@@ -33,12 +33,13 @@ import java.util.List
 import com.linewell.dataelement.integration.nifi.canvas.mapping.FieldMappingStorageGuard as mappingStorage
 import com.linewell.dataelement.integration.nifi.canvas.compile.RegisteredDatasourceType as sourceTypes
 import tableRead
+import tableWrite
 
 /**
  * POST /ods/dataAggTaskEnsure。按当前租户和来源表补齐独立接入任务。
  * 接收 tableId 和最多 100 个所选目标表。按有效 ODS 分域顺序组织链路，返回任务和计划统计。
  * 批量校验来源与目标归属。事务锁定来源表，重复请求复用任务，显式重建才替换画布。
- * dryRun 只返回计划，正式请求提交任务、画布和映射。
+ * dryRun 只返回计划，正式请求提交任务、画布和映射，并受理根来源表上的待处理申请。
  */
 
 var text = (value) => value == null ? '' : value + ''
@@ -929,12 +930,12 @@ if (blank(sourceTableId)) {
     exit 400, 'tableId不能为空'
 }
 
-// 在写入事务内锁定来源登记，避免并发请求重复创建同一条接入链路。
-var sourceTable = db.selectOne("""
-    SELECT * FROM db_table_t
-     WHERE tid = #{sourceTableId} AND tenant_id = #{tenantId} AND is_del = 0
-     FOR UPDATE
-""")
+// 先在当前事务锁定有效来源表，再读取依赖，避免并发请求重复创建同一条接入链路。
+var sourceTable = tableWrite.lockRow('db_table_t', tenantId, 'tid', sourceTableId, [
+    'tid', 'datasource_id', 'asset_status', 'access_request_status',
+    'table_name', 'table_name_en', 'table_name_cn', 'table_comment',
+    'source_catalog_id', 'field_governance_config', 'timestamp_field'
+], {is_del: 0})
 if (sourceTable == null) {
     exit 404, '来源表不存在'
 }
@@ -1318,6 +1319,7 @@ var rootSourceTable = sourceTable
 var rootSourceDb = sourceDb
 var rootSourceColumns = sourceColumns
 var rootSourceTableId = sourceTableId
+var rootSourceRequestPending = text(first(rootSourceTable, ['accessRequestStatus', 'access_request_status'])) == '1'
 var hopSourceByTarget = {}
 var chainSourceIds = [rootSourceTableId]
 var previousTable = rootSourceTable
@@ -1423,15 +1425,15 @@ for (existingTask in existingTasks) {
     if (targetTableIds.contains(primaryTargetId) && existingTaskByTarget[primaryTargetId] == null) { existingTaskByTarget[primaryTargetId] = existingTask }
 }
 var responseOf = (tasks, createdCount, summaries) => {
-        // 只有真实任务已创建/复用且无待修复问题时才受理申请；管理员建任务即为审批通过。
-        // 与任务写入同属当前事务，dryRun 或失败不会改变申请，历史任务无需补申请。
-        if (!dryRun && repairReasons.size() == 0 && tasks.size() > 0
-            && text(first(sourceTable,['accessRequestStatus','access_request_status'])) == '1') {
-            db.update("""
-                UPDATE db_table_t SET access_request_status=2
-                WHERE tid=#{sourceTableId} AND tenant_id=#{tenantId} AND is_del=0 AND access_request_status=1
-            """)
+    // 根来源锁持续到提交，仅受理最初锁定的待处理申请。每一跳的来源不能替换该申请。
+    if (!dryRun && repairReasons.size() == 0 && tasks.size() > 0 && rootSourceRequestPending) {
+        // 只变更申请状态，保留原申请人、申请时间和既有审计字段行为。
+        var acceptedRows = tableWrite.batchUpdate('db_table_t', tenantId, ['access_request_status'], ['tid'],
+            {is_del: 0}, [{tid: rootSourceTableId, access_request_status: 2}])
+        if (acceptedRows != 1) {
+            exit 409, '来源表接入申请已变化，请刷新后重试'
         }
+    }
 
     var firstTask = tasks.size() == 0 ? null : tasks[0]
     return {created: createdCount > 0, createdCount: createdCount, taskCount: tasks.size(), tasks: tasks,

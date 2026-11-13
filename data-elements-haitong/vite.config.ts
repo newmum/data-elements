@@ -35,5 +35,10 @@ export default defineConfig(({ command, isPreview }) => ({
   worker: { format: 'es' },
   // Production workstations include Chrome 100. Syntax lowering does not
   // polyfill DOM APIs or selectors; keep runtime styles compatible as well.
-  build: { target: 'chrome100', cssTarget: 'chrome100', chunkSizeWarningLimit: 1200 },
+  build: {
+    target: 'chrome100',
+    cssTarget: 'chrome100',
+    chunkSizeWarningLimit: 1200,
+    reportCompressedSize: false,
+  },
 }));

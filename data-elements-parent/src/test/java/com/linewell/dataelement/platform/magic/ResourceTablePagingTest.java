@@ -896,7 +896,8 @@ class ResourceTablePagingTest {
         var f=new Fixture();
         f.database.execute("CREATE TABLE sym_dict_t(tid VARCHAR,tenant_id VARCHAR,dict_code VARCHAR,dict_name VARCHAR,tree_path VARCHAR,parent_id VARCHAR,sort_no INT,level_no INT,is_del INT,created_time TIMESTAMP,updated_time TIMESTAMP)");
         f.database.update("INSERT INTO sym_dict_t VALUES('root','tenant-a','type','类型','root','0',0,2,0,NULL,NULL),('foreign-root','tenant-b','type','秘密','foreign','0',0,2,0,NULL,NULL)");
-        String source=CanonicalMagicSources.under("api").stream().filter(s->s.relativePath().endsWith("02.字典树查询.ms")).findFirst().orElseThrow().source().replaceAll("(?m)^import (tenantRuntime|tableSort)[^\\r\\n]*\\r?\\n","");
+        String source = CanonicalMagicSources.byId("f7622ea4ac5547af954ae35a3ab56826")
+                .replaceAll("(?m)^import (tenantRuntime|tableSort)[^\\r\\n]*\\r?\\n", "");
         for(int size:List.of(20,100)){
             for(int i=size==20?0:20;i<size;i++)f.database.update("INSERT INTO sym_dict_t VALUES(?,'tenant-a',?,?,'root.child','root',?,3,0,NULL,NULL)","dict-"+i,"code-"+i,String.format("Name %03d",i),100-i);
             f.counter.count=0;
@@ -1121,7 +1122,7 @@ class ResourceTablePagingTest {
             return executeValue(source, Map.of("body", body, "dataScope", scope, "jsons", new JsonModule()));
         }
         Map<String,Object> models() throws Exception {
-            String source=CanonicalMagicSources.under("function").stream().filter(s->s.relativePath().endsWith("05.model-read.ms")).findFirst().orElseThrow().source();
+            String source = CanonicalMagicSources.byId("7a5e47d9db00585f8d0feeefedcd6465");
             source=source.replaceAll("(?m)^import (tenantRuntime|jsons|'@/[^\\r\\n]+)[^\\r\\n]*\\r?\\n","");
             return execute(source,Map.of("input",Map.of("projectionOnly",true)));
         }

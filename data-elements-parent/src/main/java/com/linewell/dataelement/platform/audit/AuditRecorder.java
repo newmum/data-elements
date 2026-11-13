@@ -47,8 +47,19 @@ public class AuditRecorder {
         row.put("event_time",now); row.put("received_time",now); row.put("created_time",now);
         row.put("updated_time",now); row.put("request_id",AuditTrace.requestId()); row.put("trace_id",AuditTrace.traceId());
         row.put("operation_id",AuditTrace.requestId()); row.put("session_ref",actor.sessionRef()); row.put("origin_key",id);
-        row.put(platform?"snapshot_json":"detail_json",sanitizer.json(details));
         var request=AuditIdentityResolver.request();
+        var parameters = !platform && Set.of("REQUEST", "OPERATION").contains(category) && !result.equals("DENIED")
+                ? AuditRequestParameters.snapshot(request) : Map.<String, Object>of();
+        row.put(platform?"snapshot_json":"detail_json",sanitizer.json(details, parameters));
+        if (!platform && Set.of("REQUEST", "OPERATION").contains(category)) {
+            var safe = result.equals("DENIED") ? AuditParameterSnapshot.empty("OMITTED", "ACCESS_DENIED")
+                : request != null && !AuditRequestParameters.eligible(request)
+                    ? AuditParameterSnapshot.empty("OMITTED", "SECTION_OMITTED")
+                    : AuditRequestParameters.safeSnapshot(request);
+            row.put("parameter_snapshot", safe.json());
+            row.put("parameter_search_text", result.equals("DENIED") ? "" : safe.searchText());
+            row.put("parameter_capture_status", safe.status());
+        }
         if(request!=null) {
             if(navigation!=null)row.putAll(navigation.snapshot(actor));
             row.put("operation_name",AuditSanitizer.text(Objects.toString(request.getAttribute("audit.functionName"),"").replaceFirst("^\\d+[.、]\\s*",""),256));

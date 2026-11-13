@@ -6,6 +6,17 @@ import org.ssssssss.magicapi.core.interceptor.RequestInterceptor;
 @Component
 public class AuditMagicRequestInterceptor implements RequestInterceptor {
     @Override public Object preHandle(RequestEntity entity){
-        var request=AuditIdentityResolver.request();if(request!=null&&entity!=null&&entity.getApiInfo()!=null){request.setAttribute("audit.functionName",entity.getApiInfo().getName());request.setAttribute("audit.functionId",entity.getApiInfo().getId());}return null;
+        var request = AuditIdentityResolver.request();
+        if (request == null || entity == null || entity.getApiInfo() == null) return null;
+        request.setAttribute("audit.functionName", entity.getApiInfo().getName());
+        request.setAttribute("audit.functionId", entity.getApiInfo().getId());
+        try {
+            if (!entity.isRequestedFromTest() && !entity.isRequestedFromDebug()) {
+                AuditRequestParameters.capture(request, entity.getParameters(), entity.getPathVariables(), entity.getRequestBody());
+            }
+        } catch (RuntimeException error) {
+            AuditRequestParameters.captureFailed(request);
+        }
+        return null;
     }
 }

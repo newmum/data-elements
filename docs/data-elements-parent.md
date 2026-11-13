@@ -146,17 +146,19 @@ mvn package
 
 日常构建不必每次加 `clean`，以便复用编译产物；源码删除、包名调整、切换分支后出现旧类残留，或正式交付需要从空输出验证时，再执行 `clean install`。只交付应用 JAR、不需要将当前工程安装到本地 Maven 仓库时，使用 `package` 即可；它仍会完整执行测试，节省的只是最后的本地仓库安装步骤。
 
-只做本地调试、已经明确接受本轮不运行测试时，可使用下面的快速命令。`-DskipTests` 跳过测试执行，但仍编译测试源码，不能把它作为测试通过的证据；正式交付前执行不带该参数的完整构建。它不改变运行依赖或高斯驱动的打包规则。仅改动少量功能时，也可先定向执行相关测试：
+只做本地调试时，可显式选择 `-DskipTests` 跳过测试执行并保留测试编译，或使用 `-Dmaven.test.skip=true` 同时跳过测试编译和执行。正式交付前运行完整构建。仅改动少量功能时，也可先定向执行相关测试。
 
 ```powershell
-# 从仓库根目录快速打包并安装；需要自行安排本轮测试
-mvn -f data-elements-parent/pom.xml -DskipTests install
+# 从仓库根目录仅为本地调试生成 JAR
+mvn -f data-elements-parent/pom.xml "-Dmaven.test.skip=true" package
 
 # 仅验证本轮相关测试，按实际改动替换测试类名
 mvn -f data-elements-parent/pom.xml "-Dtest=ErrorDetailSanitizerTest,VendorDriverIsolationTest" test
 ```
 
-依赖已完整下载且版本未变时，快速命令可再加 `-o` 使用本地 Maven 缓存；首次构建、新增依赖或缓存缺失时需恢复联网构建。单工程不能靠增大 `-T` 获得测试方法级并行；当前测试含 JVM 全局驱动属性和脚本上下文，不默认开启测试并行。`spring-boot-starter-test` 仅在 `test` 范围生效，不把仅用于测试的框架带入应用 JAR。性能优化保留 20/100 项、16 层关联和跨租户影子 ID 的回归场景：H2 夹具使用标识查询索引，临时 JDBC 样例仅以 JDK 类路径编译，长文本脱敏在保留敏感内容过滤与截断标记的前提下避免反复扫描长标识。
+依赖已完整下载且版本未变时，可以加 `-o` 使用本地 Maven 缓存。首次构建、新增依赖或缓存缺失时需恢复联网构建。即使离线，Maven 仍会从磁盘读取依赖描述和 JAR。Windows 构建机可优先将 Maven 本地仓库、工作区和构建输出放到 SSD。单次构建可通过 `"-Dmaven.repo.local=C:\BuildCache\maven"` 指定已准备好的缓存路径。迁移缓存时同时复制 POM、插件及仓库来源记录，并沿用其对应的镜像配置和厂商驱动。
+
+单工程的 `-T` 参数控制模块调度。当前测试含 JVM 全局驱动属性和脚本上下文，默认串行执行。`spring-boot-starter-test` 仅在 `test` 范围生效。性能优化保留 20/100 项、16 层关联和跨租户影子 ID 的回归场景。只验证单个 Magic 资源的测试按清单中的元数据 ID 定位源码。H2 夹具使用标识查询索引，临时 JDBC 样例仅以 JDK 类路径编译，长文本脱敏保留敏感内容过滤与截断标记并避免反复扫描长标识。
 
 如果编译错误路径指向 `logs/code-integration/resolved/backend/src/main/java/`，并集中提示 `DslCompiler` 的 `manifest`、`mapping`、`nifi` 等同工程包不存在，应先纠正 Maven 入口：该目录是代码合并时保留的局部源码材料，仅有一个 Java 文件，并非完整后端工程。此类临时 POM 应改名为 `pom.xml.reference` 保留参考；IDE 中取消关联该临时工程，重新导入正式的 `data-elements-parent/pom.xml`，再执行 `mvn -f data-elements-parent/pom.xml clean install`。VS Code 的 `maven.excludedFolders` 和 `java.import.exclusions` 应排除 `logs/` 与 `.runtime/`，防止自动扫描把运行材料识别为独立工程。依赖于同工程源码的类无须另加 Maven 依赖。
 
@@ -1026,4 +1028,12 @@ FTPS 密码保存在 NiFi 敏感动态属性中，脚本正文不含凭据。发
 
 ## 日志框架设计
 
-认证、操作、接口、安全及任务关联的完整设计见[系统日志管理详细设计](data-elements.md#logging-design)。该设计复用行业日志表与控制库 `iam_audit_event_t`，由 `platform.audit` 提供可信上下文、脱敏和持久化原语；平台业务规则继续由现用 Magic 维护。现已增加可信快照、统一结果适配、脱敏、有界缓冲、日志查询、导出、策略及归档管理实现。五个本机数据库的结构已升级；8088 已按用户授权换包并正常启动，日志 Magic 及唯一 `log-management` 低代码组件均通过运行回读；原分散入口与统计组件经核查后删除。菜单路径快照和具体 Magic 操作名已纳入采集，查询不按行补查。针对性后端测试、四行业真实会话隔离、登录退出及文件下载验证通过；具体边界及接口以公共文档“当前实现与发布状态”为准。
+认证、操作、接口、安全及任务关联见[系统日志管理详细设计](data-elements.md#logging-design)。沿用行业日志表与控制库 `iam_audit_event_t`。通用参数快照链路已在已授权的本机 86 后端换包重启，所选 31 个 class 字节与当前 Maven classes 全部相等；日志 Magic 和唯一共享组件已发布、两级缓存刷新及运行回读，函数冷加载脚本存在，所选资源无未发布差异。范围不含 14／生产，不改变 IDAAS 身份域、参数能力或授权。
+
+`platform.audit` 负责可信上下文、已解析参数的安全采集、递归脱敏、不可变快照及同源检索投影，不重读请求流、不猜业务语义。[日志参数关键词条件函数](../magic/function/01.通用函数/34.日志参数关键词条件.ms)（ID `log_parameter_condition_v1`，`/common/log-parameter-keyword-condition`）负责行业 `operations/requests` 的 `parameterKeyword` 类型、200 个 UTF-16 单位上限及结构化包含条件；Java 查询层先限定可信租户／角色范围，再绑定条件、分页，每条 SQL 超时 15 秒，不是整个 HTTP 或导出任务的总期限。旧 `parameterName + parameterValue` 精确匹配仍兼容并按 AND 叠加，但拒绝敏感原文，禁止先掩码再命中旧索引的检索旁路；该修正已有测试并部署。列表、统计、在线导出复用条件，默认 7 天、最多 90 天。普通成功 GET 的采样策略未变，不能承诺每次均落库；现有查询／导出 Java 业务仍是待迁移范围，不因新增技术原语视为全部已迁 Magic。
+
+`AuditParameterSnapshot.fromLegacy(Object)` 只取旧 `details.requestParameters` 的 `display` 白名单并再次统一脱敏，安全结果放额外 `legacy` 对象，保持 `LEGACY`／来源未记录，不伪造 `path/query/body/verified`。这是已实现并测试的技术入口，不是历史自动重建或回填。批量读取先拒绝空白等非法 ID，一次预取后逐 ID 授权并恢复输入序；20／100 行均为两条事件 SQL，20／100 ID 均为一次批量 SQL，身份与范围解析另有固定开销。
+
+CSV 只含摘要，防前导空白后的公式，历史时间仅回退已归一化的 `created_time`；JSONL／新归档保留安全快照、不导出检索投影。新归档编码及旧归档兼容已有测试，未改旧文件；真实新快照归档尚未运行，不称 VERIFIED，离线归档参数关键词检索不扩展。真实 API、页面、同筛选 CSV／JSONL 下载及跨真实物理库拒绝已有本机证据，未写业务数据或修改授权。
+
+后端完整回归 **415 套／3304 项，跳过 7 项，失败与错误均为 0**；当前请求按策略不采集时使用 `OMITTED` 而非历史 `LEGACY`，录制器回归与真实只读请求均已验证。86 四行业两张日志表各新增三列、共 24 列，三方言四库生产渲染器原生验证 **124/124**、五库完整导出通过；这不是 H2 或全仓通过。全库检查仍有澄天既有 53 项差异（缺 43 表、9 列、1 项索引），前后报告一致、本批新增 0；Mock 数据源保存摘要、导航预期和万象主题 hash 基线红灯仍保留，不擅自补库或刷新摘要。其他 9 条资源差异及远端 44 个 Magic／3 个低代码新资源未覆盖。前端回归、Mock fixture 与整页 E2E 的区别、备份复核和归档限制以公共说明“当前实现与发布状态”为准。

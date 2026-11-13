@@ -263,7 +263,7 @@
         "52e398a9f2fc429da79048b9ea719b37"
       ],
       "kind": null,
-      "baseSha256": "1b2997d195e3d47235251fb7f6c65104a003b86a947643ebe546897187f108b2",
+      "baseSha256": "912e438c779b984242aac11cb34126c7f24017d3f79783668ccdef35a6f9f0c5",
       "metadataId": "52e398a9f2fc429da79048b9ea719b37"
     },
     {
@@ -424,7 +424,7 @@
       ],
       "kind": "api",
       "metadataId": "metadata_file_registration_01",
-      "baseSha256": "24e4eedaac2503665127f2d07383ae3c5cd7422ca7e91683defa2425e150a3d4"
+      "baseSha256": "91b08805001757ab6b1d7fbeb745130ab279e81b5af2ba28ea5bdbb2eedd1847"
     },
     {
       "path": "api/02.数据盘点/02.数据库表/01.元数据管理/26.数据上报登记.ms",
@@ -1005,7 +1005,7 @@
         "0fae2484c3674bae8d7a3cc61cf67225"
       ],
       "kind": null,
-      "baseSha256": "3ea0908e4265b2a16f7ab67a83d520821e324da017317615f30bf1814703231e",
+      "baseSha256": "50bd390a1985bcca83c279676bf78b61da89f834afdc37b50b88a47482aae8c0",
       "metadataId": "0fae2484c3674bae8d7a3cc61cf67225"
     },
     {
@@ -1055,7 +1055,7 @@
         null
       ],
       "kind": null,
-      "baseSha256": "62d638849853e33e452fae8c5a5add9b1aceea50b90426d443fc8a3d691efa61",
+      "baseSha256": "926832a31d3f89b05b28bc025f1308024ab233f16b97f4245d1279d678e22191",
       "metadataId": "c562ecb2777d466f8ce04907409b70a7"
     },
     {
@@ -1588,7 +1588,7 @@
         "ods_data_agg_task_ensure_01"
       ],
       "kind": "api",
-      "baseSha256": "c1aed08a7d61eeae8d566b4edb31728e8dc8c86dab9a9e681a0d54c826df7a3f",
+      "baseSha256": "d39c2acedf22758e7ea73040a8d48ae767b439054bfe0880883b7a17d58a02fc",
       "metadataId": "ods_data_agg_task_ensure_01"
     },
     {
@@ -1608,7 +1608,7 @@
         null
       ],
       "kind": null,
-      "baseSha256": "aa5dc3ab32a423201605b3b1f098d396ec322c3842385cf91351061207ea1047",
+      "baseSha256": "33f2d7062ee86ee728425dd9adcb4d387fa9fdbf6c650b8dff89181c49ff9fbf",
       "metadataId": "ods_data_agg_reset_01"
     },
     {
@@ -1638,7 +1638,7 @@
         "ods_batch_create_job_01"
       ],
       "kind": "api",
-      "baseSha256": "5445fb06d5491f85e468bfb5ac8809b58dad23be30130c61fe31b4fb2789fef0",
+      "baseSha256": "ed391bf15a2aea890a423d81ebb1b8be5076c467e6f431864f9f1f2bf5841058",
       "metadataId": "ods_batch_create_job_01"
     },
     {
@@ -3313,7 +3313,7 @@
         "b3519d0888524b2d990c3e09822f6e73"
       ],
       "kind": null,
-      "baseSha256": "f155ec1fc836fa12fcad87c0ad5ab98de0e124bad9d01851bd0816caf64b7009",
+      "baseSha256": "f89cf3b99a139b43989189fb70b811e0928dd01a6a84587e8d51b29ec827b13b",
       "metadataId": "b3519d0888524b2d990c3e09822f6e73"
     },
     {
@@ -6256,6 +6256,16 @@
       "kind": "function",
       "metadataId": "377fbf22fd334ef1b29464ba6a42fe31",
       "baseSha256": "5a6db028cc77c1ab66dd21511617d7412e48ecfe02b4b85531ce045b37327c88"
+    },
+    {
+      "path": "function/01.通用函数/34.日志参数关键词条件.ms",
+      "databasePath": "/magic-api/function/01.通用函数/34.日志参数关键词条件.ms",
+      "rowIds": [
+        "29bef8a994e84807beb473cb6868c4bb"
+      ],
+      "kind": "function",
+      "metadataId": "log_parameter_condition_v1",
+      "baseSha256": "6f888400e6e8aea4a27923b01f127697df92d7816ad7c1582ce1dcfc5e891ecb"
     },
     {
       "path": "function/01.通用函数/group.json",

@@ -29,8 +29,9 @@ test('missing entity cannot be silently saved',()=>assert.throws(()=>modelPayloa
 test('serial persistence keeps older writes before later writes',async()=>{const q=createSerialQueue(),out=[];await Promise.all([q(async()=>{await new Promise(r=>setTimeout(r,5));out.push(1);}),q(async()=>out.push(2))]);assert.deepEqual(out,[1,2]);});
 test('failed write does not poison the next queue item',async()=>{const q=createSerialQueue();await assert.rejects(q(async()=>{throw Error('failed');}));assert.equal(await q(async()=>42),42);});
 test('shared login does not create a mock workspace or start local preview operations',async()=>{
- let requests=0;const prior={fetch:globalThis.fetch,location:globalThis.location,localStorage:globalThis.localStorage,sessionStorage:globalThis.sessionStorage};
- globalThis.location={href:'http://localhost:3000/',origin:'http://localhost:3000',replace:()=>{}};
+ let requests=0;const prior={fetch:globalThis.fetch,location:globalThis.location,window:globalThis.window,localStorage:globalThis.localStorage,sessionStorage:globalThis.sessionStorage};
+ globalThis.location={href:'http://localhost:3000/#/governance/overview',origin:'http://localhost:3000',hash:'#/governance/overview',replace:()=>{}};
+ globalThis.window={location:globalThis.location};
  globalThis.localStorage={getItem:()=>null,setItem:()=>{},removeItem:()=>{}};globalThis.sessionStorage={getItem:()=>JSON.stringify('test-only-token')};
  globalThis.fetch=async url=>{requests++;return new Response(JSON.stringify({code:0,data:String(url).includes('/sym/user/me')?{id:'real-user',realName:'平台用户',orgName:'测试部门',roles:['admin']}:{tid:'test-tenant',name:'测试租户'}}));};
  try{const session=await http.loadSession();assert.equal(session.principalId,'real-user');assert.equal(session.name,'平台用户');assert.deepEqual(session.workspaces,[]);await assert.rejects(http.api('models'),e=>e.code==='WORKSPACE_REQUIRED');assert.equal(requests,2);}finally{Object.assign(globalThis,prior);}

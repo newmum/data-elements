@@ -172,6 +172,184 @@ CREATE TABLE "baseline_beijing_gd"."app_workshop_repository_tab"
 "seq_no" INT,
 NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
+-- TABLE asset_discovery_t
+CREATE TABLE "baseline_beijing_gd"."asset_discovery_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32) NOT NULL,
+"discovery_code" VARCHAR(64) NOT NULL,
+"discovery_name" VARCHAR(200),
+"discovery_type" VARCHAR(32) DEFAULT 'MANUAL' NOT NULL,
+"source_id" VARCHAR(32),
+"resource_type" VARCHAR(32),
+"resource_id" VARCHAR(64),
+"resource_name" VARCHAR(255),
+"org_id" VARCHAR(32),
+"catalog_id" VARCHAR(32),
+"status" VARCHAR(16) DEFAULT 'PENDING' NOT NULL,
+"discovered_time" TIMESTAMP(6),
+"handled_by" VARCHAR(32),
+"handled_time" TIMESTAMP(6),
+"description" VARCHAR(500),
+"revision" VARCHAR(32),
+"created_by" VARCHAR(32),
+"created_time" TIMESTAMP(6),
+"updated_by" VARCHAR(32),
+"updated_time" TIMESTAMP(6),
+"is_del" SMALLINT DEFAULT 0 NOT NULL,
+CONSTRAINT "pk_asset_discovery_t" NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE asset_disposal_t
+CREATE TABLE "baseline_beijing_gd"."asset_disposal_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32) NOT NULL,
+"disposal_code" VARCHAR(64) NOT NULL,
+"asset_id" VARCHAR(64),
+"asset_name" VARCHAR(255),
+"disposal_type" VARCHAR(32) DEFAULT 'OFFLINE' NOT NULL,
+"reason" VARCHAR(1000),
+"risk_level" VARCHAR(16) DEFAULT 'LOW',
+"approval_status" VARCHAR(16) DEFAULT 'DRAFT' NOT NULL,
+"apply_user_id" VARCHAR(32),
+"approver_id" VARCHAR(32),
+"approved_time" TIMESTAMP(6),
+"executed_time" TIMESTAMP(6),
+"description" VARCHAR(500),
+"revision" VARCHAR(32),
+"created_by" VARCHAR(32),
+"created_time" TIMESTAMP(6),
+"updated_by" VARCHAR(32),
+"updated_time" TIMESTAMP(6),
+"is_del" SMALLINT DEFAULT 0 NOT NULL,
+CONSTRAINT "pk_asset_disposal_t" NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE asset_evaluation_t
+CREATE TABLE "baseline_beijing_gd"."asset_evaluation_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32) NOT NULL,
+"evaluation_code" VARCHAR(64) NOT NULL,
+"evaluation_name" VARCHAR(200),
+"period" VARCHAR(7) NOT NULL,
+"org_id" VARCHAR(32),
+"catalog_count" INT DEFAULT 0 NOT NULL,
+"quality_score" DECIMAL(5,2),
+"usage_score" DECIMAL(5,2),
+"sharing_score" DECIMAL(5,2),
+"security_score" DECIMAL(5,2),
+"total_score" DECIMAL(5,2),
+"grade" VARCHAR(8),
+"rank_no" INT,
+"detail_json" CLOB,
+"evaluated_time" TIMESTAMP(6),
+"revision" VARCHAR(32),
+"created_by" VARCHAR(32),
+"created_time" TIMESTAMP(6),
+"updated_by" VARCHAR(32),
+"updated_time" TIMESTAMP(6),
+"is_del" SMALLINT DEFAULT 0 NOT NULL,
+CONSTRAINT "pk_asset_evaluation_t" NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE asset_inventory_t
+CREATE TABLE "baseline_beijing_gd"."asset_inventory_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32) NOT NULL,
+"inventory_code" VARCHAR(64) NOT NULL,
+"inventory_name" VARCHAR(200) NOT NULL,
+"scope_type" VARCHAR(16) DEFAULT 'TENANT' NOT NULL,
+"scope_json" CLOB,
+"status" VARCHAR(16) DEFAULT 'DRAFT' NOT NULL,
+"planned_time" TIMESTAMP(6),
+"started_time" TIMESTAMP(6),
+"finished_time" TIMESTAMP(6),
+"total_count" INT DEFAULT 0 NOT NULL,
+"matched_count" INT DEFAULT 0 NOT NULL,
+"missing_count" INT DEFAULT 0 NOT NULL,
+"mismatch_count" INT DEFAULT 0 NOT NULL,
+"result_json" CLOB,
+"result_summary" VARCHAR(1000),
+"revision" VARCHAR(32),
+"created_by" VARCHAR(32),
+"created_time" TIMESTAMP(6),
+"updated_by" VARCHAR(32),
+"updated_time" TIMESTAMP(6),
+"is_del" SMALLINT DEFAULT 0 NOT NULL,
+CONSTRAINT "pk_asset_inventory_t" NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE asset_operation_t
+CREATE TABLE "baseline_beijing_gd"."asset_operation_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32) NOT NULL,
+"catalog_id" VARCHAR(32) NOT NULL,
+"operation_type" VARCHAR(32) DEFAULT 'HEALTH_CHECK' NOT NULL,
+"operation_name" VARCHAR(200),
+"health_status" VARCHAR(16) DEFAULT 'NORMAL' NOT NULL,
+"last_check_time" TIMESTAMP(6),
+"issue_count" INT DEFAULT 0 NOT NULL,
+"last_issue" VARCHAR(1000),
+"owner_id" VARCHAR(32),
+"description" VARCHAR(500),
+"revision" VARCHAR(32),
+"created_by" VARCHAR(32),
+"created_time" TIMESTAMP(6),
+"updated_by" VARCHAR(32),
+"updated_time" TIMESTAMP(6),
+"is_del" SMALLINT DEFAULT 0 NOT NULL,
+CONSTRAINT "pk_asset_operation_t" NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE asset_plan_t
+CREATE TABLE "baseline_beijing_gd"."asset_plan_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32) NOT NULL,
+"plan_code" VARCHAR(64) NOT NULL,
+"plan_name" VARCHAR(200) NOT NULL,
+"plan_year" INT,
+"plan_type" VARCHAR(32) DEFAULT 'GOVERNANCE',
+"scope_json" CLOB,
+"goal_desc" VARCHAR(1000),
+"org_id" VARCHAR(32),
+"owner_id" VARCHAR(32),
+"start_date" TIMESTAMP(6),
+"end_date" TIMESTAMP(6),
+"status" VARCHAR(16) DEFAULT 'DRAFT' NOT NULL,
+"progress" INT DEFAULT 0 NOT NULL,
+"description" VARCHAR(500),
+"revision" VARCHAR(32),
+"created_by" VARCHAR(32),
+"created_time" TIMESTAMP(6),
+"updated_by" VARCHAR(32),
+"updated_time" TIMESTAMP(6),
+"is_del" SMALLINT DEFAULT 0 NOT NULL,
+CONSTRAINT "pk_asset_plan_t" NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE asset_security_t
+CREATE TABLE "baseline_beijing_gd"."asset_security_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32) NOT NULL,
+"catalog_id" VARCHAR(32) NOT NULL,
+"security_level" VARCHAR(16) DEFAULT 'L1' NOT NULL,
+"classification_id" VARCHAR(64),
+"classification_name" VARCHAR(128),
+"masking_required" SMALLINT DEFAULT 0 NOT NULL,
+"authorization_required" SMALLINT DEFAULT 0 NOT NULL,
+"policy_status" VARCHAR(16) DEFAULT 'NONE' NOT NULL,
+"last_scan_time" TIMESTAMP(6),
+"finding_count" INT DEFAULT 0 NOT NULL,
+"owner_id" VARCHAR(32),
+"description" VARCHAR(500),
+"revision" VARCHAR(32),
+"created_by" VARCHAR(32),
+"created_time" TIMESTAMP(6),
+"updated_by" VARCHAR(32),
+"updated_time" TIMESTAMP(6),
+"is_del" SMALLINT DEFAULT 0 NOT NULL,
+CONSTRAINT "pk_asset_security_t" NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
 -- TABLE asset_workbench_issue_t
 CREATE TABLE "baseline_beijing_gd"."asset_workbench_issue_t"
 (
@@ -1937,6 +2115,15 @@ CREATE TABLE "baseline_beijing_gd"."fs_alert_event"
 "status" VARCHAR(32) NOT NULL,
 "triggered_at" TIMESTAMP(6) NOT NULL,
 "tenant_id" VARCHAR(32) DEFAULT '2084109831682699265' NOT NULL,
+"policy_id" VARCHAR(32),
+"group_key" VARCHAR(255),
+"suppressed_count" INT DEFAULT 0 NOT NULL,
+"processed_by" VARCHAR(64),
+"processed_time" TIMESTAMP(6),
+"process_note" VARCHAR(500),
+"closed_by" VARCHAR(64),
+"closed_time" TIMESTAMP(6),
+"close_note" VARCHAR(500),
 CONSTRAINT "pk_fs_alert_event" NOT CLUSTER PRIMARY KEY("id")) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 -- TABLE fs_alert_rule
@@ -2113,6 +2300,237 @@ CREATE TABLE "baseline_beijing_gd"."idaas_receiver_receipt_t"
 "created_time" TIMESTAMP(6) DEFAULT SYS_EXTRACT_UTC(CURRENT_TIMESTAMP) NOT NULL,
 CONSTRAINT "ga_idaas_receiver_receipt_t_pk_75d36e4d46e8" NOT CLUSTER PRIMARY KEY("id"),
 CONSTRAINT "ga_idaas_receiver_receipt_t_source_version_range_3206d83b3af8" CHECK("source_version" BETWEEN 0 AND 18446744073709551615.)) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE kb_entity_t
+CREATE TABLE "baseline_beijing_gd"."kb_entity_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32) NOT NULL,
+"entity_code" VARCHAR(128) NOT NULL,
+"entity_type" VARCHAR(32) NOT NULL,
+"name" VARCHAR(200) NOT NULL,
+"props_json" CLOB,
+"source_type" VARCHAR(32),
+"source_ref" VARCHAR(200),
+"audit_status" VARCHAR(16) DEFAULT 'APPROVED' NOT NULL,
+"audit_remark" VARCHAR(500),
+"description" VARCHAR(500),
+"status" VARCHAR(16) DEFAULT 'ACTIVE' NOT NULL,
+"revision" VARCHAR(32),
+"created_by" VARCHAR(32),
+"created_time" TIMESTAMP(6),
+"updated_by" VARCHAR(32),
+"updated_time" TIMESTAMP(6),
+"is_del" SMALLINT DEFAULT 0 NOT NULL,
+CONSTRAINT "pk_kb_entity_t" NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE kb_portrait_t
+CREATE TABLE "baseline_beijing_gd"."kb_portrait_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32) NOT NULL,
+"object_type" VARCHAR(32) NOT NULL,
+"object_id" VARCHAR(64) NOT NULL,
+"object_name" VARCHAR(200),
+"portrait_json" CLOB,
+"version" INT DEFAULT 1 NOT NULL,
+"is_current" SMALLINT DEFAULT 1 NOT NULL,
+"generated_time" TIMESTAMP(6),
+"summary" VARCHAR(1000),
+"revision" VARCHAR(32),
+"created_by" VARCHAR(32),
+"created_time" TIMESTAMP(6),
+"updated_by" VARCHAR(32),
+"updated_time" TIMESTAMP(6),
+"is_del" SMALLINT DEFAULT 0 NOT NULL,
+CONSTRAINT "pk_kb_portrait_t" NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE kb_relation_t
+CREATE TABLE "baseline_beijing_gd"."kb_relation_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32) NOT NULL,
+"from_entity_id" VARCHAR(32) NOT NULL,
+"to_entity_id" VARCHAR(32) NOT NULL,
+"relation_type" VARCHAR(32) NOT NULL,
+"weight" DECIMAL(38,10) DEFAULT 1. NOT NULL,
+"props_json" CLOB,
+"description" VARCHAR(500),
+"status" VARCHAR(16) DEFAULT 'ACTIVE' NOT NULL,
+"revision" VARCHAR(32),
+"created_by" VARCHAR(32),
+"created_time" TIMESTAMP(6),
+"updated_by" VARCHAR(32),
+"updated_time" TIMESTAMP(6),
+"is_del" SMALLINT DEFAULT 0 NOT NULL,
+CONSTRAINT "pk_kb_relation_t" NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE kb_subscription_t
+CREATE TABLE "baseline_beijing_gd"."kb_subscription_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32) NOT NULL,
+"app_id" VARCHAR(64) NOT NULL,
+"app_name" VARCHAR(200),
+"subscribe_type" VARCHAR(16) NOT NULL,
+"target_ref" VARCHAR(200),
+"notify_channel" VARCHAR(32) DEFAULT 'INNER' NOT NULL,
+"notify_json" CLOB,
+"status" VARCHAR(16) DEFAULT 'ACTIVE' NOT NULL,
+"last_push_time" TIMESTAMP(6),
+"push_fail_count" INT DEFAULT 0 NOT NULL,
+"description" VARCHAR(500),
+"revision" VARCHAR(32),
+"created_by" VARCHAR(32),
+"created_time" TIMESTAMP(6),
+"updated_by" VARCHAR(32),
+"updated_time" TIMESTAMP(6),
+"is_del" SMALLINT DEFAULT 0 NOT NULL,
+CONSTRAINT "pk_kb_subscription_t" NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE kb_tag_attr_t
+CREATE TABLE "baseline_beijing_gd"."kb_tag_attr_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32) NOT NULL,
+"category_id" VARCHAR(32) NOT NULL,
+"attr_code" VARCHAR(64) NOT NULL,
+"attr_name" VARCHAR(200) NOT NULL,
+"data_type" VARCHAR(16) DEFAULT 'STRING' NOT NULL,
+"required_flag" SMALLINT DEFAULT 0 NOT NULL,
+"multi_flag" SMALLINT DEFAULT 0 NOT NULL,
+"sort_no" INT DEFAULT 0 NOT NULL,
+"description" VARCHAR(500),
+"status" VARCHAR(16) DEFAULT 'ACTIVE' NOT NULL,
+"revision" VARCHAR(32),
+"created_by" VARCHAR(32),
+"created_time" TIMESTAMP(6),
+"updated_by" VARCHAR(32),
+"updated_time" TIMESTAMP(6),
+"is_del" SMALLINT DEFAULT 0 NOT NULL,
+CONSTRAINT "pk_kb_tag_attr_t" NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE kb_tag_binding_t
+CREATE TABLE "baseline_beijing_gd"."kb_tag_binding_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32) NOT NULL,
+"tag_value_id" VARCHAR(32) NOT NULL,
+"object_type" VARCHAR(32) NOT NULL,
+"object_id" VARCHAR(64) NOT NULL,
+"object_name" VARCHAR(200),
+"confidence" DECIMAL(38,10) DEFAULT 1. NOT NULL,
+"source" VARCHAR(16) DEFAULT 'MANUAL' NOT NULL,
+"audit_status" VARCHAR(16) DEFAULT 'APPROVED' NOT NULL,
+"audit_remark" VARCHAR(500),
+"bound_time" TIMESTAMP(6),
+"revision" VARCHAR(32),
+"created_by" VARCHAR(32),
+"created_time" TIMESTAMP(6),
+"updated_by" VARCHAR(32),
+"updated_time" TIMESTAMP(6),
+"is_del" SMALLINT DEFAULT 0 NOT NULL,
+CONSTRAINT "pk_kb_tag_binding_t" NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE kb_tag_category_t
+CREATE TABLE "baseline_beijing_gd"."kb_tag_category_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32) NOT NULL,
+"category_code" VARCHAR(64) NOT NULL,
+"category_name" VARCHAR(200) NOT NULL,
+"parent_id" VARCHAR(32),
+"category_path" VARCHAR(500),
+"level_no" INT DEFAULT 1 NOT NULL,
+"sort_no" INT DEFAULT 0 NOT NULL,
+"description" VARCHAR(500),
+"status" VARCHAR(16) DEFAULT 'ACTIVE' NOT NULL,
+"revision" VARCHAR(32),
+"created_by" VARCHAR(32),
+"created_time" TIMESTAMP(6),
+"updated_by" VARCHAR(32),
+"updated_time" TIMESTAMP(6),
+"is_del" SMALLINT DEFAULT 0 NOT NULL,
+CONSTRAINT "pk_kb_tag_category_t" NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE kb_tag_eval_model_t
+CREATE TABLE "baseline_beijing_gd"."kb_tag_eval_model_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32) NOT NULL,
+"model_code" VARCHAR(64) NOT NULL,
+"model_name" VARCHAR(200) NOT NULL,
+"weights_json" CLOB,
+"threshold" DECIMAL(38,10) DEFAULT 0.6 NOT NULL,
+"calc_desc" VARCHAR(500),
+"description" VARCHAR(500),
+"status" VARCHAR(16) DEFAULT 'ACTIVE' NOT NULL,
+"revision" VARCHAR(32),
+"created_by" VARCHAR(32),
+"created_time" TIMESTAMP(6),
+"updated_by" VARCHAR(32),
+"updated_time" TIMESTAMP(6),
+"is_del" SMALLINT DEFAULT 0 NOT NULL,
+CONSTRAINT "pk_kb_tag_eval_model_t" NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE kb_tag_score_t
+CREATE TABLE "baseline_beijing_gd"."kb_tag_score_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32) NOT NULL,
+"model_id" VARCHAR(32) NOT NULL,
+"tag_value_id" VARCHAR(32) NOT NULL,
+"object_type" VARCHAR(32) NOT NULL,
+"object_id" VARCHAR(64) NOT NULL,
+"object_name" VARCHAR(200),
+"score" DECIMAL(38,10) DEFAULT 0. NOT NULL,
+"rank_no" INT DEFAULT 0 NOT NULL,
+"eval_date" TIMESTAMP(0) NOT NULL,
+"detail_json" CLOB,
+"revision" VARCHAR(32),
+"created_by" VARCHAR(32),
+"created_time" TIMESTAMP(6),
+"updated_by" VARCHAR(32),
+"updated_time" TIMESTAMP(6),
+"is_del" SMALLINT DEFAULT 0 NOT NULL,
+CONSTRAINT "pk_kb_tag_score_t" NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE kb_tag_value_t
+CREATE TABLE "baseline_beijing_gd"."kb_tag_value_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32) NOT NULL,
+"attr_id" VARCHAR(32) NOT NULL,
+"value_code" VARCHAR(64) NOT NULL,
+"value_name" VARCHAR(200) NOT NULL,
+"value_order" INT DEFAULT 0 NOT NULL,
+"description" VARCHAR(500),
+"status" VARCHAR(16) DEFAULT 'ACTIVE' NOT NULL,
+"revision" VARCHAR(32),
+"created_by" VARCHAR(32),
+"created_time" TIMESTAMP(6),
+"updated_by" VARCHAR(32),
+"updated_time" TIMESTAMP(6),
+"is_del" SMALLINT DEFAULT 0 NOT NULL,
+CONSTRAINT "pk_kb_tag_value_t" NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE kb_thesaurus_t
+CREATE TABLE "baseline_beijing_gd"."kb_thesaurus_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32) NOT NULL,
+"word" VARCHAR(200) NOT NULL,
+"synonyms" CLOB,
+"domain_code" VARCHAR(64) DEFAULT 'COMMON' NOT NULL,
+"description" VARCHAR(500),
+"status" VARCHAR(16) DEFAULT 'ACTIVE' NOT NULL,
+"revision" VARCHAR(32),
+"created_by" VARCHAR(32),
+"created_time" TIMESTAMP(6),
+"updated_by" VARCHAR(32),
+"updated_time" TIMESTAMP(6),
+"is_del" SMALLINT DEFAULT 0 NOT NULL,
+CONSTRAINT "pk_kb_thesaurus_t" NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 -- TABLE lake_zone_object_t
 CREATE TABLE "baseline_beijing_gd"."lake_zone_object_t"
@@ -2393,6 +2811,9 @@ CREATE TABLE "baseline_beijing_gd"."log_request_t"
 "menu_path" VARCHAR(1000),
 "page_route" VARCHAR(512),
 "operation_name" VARCHAR(256),
+"parameter_snapshot" TEXT,
+"parameter_search_text" TEXT,
+"parameter_capture_status" VARCHAR(24) DEFAULT NULL,
 NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 -- TABLE log_system_t
@@ -2461,6 +2882,9 @@ CREATE TABLE "baseline_beijing_gd"."log_system_t"
 "menu_path" VARCHAR(1000),
 "page_route" VARCHAR(512),
 "operation_name" VARCHAR(256),
+"parameter_snapshot" TEXT,
+"parameter_search_text" TEXT,
+"parameter_capture_status" VARCHAR(24) DEFAULT NULL,
 NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 -- TABLE log_template_t
@@ -2705,6 +3129,279 @@ CREATE TABLE "baseline_beijing_gd"."ods_batch_create_job_t"
 "finished_time" TIMESTAMP(6),
 CONSTRAINT "ga_ods_batch_create_job_t_pk_0e9ee51711e4" NOT CLUSTER PRIMARY KEY("job_id"),
 CONSTRAINT "ga_ods_batch_create_job_t_stop_requested_range_a0a9adc0ba95" CHECK("stop_requested" BETWEEN (-128) AND 127)) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE ops_alarm_policy_t
+CREATE TABLE "baseline_beijing_gd"."ops_alarm_policy_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32) NOT NULL,
+"policy_code" VARCHAR(64) NOT NULL,
+"policy_name" VARCHAR(200) NOT NULL,
+"metric_id" VARCHAR(32),
+"resource_type" VARCHAR(32),
+"scope_json" CLOB,
+"threshold_json" CLOB,
+"silence_window" VARCHAR(64),
+"silence_start" TIMESTAMP(6),
+"silence_end" TIMESTAMP(6),
+"group_by" VARCHAR(255),
+"dispatch_json" CLOB,
+"notify_template" VARCHAR(500),
+"notify_channels" VARCHAR(255),
+"dedup_window_seconds" INT DEFAULT 300 NOT NULL,
+"suppress_json" CLOB,
+"priority" VARCHAR(16) DEFAULT 'P1' NOT NULL,
+"enabled" SMALLINT DEFAULT 1 NOT NULL,
+"description" VARCHAR(500),
+"revision" VARCHAR(32),
+"created_by" VARCHAR(32),
+"created_time" TIMESTAMP(6),
+"updated_by" VARCHAR(32),
+"updated_time" TIMESTAMP(6),
+"is_del" SMALLINT DEFAULT 0 NOT NULL,
+CONSTRAINT "pk_ops_alarm_policy_t" NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE ops_app_t
+CREATE TABLE "baseline_beijing_gd"."ops_app_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32) NOT NULL,
+"app_code" VARCHAR(64) NOT NULL,
+"app_name" VARCHAR(200) NOT NULL,
+"project_id" VARCHAR(32),
+"owner_id" VARCHAR(32),
+"app_type" VARCHAR(32) DEFAULT 'WEB' NOT NULL,
+"env" VARCHAR(32) DEFAULT 'PROD' NOT NULL,
+"description" VARCHAR(500),
+"sla_json" CLOB,
+"status" VARCHAR(16) DEFAULT 'ACTIVE' NOT NULL,
+"health_status" VARCHAR(16) DEFAULT 'UNKNOWN' NOT NULL,
+"cluster_count" INT DEFAULT 0 NOT NULL,
+"service_count" INT DEFAULT 0 NOT NULL,
+"host_count" INT DEFAULT 0 NOT NULL,
+"stability_rate" DECIMAL(38,10),
+"last_check_time" TIMESTAMP(6),
+"revision" VARCHAR(32),
+"created_by" VARCHAR(32),
+"created_time" TIMESTAMP(6),
+"updated_by" VARCHAR(32),
+"updated_time" TIMESTAMP(6),
+"is_del" SMALLINT DEFAULT 0 NOT NULL,
+CONSTRAINT "pk_ops_app_t" NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE ops_cluster_t
+CREATE TABLE "baseline_beijing_gd"."ops_cluster_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32) NOT NULL,
+"cluster_code" VARCHAR(64) NOT NULL,
+"cluster_name" VARCHAR(200) NOT NULL,
+"cluster_type" VARCHAR(32) DEFAULT 'OTHER' NOT NULL,
+"app_id" VARCHAR(32),
+"endpoint" VARCHAR(512),
+"control_type" VARCHAR(32) DEFAULT 'MANUAL' NOT NULL,
+"status" VARCHAR(16) DEFAULT 'UNKNOWN' NOT NULL,
+"node_count" INT DEFAULT 0 NOT NULL,
+"version" VARCHAR(64),
+"description" VARCHAR(500),
+"last_start_time" TIMESTAMP(6),
+"last_stop_time" TIMESTAMP(6),
+"last_heartbeat" TIMESTAMP(6),
+"revision" VARCHAR(32),
+"created_by" VARCHAR(32),
+"created_time" TIMESTAMP(6),
+"updated_by" VARCHAR(32),
+"updated_time" TIMESTAMP(6),
+"is_del" SMALLINT DEFAULT 0 NOT NULL,
+CONSTRAINT "pk_ops_cluster_t" NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE ops_inspection_t
+CREATE TABLE "baseline_beijing_gd"."ops_inspection_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32) NOT NULL,
+"inspection_code" VARCHAR(64) NOT NULL,
+"inspection_name" VARCHAR(200),
+"inspection_type" VARCHAR(32) DEFAULT 'MANUAL' NOT NULL,
+"scope_json" CLOB,
+"result_json" CLOB,
+"status" VARCHAR(16) DEFAULT 'PENDING' NOT NULL,
+"total_count" INT DEFAULT 0 NOT NULL,
+"pass_count" INT DEFAULT 0 NOT NULL,
+"warning_count" INT DEFAULT 0 NOT NULL,
+"fail_count" INT DEFAULT 0 NOT NULL,
+"started_at" TIMESTAMP(6),
+"finished_at" TIMESTAMP(6),
+"operator_id" VARCHAR(32),
+"description" VARCHAR(500),
+"revision" VARCHAR(32),
+"created_by" VARCHAR(32),
+"created_time" TIMESTAMP(6),
+"updated_by" VARCHAR(32),
+"updated_time" TIMESTAMP(6),
+"is_del" SMALLINT DEFAULT 0 NOT NULL,
+CONSTRAINT "pk_ops_inspection_t" NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE ops_metric_point_t
+CREATE TABLE "baseline_beijing_gd"."ops_metric_point_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32) NOT NULL,
+"metric_id" VARCHAR(32) NOT NULL,
+"resource_ref" VARCHAR(128),
+"ts" TIMESTAMP(6) NOT NULL,
+"value" DECIMAL(38,10),
+"labels_json" CLOB,
+CONSTRAINT "pk_ops_metric_point_t" NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE ops_metric_t
+CREATE TABLE "baseline_beijing_gd"."ops_metric_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32) NOT NULL,
+"metric_code" VARCHAR(64) NOT NULL,
+"metric_name" VARCHAR(200) NOT NULL,
+"metric_type" VARCHAR(32) DEFAULT 'GAUGE' NOT NULL,
+"unit" VARCHAR(32),
+"resource_type" VARCHAR(32),
+"source" VARCHAR(32) DEFAULT 'PROMETHEUS' NOT NULL,
+"collect_interval_seconds" INT DEFAULT 60 NOT NULL,
+"labels_json" CLOB,
+"threshold_json" CLOB,
+"enabled" SMALLINT DEFAULT 1 NOT NULL,
+"description" VARCHAR(500),
+"revision" VARCHAR(32),
+"created_by" VARCHAR(32),
+"created_time" TIMESTAMP(6),
+"updated_by" VARCHAR(32),
+"updated_time" TIMESTAMP(6),
+"is_del" SMALLINT DEFAULT 0 NOT NULL,
+CONSTRAINT "pk_ops_metric_t" NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE ops_node_t
+CREATE TABLE "baseline_beijing_gd"."ops_node_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32) NOT NULL,
+"cluster_id" VARCHAR(32) NOT NULL,
+"node_name" VARCHAR(128),
+"node_ip" VARCHAR(64),
+"role" VARCHAR(32) DEFAULT 'WORKER' NOT NULL,
+"status" VARCHAR(16) DEFAULT 'UNKNOWN' NOT NULL,
+"cpu_usage" DECIMAL(38,10),
+"memory_usage" DECIMAL(38,10),
+"disk_usage" DECIMAL(38,10),
+"last_heartbeat" TIMESTAMP(6),
+"description" VARCHAR(500),
+"revision" VARCHAR(32),
+"created_by" VARCHAR(32),
+"created_time" TIMESTAMP(6),
+"updated_by" VARCHAR(32),
+"updated_time" TIMESTAMP(6),
+"is_del" SMALLINT DEFAULT 0 NOT NULL,
+CONSTRAINT "pk_ops_node_t" NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE ops_project_t
+CREATE TABLE "baseline_beijing_gd"."ops_project_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32) NOT NULL,
+"project_code" VARCHAR(64) NOT NULL,
+"project_name" VARCHAR(200) NOT NULL,
+"owner_id" VARCHAR(32),
+"org_id" VARCHAR(32),
+"description" VARCHAR(500),
+"sla_json" CLOB,
+"status" VARCHAR(16) DEFAULT 'ACTIVE' NOT NULL,
+"health_status" VARCHAR(16) DEFAULT 'UNKNOWN' NOT NULL,
+"app_count" INT DEFAULT 0 NOT NULL,
+"resource_count" INT DEFAULT 0 NOT NULL,
+"stability_rate" DECIMAL(38,10),
+"last_check_time" TIMESTAMP(6),
+"revision" VARCHAR(32),
+"created_by" VARCHAR(32),
+"created_time" TIMESTAMP(6),
+"updated_by" VARCHAR(32),
+"updated_time" TIMESTAMP(6),
+"is_del" SMALLINT DEFAULT 0 NOT NULL,
+CONSTRAINT "pk_ops_project_t" NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE ops_report_t
+CREATE TABLE "baseline_beijing_gd"."ops_report_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32) NOT NULL,
+"report_code" VARCHAR(64) NOT NULL,
+"report_name" VARCHAR(200),
+"report_type" VARCHAR(32) DEFAULT 'WEEKLY' NOT NULL,
+"scope_type" VARCHAR(32) DEFAULT 'PROJECT' NOT NULL,
+"scope_ref" VARCHAR(128),
+"period_start" TIMESTAMP(6),
+"period_end" TIMESTAMP(6),
+"content_json" CLOB,
+"summary" VARCHAR(2000),
+"status" VARCHAR(16) DEFAULT 'GENERATED' NOT NULL,
+"generated_at" TIMESTAMP(6),
+"generated_by" VARCHAR(32),
+"revision" VARCHAR(32),
+"created_by" VARCHAR(32),
+"created_time" TIMESTAMP(6),
+"updated_by" VARCHAR(32),
+"updated_time" TIMESTAMP(6),
+"is_del" SMALLINT DEFAULT 0 NOT NULL,
+CONSTRAINT "pk_ops_report_t" NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE ops_resource_t
+CREATE TABLE "baseline_beijing_gd"."ops_resource_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32) NOT NULL,
+"resource_code" VARCHAR(64) NOT NULL,
+"resource_name" VARCHAR(200) NOT NULL,
+"resource_type" VARCHAR(32) NOT NULL,
+"resource_ref" VARCHAR(128),
+"app_id" VARCHAR(32),
+"cluster_id" VARCHAR(32),
+"node_id" VARCHAR(32),
+"env" VARCHAR(32),
+"endpoint" VARCHAR(512),
+"collect_type" VARCHAR(32) DEFAULT 'PULL' NOT NULL,
+"register_status" VARCHAR(16) DEFAULT 'REGISTERED' NOT NULL,
+"managed_status" VARCHAR(16) DEFAULT 'MANAGED' NOT NULL,
+"status" VARCHAR(16) DEFAULT 'UNKNOWN' NOT NULL,
+"health_status" VARCHAR(16) DEFAULT 'UNKNOWN' NOT NULL,
+"last_heartbeat" TIMESTAMP(6),
+"labels_json" CLOB,
+"description" VARCHAR(500),
+"revision" VARCHAR(32),
+"created_by" VARCHAR(32),
+"created_time" TIMESTAMP(6),
+"updated_by" VARCHAR(32),
+"updated_time" TIMESTAMP(6),
+"is_del" SMALLINT DEFAULT 0 NOT NULL,
+CONSTRAINT "pk_ops_resource_t" NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE ops_topology_t
+CREATE TABLE "baseline_beijing_gd"."ops_topology_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32) NOT NULL,
+"topology_code" VARCHAR(64),
+"from_ref" VARCHAR(128) NOT NULL,
+"to_ref" VARCHAR(128) NOT NULL,
+"from_type" VARCHAR(32),
+"to_type" VARCHAR(32),
+"relation_type" VARCHAR(32) DEFAULT 'DEPENDS' NOT NULL,
+"meta_json" CLOB,
+"status" VARCHAR(16) DEFAULT 'ACTIVE' NOT NULL,
+"description" VARCHAR(500),
+"revision" VARCHAR(32),
+"created_by" VARCHAR(32),
+"created_time" TIMESTAMP(6),
+"updated_by" VARCHAR(32),
+"updated_time" TIMESTAMP(6),
+"is_del" SMALLINT DEFAULT 0 NOT NULL,
+CONSTRAINT "pk_ops_topology_t" NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 -- TABLE push_node_t
 CREATE TABLE "baseline_beijing_gd"."push_node_t"
@@ -3348,6 +4045,291 @@ CREATE TABLE "baseline_beijing_gd"."service_node_t"
 "updated_time" TIMESTAMP(6) NOT NULL,
 "is_del" SMALLINT DEFAULT 0 NOT NULL,
 NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE srch_analyzer_t
+CREATE TABLE "baseline_beijing_gd"."srch_analyzer_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32) NOT NULL,
+"analyzer_code" VARCHAR(64) NOT NULL,
+"analyzer_name" VARCHAR(200) NOT NULL,
+"analyzer_type" VARCHAR(32) DEFAULT 'IK_MAX_WORD' NOT NULL,
+"tokenizer" VARCHAR(100),
+"stopword_json" CLOB,
+"synonym_json" CLOB,
+"config_json" CLOB,
+"status" VARCHAR(16) DEFAULT 'ACTIVE' NOT NULL,
+"description" VARCHAR(500),
+"revision" VARCHAR(32),
+"created_by" VARCHAR(32),
+"created_time" TIMESTAMP(6),
+"updated_by" VARCHAR(32),
+"updated_time" TIMESTAMP(6),
+"is_del" SMALLINT DEFAULT '0' NOT NULL,
+CONSTRAINT "pk_srch_analyzer_t" NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE srch_dict_t
+CREATE TABLE "baseline_beijing_gd"."srch_dict_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32) NOT NULL,
+"dict_type" VARCHAR(32) NOT NULL,
+"term" VARCHAR(200) NOT NULL,
+"expansions" CLOB,
+"weight" INT DEFAULT '1' NOT NULL,
+"status" VARCHAR(16) DEFAULT 'ACTIVE' NOT NULL,
+"description" VARCHAR(500),
+"revision" VARCHAR(32),
+"created_by" VARCHAR(32),
+"created_time" TIMESTAMP(6),
+"updated_by" VARCHAR(32),
+"updated_time" TIMESTAMP(6),
+"is_del" SMALLINT DEFAULT '0' NOT NULL,
+CONSTRAINT "pk_srch_dict_t" NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE srch_engine_t
+CREATE TABLE "baseline_beijing_gd"."srch_engine_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32) NOT NULL,
+"engine_code" VARCHAR(64) NOT NULL,
+"engine_name" VARCHAR(200) NOT NULL,
+"engine_type" VARCHAR(32) DEFAULT 'ELASTICSEARCH' NOT NULL,
+"endpoint" VARCHAR(500),
+"auth_mode" VARCHAR(32) DEFAULT 'NONE' NOT NULL,
+"index_prefix" VARCHAR(100) DEFAULT 'elements_' NOT NULL,
+"es_version" VARCHAR(64),
+"config_json" CLOB,
+"status" VARCHAR(16) DEFAULT 'ACTIVE' NOT NULL,
+"last_check_time" TIMESTAMP(6),
+"last_check_message" VARCHAR(1000),
+"revision" VARCHAR(32),
+"created_by" VARCHAR(32),
+"created_time" TIMESTAMP(6),
+"updated_by" VARCHAR(32),
+"updated_time" TIMESTAMP(6),
+"is_del" SMALLINT DEFAULT '0' NOT NULL,
+CONSTRAINT "pk_srch_engine_t" NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE srch_index_field_t
+CREATE TABLE "baseline_beijing_gd"."srch_index_field_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32) NOT NULL,
+"index_id" VARCHAR(32) NOT NULL,
+"field_name" VARCHAR(200) NOT NULL,
+"field_label" VARCHAR(200),
+"field_type" VARCHAR(32) DEFAULT 'text' NOT NULL,
+"source_column" VARCHAR(200),
+"searchable" SMALLINT DEFAULT '1' NOT NULL,
+"analyzed" SMALLINT DEFAULT '1' NOT NULL,
+"filterable" SMALLINT DEFAULT '0' NOT NULL,
+"sortable" SMALLINT DEFAULT '0' NOT NULL,
+"aggregatable" SMALLINT DEFAULT '0' NOT NULL,
+"highlightable" SMALLINT DEFAULT '0' NOT NULL,
+"weight" INT DEFAULT '1' NOT NULL,
+"analyzer" VARCHAR(100),
+"format_pattern" VARCHAR(100),
+"sort_no" INT DEFAULT '0' NOT NULL,
+"revision" VARCHAR(32),
+"created_by" VARCHAR(32),
+"created_time" TIMESTAMP(6),
+"updated_by" VARCHAR(32),
+"updated_time" TIMESTAMP(6),
+"is_del" SMALLINT DEFAULT '0' NOT NULL,
+CONSTRAINT "pk_srch_index_field_t" NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE srch_index_t
+CREATE TABLE "baseline_beijing_gd"."srch_index_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32) NOT NULL,
+"index_code" VARCHAR(64) NOT NULL,
+"index_name" VARCHAR(200) NOT NULL,
+"engine_id" VARCHAR(32) NOT NULL,
+"source_type" VARCHAR(32) DEFAULT 'DATASOURCE' NOT NULL,
+"datasource_id" VARCHAR(64),
+"source_table" VARCHAR(200),
+"primary_key" VARCHAR(100) DEFAULT 'id' NOT NULL,
+"analyzer_code" VARCHAR(100) DEFAULT 'ik_max_word' NOT NULL,
+"alias_name" VARCHAR(100),
+"mapping_json" CLOB,
+"settings_json" CLOB,
+"doc_count" BIGINT DEFAULT '0' NOT NULL,
+"status" VARCHAR(16) DEFAULT 'DRAFT' NOT NULL,
+"last_build_time" TIMESTAMP(6),
+"last_build_cost_ms" BIGINT,
+"last_build_message" VARCHAR(1000),
+"revision" VARCHAR(32),
+"created_by" VARCHAR(32),
+"created_time" TIMESTAMP(6),
+"updated_by" VARCHAR(32),
+"updated_time" TIMESTAMP(6),
+"is_del" SMALLINT DEFAULT '0' NOT NULL,
+CONSTRAINT "pk_srch_index_t" NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE srch_kb_doc_t
+CREATE TABLE "baseline_beijing_gd"."srch_kb_doc_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32) NOT NULL,
+"kb_id" VARCHAR(32) NOT NULL,
+"title" VARCHAR(300) NOT NULL,
+"doc_type" VARCHAR(32) DEFAULT 'EXPERIENCE' NOT NULL,
+"content" CLOB,
+"tags" VARCHAR(500),
+"source" VARCHAR(500),
+"es_doc_id" VARCHAR(100),
+"status" VARCHAR(16) DEFAULT 'READY' NOT NULL,
+"indexed_time" TIMESTAMP(6),
+"revision" VARCHAR(32),
+"created_by" VARCHAR(32),
+"created_time" TIMESTAMP(6),
+"updated_by" VARCHAR(32),
+"updated_time" TIMESTAMP(6),
+"is_del" SMALLINT DEFAULT '0' NOT NULL,
+CONSTRAINT "pk_srch_kb_doc_t" NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE srch_kb_t
+CREATE TABLE "baseline_beijing_gd"."srch_kb_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32) NOT NULL,
+"kb_code" VARCHAR(64) NOT NULL,
+"kb_name" VARCHAR(200) NOT NULL,
+"industry_code" VARCHAR(100),
+"index_code" VARCHAR(100) DEFAULT 'srch_kb_doc' NOT NULL,
+"description" VARCHAR(500),
+"doc_count" INT DEFAULT '0' NOT NULL,
+"status" VARCHAR(16) DEFAULT 'ACTIVE' NOT NULL,
+"revision" VARCHAR(32),
+"created_by" VARCHAR(32),
+"created_time" TIMESTAMP(6),
+"updated_by" VARCHAR(32),
+"updated_time" TIMESTAMP(6),
+"is_del" SMALLINT DEFAULT '0' NOT NULL,
+CONSTRAINT "pk_srch_kb_t" NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE srch_query_log_t
+CREATE TABLE "baseline_beijing_gd"."srch_query_log_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32) NOT NULL,
+"trace_id" VARCHAR(64),
+"service_id" VARCHAR(32),
+"service_code" VARCHAR(64),
+"query_type" VARCHAR(32),
+"keyword" VARCHAR(1000),
+"params_json" CLOB,
+"hit_count" BIGINT DEFAULT '0' NOT NULL,
+"cost_ms" BIGINT DEFAULT '0' NOT NULL,
+"result_code" VARCHAR(32) DEFAULT '200' NOT NULL,
+"app_id" VARCHAR(64),
+"user_id" VARCHAR(64),
+"client_ip" VARCHAR(64),
+"revision" VARCHAR(32),
+"created_by" VARCHAR(32),
+"created_time" TIMESTAMP(6),
+"updated_by" VARCHAR(32),
+"updated_time" TIMESTAMP(6),
+"is_del" SMALLINT DEFAULT '0' NOT NULL,
+CONSTRAINT "pk_srch_query_log_t" NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE srch_redlist_t
+CREATE TABLE "baseline_beijing_gd"."srch_redlist_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32) NOT NULL,
+"service_id" VARCHAR(32),
+"object_type" VARCHAR(32) DEFAULT 'APP' NOT NULL,
+"object_value" VARCHAR(200) NOT NULL,
+"reason" VARCHAR(500),
+"status" VARCHAR(16) DEFAULT 'ACTIVE' NOT NULL,
+"effective_time" TIMESTAMP(6),
+"expire_time" TIMESTAMP(6),
+"revision" VARCHAR(32),
+"created_by" VARCHAR(32),
+"created_time" TIMESTAMP(6),
+"updated_by" VARCHAR(32),
+"updated_time" TIMESTAMP(6),
+"is_del" SMALLINT DEFAULT '0' NOT NULL,
+CONSTRAINT "pk_srch_redlist_t" NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE srch_service_t
+CREATE TABLE "baseline_beijing_gd"."srch_service_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32) NOT NULL,
+"service_code" VARCHAR(64) NOT NULL,
+"service_name" VARCHAR(200) NOT NULL,
+"index_id" VARCHAR(32) NOT NULL,
+"strategy_id" VARCHAR(32),
+"service_type" VARCHAR(32) DEFAULT 'SEARCH' NOT NULL,
+"request_method" VARCHAR(16) DEFAULT 'BOTH' NOT NULL,
+"default_page_size" INT DEFAULT '20' NOT NULL,
+"max_page_size" INT DEFAULT '100' NOT NULL,
+"timeout_ms" INT DEFAULT '3000' NOT NULL,
+"query_fields" CLOB,
+"highlight_fields" CLOB,
+"filter_fields" CLOB,
+"description" VARCHAR(500),
+"status" VARCHAR(16) DEFAULT 'DRAFT' NOT NULL,
+"version_no" INT DEFAULT '1' NOT NULL,
+"published_time" TIMESTAMP(6),
+"revision" VARCHAR(32),
+"created_by" VARCHAR(32),
+"created_time" TIMESTAMP(6),
+"updated_by" VARCHAR(32),
+"updated_time" TIMESTAMP(6),
+"is_del" SMALLINT DEFAULT '0' NOT NULL,
+CONSTRAINT "pk_srch_service_t" NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE srch_strategy_t
+CREATE TABLE "baseline_beijing_gd"."srch_strategy_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32) NOT NULL,
+"strategy_code" VARCHAR(64) NOT NULL,
+"strategy_name" VARCHAR(200) NOT NULL,
+"template_type" VARCHAR(32) DEFAULT 'SMART' NOT NULL,
+"match_mode" VARCHAR(32) DEFAULT 'MULTI_MATCH' NOT NULL,
+"field_weights" CLOB,
+"default_sort" VARCHAR(200),
+"filter_json" CLOB,
+"highlight_json" CLOB,
+"page_size" INT DEFAULT '20' NOT NULL,
+"max_page_size" INT DEFAULT '100' NOT NULL,
+"dsl_template" CLOB,
+"status" VARCHAR(16) DEFAULT 'ACTIVE' NOT NULL,
+"revision" VARCHAR(32),
+"created_by" VARCHAR(32),
+"created_time" TIMESTAMP(6),
+"updated_by" VARCHAR(32),
+"updated_time" TIMESTAMP(6),
+"is_del" SMALLINT DEFAULT '0' NOT NULL,
+CONSTRAINT "pk_srch_strategy_t" NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE srch_subscription_t
+CREATE TABLE "baseline_beijing_gd"."srch_subscription_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32) NOT NULL,
+"service_id" VARCHAR(32) NOT NULL,
+"app_id" VARCHAR(64) NOT NULL,
+"app_name" VARCHAR(200),
+"quota_daily" INT DEFAULT '10000' NOT NULL,
+"quota_used" INT DEFAULT '0' NOT NULL,
+"quota_date" TIMESTAMP(0),
+"status" VARCHAR(16) DEFAULT 'ACTIVE' NOT NULL,
+"expire_time" TIMESTAMP(6),
+"description" VARCHAR(500),
+"revision" VARCHAR(32),
+"created_by" VARCHAR(32),
+"created_time" TIMESTAMP(6),
+"updated_by" VARCHAR(32),
+"updated_time" TIMESTAMP(6),
+"is_del" SMALLINT DEFAULT '0' NOT NULL,
+CONSTRAINT "pk_srch_subscription_t" NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 -- TABLE surveillance_control_item_t
 CREATE TABLE "baseline_beijing_gd"."surveillance_control_item_t"
@@ -4014,6 +4996,42 @@ CREATE TABLE "baseline_beijing_gd"."sym_server_t"
 "tenant_id" VARCHAR(32) DEFAULT '2084109831682699265' NOT NULL,
 NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
+-- TABLE sys_timer_log_t
+CREATE TABLE "baseline_beijing_gd"."sys_timer_log_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32) NOT NULL,
+"timer_id" VARCHAR(32) NOT NULL,
+"timer_code" VARCHAR(64) NOT NULL,
+"fire_at" TIMESTAMP(6) NOT NULL,
+"result" VARCHAR(16) NOT NULL,
+"cost_ms" INT DEFAULT 0 NOT NULL,
+"error_msg" VARCHAR(1000),
+"created_time" TIMESTAMP(6),
+CONSTRAINT "pk_sys_timer_log_t" NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE sys_timer_t
+CREATE TABLE "baseline_beijing_gd"."sys_timer_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32) NOT NULL,
+"timer_code" VARCHAR(64) NOT NULL,
+"timer_name" VARCHAR(100) NOT NULL,
+"cron" VARCHAR(100) NOT NULL,
+"handler" VARCHAR(200) NOT NULL,
+"params_json" VARCHAR(2000),
+"status" VARCHAR(16) DEFAULT 'ENABLED' NOT NULL,
+"last_fire_at" TIMESTAMP(6),
+"next_fire_at" TIMESTAMP(6),
+"lock_ttl_seconds" INT DEFAULT 60 NOT NULL,
+"description" VARCHAR(500),
+"created_by" VARCHAR(32),
+"updated_by" VARCHAR(32),
+"created_time" TIMESTAMP(6),
+"updated_time" TIMESTAMP(6),
+"is_del" SMALLINT DEFAULT 0 NOT NULL,
+CONSTRAINT "pk_sys_timer_t" NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
 -- TABLE wf_approval_action_log_t
 CREATE TABLE "baseline_beijing_gd"."wf_approval_action_log_t"
 (
@@ -4417,6 +5435,12 @@ CREATE OR REPLACE  INDEX "idx_svc_subscription_status" ON "baseline_beijing_gd".
 
 CREATE OR REPLACE  INDEX "idx_sym_config_lookup" ON "baseline_beijing_gd"."sym_config_t"("tenant_id" ASC,"config_group" ASC,"is_use" ASC,"is_del" ASC,"sort_no" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
+CREATE OR REPLACE  INDEX "idx_sys_timer_due" ON "baseline_beijing_gd"."sys_timer_t"("tenant_id" ASC,"status" ASC,"next_fire_at" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "idx_sys_timer_log_time" ON "baseline_beijing_gd"."sys_timer_log_t"("tenant_id" ASC,"fire_at" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "idx_sys_timer_log_timer" ON "baseline_beijing_gd"."sys_timer_log_t"("tenant_id" ASC,"timer_id" ASC,"fire_at" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
 CREATE OR REPLACE  INDEX "INDEX33572321" ON "baseline_beijing_gd"."data_access_multi_group_item_t"("group_id" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 CREATE OR REPLACE  INDEX "INDEX33576452" ON "baseline_beijing_gd"."data_access_mapping_publication_t"("tenant_id" ASC,"plan_id" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
@@ -4440,6 +5464,26 @@ CREATE OR REPLACE  INDEX "ix_app_workshop_repository_1fcxbde" ON "baseline_beiji
 CREATE OR REPLACE  INDEX "ix_app_workshop_repository_self_icon_1fcxbde" ON "baseline_beijing_gd"."app_workshop_repository_self_icon"("tenant_id" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 CREATE OR REPLACE  INDEX "ix_app_workshop_repository_tab_1fcxbde" ON "baseline_beijing_gd"."app_workshop_repository_tab"("tenant_id" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_asset_discovery_resource" ON "baseline_beijing_gd"."asset_discovery_t"("tenant_id" ASC,"resource_type" ASC,"resource_id" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_asset_discovery_status" ON "baseline_beijing_gd"."asset_discovery_t"("tenant_id" ASC,"status" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_asset_disposal_asset" ON "baseline_beijing_gd"."asset_disposal_t"("tenant_id" ASC,"asset_id" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_asset_disposal_status" ON "baseline_beijing_gd"."asset_disposal_t"("tenant_id" ASC,"approval_status" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_asset_evaluation_period" ON "baseline_beijing_gd"."asset_evaluation_t"("tenant_id" ASC,"period" ASC,"org_id" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_asset_inventory_status" ON "baseline_beijing_gd"."asset_inventory_t"("tenant_id" ASC,"status" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_asset_operation_health" ON "baseline_beijing_gd"."asset_operation_t"("tenant_id" ASC,"health_status" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_asset_plan_org" ON "baseline_beijing_gd"."asset_plan_t"("tenant_id" ASC,"org_id" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_asset_plan_status" ON "baseline_beijing_gd"."asset_plan_t"("tenant_id" ASC,"status" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_asset_security_level" ON "baseline_beijing_gd"."asset_security_t"("tenant_id" ASC,"security_level" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 CREATE OR REPLACE  INDEX "ix_asset_workbench_issue_t_14e0jio" ON "baseline_beijing_gd"."asset_workbench_issue_t"("tenant_id" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
@@ -4466,8 +5510,6 @@ CREATE OR REPLACE  INDEX "ix_data_access_field_mapping_17u92kp" ON "baseline_bei
 CREATE OR REPLACE  INDEX "ix_data_access_field_mapping_1fcxbde" ON "baseline_beijing_gd"."data_access_field_mapping"("tenant_id" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 CREATE OR REPLACE  INDEX "ix_data_access_task_monitor_snap_t_1fcxbde" ON "baseline_beijing_gd"."data_access_task_monitor_snap_t"("tenant_id" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
-
-CREATE INDEX "idx_task_monitor_snap_retention" ON "baseline_beijing_gd"."data_access_task_monitor_snap_t" ("tenant_id","monitor_time","tid");
 
 CREATE OR REPLACE  INDEX "ix_data_apply_form_t_1fcxbde" ON "baseline_beijing_gd"."data_apply_form_t"("tenant_id" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
@@ -4579,6 +5621,8 @@ CREATE OR REPLACE  INDEX "ix_fs_alert_event_6arfh7" ON "baseline_beijing_gd"."fs
 
 CREATE OR REPLACE  INDEX "ix_fs_alert_event_pm14xq" ON "baseline_beijing_gd"."fs_alert_event"("rule_id" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
+CREATE OR REPLACE  INDEX "ix_fs_alert_event_status" ON "baseline_beijing_gd"."fs_alert_event"("tenant_id" ASC,"status" ASC,"triggered_at" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
 CREATE OR REPLACE  INDEX "ix_fs_alert_rule_14e0jio" ON "baseline_beijing_gd"."fs_alert_rule"("tenant_id" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 CREATE OR REPLACE  INDEX "ix_fs_audit_log_14e0jio" ON "baseline_beijing_gd"."fs_audit_log"("tenant_id" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
@@ -4598,6 +5642,44 @@ CREATE OR REPLACE  INDEX "ix_fs_publish_record_14e0jio" ON "baseline_beijing_gd"
 CREATE OR REPLACE  INDEX "ix_fs_runtime_node_14e0jio" ON "baseline_beijing_gd"."fs_runtime_node"("tenant_id" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 CREATE OR REPLACE  INDEX "ix_gateway_user_app_rela_1fcxbde" ON "baseline_beijing_gd"."gateway_user_app_rela"("tenant_id" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_kb_entity_audit" ON "baseline_beijing_gd"."kb_entity_t"("tenant_id" ASC,"audit_status" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_kb_entity_name" ON "baseline_beijing_gd"."kb_entity_t"("tenant_id" ASC,"name" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_kb_entity_type" ON "baseline_beijing_gd"."kb_entity_t"("tenant_id" ASC,"entity_type" ASC,"status" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_kb_portrait_current" ON "baseline_beijing_gd"."kb_portrait_t"("tenant_id" ASC,"object_type" ASC,"object_id" ASC,"is_current" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_kb_relation_from" ON "baseline_beijing_gd"."kb_relation_t"("tenant_id" ASC,"from_entity_id" ASC,"relation_type" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_kb_relation_to" ON "baseline_beijing_gd"."kb_relation_t"("tenant_id" ASC,"to_entity_id" ASC,"relation_type" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_kb_subscription_app" ON "baseline_beijing_gd"."kb_subscription_t"("tenant_id" ASC,"app_id" ASC,"status" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_kb_subscription_type" ON "baseline_beijing_gd"."kb_subscription_t"("tenant_id" ASC,"subscribe_type" ASC,"status" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_kb_tag_attr_category" ON "baseline_beijing_gd"."kb_tag_attr_t"("tenant_id" ASC,"category_id" ASC,"status" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_kb_tag_binding_audit" ON "baseline_beijing_gd"."kb_tag_binding_t"("tenant_id" ASC,"audit_status" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_kb_tag_binding_object" ON "baseline_beijing_gd"."kb_tag_binding_t"("tenant_id" ASC,"object_type" ASC,"object_id" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_kb_tag_binding_value" ON "baseline_beijing_gd"."kb_tag_binding_t"("tenant_id" ASC,"tag_value_id" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_kb_tag_category_parent" ON "baseline_beijing_gd"."kb_tag_category_t"("tenant_id" ASC,"parent_id" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_kb_tag_category_status" ON "baseline_beijing_gd"."kb_tag_category_t"("tenant_id" ASC,"status" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_kb_tag_eval_model_status" ON "baseline_beijing_gd"."kb_tag_eval_model_t"("tenant_id" ASC,"status" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_kb_tag_score_object" ON "baseline_beijing_gd"."kb_tag_score_t"("tenant_id" ASC,"object_type" ASC,"object_id" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_kb_tag_score_rank" ON "baseline_beijing_gd"."kb_tag_score_t"("tenant_id" ASC,"model_id" ASC,"eval_date" ASC,"rank_no" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_kb_tag_value_attr" ON "baseline_beijing_gd"."kb_tag_value_t"("tenant_id" ASC,"attr_id" ASC,"status" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_kb_thesaurus_domain" ON "baseline_beijing_gd"."kb_thesaurus_t"("tenant_id" ASC,"domain_code" ASC,"status" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 CREATE OR REPLACE  INDEX "ix_lake_zone_datasource" ON "baseline_beijing_gd"."lake_zone_t"("datasource_id" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
@@ -4632,6 +5714,56 @@ CREATE OR REPLACE  INDEX "ix_log_version_t_1fcxbde" ON "baseline_beijing_gd"."lo
 CREATE OR REPLACE  INDEX "ix_nifi_pipeline_migration_mark_t_14e0jio" ON "baseline_beijing_gd"."nifi_pipeline_migration_mark_t"("tenant_id" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 CREATE OR REPLACE  INDEX "ix_nifi_pipeline_t_1fcxbde" ON "baseline_beijing_gd"."nifi_pipeline_t"("tenant_id" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_ops_alarm_policy_enabled" ON "baseline_beijing_gd"."ops_alarm_policy_t"("tenant_id" ASC,"enabled" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_ops_alarm_policy_metric" ON "baseline_beijing_gd"."ops_alarm_policy_t"("tenant_id" ASC,"metric_id" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_ops_app_owner" ON "baseline_beijing_gd"."ops_app_t"("tenant_id" ASC,"owner_id" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_ops_app_project" ON "baseline_beijing_gd"."ops_app_t"("tenant_id" ASC,"project_id" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_ops_app_status" ON "baseline_beijing_gd"."ops_app_t"("tenant_id" ASC,"status" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_ops_cluster_app" ON "baseline_beijing_gd"."ops_cluster_t"("tenant_id" ASC,"app_id" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_ops_cluster_type_status" ON "baseline_beijing_gd"."ops_cluster_t"("tenant_id" ASC,"cluster_type" ASC,"status" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_ops_inspection_status" ON "baseline_beijing_gd"."ops_inspection_t"("tenant_id" ASC,"status" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_ops_inspection_type" ON "baseline_beijing_gd"."ops_inspection_t"("tenant_id" ASC,"inspection_type" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_ops_metric_point_resource" ON "baseline_beijing_gd"."ops_metric_point_t"("tenant_id" ASC,"resource_ref" ASC,"ts" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_ops_metric_point_tenant_ts" ON "baseline_beijing_gd"."ops_metric_point_t"("tenant_id" ASC,"ts" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_ops_metric_point_ts" ON "baseline_beijing_gd"."ops_metric_point_t"("tenant_id" ASC,"metric_id" ASC,"ts" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_ops_metric_resource" ON "baseline_beijing_gd"."ops_metric_t"("tenant_id" ASC,"resource_type" ASC,"enabled" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_ops_node_cluster" ON "baseline_beijing_gd"."ops_node_t"("tenant_id" ASC,"cluster_id" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_ops_node_status" ON "baseline_beijing_gd"."ops_node_t"("tenant_id" ASC,"status" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_ops_project_owner" ON "baseline_beijing_gd"."ops_project_t"("tenant_id" ASC,"owner_id" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_ops_project_status" ON "baseline_beijing_gd"."ops_project_t"("tenant_id" ASC,"status" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_ops_report_scope" ON "baseline_beijing_gd"."ops_report_t"("tenant_id" ASC,"scope_type" ASC,"scope_ref" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_ops_report_type_period" ON "baseline_beijing_gd"."ops_report_t"("tenant_id" ASC,"report_type" ASC,"period_start" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_ops_resource_app" ON "baseline_beijing_gd"."ops_resource_t"("tenant_id" ASC,"app_id" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_ops_resource_cluster" ON "baseline_beijing_gd"."ops_resource_t"("tenant_id" ASC,"cluster_id" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_ops_resource_register" ON "baseline_beijing_gd"."ops_resource_t"("tenant_id" ASC,"register_status" ASC,"managed_status" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_ops_resource_type_status" ON "baseline_beijing_gd"."ops_resource_t"("tenant_id" ASC,"resource_type" ASC,"status" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_ops_topology_from" ON "baseline_beijing_gd"."ops_topology_t"("tenant_id" ASC,"from_ref" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_ops_topology_to" ON "baseline_beijing_gd"."ops_topology_t"("tenant_id" ASC,"to_ref" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 CREATE OR REPLACE  INDEX "ix_push_node_code" ON "baseline_beijing_gd"."push_node_t"("tenant_id" ASC,"node_code" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
@@ -4668,6 +5800,40 @@ CREATE OR REPLACE  INDEX "ix_rm_role_t_1k71r4m" ON "baseline_beijing_gd"."rm_rol
 CREATE OR REPLACE  INDEX "ix_rm_user_org_rela_t_6wieol" ON "baseline_beijing_gd"."rm_user_org_rela_t"("tenant_id" ASC,"user_id" ASC,"job_type" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 CREATE OR REPLACE  INDEX "ix_rm_user_role_rela_t_q5a6tn" ON "baseline_beijing_gd"."rm_user_role_rela_t"("tenant_id" ASC,"user_id" ASC,"role_id" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_srch_analyzer_status" ON "baseline_beijing_gd"."srch_analyzer_t"("tenant_id" ASC,"status" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_srch_dict_type" ON "baseline_beijing_gd"."srch_dict_t"("tenant_id" ASC,"dict_type" ASC,"status" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_srch_engine_status" ON "baseline_beijing_gd"."srch_engine_t"("tenant_id" ASC,"status" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_srch_field_order" ON "baseline_beijing_gd"."srch_index_field_t"("tenant_id" ASC,"index_id" ASC,"sort_no" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_srch_index_engine" ON "baseline_beijing_gd"."srch_index_t"("tenant_id" ASC,"engine_id" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_srch_index_status" ON "baseline_beijing_gd"."srch_index_t"("tenant_id" ASC,"status" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_srch_kb_doc_kb" ON "baseline_beijing_gd"."srch_kb_doc_t"("tenant_id" ASC,"kb_id" ASC,"status" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_srch_kb_doc_title" ON "baseline_beijing_gd"."srch_kb_doc_t"("tenant_id" ASC,"title" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_srch_kb_status" ON "baseline_beijing_gd"."srch_kb_t"("tenant_id" ASC,"status" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_srch_log_service" ON "baseline_beijing_gd"."srch_query_log_t"("tenant_id" ASC,"service_code" ASC,"created_time" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_srch_log_time" ON "baseline_beijing_gd"."srch_query_log_t"("tenant_id" ASC,"created_time" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_srch_log_trace" ON "baseline_beijing_gd"."srch_query_log_t"("tenant_id" ASC,"trace_id" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_srch_redlist_service" ON "baseline_beijing_gd"."srch_redlist_t"("tenant_id" ASC,"service_id" ASC,"object_type" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_srch_service_index" ON "baseline_beijing_gd"."srch_service_t"("tenant_id" ASC,"index_id" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_srch_service_status" ON "baseline_beijing_gd"."srch_service_t"("tenant_id" ASC,"status" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_srch_strategy_template" ON "baseline_beijing_gd"."srch_strategy_t"("tenant_id" ASC,"template_type" ASC,"status" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_srch_subscription_app" ON "baseline_beijing_gd"."srch_subscription_t"("tenant_id" ASC,"app_id" ASC,"status" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 CREATE OR REPLACE  INDEX "ix_sym_application_t_1lzxh0r" ON "baseline_beijing_gd"."sym_application_t"("tenant_id" ASC,"is_del" ASC,"updated_time" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
@@ -4777,6 +5943,22 @@ CREATE OR REPLACE UNIQUE  INDEX "uk_svc_metric_hour" ON "baseline_beijing_gd"."s
 
 CREATE OR REPLACE UNIQUE  INDEX "uk_svc_subscription" ON "baseline_beijing_gd"."svc_subscription_t"("tenant_id" ASC,"app_id" ASC,"service_code" ASC,"version" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
+CREATE OR REPLACE UNIQUE  INDEX "uk_sys_timer_code" ON "baseline_beijing_gd"."sys_timer_t"("tenant_id" ASC,"timer_code" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE UNIQUE  INDEX "ux_asset_discovery_code" ON "baseline_beijing_gd"."asset_discovery_t"("tenant_id" ASC,"discovery_code" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE UNIQUE  INDEX "ux_asset_disposal_code" ON "baseline_beijing_gd"."asset_disposal_t"("tenant_id" ASC,"disposal_code" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE UNIQUE  INDEX "ux_asset_evaluation_code" ON "baseline_beijing_gd"."asset_evaluation_t"("tenant_id" ASC,"evaluation_code" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE UNIQUE  INDEX "ux_asset_inventory_code" ON "baseline_beijing_gd"."asset_inventory_t"("tenant_id" ASC,"inventory_code" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE UNIQUE  INDEX "ux_asset_operation_catalog" ON "baseline_beijing_gd"."asset_operation_t"("tenant_id" ASC,"catalog_id" ASC,"operation_type" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE UNIQUE  INDEX "ux_asset_plan_code" ON "baseline_beijing_gd"."asset_plan_t"("tenant_id" ASC,"plan_code" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE UNIQUE  INDEX "ux_asset_security_catalog" ON "baseline_beijing_gd"."asset_security_t"("tenant_id" ASC,"catalog_id" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
 CREATE OR REPLACE UNIQUE  INDEX "ux_data_reconcile_bucket_t_fdhbl8" ON "baseline_beijing_gd"."data_reconcile_bucket_t"("tenant_id" ASC,"run_id" ASC,"bucket_no" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 CREATE OR REPLACE UNIQUE  INDEX "ux_data_reconcile_diff_t_1vxdyir" ON "baseline_beijing_gd"."data_reconcile_diff_t"("tenant_id" ASC,"run_id" ASC,"diff_hash" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
@@ -4801,6 +5983,26 @@ CREATE OR REPLACE UNIQUE  INDEX "ux_dwm_center_layer_source_t_1g0u452" ON "basel
 
 CREATE OR REPLACE UNIQUE  INDEX "ux_fs_flow_version_1d0wdf9" ON "baseline_beijing_gd"."fs_flow_version"("flow_id" ASC,"version" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
+CREATE OR REPLACE UNIQUE  INDEX "ux_kb_entity_code" ON "baseline_beijing_gd"."kb_entity_t"("tenant_id" ASC,"entity_code" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE UNIQUE  INDEX "ux_kb_portrait_version" ON "baseline_beijing_gd"."kb_portrait_t"("tenant_id" ASC,"object_type" ASC,"object_id" ASC,"version" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE UNIQUE  INDEX "ux_kb_relation_triple" ON "baseline_beijing_gd"."kb_relation_t"("tenant_id" ASC,"from_entity_id" ASC,"to_entity_id" ASC,"relation_type" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE UNIQUE  INDEX "ux_kb_tag_attr_code" ON "baseline_beijing_gd"."kb_tag_attr_t"("tenant_id" ASC,"category_id" ASC,"attr_code" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE UNIQUE  INDEX "ux_kb_tag_binding" ON "baseline_beijing_gd"."kb_tag_binding_t"("tenant_id" ASC,"tag_value_id" ASC,"object_type" ASC,"object_id" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE UNIQUE  INDEX "ux_kb_tag_category_code" ON "baseline_beijing_gd"."kb_tag_category_t"("tenant_id" ASC,"category_code" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE UNIQUE  INDEX "ux_kb_tag_eval_model_code" ON "baseline_beijing_gd"."kb_tag_eval_model_t"("tenant_id" ASC,"model_code" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE UNIQUE  INDEX "ux_kb_tag_score" ON "baseline_beijing_gd"."kb_tag_score_t"("tenant_id" ASC,"model_id" ASC,"tag_value_id" ASC,"object_type" ASC,"object_id" ASC,"eval_date" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE UNIQUE  INDEX "ux_kb_tag_value_code" ON "baseline_beijing_gd"."kb_tag_value_t"("tenant_id" ASC,"attr_id" ASC,"value_code" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE UNIQUE  INDEX "ux_kb_thesaurus_word" ON "baseline_beijing_gd"."kb_thesaurus_t"("tenant_id" ASC,"word" ASC,"domain_code" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
 CREATE OR REPLACE UNIQUE  INDEX "ux_lake_zone_code" ON "baseline_beijing_gd"."lake_zone_t"("tenant_id" ASC,"zone_code" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 CREATE OR REPLACE UNIQUE  INDEX "ux_lake_zone_object" ON "baseline_beijing_gd"."lake_zone_object_t"("tenant_id" ASC,"zone_id" ASC,"object_type" ASC,"object_ref" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
@@ -4815,7 +6017,47 @@ CREATE OR REPLACE UNIQUE  INDEX "ux_log_outbox_event" ON "baseline_beijing_gd"."
 
 CREATE OR REPLACE UNIQUE  INDEX "ux_log_policy_scope" ON "baseline_beijing_gd"."log_policy_t"("scope_kind" ASC,"scope_id" ASC,"identity_domain" ASC,"category" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
+CREATE OR REPLACE UNIQUE  INDEX "ux_ops_alarm_policy_code" ON "baseline_beijing_gd"."ops_alarm_policy_t"("tenant_id" ASC,"policy_code" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE UNIQUE  INDEX "ux_ops_app_code" ON "baseline_beijing_gd"."ops_app_t"("tenant_id" ASC,"app_code" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE UNIQUE  INDEX "ux_ops_cluster_code" ON "baseline_beijing_gd"."ops_cluster_t"("tenant_id" ASC,"cluster_code" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE UNIQUE  INDEX "ux_ops_inspection_code" ON "baseline_beijing_gd"."ops_inspection_t"("tenant_id" ASC,"inspection_code" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE UNIQUE  INDEX "ux_ops_metric_code" ON "baseline_beijing_gd"."ops_metric_t"("tenant_id" ASC,"metric_code" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE UNIQUE  INDEX "ux_ops_node_cluster_ip" ON "baseline_beijing_gd"."ops_node_t"("tenant_id" ASC,"cluster_id" ASC,"node_ip" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE UNIQUE  INDEX "ux_ops_project_code" ON "baseline_beijing_gd"."ops_project_t"("tenant_id" ASC,"project_code" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE UNIQUE  INDEX "ux_ops_report_code" ON "baseline_beijing_gd"."ops_report_t"("tenant_id" ASC,"report_code" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE UNIQUE  INDEX "ux_ops_resource_code" ON "baseline_beijing_gd"."ops_resource_t"("tenant_id" ASC,"resource_code" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE UNIQUE  INDEX "ux_ops_topology_edge" ON "baseline_beijing_gd"."ops_topology_t"("tenant_id" ASC,"from_ref" ASC,"to_ref" ASC,"relation_type" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
 CREATE OR REPLACE UNIQUE  INDEX "ux_request_t_origin" ON "baseline_beijing_gd"."log_request_t"("tenant_id" ASC,"origin_key" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE UNIQUE  INDEX "ux_srch_analyzer_code" ON "baseline_beijing_gd"."srch_analyzer_t"("tenant_id" ASC,"analyzer_code" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE UNIQUE  INDEX "ux_srch_dict_term" ON "baseline_beijing_gd"."srch_dict_t"("tenant_id" ASC,"dict_type" ASC,"term" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE UNIQUE  INDEX "ux_srch_engine_code" ON "baseline_beijing_gd"."srch_engine_t"("tenant_id" ASC,"engine_code" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE UNIQUE  INDEX "ux_srch_field_name" ON "baseline_beijing_gd"."srch_index_field_t"("tenant_id" ASC,"index_id" ASC,"field_name" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE UNIQUE  INDEX "ux_srch_index_code" ON "baseline_beijing_gd"."srch_index_t"("tenant_id" ASC,"index_code" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE UNIQUE  INDEX "ux_srch_kb_code" ON "baseline_beijing_gd"."srch_kb_t"("tenant_id" ASC,"kb_code" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE UNIQUE  INDEX "ux_srch_redlist_object" ON "baseline_beijing_gd"."srch_redlist_t"("tenant_id" ASC,"service_id" ASC,"object_type" ASC,"object_value" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE UNIQUE  INDEX "ux_srch_service_code" ON "baseline_beijing_gd"."srch_service_t"("tenant_id" ASC,"service_code" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE UNIQUE  INDEX "ux_srch_strategy_code" ON "baseline_beijing_gd"."srch_strategy_t"("tenant_id" ASC,"strategy_code" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE UNIQUE  INDEX "ux_srch_subscription" ON "baseline_beijing_gd"."srch_subscription_t"("tenant_id" ASC,"service_id" ASC,"app_id" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 CREATE OR REPLACE UNIQUE  INDEX "ux_system_t_origin" ON "baseline_beijing_gd"."log_system_t"("tenant_id" ASC,"origin_key" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
@@ -4844,6 +6086,13 @@ COMMENT ON TABLE "baseline_beijing_gd"."app_workshop_big_screen" IS '应用工�
 COMMENT ON TABLE "baseline_beijing_gd"."app_workshop_repository" IS '应用工坊-应用工坊应用';
 COMMENT ON TABLE "baseline_beijing_gd"."app_workshop_repository_self_icon" IS '应用工坊-应用工坊自定义图标';
 COMMENT ON TABLE "baseline_beijing_gd"."app_workshop_repository_tab" IS '应用工坊-应用工坊页面签';
+COMMENT ON TABLE "baseline_beijing_gd"."asset_discovery_t" IS '资产管理-资产发现';
+COMMENT ON TABLE "baseline_beijing_gd"."asset_disposal_t" IS '资产管理-资产处置';
+COMMENT ON TABLE "baseline_beijing_gd"."asset_evaluation_t" IS '资产管理-资产量化评估';
+COMMENT ON TABLE "baseline_beijing_gd"."asset_inventory_t" IS '资产管理-智能盘点';
+COMMENT ON TABLE "baseline_beijing_gd"."asset_operation_t" IS '资产管理-资产运维';
+COMMENT ON TABLE "baseline_beijing_gd"."asset_plan_t" IS '资产管理-资产规划';
+COMMENT ON TABLE "baseline_beijing_gd"."asset_security_t" IS '资产管理-资产安全';
 COMMENT ON TABLE "baseline_beijing_gd"."asset_workbench_issue_t" IS '资产工作台-资产工作台问题';
 COMMENT ON TABLE "baseline_beijing_gd"."asset_workbench_sync_t" IS '资产工作台-资产工作台同步任务';
 COMMENT ON TABLE "baseline_beijing_gd"."da_apply_scope_t" IS '资源申请-申请资源与范围快照；主申请单和流程继续复用';
@@ -4925,6 +6174,17 @@ COMMENT ON TABLE "baseline_beijing_gd"."gateway_user_app_rela" IS '网关管理-
 COMMENT ON TABLE "baseline_beijing_gd"."idaas_receiver_binding_t" IS '统一身份-标准接收端固定绑定及加密服务密钥';
 COMMENT ON TABLE "baseline_beijing_gd"."idaas_receiver_object_t" IS '统一身份-中央来源映射、版本与拥有关系；不复制本地密码';
 COMMENT ON TABLE "baseline_beijing_gd"."idaas_receiver_receipt_t" IS '统一身份-每次接收持久回执与重放约束';
+COMMENT ON TABLE "baseline_beijing_gd"."kb_entity_t" IS '知识服务-图谱实体';
+COMMENT ON TABLE "baseline_beijing_gd"."kb_portrait_t" IS '知识服务-标签画像';
+COMMENT ON TABLE "baseline_beijing_gd"."kb_relation_t" IS '知识服务-图谱关系';
+COMMENT ON TABLE "baseline_beijing_gd"."kb_subscription_t" IS '知识服务-知识订阅';
+COMMENT ON TABLE "baseline_beijing_gd"."kb_tag_attr_t" IS '知识服务-标签属性';
+COMMENT ON TABLE "baseline_beijing_gd"."kb_tag_binding_t" IS '知识服务-标签绑定';
+COMMENT ON TABLE "baseline_beijing_gd"."kb_tag_category_t" IS '知识服务-标签类';
+COMMENT ON TABLE "baseline_beijing_gd"."kb_tag_eval_model_t" IS '知识服务-标签评估模型';
+COMMENT ON TABLE "baseline_beijing_gd"."kb_tag_score_t" IS '知识服务-标签评分与排行';
+COMMENT ON TABLE "baseline_beijing_gd"."kb_tag_value_t" IS '知识服务-标签值';
+COMMENT ON TABLE "baseline_beijing_gd"."kb_thesaurus_t" IS '知识服务-专业词库';
 COMMENT ON TABLE "baseline_beijing_gd"."lake_zone_object_t" IS '数据资源（湖仓底座）-已纳管对象清单';
 COMMENT ON TABLE "baseline_beijing_gd"."lake_zone_rule_t" IS '数据资源（湖仓底座）-入出湖标准与交互规则';
 COMMENT ON TABLE "baseline_beijing_gd"."lake_zone_t" IS '数据资源（湖仓底座）-湖仓分层实例';
@@ -4945,6 +6205,17 @@ COMMENT ON TABLE "baseline_beijing_gd"."nifi_pipeline_migration_mark_t" IS '数�
 COMMENT ON TABLE "baseline_beijing_gd"."nifi_pipeline_t" IS '数据接入-数据集成管道（NiFi）';
 COMMENT ON TABLE "baseline_beijing_gd"."ods_batch_create_item_t" IS '数据接入-批量创建任务逐项结果';
 COMMENT ON TABLE "baseline_beijing_gd"."ods_batch_create_job_t" IS '数据接入-批量创建任务作业';
+COMMENT ON TABLE "baseline_beijing_gd"."ops_alarm_policy_t" IS '运行监控-告警策略';
+COMMENT ON TABLE "baseline_beijing_gd"."ops_app_t" IS '运行监控-应用';
+COMMENT ON TABLE "baseline_beijing_gd"."ops_cluster_t" IS '运行监控-集群';
+COMMENT ON TABLE "baseline_beijing_gd"."ops_inspection_t" IS '运行监控-健康巡检';
+COMMENT ON TABLE "baseline_beijing_gd"."ops_metric_point_t" IS '运行监控-指标时序点（按租户/指标/时间检索，建议按月归档）';
+COMMENT ON TABLE "baseline_beijing_gd"."ops_metric_t" IS '运行监控-指标定义';
+COMMENT ON TABLE "baseline_beijing_gd"."ops_node_t" IS '运行监控-集群节点';
+COMMENT ON TABLE "baseline_beijing_gd"."ops_project_t" IS '运行监控-项目';
+COMMENT ON TABLE "baseline_beijing_gd"."ops_report_t" IS '运行监控-运行报告';
+COMMENT ON TABLE "baseline_beijing_gd"."ops_resource_t" IS '运行监控-监控资源';
+COMMENT ON TABLE "baseline_beijing_gd"."ops_topology_t" IS '运行监控-资源拓扑';
 COMMENT ON TABLE "baseline_beijing_gd"."push_node_t" IS '数据接入-数据推送节点配置';
 COMMENT ON TABLE "baseline_beijing_gd"."res_catalog_publish_request" IS '资源中心-目录发布申请';
 COMMENT ON TABLE "baseline_beijing_gd"."res_logical_model" IS '资源中心-逻辑数据模型';
@@ -4976,6 +6247,18 @@ COMMENT ON TABLE "baseline_beijing_gd"."sec_scan_task" IS '数据安全-敏感�
 COMMENT ON TABLE "baseline_beijing_gd"."sec_watermark_policy" IS '数据安全-数据水印策略';
 COMMENT ON TABLE "baseline_beijing_gd"."sec_watermark_task" IS '数据安全-水印受控申请；不上传或保存文件载荷';
 COMMENT ON TABLE "baseline_beijing_gd"."service_node_t" IS '数据服务-发布节点配置';
+COMMENT ON TABLE "baseline_beijing_gd"."srch_analyzer_t" IS '智能搜索-分析器配置';
+COMMENT ON TABLE "baseline_beijing_gd"."srch_dict_t" IS '智能搜索-业务词典';
+COMMENT ON TABLE "baseline_beijing_gd"."srch_engine_t" IS '智能搜索-搜索引擎实例';
+COMMENT ON TABLE "baseline_beijing_gd"."srch_index_field_t" IS '智能搜索-索引字段映射';
+COMMENT ON TABLE "baseline_beijing_gd"."srch_index_t" IS '智能搜索-搜索索引定义';
+COMMENT ON TABLE "baseline_beijing_gd"."srch_kb_doc_t" IS '智能搜索-知识库文档';
+COMMENT ON TABLE "baseline_beijing_gd"."srch_kb_t" IS '智能搜索-轻量知识库';
+COMMENT ON TABLE "baseline_beijing_gd"."srch_query_log_t" IS '智能搜索-查询日志';
+COMMENT ON TABLE "baseline_beijing_gd"."srch_redlist_t" IS '智能搜索-服务红名单';
+COMMENT ON TABLE "baseline_beijing_gd"."srch_service_t" IS '智能搜索-搜索服务';
+COMMENT ON TABLE "baseline_beijing_gd"."srch_strategy_t" IS '智能搜索-检索策略';
+COMMENT ON TABLE "baseline_beijing_gd"."srch_subscription_t" IS '智能搜索-服务订阅';
 COMMENT ON TABLE "baseline_beijing_gd"."surveillance_control_item_t" IS '布控管理-具体布控数据项';
 COMMENT ON TABLE "baseline_beijing_gd"."surveillance_kafka_connection_t" IS '布控管理-Kafka消息连接';
 COMMENT ON TABLE "baseline_beijing_gd"."surveillance_kafka_topic_t" IS '布控管理-Kafka主题业务定义';
@@ -5009,6 +6292,8 @@ COMMENT ON TABLE "baseline_beijing_gd"."sym_dict_t" IS '系统管理-系统字�
 COMMENT ON TABLE "baseline_beijing_gd"."sym_dict_type_t" IS '系统管理-字典类型';
 COMMENT ON TABLE "baseline_beijing_gd"."sym_form" IS '动态表单-动态表单配置';
 COMMENT ON TABLE "baseline_beijing_gd"."sym_server_t" IS '系统管理-服务器配置';
+COMMENT ON TABLE "baseline_beijing_gd"."sys_timer_log_t" IS '数据服务-定时任务执行日志';
+COMMENT ON TABLE "baseline_beijing_gd"."sys_timer_t" IS '数据服务-定时任务配置';
 COMMENT ON TABLE "baseline_beijing_gd"."wf_approval_action_log_t" IS '流程审批-审批操作审计';
 COMMENT ON TABLE "baseline_beijing_gd"."wf_approval_delegation_t" IS '流程审批-审批委托规则';
 COMMENT ON TABLE "baseline_beijing_gd"."wf_approval_reminder_t" IS '流程审批-审批催办记录';
@@ -5147,6 +6432,149 @@ COMMENT ON COLUMN "baseline_beijing_gd"."app_workshop_repository_tab"."thumbnail
 COMMENT ON COLUMN "baseline_beijing_gd"."app_workshop_repository_tab"."tid" IS '主键标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."app_workshop_repository_tab"."updated_by" IS '更新人标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."app_workshop_repository_tab"."updated_time" IS '更新时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_discovery_t"."catalog_id" IS '关联目录标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_discovery_t"."created_by" IS '创建人';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_discovery_t"."created_time" IS '创建时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_discovery_t"."description" IS '备注';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_discovery_t"."discovered_time" IS '发现时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_discovery_t"."discovery_code" IS '发现记录编码，租户内唯一';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_discovery_t"."discovery_name" IS '发现名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_discovery_t"."discovery_type" IS '发现方式：MANUAL人工、SCAN扫描、API接口、IMPORT导入';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_discovery_t"."handled_by" IS '处理人';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_discovery_t"."handled_time" IS '处理时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_discovery_t"."is_del" IS '删除标志：0正常，1删除';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_discovery_t"."org_id" IS '归属部门';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_discovery_t"."resource_id" IS '发现资源标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_discovery_t"."resource_name" IS '发现资源名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_discovery_t"."resource_type" IS '资源类型：TABLE数据表、API接口、FILE文件、CATALOG目录';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_discovery_t"."revision" IS '版本号';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_discovery_t"."source_id" IS '来源数据源标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_discovery_t"."status" IS '处理状态：PENDING待确认、CONFIRMED已确认、REGISTERED已登记、IGNORED已忽略';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_discovery_t"."tenant_id" IS '租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_discovery_t"."tid" IS '主键标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_discovery_t"."updated_by" IS '更新人';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_discovery_t"."updated_time" IS '更新时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_disposal_t"."apply_user_id" IS '申请人';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_disposal_t"."approval_status" IS '审批状态：DRAFT草稿、PENDING审批中、APPROVED已批准、REJECTED已驳回、EXECUTED已执行';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_disposal_t"."approved_time" IS '审批时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_disposal_t"."approver_id" IS '审批人';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_disposal_t"."asset_id" IS '处置资产标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_disposal_t"."asset_name" IS '处置资产名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_disposal_t"."created_by" IS '创建人';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_disposal_t"."created_time" IS '创建时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_disposal_t"."description" IS '备注';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_disposal_t"."disposal_code" IS '处置单编码，租户内唯一';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_disposal_t"."disposal_type" IS '处置类型：OFFLINE下线、DESTROY销毁、ARCHIVE归档、MIGRATE迁移';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_disposal_t"."executed_time" IS '执行时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_disposal_t"."is_del" IS '删除标志：0正常，1删除';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_disposal_t"."reason" IS '处置原因';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_disposal_t"."revision" IS '版本号';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_disposal_t"."risk_level" IS '风险级别：LOW低、MEDIUM中、HIGH高';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_disposal_t"."tenant_id" IS '租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_disposal_t"."tid" IS '主键标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_disposal_t"."updated_by" IS '更新人';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_disposal_t"."updated_time" IS '更新时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_evaluation_t"."catalog_count" IS '覆盖目录数量';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_evaluation_t"."created_by" IS '创建人';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_evaluation_t"."created_time" IS '创建时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_evaluation_t"."detail_json" IS '指标明细 JSON';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_evaluation_t"."evaluated_time" IS '评估时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_evaluation_t"."evaluation_code" IS '评估编码，租户内唯一';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_evaluation_t"."evaluation_name" IS '评估名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_evaluation_t"."grade" IS '评估等级：A、B、C、D';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_evaluation_t"."is_del" IS '删除标志：0正常，1删除';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_evaluation_t"."org_id" IS '评估部门；为空表示租户整体';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_evaluation_t"."period" IS '评估周期：YYYY-MM';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_evaluation_t"."quality_score" IS '质量得分';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_evaluation_t"."rank_no" IS '部门排名';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_evaluation_t"."revision" IS '版本号';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_evaluation_t"."security_score" IS '安全得分';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_evaluation_t"."sharing_score" IS '共享得分';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_evaluation_t"."tenant_id" IS '租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_evaluation_t"."tid" IS '主键标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_evaluation_t"."total_score" IS '综合得分';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_evaluation_t"."updated_by" IS '更新人';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_evaluation_t"."updated_time" IS '更新时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_evaluation_t"."usage_score" IS '使用得分';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_inventory_t"."created_by" IS '创建人';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_inventory_t"."created_time" IS '创建时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_inventory_t"."finished_time" IS '完成时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_inventory_t"."inventory_code" IS '盘点任务编码，租户内唯一';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_inventory_t"."inventory_name" IS '盘点任务名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_inventory_t"."is_del" IS '删除标志：0正常，1删除';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_inventory_t"."matched_count" IS '一致数量';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_inventory_t"."mismatch_count" IS '不一致数量';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_inventory_t"."missing_count" IS '缺失挂接数量';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_inventory_t"."planned_time" IS '计划执行时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_inventory_t"."result_json" IS '盘点差异明细 JSON';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_inventory_t"."result_summary" IS '盘点结果摘要';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_inventory_t"."revision" IS '版本号';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_inventory_t"."scope_json" IS '盘点范围快照 JSON';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_inventory_t"."scope_type" IS '盘点范围：TENANT租户、ORG部门、CATALOG指定目录';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_inventory_t"."started_time" IS '开始时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_inventory_t"."status" IS '状态：DRAFT草稿、RUNNING执行中、COMPLETED已完成、FAILED失败';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_inventory_t"."tenant_id" IS '租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_inventory_t"."tid" IS '主键标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_inventory_t"."total_count" IS '盘点对象总数';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_inventory_t"."updated_by" IS '更新人';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_inventory_t"."updated_time" IS '更新时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_operation_t"."catalog_id" IS '关联目录标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_operation_t"."created_by" IS '创建人';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_operation_t"."created_time" IS '创建时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_operation_t"."description" IS '备注';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_operation_t"."health_status" IS '健康状态：NORMAL正常、WARNING警告、ERROR异常';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_operation_t"."is_del" IS '删除标志：0正常，1删除';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_operation_t"."issue_count" IS '问题数量';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_operation_t"."last_check_time" IS '最近巡检时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_operation_t"."last_issue" IS '最近问题描述';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_operation_t"."operation_name" IS '运维事项名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_operation_t"."operation_type" IS '运维类型：HEALTH_CHECK健康巡检、ISSUE问题处置、MAINTENANCE维护、ALERT告警';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_operation_t"."owner_id" IS '运维责任人';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_operation_t"."revision" IS '版本号';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_operation_t"."tenant_id" IS '租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_operation_t"."tid" IS '主键标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_operation_t"."updated_by" IS '更新人';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_operation_t"."updated_time" IS '更新时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_plan_t"."created_by" IS '创建人';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_plan_t"."created_time" IS '创建时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_plan_t"."description" IS '备注';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_plan_t"."end_date" IS '计划结束时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_plan_t"."goal_desc" IS '规划目标说明';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_plan_t"."is_del" IS '删除标志：0正常，1删除';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_plan_t"."org_id" IS '责任部门';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_plan_t"."owner_id" IS '责任人';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_plan_t"."plan_code" IS '规划编码，租户内唯一';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_plan_t"."plan_name" IS '规划名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_plan_t"."plan_type" IS '规划类型：GOVERNANCE治理、INVENTORY盘点、EVALUATION评估、SHARING共享、SECURITY安全';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_plan_t"."plan_year" IS '规划年度';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_plan_t"."progress" IS '执行进度百分比';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_plan_t"."revision" IS '版本号';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_plan_t"."scope_json" IS '规划范围快照 JSON';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_plan_t"."start_date" IS '计划开始时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_plan_t"."status" IS '状态：DRAFT草稿、APPROVED已批准、EXECUTING执行中、COMPLETED已完成、CANCELLED已取消';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_plan_t"."tenant_id" IS '租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_plan_t"."tid" IS '主键标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_plan_t"."updated_by" IS '更新人';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_plan_t"."updated_time" IS '更新时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_security_t"."authorization_required" IS '是否要求访问授权：0否，1是';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_security_t"."catalog_id" IS '关联目录标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_security_t"."classification_id" IS '分类分级标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_security_t"."classification_name" IS '分类分级名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_security_t"."created_by" IS '创建人';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_security_t"."created_time" IS '创建时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_security_t"."description" IS '备注';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_security_t"."finding_count" IS '安全问题数量';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_security_t"."is_del" IS '删除标志：0正常，1删除';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_security_t"."last_scan_time" IS '最近安全检查时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_security_t"."masking_required" IS '是否要求脱敏：0否，1是';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_security_t"."owner_id" IS '安全责任人';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_security_t"."policy_status" IS '策略状态：NONE未配置、CONFIGURED已配置、REVIEW待复核';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_security_t"."revision" IS '版本号';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_security_t"."security_level" IS '安全级别：L1至L5';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_security_t"."tenant_id" IS '租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_security_t"."tid" IS '主键标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_security_t"."updated_by" IS '更新人';
+COMMENT ON COLUMN "baseline_beijing_gd"."asset_security_t"."updated_time" IS '更新时间';
 COMMENT ON COLUMN "baseline_beijing_gd"."asset_workbench_issue_t"."asset_id" IS '资产标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."asset_workbench_issue_t"."asset_type" IS '资产类型';
 COMMENT ON COLUMN "baseline_beijing_gd"."asset_workbench_issue_t"."assignee_org_id" IS '受理人组织标识';
@@ -6534,13 +7962,22 @@ COMMENT ON COLUMN "baseline_beijing_gd"."flow_user"."type" IS '类型';
 COMMENT ON COLUMN "baseline_beijing_gd"."flow_user"."update_by" IS '更新人员';
 COMMENT ON COLUMN "baseline_beijing_gd"."flow_user"."update_time" IS '更新时间';
 COMMENT ON COLUMN "baseline_beijing_gd"."fs_alert_event"."actual_value" IS '实际值';
+COMMENT ON COLUMN "baseline_beijing_gd"."fs_alert_event"."close_note" IS '关闭说明';
+COMMENT ON COLUMN "baseline_beijing_gd"."fs_alert_event"."closed_by" IS '关闭人';
+COMMENT ON COLUMN "baseline_beijing_gd"."fs_alert_event"."closed_time" IS '关闭时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."fs_alert_event"."group_key" IS '告警分组键';
 COMMENT ON COLUMN "baseline_beijing_gd"."fs_alert_event"."id" IS '主键标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."fs_alert_event"."message" IS '消息';
 COMMENT ON COLUMN "baseline_beijing_gd"."fs_alert_event"."metric" IS '指标';
 COMMENT ON COLUMN "baseline_beijing_gd"."fs_alert_event"."notify_target" IS '通知目标';
+COMMENT ON COLUMN "baseline_beijing_gd"."fs_alert_event"."policy_id" IS '命中告警策略标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."fs_alert_event"."process_note" IS '处理说明';
+COMMENT ON COLUMN "baseline_beijing_gd"."fs_alert_event"."processed_by" IS '处理人';
+COMMENT ON COLUMN "baseline_beijing_gd"."fs_alert_event"."processed_time" IS '处理时间';
 COMMENT ON COLUMN "baseline_beijing_gd"."fs_alert_event"."rule_id" IS '规则标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."fs_alert_event"."rule_name" IS '规则名称';
 COMMENT ON COLUMN "baseline_beijing_gd"."fs_alert_event"."status" IS '状态';
+COMMENT ON COLUMN "baseline_beijing_gd"."fs_alert_event"."suppressed_count" IS '窗口内去重/抑制合并次数';
 COMMENT ON COLUMN "baseline_beijing_gd"."fs_alert_event"."tenant_id" IS '租户标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."fs_alert_event"."threshold_value" IS '阈值值';
 COMMENT ON COLUMN "baseline_beijing_gd"."fs_alert_event"."triggered_at" IS '已触发时间';
@@ -6658,6 +8095,182 @@ COMMENT ON COLUMN "baseline_beijing_gd"."idaas_receiver_receipt_t"."payload_hash
 COMMENT ON COLUMN "baseline_beijing_gd"."idaas_receiver_receipt_t"."result_json" IS '结果JSON数据';
 COMMENT ON COLUMN "baseline_beijing_gd"."idaas_receiver_receipt_t"."source_id" IS '来源标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."idaas_receiver_receipt_t"."source_version" IS '来源版本';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_entity_t"."audit_remark" IS '审核意见';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_entity_t"."audit_status" IS '审核状态：PENDING待审核、APPROVED通过、REJECTED驳回';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_entity_t"."created_by" IS '创建人';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_entity_t"."created_time" IS '创建时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_entity_t"."description" IS '实体说明';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_entity_t"."entity_code" IS '实体编码，租户内唯一';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_entity_t"."entity_type" IS '实体类型：DATASET数据集、TABLE数据表、API接口、SERVICE服务、APP应用、DEPT部门、PERSON人员、DOC文档';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_entity_t"."is_del" IS '删除标志：0正常，1删除';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_entity_t"."name" IS '实体名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_entity_t"."props_json" IS '实体属性 JSON';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_entity_t"."revision" IS '版本号';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_entity_t"."source_ref" IS '来源引用标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_entity_t"."source_type" IS '来源类型：REGISTER登记、IMPORT导入、GENERATE生成';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_entity_t"."status" IS '状态：ACTIVE有效、INACTIVE失效';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_entity_t"."tenant_id" IS '租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_entity_t"."tid" IS '主键标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_entity_t"."updated_by" IS '更新人';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_entity_t"."updated_time" IS '更新时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_portrait_t"."created_by" IS '创建人';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_portrait_t"."created_time" IS '创建时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_portrait_t"."generated_time" IS '生成时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_portrait_t"."is_current" IS '是否当前版本：0否，1是';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_portrait_t"."is_del" IS '删除标志：0正常，1删除';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_portrait_t"."object_id" IS '画像对象标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_portrait_t"."object_name" IS '画像对象名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_portrait_t"."object_type" IS '画像对象类型：DATASET、TABLE、API、SERVICE、APP、DOC';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_portrait_t"."portrait_json" IS '画像内容 JSON：标签、评分、关系摘要';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_portrait_t"."revision" IS '版本号';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_portrait_t"."summary" IS '画像摘要';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_portrait_t"."tenant_id" IS '租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_portrait_t"."tid" IS '主键标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_portrait_t"."updated_by" IS '更新人';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_portrait_t"."updated_time" IS '更新时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_portrait_t"."version" IS '画像版本号';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_relation_t"."created_by" IS '创建人';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_relation_t"."created_time" IS '创建时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_relation_t"."description" IS '关系说明';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_relation_t"."from_entity_id" IS '起点实体标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_relation_t"."is_del" IS '删除标志：0正常，1删除';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_relation_t"."props_json" IS '关系属性 JSON';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_relation_t"."relation_type" IS '关系类型：DEPEND依赖、BELONG归属、FLOW流向、SIMILAR相似、CONTAIN包含';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_relation_t"."revision" IS '版本号';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_relation_t"."status" IS '状态：ACTIVE有效、INACTIVE失效';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_relation_t"."tenant_id" IS '租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_relation_t"."tid" IS '主键标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_relation_t"."to_entity_id" IS '终点实体标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_relation_t"."updated_by" IS '更新人';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_relation_t"."updated_time" IS '更新时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_relation_t"."weight" IS '关系权重';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_subscription_t"."app_id" IS '订阅应用标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_subscription_t"."app_name" IS '订阅应用名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_subscription_t"."created_by" IS '创建人';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_subscription_t"."created_time" IS '创建时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_subscription_t"."description" IS '订阅说明';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_subscription_t"."is_del" IS '删除标志：0正常，1删除';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_subscription_t"."last_push_time" IS '最近推送时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_subscription_t"."notify_channel" IS '通知渠道：INNER站内、EMAIL邮件、WEBHOOK回调、SMS短信';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_subscription_t"."notify_json" IS '通知配置 JSON';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_subscription_t"."push_fail_count" IS '连续推送失败次数';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_subscription_t"."revision" IS '版本号';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_subscription_t"."status" IS '状态：ACTIVE订阅中、PAUSED暂停、STOPPED已停止';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_subscription_t"."subscribe_type" IS '订阅类型：SEARCH搜索、PORTRAIT画像、GRAPH图谱';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_subscription_t"."target_ref" IS '订阅目标引用：搜索词、对象标识或实体编码';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_subscription_t"."tenant_id" IS '租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_subscription_t"."tid" IS '主键标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_subscription_t"."updated_by" IS '更新人';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_subscription_t"."updated_time" IS '更新时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_attr_t"."attr_code" IS '属性编码，标签类内唯一';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_attr_t"."attr_name" IS '属性名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_attr_t"."category_id" IS '所属标签类标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_attr_t"."created_by" IS '创建人';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_attr_t"."created_time" IS '创建时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_attr_t"."data_type" IS '数据类型：STRING文本、NUMBER数值、DATE日期、BOOLEAN布尔、ENUM枚举';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_attr_t"."description" IS '属性说明';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_attr_t"."is_del" IS '删除标志：0正常，1删除';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_attr_t"."multi_flag" IS '是否多值：0单值，1多值';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_attr_t"."required_flag" IS '是否必填：0否，1是';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_attr_t"."revision" IS '版本号';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_attr_t"."sort_no" IS '排序号';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_attr_t"."status" IS '状态：ACTIVE启用、INACTIVE停用';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_attr_t"."tenant_id" IS '租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_attr_t"."tid" IS '主键标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_attr_t"."updated_by" IS '更新人';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_attr_t"."updated_time" IS '更新时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_binding_t"."audit_remark" IS '审核意见';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_binding_t"."audit_status" IS '审核状态：PENDING待审核、APPROVED通过、REJECTED驳回';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_binding_t"."bound_time" IS '绑定时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_binding_t"."confidence" IS '置信度，0~1';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_binding_t"."created_by" IS '创建人';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_binding_t"."created_time" IS '创建时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_binding_t"."is_del" IS '删除标志：0正常，1删除';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_binding_t"."object_id" IS '绑定对象标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_binding_t"."object_name" IS '绑定对象名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_binding_t"."object_type" IS '绑定对象类型：DATASET数据集、TABLE数据表、API接口、SERVICE服务、APP应用、DOC文档';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_binding_t"."revision" IS '版本号';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_binding_t"."source" IS '来源：MANUAL人工、RULE规则、IMPORT导入';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_binding_t"."tag_value_id" IS '标签值标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_binding_t"."tenant_id" IS '租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_binding_t"."tid" IS '主键标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_binding_t"."updated_by" IS '更新人';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_binding_t"."updated_time" IS '更新时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_category_t"."category_code" IS '标签类编码，租户内唯一';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_category_t"."category_name" IS '标签类名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_category_t"."category_path" IS '层级路径，如 /行业/广电/内容';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_category_t"."created_by" IS '创建人';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_category_t"."created_time" IS '创建时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_category_t"."description" IS '标签类说明';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_category_t"."is_del" IS '删除标志：0正常，1删除';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_category_t"."level_no" IS '层级序号，根为 1';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_category_t"."parent_id" IS '上级标签类标识，根节点为空';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_category_t"."revision" IS '版本号';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_category_t"."sort_no" IS '同级排序号';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_category_t"."status" IS '状态：ACTIVE启用、INACTIVE停用';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_category_t"."tenant_id" IS '租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_category_t"."tid" IS '主键标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_category_t"."updated_by" IS '更新人';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_category_t"."updated_time" IS '更新时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_eval_model_t"."calc_desc" IS '计算口径说明';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_eval_model_t"."created_by" IS '创建人';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_eval_model_t"."created_time" IS '创建时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_eval_model_t"."description" IS '模型说明';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_eval_model_t"."is_del" IS '删除标志：0正常，1删除';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_eval_model_t"."model_code" IS '模型编码，租户内唯一';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_eval_model_t"."model_name" IS '模型名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_eval_model_t"."revision" IS '版本号';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_eval_model_t"."status" IS '状态：ACTIVE启用、INACTIVE停用';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_eval_model_t"."tenant_id" IS '租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_eval_model_t"."threshold" IS '生效阈值，0~1';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_eval_model_t"."tid" IS '主键标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_eval_model_t"."updated_by" IS '更新人';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_eval_model_t"."updated_time" IS '更新时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_eval_model_t"."weights_json" IS '权重配置 JSON：属性编码与权重';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_score_t"."created_by" IS '创建人';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_score_t"."created_time" IS '创建时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_score_t"."detail_json" IS '评分明细 JSON：各属性得分与权重';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_score_t"."eval_date" IS '评估日期';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_score_t"."is_del" IS '删除标志：0正常，1删除';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_score_t"."model_id" IS '评估模型标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_score_t"."object_id" IS '评分对象标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_score_t"."object_name" IS '评分对象名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_score_t"."object_type" IS '评分对象类型：DATASET、TABLE、API、SERVICE、APP、DOC';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_score_t"."rank_no" IS '排行序号';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_score_t"."revision" IS '版本号';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_score_t"."score" IS '评分，0~1';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_score_t"."tag_value_id" IS '标签值标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_score_t"."tenant_id" IS '租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_score_t"."tid" IS '主键标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_score_t"."updated_by" IS '更新人';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_score_t"."updated_time" IS '更新时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_value_t"."attr_id" IS '所属标签属性标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_value_t"."created_by" IS '创建人';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_value_t"."created_time" IS '创建时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_value_t"."description" IS '标签值说明';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_value_t"."is_del" IS '删除标志：0正常，1删除';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_value_t"."revision" IS '版本号';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_value_t"."status" IS '状态：ACTIVE启用、INACTIVE停用';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_value_t"."tenant_id" IS '租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_value_t"."tid" IS '主键标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_value_t"."updated_by" IS '更新人';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_value_t"."updated_time" IS '更新时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_value_t"."value_code" IS '标签值编码，属性内唯一';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_value_t"."value_name" IS '标签值名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_tag_value_t"."value_order" IS '展示顺序';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_thesaurus_t"."created_by" IS '创建人';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_thesaurus_t"."created_time" IS '创建时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_thesaurus_t"."description" IS '词条说明';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_thesaurus_t"."domain_code" IS '所属领域：COMMON通用、BROADCASTING广电、DATA_GOVERNANCE数据治理等';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_thesaurus_t"."is_del" IS '删除标志：0正常，1删除';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_thesaurus_t"."revision" IS '版本号';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_thesaurus_t"."status" IS '状态：ACTIVE启用、INACTIVE停用';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_thesaurus_t"."synonyms" IS '同义词 JSON 数组';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_thesaurus_t"."tenant_id" IS '租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_thesaurus_t"."tid" IS '主键标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_thesaurus_t"."updated_by" IS '更新人';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_thesaurus_t"."updated_time" IS '更新时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."kb_thesaurus_t"."word" IS '标准词';
 COMMENT ON COLUMN "baseline_beijing_gd"."lake_zone_object_t"."created_time" IS '创建时间';
 COMMENT ON COLUMN "baseline_beijing_gd"."lake_zone_object_t"."is_del" IS '删除标志：0正常，1删除';
 COMMENT ON COLUMN "baseline_beijing_gd"."lake_zone_object_t"."last_sync_at" IS '最近同步时间';
@@ -6860,6 +8473,9 @@ COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."org_id" IS '组织标�
 COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."org_name" IS '组织名称';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."origin_key" IS '原始事件幂等标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."page_route" IS '已核验的页面路由，不含查询参数';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."parameter_capture_status" IS '日志管理-参数采集状态：EMPTY/CAPTURED/PARTIAL/OMITTED/FAILED/LEGACY；NULL表示历史未采集';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."parameter_search_text" IS '日志管理-由同一安全参数快照生成的参数检索投影';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."parameter_snapshot" IS '日志管理-安全参数快照，仅保存脱敏限长后的内容';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."reason_code" IS '脱敏原因编码';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."received_time" IS '事件接收时间，UTC';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."req_header" IS '请求请求头';
@@ -6929,6 +8545,9 @@ COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."origin_key" IS '原始�
 COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."origin_record_id" IS '原领域记录标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."origin_record_type" IS '原领域记录类型';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."page_route" IS '已核验的页面路由，不含查询参数';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."parameter_capture_status" IS '日志管理-参数采集状态：EMPTY/CAPTURED/PARTIAL/OMITTED/FAILED/LEGACY；NULL表示历史未采集';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."parameter_search_text" IS '日志管理-由同一安全参数快照生成的参数检索投影';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."parameter_snapshot" IS '日志管理-安全参数快照，仅保存脱敏限长后的内容';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."post_params" IS '提交参数';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."project_code" IS '项目编码';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."reason_code" IS '脱敏原因编码';
@@ -7148,6 +8767,224 @@ COMMENT ON COLUMN "baseline_beijing_gd"."ods_batch_create_job_t"."target_db_id" 
 COMMENT ON COLUMN "baseline_beijing_gd"."ods_batch_create_job_t"."tenant_id" IS '当前登录租户标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."ods_batch_create_job_t"."total_count" IS '创建项总数';
 COMMENT ON COLUMN "baseline_beijing_gd"."ods_batch_create_job_t"."updated_time" IS '作业最近更新时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_alarm_policy_t"."created_by" IS '创建人';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_alarm_policy_t"."created_time" IS '创建时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_alarm_policy_t"."dedup_window_seconds" IS '去重窗口秒';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_alarm_policy_t"."description" IS '策略说明';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_alarm_policy_t"."dispatch_json" IS '分派 JSON：责任人、团队、轮值';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_alarm_policy_t"."enabled" IS '启用标志：1启用，0停用';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_alarm_policy_t"."group_by" IS '告警分组标签';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_alarm_policy_t"."is_del" IS '删除标志：0正常，1删除';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_alarm_policy_t"."metric_id" IS '指标标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_alarm_policy_t"."notify_channels" IS '通知渠道：WEBHOOK、EMAIL、SMS、INBOX';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_alarm_policy_t"."notify_template" IS '通知模板';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_alarm_policy_t"."policy_code" IS '策略编码，租户内唯一';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_alarm_policy_t"."policy_name" IS '策略名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_alarm_policy_t"."priority" IS '优先级：P0、P1、P2';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_alarm_policy_t"."resource_type" IS '适用资源类型';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_alarm_policy_t"."revision" IS '版本号';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_alarm_policy_t"."scope_json" IS '作用范围 JSON：项目/应用/资源';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_alarm_policy_t"."silence_end" IS '静默结束时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_alarm_policy_t"."silence_start" IS '静默开始时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_alarm_policy_t"."silence_window" IS '静默时段，如 22:00-06:00';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_alarm_policy_t"."suppress_json" IS '依赖抑制 JSON';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_alarm_policy_t"."tenant_id" IS '租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_alarm_policy_t"."threshold_json" IS '阈值 JSON：比较符、警告值、严重值、持续时长';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_alarm_policy_t"."tid" IS '主键标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_alarm_policy_t"."updated_by" IS '更新人';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_alarm_policy_t"."updated_time" IS '更新时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_app_t"."app_code" IS '应用编码，租户内唯一';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_app_t"."app_name" IS '应用名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_app_t"."app_type" IS '应用类型：WEB页面、API接口、BATCH批处理、INTEGRATION数据集成';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_app_t"."cluster_count" IS '集群数量';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_app_t"."created_by" IS '创建人';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_app_t"."created_time" IS '创建时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_app_t"."description" IS '应用说明';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_app_t"."env" IS '运行环境：DEV开发、TEST测试、PROD生产';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_app_t"."health_status" IS '健康状态：HEALTHY健康、WARNING预警、FAULT故障、UNKNOWN未知';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_app_t"."host_count" IS '主机数量';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_app_t"."is_del" IS '删除标志：0正常，1删除';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_app_t"."last_check_time" IS '最近巡检时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_app_t"."owner_id" IS '责任人';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_app_t"."project_id" IS '所属项目标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_app_t"."revision" IS '版本号';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_app_t"."service_count" IS '服务数量';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_app_t"."sla_json" IS 'SLA 配置 JSON';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_app_t"."stability_rate" IS '7×24 稳定性百分比';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_app_t"."status" IS '状态：ACTIVE启用、INACTIVE停用、ARCHIVED归档';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_app_t"."tenant_id" IS '租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_app_t"."tid" IS '主键标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_app_t"."updated_by" IS '更新人';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_app_t"."updated_time" IS '更新时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_cluster_t"."app_id" IS '所属应用标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_cluster_t"."cluster_code" IS '集群编码，租户内唯一';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_cluster_t"."cluster_name" IS '集群名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_cluster_t"."cluster_type" IS '集群类型：SPARK、FLINK、KAFKA、ES、NIFI、DB、REDIS、OTHER';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_cluster_t"."control_type" IS '控制方式：MANUAL人工、SSH、API、K8S';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_cluster_t"."created_by" IS '创建人';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_cluster_t"."created_time" IS '创建时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_cluster_t"."description" IS '集群说明';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_cluster_t"."endpoint" IS '访问端点';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_cluster_t"."is_del" IS '删除标志：0正常，1删除';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_cluster_t"."last_heartbeat" IS '最近心跳时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_cluster_t"."last_start_time" IS '最近启动时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_cluster_t"."last_stop_time" IS '最近停止时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_cluster_t"."node_count" IS '节点数量';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_cluster_t"."revision" IS '版本号';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_cluster_t"."status" IS '状态：RUNNING运行、STOPPED停止、DEGRADED降级、FAULT故障、UNKNOWN未知';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_cluster_t"."tenant_id" IS '租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_cluster_t"."tid" IS '主键标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_cluster_t"."updated_by" IS '更新人';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_cluster_t"."updated_time" IS '更新时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_cluster_t"."version" IS '版本号';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_inspection_t"."created_by" IS '创建人';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_inspection_t"."created_time" IS '创建时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_inspection_t"."description" IS '巡检说明';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_inspection_t"."fail_count" IS '失败数';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_inspection_t"."finished_at" IS '完成时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_inspection_t"."inspection_code" IS '巡检编码，租户内唯一';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_inspection_t"."inspection_name" IS '巡检名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_inspection_t"."inspection_type" IS '巡检类型：MANUAL人工、SCHEDULED定时、TRIGGERED触发';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_inspection_t"."is_del" IS '删除标志：0正常，1删除';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_inspection_t"."operator_id" IS '执行人';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_inspection_t"."pass_count" IS '通过数';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_inspection_t"."result_json" IS '巡检结果 JSON';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_inspection_t"."revision" IS '版本号';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_inspection_t"."scope_json" IS '巡检范围 JSON';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_inspection_t"."started_at" IS '开始时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_inspection_t"."status" IS '状态：PENDING待执行、RUNNING执行中、SUCCESS成功、WARNING有告警、FAILED失败';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_inspection_t"."tenant_id" IS '租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_inspection_t"."tid" IS '主键标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_inspection_t"."total_count" IS '检查项总数';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_inspection_t"."updated_by" IS '更新人';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_inspection_t"."updated_time" IS '更新时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_inspection_t"."warning_count" IS '告警数';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_metric_point_t"."labels_json" IS '标签快照 JSON';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_metric_point_t"."metric_id" IS '指标标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_metric_point_t"."resource_ref" IS '资源标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_metric_point_t"."tenant_id" IS '租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_metric_point_t"."tid" IS '主键标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_metric_point_t"."ts" IS '指标时间点';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_metric_point_t"."value" IS '指标值';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_metric_t"."collect_interval_seconds" IS '采集间隔秒';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_metric_t"."created_by" IS '创建人';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_metric_t"."created_time" IS '创建时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_metric_t"."description" IS '指标说明';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_metric_t"."enabled" IS '启用标志：1启用，0停用';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_metric_t"."is_del" IS '删除标志：0正常，1删除';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_metric_t"."labels_json" IS '指标标签 JSON';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_metric_t"."metric_code" IS '指标编码，租户内唯一';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_metric_t"."metric_name" IS '指标名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_metric_t"."metric_type" IS '指标类型：GAUGE瞬时值、COUNTER累计值、HISTOGRAM直方图';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_metric_t"."resource_type" IS '适用资源类型';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_metric_t"."revision" IS '版本号';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_metric_t"."source" IS '指标来源：PROMETHEUS、AGENT、API、SQL、MANUAL';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_metric_t"."tenant_id" IS '租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_metric_t"."threshold_json" IS '默认阈值 JSON';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_metric_t"."tid" IS '主键标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_metric_t"."unit" IS '单位';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_metric_t"."updated_by" IS '更新人';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_metric_t"."updated_time" IS '更新时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_node_t"."cluster_id" IS '所属集群标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_node_t"."cpu_usage" IS 'CPU 使用率百分比';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_node_t"."created_by" IS '创建人';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_node_t"."created_time" IS '创建时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_node_t"."description" IS '节点说明';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_node_t"."disk_usage" IS '磁盘使用率百分比';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_node_t"."is_del" IS '删除标志：0正常，1删除';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_node_t"."last_heartbeat" IS '最近心跳时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_node_t"."memory_usage" IS '内存使用率百分比';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_node_t"."node_ip" IS '节点 IP';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_node_t"."node_name" IS '节点名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_node_t"."revision" IS '版本号';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_node_t"."role" IS '节点角色：MASTER、WORKER、COORDINATOR、BROKER、OTHER';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_node_t"."status" IS '状态：ONLINE在线、OFFLINE离线、FAULT故障、UNKNOWN未知';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_node_t"."tenant_id" IS '租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_node_t"."tid" IS '主键标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_node_t"."updated_by" IS '更新人';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_node_t"."updated_time" IS '更新时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_project_t"."app_count" IS '应用数量';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_project_t"."created_by" IS '创建人';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_project_t"."created_time" IS '创建时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_project_t"."description" IS '项目说明';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_project_t"."health_status" IS '健康状态：HEALTHY健康、WARNING预警、FAULT故障、UNKNOWN未知';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_project_t"."is_del" IS '删除标志：0正常，1删除';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_project_t"."last_check_time" IS '最近巡检时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_project_t"."org_id" IS '归属部门';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_project_t"."owner_id" IS '责任人';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_project_t"."project_code" IS '项目编码，租户内唯一';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_project_t"."project_name" IS '项目名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_project_t"."resource_count" IS '资源数量';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_project_t"."revision" IS '版本号';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_project_t"."sla_json" IS 'SLA 配置 JSON：可用性目标、响应时间、稳定性口径';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_project_t"."stability_rate" IS '7×24 稳定性百分比';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_project_t"."status" IS '状态：ACTIVE启用、INACTIVE停用、ARCHIVED归档';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_project_t"."tenant_id" IS '租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_project_t"."tid" IS '主键标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_project_t"."updated_by" IS '更新人';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_project_t"."updated_time" IS '更新时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_report_t"."content_json" IS '报告内容 JSON';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_report_t"."created_by" IS '创建人';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_report_t"."created_time" IS '创建时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_report_t"."generated_at" IS '生成时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_report_t"."generated_by" IS '生成人';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_report_t"."is_del" IS '删除标志：0正常，1删除';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_report_t"."period_end" IS '统计结束时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_report_t"."period_start" IS '统计开始时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_report_t"."report_code" IS '报告编码，租户内唯一';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_report_t"."report_name" IS '报告名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_report_t"."report_type" IS '报告类型：DAILY日报、WEEKLY周报、MONTHLY月报、CLUSTER_7D集群7天报告、ALARM告警报告、INSPECTION巡检报告';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_report_t"."revision" IS '版本号';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_report_t"."scope_ref" IS '范围标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_report_t"."scope_type" IS '范围类型：PROJECT、APP、CLUSTER、RESOURCE';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_report_t"."status" IS '状态：GENERATED已生成、ARCHIVED已归档、FAILED生成失败';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_report_t"."summary" IS '报告摘要';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_report_t"."tenant_id" IS '租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_report_t"."tid" IS '主键标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_report_t"."updated_by" IS '更新人';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_report_t"."updated_time" IS '更新时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_resource_t"."app_id" IS '所属应用标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_resource_t"."cluster_id" IS '所属集群标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_resource_t"."collect_type" IS '采集方式：PULL拉取、PUSH推送、AGENT代理、NONE不采集';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_resource_t"."created_by" IS '创建人';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_resource_t"."created_time" IS '创建时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_resource_t"."description" IS '资源说明';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_resource_t"."endpoint" IS '访问端点';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_resource_t"."env" IS '运行环境';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_resource_t"."health_status" IS '健康状态：HEALTHY健康、WARNING预警、FAULT故障、UNKNOWN未知';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_resource_t"."is_del" IS '删除标志：0正常，1删除';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_resource_t"."labels_json" IS '资源标签 JSON';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_resource_t"."last_heartbeat" IS '最近心跳时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_resource_t"."managed_status" IS '托管状态：MANAGED已托管、UNMANAGED未托管';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_resource_t"."node_id" IS '所属节点标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_resource_t"."register_status" IS '注册状态：REGISTERED已注册、UNREGISTERED未注册';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_resource_t"."resource_code" IS '资源编码，租户内唯一';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_resource_t"."resource_name" IS '资源名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_resource_t"."resource_ref" IS '关联业务资源标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_resource_t"."resource_type" IS '资源类型：HOST主机、ENV环境、SERVICE服务、INSTANCE实例、CONTAINER容器、DB数据库、MIDDLEWARE中间件';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_resource_t"."revision" IS '版本号';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_resource_t"."status" IS '运行状态：ONLINE在线、OFFLINE离线、FAULT故障、UNKNOWN未知';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_resource_t"."tenant_id" IS '租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_resource_t"."tid" IS '主键标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_resource_t"."updated_by" IS '更新人';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_resource_t"."updated_time" IS '更新时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_topology_t"."created_by" IS '创建人';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_topology_t"."created_time" IS '创建时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_topology_t"."description" IS '拓扑说明';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_topology_t"."from_ref" IS '上游资源标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_topology_t"."from_type" IS '上游资源类型';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_topology_t"."is_del" IS '删除标志：0正常，1删除';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_topology_t"."meta_json" IS '拓扑元数据 JSON';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_topology_t"."relation_type" IS '关系类型：DEPENDS依赖、CALLS调用、DEPLOYS部署、CONTAINS包含、FLOW数据流';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_topology_t"."revision" IS '版本号';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_topology_t"."status" IS '状态：ACTIVE有效、INACTIVE失效';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_topology_t"."tenant_id" IS '租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_topology_t"."tid" IS '主键标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_topology_t"."to_ref" IS '下游资源标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_topology_t"."to_type" IS '下游资源类型';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_topology_t"."topology_code" IS '拓扑编码';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_topology_t"."updated_by" IS '更新人';
+COMMENT ON COLUMN "baseline_beijing_gd"."ops_topology_t"."updated_time" IS '更新时间';
 COMMENT ON COLUMN "baseline_beijing_gd"."push_node_t"."base_url" IS 'haitong-data-pull服务根地址，不含凭据';
 COMMENT ON COLUMN "baseline_beijing_gd"."push_node_t"."created_time" IS '节点创建时间';
 COMMENT ON COLUMN "baseline_beijing_gd"."push_node_t"."enabled" IS '是否启用：0停用、1启用';
@@ -7635,6 +9472,231 @@ COMMENT ON COLUMN "baseline_beijing_gd"."service_node_t"."service_type" IS '服�
 COMMENT ON COLUMN "baseline_beijing_gd"."service_node_t"."tenant_id" IS '租户标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."service_node_t"."tid" IS '主键标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."service_node_t"."updated_time" IS '更新时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_analyzer_t"."analyzer_code" IS '分析器编码，租户内唯一';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_analyzer_t"."analyzer_name" IS '分析器名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_analyzer_t"."analyzer_type" IS '分析器类型：IK_MAX_WORD、IK_SMART、STANDARD';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_analyzer_t"."config_json" IS '扩展参数 JSON';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_analyzer_t"."created_by" IS '创建人';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_analyzer_t"."created_time" IS '创建时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_analyzer_t"."description" IS '分析器说明';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_analyzer_t"."is_del" IS '删除标志：0正常，1删除';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_analyzer_t"."revision" IS '版本号';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_analyzer_t"."status" IS '状态：ACTIVE启用、INACTIVE停用';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_analyzer_t"."stopword_json" IS '停用词 JSON 数组';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_analyzer_t"."synonym_json" IS '同义词规则 JSON 数组';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_analyzer_t"."tenant_id" IS '租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_analyzer_t"."tid" IS '主键标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_analyzer_t"."tokenizer" IS '分词器名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_analyzer_t"."updated_by" IS '更新人';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_analyzer_t"."updated_time" IS '更新时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_dict_t"."created_by" IS '创建人';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_dict_t"."created_time" IS '创建时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_dict_t"."description" IS '词条说明';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_dict_t"."dict_type" IS '词典类型：SYNONYM同义词、STOPWORD停用词、CORRECTION纠错、BUSINESS业务词';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_dict_t"."expansions" IS '扩展词 JSON 数组或逗号分隔文本';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_dict_t"."is_del" IS '删除标志：0正常，1删除';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_dict_t"."revision" IS '版本号';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_dict_t"."status" IS '状态：ACTIVE启用、INACTIVE停用';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_dict_t"."tenant_id" IS '租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_dict_t"."term" IS '词条';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_dict_t"."tid" IS '主键标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_dict_t"."updated_by" IS '更新人';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_dict_t"."updated_time" IS '更新时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_dict_t"."weight" IS '词条权重';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_engine_t"."auth_mode" IS '认证方式：NONE、BASIC、API_KEY';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_engine_t"."config_json" IS '连接参数 JSON：超时、副本数、分片数等';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_engine_t"."created_by" IS '创建人';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_engine_t"."created_time" IS '创建时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_engine_t"."endpoint" IS '服务地址，空表示使用平台默认连接';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_engine_t"."engine_code" IS '引擎编码，租户内唯一';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_engine_t"."engine_name" IS '引擎名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_engine_t"."engine_type" IS '引擎类型：ELASTICSEARCH';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_engine_t"."es_version" IS '引擎版本';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_engine_t"."index_prefix" IS '逻辑索引前缀，物理名追加租户后缀';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_engine_t"."is_del" IS '删除标志：0正常，1删除';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_engine_t"."last_check_message" IS '最近检查结果说明';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_engine_t"."last_check_time" IS '最近连通性检查时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_engine_t"."revision" IS '版本号';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_engine_t"."status" IS '状态：ACTIVE启用、INACTIVE停用';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_engine_t"."tenant_id" IS '租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_engine_t"."tid" IS '主键标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_engine_t"."updated_by" IS '更新人';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_engine_t"."updated_time" IS '更新时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_index_field_t"."aggregatable" IS '是否可聚合：0否，1是';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_index_field_t"."analyzed" IS '是否分词：0否，1是';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_index_field_t"."analyzer" IS '字段级分析器编码';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_index_field_t"."created_by" IS '创建人';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_index_field_t"."created_time" IS '创建时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_index_field_t"."field_label" IS '字段中文名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_index_field_t"."field_name" IS '索引字段名';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_index_field_t"."field_type" IS '字段类型：text、keyword、date、long、double、boolean、object';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_index_field_t"."filterable" IS '是否可过滤：0否，1是';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_index_field_t"."format_pattern" IS '日期等格式化模式';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_index_field_t"."highlightable" IS '是否可高亮：0否，1是';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_index_field_t"."index_id" IS '所属搜索索引';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_index_field_t"."is_del" IS '删除标志：0正常，1删除';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_index_field_t"."revision" IS '版本号';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_index_field_t"."searchable" IS '是否参与全文检索：0否，1是';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_index_field_t"."sort_no" IS '显示排序号';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_index_field_t"."sortable" IS '是否可排序：0否，1是';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_index_field_t"."source_column" IS '来源列名';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_index_field_t"."tenant_id" IS '租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_index_field_t"."tid" IS '主键标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_index_field_t"."updated_by" IS '更新人';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_index_field_t"."updated_time" IS '更新时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_index_field_t"."weight" IS '检索权重，默认 1';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_index_t"."alias_name" IS '查询别名';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_index_t"."analyzer_code" IS '默认分析器编码';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_index_t"."created_by" IS '创建人';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_index_t"."created_time" IS '创建时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_index_t"."datasource_id" IS '来源数据源标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_index_t"."doc_count" IS '当前文档数';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_index_t"."engine_id" IS '所属搜索引擎';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_index_t"."index_code" IS '索引编码，租户内唯一';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_index_t"."index_name" IS '索引显示名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_index_t"."is_del" IS '删除标志：0正常，1删除';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_index_t"."last_build_cost_ms" IS '最近构建耗时毫秒';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_index_t"."last_build_message" IS '最近构建结果说明';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_index_t"."last_build_time" IS '最近构建时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_index_t"."mapping_json" IS '字段映射 JSON';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_index_t"."primary_key" IS '业务主键字段，默认 id';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_index_t"."revision" IS '版本号';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_index_t"."settings_json" IS '索引设置 JSON：分片、副本、刷新间隔';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_index_t"."source_table" IS '来源物理表名';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_index_t"."source_type" IS '数据来源类型：DATASOURCE数据源、TABLE物理表、CATALOG元数据目录';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_index_t"."status" IS '状态：DRAFT草稿、BUILDING构建中、READY就绪、FAILED失败、DISABLED停用';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_index_t"."tenant_id" IS '租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_index_t"."tid" IS '主键标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_index_t"."updated_by" IS '更新人';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_index_t"."updated_time" IS '更新时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_kb_doc_t"."content" IS '文档正文';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_kb_doc_t"."created_by" IS '创建人';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_kb_doc_t"."created_time" IS '创建时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_kb_doc_t"."doc_type" IS '文档类型：EXPERIENCE经验、RULE规则、STANDARD标准';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_kb_doc_t"."es_doc_id" IS '检索引擎文档标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_kb_doc_t"."indexed_time" IS '最近索引时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_kb_doc_t"."is_del" IS '删除标志：0正常，1删除';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_kb_doc_t"."kb_id" IS '所属知识库';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_kb_doc_t"."revision" IS '版本号';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_kb_doc_t"."source" IS '来源说明';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_kb_doc_t"."status" IS '状态：READY待索引、INDEXED已索引、FAILED失败';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_kb_doc_t"."tags" IS '标签，逗号分隔';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_kb_doc_t"."tenant_id" IS '租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_kb_doc_t"."tid" IS '主键标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_kb_doc_t"."title" IS '文档标题';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_kb_doc_t"."updated_by" IS '更新人';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_kb_doc_t"."updated_time" IS '更新时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_kb_t"."created_by" IS '创建人';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_kb_t"."created_time" IS '创建时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_kb_t"."description" IS '知识库说明';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_kb_t"."doc_count" IS '文档数量';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_kb_t"."index_code" IS '绑定的索引编码，默认 srch_kb_doc';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_kb_t"."industry_code" IS '行业编码';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_kb_t"."is_del" IS '删除标志：0正常，1删除';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_kb_t"."kb_code" IS '知识库编码，租户内唯一';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_kb_t"."kb_name" IS '知识库名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_kb_t"."revision" IS '版本号';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_kb_t"."status" IS '状态：ACTIVE启用、INACTIVE停用';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_kb_t"."tenant_id" IS '租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_kb_t"."tid" IS '主键标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_kb_t"."updated_by" IS '更新人';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_kb_t"."updated_time" IS '更新时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_query_log_t"."app_id" IS '调用应用标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_query_log_t"."client_ip" IS '客户端地址';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_query_log_t"."cost_ms" IS '耗时毫秒';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_query_log_t"."created_by" IS '创建人';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_query_log_t"."created_time" IS '创建时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_query_log_t"."hit_count" IS '命中总数';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_query_log_t"."is_del" IS '删除标志：0正常，1删除';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_query_log_t"."keyword" IS '原始检索词';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_query_log_t"."params_json" IS '查询参数 JSON';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_query_log_t"."query_type" IS '查询类型：SMART、PRECISE、SPATIOTEMPORAL、DETAIL、BATCH';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_query_log_t"."result_code" IS '结果码，成功为 200';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_query_log_t"."revision" IS '版本号';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_query_log_t"."service_code" IS '搜索服务编码';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_query_log_t"."service_id" IS '搜索服务标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_query_log_t"."tenant_id" IS '租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_query_log_t"."tid" IS '主键标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_query_log_t"."trace_id" IS '链路追踪标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_query_log_t"."updated_by" IS '更新人';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_query_log_t"."updated_time" IS '更新时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_query_log_t"."user_id" IS '调用用户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_redlist_t"."created_by" IS '创建人';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_redlist_t"."created_time" IS '创建时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_redlist_t"."effective_time" IS '生效时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_redlist_t"."expire_time" IS '失效时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_redlist_t"."is_del" IS '删除标志：0正常，1删除';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_redlist_t"."object_type" IS '对象类型：APP应用、USER用户、IP地址、KEYWORD关键词';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_redlist_t"."object_value" IS '对象值';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_redlist_t"."reason" IS '加入红名单原因';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_redlist_t"."revision" IS '版本号';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_redlist_t"."service_id" IS '所属搜索服务，空表示租户级';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_redlist_t"."status" IS '状态：ACTIVE生效、INACTIVE失效';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_redlist_t"."tenant_id" IS '租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_redlist_t"."tid" IS '主键标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_redlist_t"."updated_by" IS '更新人';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_redlist_t"."updated_time" IS '更新时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_service_t"."created_by" IS '创建人';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_service_t"."created_time" IS '创建时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_service_t"."default_page_size" IS '默认每页条数';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_service_t"."description" IS '服务说明';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_service_t"."filter_fields" IS '可过滤字段 JSON 数组';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_service_t"."highlight_fields" IS '默认高亮字段 JSON 数组';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_service_t"."index_id" IS '绑定的搜索索引';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_service_t"."is_del" IS '删除标志：0正常，1删除';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_service_t"."max_page_size" IS '最大每页条数';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_service_t"."published_time" IS '最近发布时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_service_t"."query_fields" IS '默认查询字段 JSON 数组';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_service_t"."request_method" IS '调用方式：API、PAGE、BOTH';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_service_t"."revision" IS '版本号';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_service_t"."service_code" IS '服务编码，租户内唯一';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_service_t"."service_name" IS '服务名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_service_t"."service_type" IS '服务类型：SEARCH检索、DETAIL明细、BATCH批量';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_service_t"."status" IS '状态：DRAFT草稿、PUBLISHED已发布、DISABLED停用';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_service_t"."strategy_id" IS '绑定的检索策略';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_service_t"."tenant_id" IS '租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_service_t"."tid" IS '主键标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_service_t"."timeout_ms" IS '服务超时毫秒';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_service_t"."updated_by" IS '更新人';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_service_t"."updated_time" IS '更新时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_service_t"."version_no" IS '发布版本号';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_strategy_t"."created_by" IS '创建人';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_strategy_t"."created_time" IS '创建时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_strategy_t"."default_sort" IS '默认排序表达式';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_strategy_t"."dsl_template" IS 'DSL 模板，允许高级覆盖';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_strategy_t"."field_weights" IS '字段权重 JSON，如 PDMC^3、TM^2';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_strategy_t"."filter_json" IS '默认过滤条件 JSON';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_strategy_t"."highlight_json" IS '高亮配置 JSON';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_strategy_t"."is_del" IS '删除标志：0正常，1删除';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_strategy_t"."match_mode" IS '匹配方式：MULTI_MATCH、TERM、RANGE、BOOL';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_strategy_t"."max_page_size" IS '最大每页条数';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_strategy_t"."page_size" IS '默认每页条数';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_strategy_t"."revision" IS '版本号';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_strategy_t"."status" IS '状态：ACTIVE启用、INACTIVE停用';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_strategy_t"."strategy_code" IS '策略编码，租户内唯一';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_strategy_t"."strategy_name" IS '策略名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_strategy_t"."template_type" IS '模板类型：SMART智能、PRECISE精准、SPATIOTEMPORAL时空、DETAIL明细、BATCH批量';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_strategy_t"."tenant_id" IS '租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_strategy_t"."tid" IS '主键标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_strategy_t"."updated_by" IS '更新人';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_strategy_t"."updated_time" IS '更新时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_subscription_t"."app_id" IS '订阅应用标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_subscription_t"."app_name" IS '订阅应用名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_subscription_t"."created_by" IS '创建人';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_subscription_t"."created_time" IS '创建时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_subscription_t"."description" IS '订阅说明';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_subscription_t"."expire_time" IS '订阅到期时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_subscription_t"."is_del" IS '删除标志：0正常，1删除';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_subscription_t"."quota_daily" IS '每日调用配额，0 表示不限';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_subscription_t"."quota_date" IS '配额统计日期';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_subscription_t"."quota_used" IS '当日已用次数';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_subscription_t"."revision" IS '版本号';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_subscription_t"."service_id" IS '订阅的搜索服务';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_subscription_t"."status" IS '状态：ACTIVE正常、SUSPENDED暂停、EXPIRED过期';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_subscription_t"."tenant_id" IS '租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_subscription_t"."tid" IS '主键标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_subscription_t"."updated_by" IS '更新人';
+COMMENT ON COLUMN "baseline_beijing_gd"."srch_subscription_t"."updated_time" IS '更新时间';
 COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_control_item_t"."attributes_json" IS '对象业务属性JSON';
 COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_control_item_t"."channel_code" IS '布控通道编码';
 COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_control_item_t"."control_item_id" IS '布控数据项业务标识';
@@ -8135,6 +10197,32 @@ COMMENT ON COLUMN "baseline_beijing_gd"."sym_server_t"."tenant_id" IS '租户标
 COMMENT ON COLUMN "baseline_beijing_gd"."sym_server_t"."tid" IS '主键标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."sym_server_t"."updated_by" IS '更新人标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."sym_server_t"."updated_time" IS '更新时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."sys_timer_log_t"."cost_ms" IS '执行耗时毫秒数';
+COMMENT ON COLUMN "baseline_beijing_gd"."sys_timer_log_t"."created_time" IS '记录时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."sys_timer_log_t"."error_msg" IS '错误信息';
+COMMENT ON COLUMN "baseline_beijing_gd"."sys_timer_log_t"."fire_at" IS '触发时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."sys_timer_log_t"."result" IS '执行结果：SUCCESS成功、FAILED失败';
+COMMENT ON COLUMN "baseline_beijing_gd"."sys_timer_log_t"."tenant_id" IS '租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."sys_timer_log_t"."tid" IS '主键标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."sys_timer_log_t"."timer_code" IS '定时任务编码';
+COMMENT ON COLUMN "baseline_beijing_gd"."sys_timer_log_t"."timer_id" IS '定时任务标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."sys_timer_t"."created_by" IS '创建人';
+COMMENT ON COLUMN "baseline_beijing_gd"."sys_timer_t"."created_time" IS '创建时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."sys_timer_t"."cron" IS '执行表达式，支持 5 段（分）或 6 段（秒）Spring Cron';
+COMMENT ON COLUMN "baseline_beijing_gd"."sys_timer_t"."description" IS '任务说明';
+COMMENT ON COLUMN "baseline_beijing_gd"."sys_timer_t"."handler" IS '执行处理器：bean:Bean名称 或 magic:METHOD 路径';
+COMMENT ON COLUMN "baseline_beijing_gd"."sys_timer_t"."is_del" IS '删除标志：0正常，1删除';
+COMMENT ON COLUMN "baseline_beijing_gd"."sys_timer_t"."last_fire_at" IS '上次触发时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."sys_timer_t"."lock_ttl_seconds" IS '分布式锁租期秒数';
+COMMENT ON COLUMN "baseline_beijing_gd"."sys_timer_t"."next_fire_at" IS '下次触发时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."sys_timer_t"."params_json" IS '执行参数 JSON';
+COMMENT ON COLUMN "baseline_beijing_gd"."sys_timer_t"."status" IS '状态：ENABLED启用、DISABLED停用';
+COMMENT ON COLUMN "baseline_beijing_gd"."sys_timer_t"."tenant_id" IS '租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."sys_timer_t"."tid" IS '主键标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."sys_timer_t"."timer_code" IS '定时任务编码';
+COMMENT ON COLUMN "baseline_beijing_gd"."sys_timer_t"."timer_name" IS '定时任务名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."sys_timer_t"."updated_by" IS '更新人';
+COMMENT ON COLUMN "baseline_beijing_gd"."sys_timer_t"."updated_time" IS '更新时间';
 COMMENT ON COLUMN "baseline_beijing_gd"."wf_approval_action_log_t"."action_code" IS '操作编码';
 COMMENT ON COLUMN "baseline_beijing_gd"."wf_approval_action_log_t"."action_message" IS '操作消息';
 COMMENT ON COLUMN "baseline_beijing_gd"."wf_approval_action_log_t"."action_result" IS '操作结果';

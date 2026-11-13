@@ -115,9 +115,7 @@ class CatalogRegistryPagingTest {
         private final MagicScript script;
 
         Fixture() throws Exception {
-            String canonical = CanonicalMagicSources.under("api").stream()
-                    .filter(resource -> resource.relativePath().endsWith("03.数据目录分页.ms"))
-                    .findFirst().orElseThrow().source();
+            String canonical = CanonicalMagicSources.byId("datapd_catalog_page_compat_01");
             script = MagicScript.create(canonical.replaceAll(
                     "(?m)^import (tenantRuntime|dataScope|tableRead|tableSort)\\s*\\R", ""), null);
             var dataSources = new MagicDynamicDataSource();

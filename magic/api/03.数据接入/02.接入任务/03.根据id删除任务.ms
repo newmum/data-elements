@@ -25,6 +25,7 @@
 import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient as nifiClient
 import log
 import tenantRuntime
+import auditEvents
 
 // 接口：03.根据id删除任务
 // 路由：POST /ods/task/deleteById
@@ -49,6 +50,14 @@ var task = db.table('data_access_agg_task_t').where()
     .eq('tid', tid).eq('tenant_id', tenantId).eq('is_del', 0).selectOne()
 if (task == null) { exit 404, '当前租户下任务不存在' }
 
+// 任务名来自当前租户的有效任务记录，避免将请求中的任意名称写入审计。
+var auditedTaskName = text(task.taskName || task.task_name)
+try {
+    auditEvents.requestParameters({taskId:tid, taskName:auditedTaskName, dryRun:body?.dryRun == true})
+} catch (auditUnavailable) {
+    // 滚动更新期间旧运行包仍可执行删除。
+}
+
 if (body?.dryRun == true) {
     return {
         dryRun: true,
@@ -61,8 +70,15 @@ if (body?.dryRun == true) {
 
 // 任务和流程的生命周期与监控历史保留期限独立。
 var now = new Date()
-db.table('data_access_agg_task_t').where().eq('tid', tid).eq('tenant_id', tenantId).eq('is_del', 0)
+var deletedTaskCount = db.table('data_access_agg_task_t').where().eq('tid', tid).eq('tenant_id', tenantId).eq('is_del', 0)
     .update({is_del: 1, task_status: 0, updated_time: now})
+if (deletedTaskCount == 1) {
+    try {
+        auditEvents.requestParameters({deletedTaskId:tid, deletedTaskName:auditedTaskName})
+    } catch (auditUnavailable) {
+        // 审计参数记录与旧运行包兼容。
+    }
+}
 db.table('data_access_field_mapping').where().eq('task_id', tid).eq('is_del', 0)
     .update({is_del: 1, updated_time: now})
 if (task.pipelineId != null && task.pipelineId != '') {

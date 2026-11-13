@@ -38,10 +38,29 @@ public class AuditSanitizer {
         return text(value,512);
     }
     public String json(Object details) {
+        return json(details, Map.of());
+    }
+    String json(Object details, Map<String, Object> requestParameters) {
         try {
-            String json = mapper.writeValueAsString(clean(details));
-            if (json.getBytes(StandardCharsets.UTF_8).length > 32768) return "{\"phase\":\"DETAIL_LIMIT_EXCEEDED\"}";
-            return json;
+            Object cleaned = clean(details);
+            if (requestParameters.isEmpty()) {
+                String json = compactJson(cleaned);
+                return fits(json) ? json : "{\"phase\":\"DETAIL_LIMIT_EXCEEDED\"}";
+            }
+            Map<String, Object> event = new LinkedHashMap<>();
+            if (cleaned instanceof Map<?, ?> map) map.forEach((key, value) -> event.put((String) key, value));
+            else if (cleaned != null) event.put("details", cleaned);
+            var index = AuditRequestParameters.index(requestParameters);
+            event.put(AuditRequestParameters.DETAILS_KEY, requestParameters);
+            event.put(AuditRequestParameters.INDEX_KEY, index);
+            String json = compactJson(event);
+            if (fits(json)) return json;
+            return compactJson(Map.of("phase", "DETAIL_LIMIT_EXCEEDED",
+                    AuditRequestParameters.DETAILS_KEY, requestParameters, AuditRequestParameters.INDEX_KEY, index));
         } catch (Exception e) { throw new IllegalArgumentException("日志摘要无法序列化", e); }
     }
+    private String compactJson(Object value) throws com.fasterxml.jackson.core.JsonProcessingException {
+        return mapper.writer().without(com.fasterxml.jackson.databind.SerializationFeature.INDENT_OUTPUT).writeValueAsString(value);
+    }
+    private boolean fits(String json) { return json.getBytes(StandardCharsets.UTF_8).length <= 32768; }
 }

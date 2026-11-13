@@ -72,13 +72,18 @@ const initEffect = () => {
   formCreate.register({
     name: "setJdbcUrl",
     async value(val, rule, api) {
-      const dbType = api.getRule("dbType").value || "";
-      let host = api.getRule("host").value || "";
-      const port = api.getRule("port").value || "";
-      const database = api.getRule("database").value || "";
-      const serviceName = api.getRule("serviceName").value || "";
-      const username = api.getRule("username").value || "";
-      const password = api.getRule("password").value || "";
+      const dbTypeRule = api.getRule("dbType");
+      const hostRule = api.getRule("host");
+      const jdbcUrlRule = api.getRule("jdbcURL");
+      if (!dbTypeRule || !hostRule || !jdbcUrlRule) return;
+
+      const dbType = dbTypeRule.value || "";
+      let host = hostRule.value || "";
+      const port = api.getRule("port")?.value || "";
+      const database = api.getRule("database")?.value || "";
+      const serviceName = api.getRule("serviceName")?.value || "";
+      const username = api.getRule("username")?.value || "";
+      const password = api.getRule("password")?.value || "";
       let jdbcUrl = "jdbc:xxx://xxx.x.x:xxxx/";
       const jdbcType = api.getRule("jdbcType")?.value;
       switch (dbType) {
@@ -126,7 +131,7 @@ const initEffect = () => {
           jdbcUrl = `jdbc${dbType ? ":" + dbType : ""}://${host}${port ? ":" + port : ""}${database ? "/" + database : ""}`;
           break;
       }
-      api.getRule("jdbcURL").value = jdbcUrl;
+      jdbcUrlRule.value = jdbcUrl;
     },
   });
 };

@@ -28,21 +28,21 @@ import apiPullConfig
 import tenantRuntime
 import dataScope
 import metadataAsset
+import tableRead
+import tableWrite
 import '@/common/datasourceConnectionConfig' as datasourceConnectionConfig
 import cn.hutool.core.util.IdUtil
 import cn.hutool.json.JSONUtil
+import java.util.List
 import java.util.Map
 import jsons
 import log
 
-// 接口：04.保存数据源
-// 路由：POST /dst/database/saveOrUpdate
-// 业务说明：保存数据源主记录、应用关系和 pool_cfg 连接配置；推送来源地址复用 host，不使用动态属性表。
-/*
- * 数据源 04：新增或修改 db_datasource_t。
- *
- * 保存接口只写数据源主表和应用关系，并同步 ES 搜索投影；不连接物理库、不执行元数据探查。
- * 连接参数统一保存到 db_datasource_t.pool_cfg JSON 对象。第五步完成登记使用 completeOnly=true，只更新 asset_status，不触碰连接信息。
+/**
+ * POST /dst/database/saveOrUpdate 保存当前租户的数据源主记录、应用归属和连接配置。
+ * tid 为空时新增，propList 提交登记字段，连接扩展配置保存在 pool_cfg。
+ * completeOnly=true 审查并更新登记状态。dryRun=true 只返回预检结果，无持久化或索引操作。
+ * 主数据持久化后同步搜索索引。deferIndexRefresh 允许调用方随后触发普通保存的索引同步。
  */
 var text = (value) => value == null ? null : value + ''
 var blank = (value) => value == null || text(value).trim() == ''
@@ -52,6 +52,7 @@ var tenantId = tenantRuntime.id()
 // 解析请求体并为可选参数设置默认值。
 var tid = blank(body == null ? null : body.tid) ? IdUtil.getSnowflakeNextIdStr() : body.tid
 var props = body == null || body.propList == null ? {} : body.propList
+var dryRun = props.dryRun == true || body?.dryRun == true
 var first = (row, keys) => {
     if (row == null) {
         return null
@@ -71,7 +72,8 @@ if (blank(tenantId)) {
 // 结束登记允许部分表未完成；状态由当前租户有效表的 asset_status 聚合决定。
 var completionReview = null
 var isProxyCompletion = false
-var proxyCompletionWhere = ""
+var proxyServiceConditions = null
+var proxySourceConditions = null
 var requestedStatus = first(props, ['assetStatus', 'asset_status'])
 if (props.completeOnly == true || ['1', '2'].contains(text(requestedStatus))) {
     var existed = db.table('db_datasource_t').where().eq('tid', tid).eq('tenant_id', tenantId).eq('is_del', 0).selectOne()
@@ -87,28 +89,53 @@ if (props.completeOnly == true || ['1', '2'].contains(text(requestedStatus))) {
     if (blank(completionMode)) { completionMode = completionPool.accessMode }
     isProxyCompletion = ['proxy', 'agent'].contains(blank(completionMode) ? '' : text(completionMode).toLowerCase())
     if (isProxyCompletion) {
-        // 与服务列表使用同一角色范围；按父源一次聚合，不读取每个服务的详情。
+        // 预检与实际更新共用同一组服务范围条件。空组织和缺失的 OWNER 标识均不可见。
         var completionScope = dataScope.dataSource()
-        var completionUserId = completionScope.userId
-        var completionOrgIds = completionScope.organizationIds
-        proxyCompletionWhere = 'a.is_del=0 AND a.tenant_id=#{tenantId} AND a.datasource_id=#{tid}'
-        if (completionScope.scope == 'OWNER') { proxyCompletionWhere = proxyCompletionWhere + ' AND a.created_by=#{completionUserId}' }
-        else if (completionScope.scope == 'ORG') { proxyCompletionWhere = proxyCompletionWhere + (completionOrgIds.size()==0 ? ' AND 1=0' : ' AND a.org_id IN (#{completionOrgIds})') }
-        else if (completionScope.scope != 'ALL') { exit 403, '数据范围无效' }
-        var completionServiceCount = db.selectInt('select count(*) from api_info_t a where ' + proxyCompletionWhere)
-        completionReview = {tid:tid,assetStatus:completionServiceCount>0?2:1,completionEligible:completionServiceCount>0,tableReviewReady:completionServiceCount>0,serviceCount:completionServiceCount,tableCount:0,registeredTableCount:0,pendingTableCount:0}
+        proxyServiceConditions = {is_del: 0}
+        if (completionScope.scope == 'OWNER') {
+            proxyServiceConditions.created_by = blank(completionScope.userId) ? [] : completionScope.userId
+        } else if (completionScope.scope == 'ORG') {
+            proxyServiceConditions.org_id = completionScope.organizationIds == null ? [] : completionScope.organizationIds
+        } else if (completionScope.scope != 'ALL') {
+            exit 403, '数据范围无效'
+        }
+
+        var serviceAlias = 'completion_service'
+        var services = tableRead.from('api_info_t', serviceAlias, tenantId)
+        services.where(tableRead.equal(tableRead.column(serviceAlias, 'datasource_id', 'TEXT'), tid))
+        for (field in proxyServiceConditions.keySet()) {
+            var conditionValue = proxyServiceConditions[field]
+            var column = tableRead.column(serviceAlias, field, field == 'is_del' ? 'NUMBER' : 'TEXT')
+            services.where(conditionValue instanceof List
+                ? tableRead.in(column, conditionValue)
+                : tableRead.equal(column, conditionValue))
+        }
+        var counts = services.grouped({service_count: tableRead.count()}, [])
+        var completionServiceCount = counts[0].service_count::long
+        var eligible = completionServiceCount > 0
+        completionReview = {
+            tid: tid, assetStatus: eligible ? 2 : 1, completionEligible: eligible,
+            tableReviewReady: eligible, serviceCount: completionServiceCount,
+            tableCount: 0, registeredTableCount: 0, pendingTableCount: 0
+        }
+        proxySourceConditions = {is_del: 0, updated_time: first(existed, ['updatedTime', 'updated_time'])}
     } else {
         completionReview = metadataAsset.reviewRegistrationStatus(tid)
     }
-    if (props.dryRun == true || body?.dryRun == true) { return completionReview }
+    if (dryRun) { return completionReview }
 }
 var completionAssetStatus = completionReview == null ? 0 : completionReview.assetStatus
+var persistProxyCompletion = () => {
+    // 单条更新同时校验数据源版本和可见服务。预检后任一条件失效都拒绝提交。
+    var changed = tableWrite.updateIfExists('db_datasource_t', tenantId, 'tid', tid, {
+        asset_status: completionAssetStatus, flow_status: 2, updated_time: nowTime
+    }, proxySourceConditions, 'api_info_t', 'datasource_id', proxyServiceConditions)
+    if (changed != 1) { exit 409, '服务清单已变化，请重新确认后结束登记' }
+}
 if (props.completeOnly == true) {
     if (isProxyCompletion) {
         if (completionReview.completionEligible != true) { exit 400, '请先登记至少一项当前数据范围内的数据服务，再结束登记' }
-        // 服务在审查后可能变化；持久化时再次以同一 SQL 条件原子校验，不接受前端完成标记。
-        var completedRows = db.update('update db_datasource_t set asset_status=#{completionAssetStatus},flow_status=2,updated_time=#{nowTime} where tid=#{tid} AND tenant_id=#{tenantId} AND is_del=0 AND EXISTS (select 1 from api_info_t a where ' + proxyCompletionWhere + ')')
-        if (completedRows < 1) { exit 409, '服务清单已变化，请重新确认后结束登记' }
+        db.transaction(persistProxyCompletion)
     } else {
         completionReview = metadataAsset.refreshRegistrationStatus(tid, true)
         completionAssetStatus = completionReview.assetStatus
@@ -193,9 +220,12 @@ var connectionNames = [
     'kafkaSampleSize', 'kafkaPollTimeoutMs',
     'nodes', 'authMethod', 'apiKey', 'indexName', 'defaultIndex'
 ]
-// Existing values are the source of truth for fields not rendered in step one.
+// 第一步未提交的字段继承当前租户的有效主记录，权限也按该记录判断。
 var old = db.table('db_datasource_t').where().eq('tid', tid).eq('tenant_id', tenantId).eq('is_del', 0).selectOne()
-if (old != null && completionReview == null && !dataScope.canReadDataSourceFor('MENU:2081000000000000002', old)) {
+if (old == null && completionReview != null) {
+    exit 409, '数据源记录已变化，请重新读取后保存'
+}
+if (old != null && !dataScope.canReadDataSourceFor('MENU:2081000000000000002', old)) {
     exit 403, '数据源不存在或无权修改'
 }
 var oldConnectionConfig = old == null ? {} : datasourceConnectionConfig('read', tid, null, false)
@@ -558,45 +588,70 @@ var main = {
     updated_time: nowTime,
     reg_time: old == null ? nowTime : first(old, ['regTime', 'reg_time'])
 }
-if (old == null) {
-    main.created_time = nowTime
-    db.table('db_datasource_t').primary('tid').insert(main)
-} else {
-    db.table('db_datasource_t').primary('tid').update(main, true)
-}
-
 // 数据组织、密码、令牌及协议专属参数都由数据源主表 pool_cfg JSON 统一承载。
 // 局部编辑没有回传的字段不会被覆盖；明确关闭连接时才会清空连接配置。
 // 接入方式是无连接登记也需要保留的业务配置，清空连接后单独写回它。
-if (showConnect == 0) {
-    datasourceConnectionConfig('save', tid, {}, true)
-    var registrationConfig = {}
-    if (!blank(accessMode)) {
-        registrationConfig.accessMode = accessMode
-    }
-    // API 抓取离线登记仍保存请求定义，以便网络恢复后生成对应任务。
-    if (isApiCapture) {
-        var apiItems = props instanceof Map && props.containsKey('apiPullItems')
-            ? props.apiPullItems : oldConnectionConfig.apiPullItems
-        if (apiItems != null) { registrationConfig.apiPullItems = apiItems }
-    }
-    if (accessMode == 'upload' && oldConnectionConfig.reportRegistration != null) {
-        registrationConfig.reportRegistration = oldConnectionConfig.reportRegistration
-    }
-    if (accessMode == 'receive') {
-        if (!blank(receiveProfile.receivePayloadSize)) {
-            registrationConfig.receivePayloadSize = receiveProfile.receivePayloadSize
+var persistConnection = () => {
+    if (showConnect == 0) {
+        datasourceConnectionConfig('save', tid, {}, true)
+        var registrationConfig = {}
+        if (!blank(accessMode)) {
+            registrationConfig.accessMode = accessMode
         }
-        if (!blank(receiveProfile.receivePushFrequency)) {
-            registrationConfig.receivePushFrequency = receiveProfile.receivePushFrequency
+        // API 抓取离线登记仍保存请求定义，以便网络恢复后生成对应任务。
+        if (isApiCapture) {
+            var apiItems = props instanceof Map && props.containsKey('apiPullItems')
+                ? props.apiPullItems : oldConnectionConfig.apiPullItems
+            if (apiItems != null) { registrationConfig.apiPullItems = apiItems }
         }
+        if (accessMode == 'upload' && oldConnectionConfig.reportRegistration != null) {
+            registrationConfig.reportRegistration = oldConnectionConfig.reportRegistration
+        }
+        if (accessMode == 'receive') {
+            if (!blank(receiveProfile.receivePayloadSize)) {
+                registrationConfig.receivePayloadSize = receiveProfile.receivePayloadSize
+            }
+            if (!blank(receiveProfile.receivePushFrequency)) {
+                registrationConfig.receivePushFrequency = receiveProfile.receivePushFrequency
+            }
+        }
+        if (!blank(accessMode)) {
+            datasourceConnectionConfig('save', tid, registrationConfig, false)
+        }
+    } else {
+        datasourceConnectionConfig('save', tid, connectionConfig, false)
     }
-    if (!blank(accessMode)) {
-        datasourceConnectionConfig('save', tid, registrationConfig, false)
-    }
-} else {
-    datasourceConnectionConfig('save', tid, connectionConfig, false)
 }
+
+var persistSource = () => {
+    if (old == null) {
+        main.created_time = nowTime
+        db.table('db_datasource_t').primary('tid').insert(main)
+    } else {
+        // 历史整表提交也可能要求完成代理登记。先校验服务，再在同一事务保存主表和连接配置。
+        var guardedCompletion = isProxyCompletion && completionReview.completionEligible == true
+        if (guardedCompletion) { persistProxyCompletion() }
+        var update = db.table('db_datasource_t').withBlank().where()
+            .eq('tid', tid).eq('tenant_id', tenantId).eq('is_del', 0)
+        if (!guardedCompletion) {
+            // 表单按已读版本合并隐藏字段，冲突时重新读取，避免覆盖并发编辑或复活已删除记录。
+            var expectedUpdatedTime = first(old, ['updatedTime', 'updated_time'])
+            if (expectedUpdatedTime == null) { update.isNull('updated_time') }
+            else { update.eq('updated_time', expectedUpdatedTime) }
+        }
+        var changed = update.update(main)
+        // 通过代理校验时已锁定并更新主记录。部分驱动对相同值的第二次更新返回 0。
+        if (changed != 1 && !(guardedCompletion && changed == 0)) {
+            exit 409, '数据源记录已变化，请重新读取后保存'
+        }
+    }
+    persistConnection()
+}
+// 普通保存预检完成校验和字段推导后直接返回，避免将预检写入主表、配置或索引。
+if (dryRun) {
+    return {tid: tid, assetStatus: assetStatus, indexRefreshPending: false}
+}
+db.transaction(persistSource)
 
 var savedTid = tid
 // ES 是查询投影而非主数据。编辑页可要求把索引重建放到成功返回后执行，避免

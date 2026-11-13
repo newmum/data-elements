@@ -6431,6 +6431,9 @@ CREATE TABLE "public"."log_request_t" (
   "menu_path" character varying(1000 char),
   "page_route" character varying(512 char),
   "operation_name" character varying(256 char),
+  "parameter_snapshot" text,
+  "parameter_search_text" text,
+  "parameter_capture_status" character varying(24 char) DEFAULT NULL::varchar,
   CONSTRAINT "log_request_t_pkey" PRIMARY KEY (tid)
 );
 
@@ -6574,6 +6577,12 @@ COMMENT ON COLUMN "public"."log_request_t"."page_route" IS '已核验的页面�
 
 COMMENT ON COLUMN "public"."log_request_t"."operation_name" IS '操作时Magic接口或显式动作的中文名称';
 
+COMMENT ON COLUMN "public"."log_request_t"."parameter_snapshot" IS '日志管理-安全参数快照，仅保存脱敏限长后的内容';
+
+COMMENT ON COLUMN "public"."log_request_t"."parameter_search_text" IS '日志管理-由同一安全参数快照生成的参数检索投影';
+
+COMMENT ON COLUMN "public"."log_request_t"."parameter_capture_status" IS '日志管理-参数采集状态：EMPTY/CAPTURED/PARTIAL/OMITTED/FAILED/LEGACY；NULL表示历史未采集';
+
 CREATE TABLE "public"."log_system_t" (
   "tid" character varying(32 char) NOT NULL,
   "user_account" character varying(128 char),
@@ -6638,6 +6647,9 @@ CREATE TABLE "public"."log_system_t" (
   "menu_path" character varying(1000 char),
   "page_route" character varying(512 char),
   "operation_name" character varying(256 char),
+  "parameter_snapshot" text,
+  "parameter_search_text" text,
+  "parameter_capture_status" character varying(24 char) DEFAULT NULL::varchar,
   CONSTRAINT "log_system_t_pkey" PRIMARY KEY (tid)
 );
 
@@ -6768,6 +6780,12 @@ COMMENT ON COLUMN "public"."log_system_t"."menu_path" IS '操作时菜单名称�
 COMMENT ON COLUMN "public"."log_system_t"."page_route" IS '已核验的页面路由，不含查询参数';
 
 COMMENT ON COLUMN "public"."log_system_t"."operation_name" IS '操作时Magic接口或显式动作的中文名称';
+
+COMMENT ON COLUMN "public"."log_system_t"."parameter_snapshot" IS '日志管理-安全参数快照，仅保存脱敏限长后的内容';
+
+COMMENT ON COLUMN "public"."log_system_t"."parameter_search_text" IS '日志管理-由同一安全参数快照生成的参数检索投影';
+
+COMMENT ON COLUMN "public"."log_system_t"."parameter_capture_status" IS '日志管理-参数采集状态：EMPTY/CAPTURED/PARTIAL/OMITTED/FAILED/LEGACY；NULL表示历史未采集';
 
 CREATE TABLE "public"."log_template_t" (
   "tid" character varying(32 char) NOT NULL,
@@ -11175,8 +11193,6 @@ CREATE INDEX ix_b93bede06e56b9b92e2f8991 ON public.data_access_multi_group_t USI
 CREATE UNIQUE INDEX ix_29d4deb2fc86506ba00bac31 ON public.data_access_task_monitor_snap_t USING btree (tid);
 
 CREATE INDEX ix_94a7ddb0cbf142c308c9b2f6 ON public.data_access_task_monitor_snap_t USING btree (tenant_id, is_del);
-
-CREATE INDEX idx_task_monitor_snap_retention ON public.data_access_task_monitor_snap_t USING btree (tenant_id, monitor_time, tid);
 
 CREATE INDEX ix_150aaddd0067aedc1763dc20 ON public.data_api_authorization_t USING btree (tenant_id, apply_form_id, is_del);
 

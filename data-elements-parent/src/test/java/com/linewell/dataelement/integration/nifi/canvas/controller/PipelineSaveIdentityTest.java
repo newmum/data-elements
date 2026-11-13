@@ -104,6 +104,34 @@ class PipelineSaveIdentityTest {
     }
 
     @Test
+    void successiveCanvasSavesKeepThePersistedDescriptionAndRevision() {
+        Pipeline loaded = pipeline("p1", null, PipelineStatus.SAVED);
+        Pipeline withDescription = new Pipeline(loaded.id(), loaded.name(), "已有流程说明",
+                loaded.createdAt(), loaded.updatedAt(), loaded.dsl(), null, loaded.status(),
+                null, null, null, null, null);
+        var persisted = new AtomicReference<>(withDescription);
+        when(repo.findById("p1")).thenAnswer(i -> Optional.of(persisted.get()));
+        when(repo.update(eq("p1"), any())).thenAnswer(i -> {
+            Pipeline saved = i.<UnaryOperator<Pipeline>>getArgument(1).apply(persisted.get());
+            assertThat(saved.description()).isEqualTo(withDescription.description());
+            persisted.set(saved);
+            return saved;
+        });
+        Pipeline edited = new Pipeline(loaded.id(), "第一次编辑", null, null, null, loaded.dsl(),
+                null, null, null, null, null, null, null);
+        Pipeline saved = controller.update("p1", edited, null, withDescription.designHash()).getBody();
+        assertThat(saved.designHash()).isEqualTo(persisted.get().designHash());
+        Pipeline secondEdit = new Pipeline(loaded.id(), "第二次编辑", null, null, null, loaded.dsl(),
+                null, null, null, null, null, null, null);
+        assertThat(controller.update("p1", secondEdit, null, saved.designHash()).getBody().name())
+                .isEqualTo("第二次编辑");
+        Pipeline emptyDescription = new Pipeline(edited.id(), edited.name(), "", null, null, edited.dsl(),
+                null, null, null, null, null, null, null);
+        assertThat(emptyDescription.designHash()).isEqualTo(edited.designHash());
+        verifyNoInteractions(nifi);
+    }
+
+    @Test
     void concurrentPlatformDesignChangeStillRejectsAnOldDesignRevision() {
         Pipeline loaded = pipeline("p1", "original-group", PipelineStatus.STOPPED);
         Pipeline changed = new Pipeline(loaded.id(), "其他入口的新名称", loaded.description(), loaded.createdAt(), 99L,

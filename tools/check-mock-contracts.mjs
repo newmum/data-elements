@@ -15,6 +15,33 @@ function metadata(source) {
   return JSON.parse(separator >= 0 ? source.slice(0, separator) : source);
 }
 
+/** 非 HTTP 的共享函数依赖单独校验，不能伪造为接口或仅放在不执行的说明字段中。 */
+export async function checkFunctionDependency(root, dependency) {
+  const errors = [], source = dependency.source;
+  if (source?.kind !== "magic-function" || !source.file?.startsWith("magic/function/") || !dependency.review) {
+    return ["共享函数依赖须登记 magic-function 源码及审阅说明"];
+  }
+  const filename = path.resolve(root, source.file), relative = path.relative(root, filename);
+  if (relative.startsWith("..") || path.isAbsolute(relative)) return ["共享函数源码路径越界"];
+  try {
+    const content = await fs.readFile(filename, "utf8"), meta = metadata(content);
+    if (sourceDigest(content) !== source.reviewedSha256) errors.push(`共享函数已变化，须核对 Mock：${source.file}`);
+    const parts = [meta.path];
+    let id = meta.groupId, folder = path.dirname(filename);
+    const seen = new Set();
+    while (id && !["0", "function:0"].includes(id)) {
+      if (seen.has(id)) throw new Error("函数分组循环");
+      seen.add(id);
+      const group = metadata(await fs.readFile(path.join(folder, "group.json"), "utf8"));
+      if (group.id !== id) throw new Error("函数分组身份不一致");
+      parts.unshift(group.path || ""); id = group.parentId; folder = path.dirname(folder);
+    }
+    const route = `/${parts.join("/").split("/").filter(Boolean).join("/")}`;
+    if (meta.id !== source.id || route !== source.path) errors.push(`共享函数身份或路径已变化：${source.file}`);
+  } catch { errors.push(`共享函数或分组无法核验：${source.file}`); }
+  return errors;
+}
+
 /** 校验真实资源身份及审阅摘要；脚本内部变化也提示人工判断是否影响契约。 */
 export async function checkContracts(root = repository) {
   const specification = JSON.parse(
@@ -82,7 +109,14 @@ export async function checkContracts(root = repository) {
     if (!entry.response || !entry.request || !entry.review)
       errors.push(`缺少请求、响应或审阅说明：${entry.operation}`);
   }
-  return { interfaces: specification.interfaces.length, errors };
+  for (const dependency of specification.dependencies || []) {
+    if (!Array.isArray(dependency.operations) || !dependency.operations.length ||
+        new Set(dependency.operations).size !== dependency.operations.length ||
+        dependency.operations.some((operation) => !operations.has(operation)))
+      errors.push("共享函数依赖必须关联已登记且不重复的 HTTP operation");
+    errors.push(...await checkFunctionDependency(root, dependency));
+  }
+  return { interfaces: specification.interfaces.length, dependencies: specification.dependencies?.length || 0, errors };
 }
 
 /** 小型 JSON Schema 子集，明确覆盖本阶段实际校验的对象、数组和标量。 */
@@ -118,6 +152,6 @@ if (
     process.exitCode = 1;
   } else
     console.log(
-      `澄天 mock 契约：${result.interfaces} 项真实实现身份与审阅摘要通过`,
+      `澄天 mock 契约：${result.interfaces} 项接口、${result.dependencies} 项共享函数依赖的身份与审阅摘要通过`,
     );
 }

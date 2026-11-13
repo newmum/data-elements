@@ -61,7 +61,9 @@ public final class DslHasher {
     public static String designHash(Pipeline pipeline) {
         Map<String, Object> design = new LinkedHashMap<>();
         design.put("name", pipeline.name());
-        design.put("description", pipeline.description());
+        String description = pipeline.description();
+        // DM can store an empty VARCHAR as NULL. Both represent an absent description.
+        design.put("description", description == null || description.isEmpty() ? null : description);
         Pipeline.Dsl dsl = pipeline.dsl();
         if (dsl != null) {
             Map<String, Object> graph = new LinkedHashMap<>();

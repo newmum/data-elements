@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient;
 import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiException;
 import com.linewell.dataelement.integration.nifi.canvas.pipeline.Pipeline;
+import com.linewell.dataelement.integration.nifi.canvas.pipeline.PipelineStatus;
 import com.linewell.dataelement.platform.tenant.domain.TenantContext;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -158,6 +159,11 @@ public class PipelineGroupOrganizer {
                  where tenant_id = ? and pipeline_id = ? and is_del = 0
                 """, tenant, pipeline.id())) {
             if (!text(task, "process_group_id").isBlank()) ids.add(text(task, "process_group_id"));
+        }
+        if (ids.isEmpty() && pipeline.lastDeployedHash() == null && pipeline.lastDeployedAt() == null
+                && pipeline.nodeMapping() == null
+                && (pipeline.status() == PipelineStatus.DRAFT || pipeline.status() == PipelineStatus.SAVED)) {
+            return List.of();
         }
         // Support both the compact hierarchy and legacy tenant/datasource
         // wrappers without creating any groups during recovery.

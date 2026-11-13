@@ -6,6 +6,7 @@ import static org.mockito.Mockito.*;
 
 import com.linewell.dataelement.platform.tenant.domain.TenantContext;
 import java.sql.Connection;
+import java.sql.DatabaseMetaData;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import javax.sql.DataSource;
@@ -22,6 +23,7 @@ class NifiMutationAspectTest {
             PreparedStatement statement = mock(PreparedStatement.class);
             ResultSet result = mock(ResultSet.class);
             when(source.getConnection()).thenReturn(connection);
+            stubJdbcUrl(connection, "jdbc:mysql://localhost/baseline");
             when(connection.prepareStatement(anyString())).thenReturn(statement);
             when(statement.executeQuery()).thenReturn(result);
             when(result.next()).thenReturn(true);
@@ -34,26 +36,38 @@ class NifiMutationAspectTest {
         }
     }
 
-    @Test
-    void failureReleasesLockOnTheSameConnection() throws Throwable {
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.CsvSource(delimiter = '|', textBlock = """
+            jdbc:mysql://localhost/baseline | SELECT GET_LOCK(?, 0) | SELECT RELEASE_LOCK(?) | 1
+            jdbc:dm://localhost:5236 | SELECT SYS.DBMS_LOCK.REQUEST(?, 6, 0) FROM DUAL | SELECT SYS.DBMS_LOCK.RELEASE(?) FROM DUAL | 0
+            """)
+    void failureReleasesLockOnTheSameConnection(String jdbcUrl, String acquireSql, String releaseSql,
+                                                int successCode) throws Throwable {
         try (var scope = TenantContext.use("tenant")) {
             DataSource source = mock(DataSource.class);
             Connection connection = mock(Connection.class);
             PreparedStatement statement = mock(PreparedStatement.class);
             ResultSet result = mock(ResultSet.class);
             when(source.getConnection()).thenReturn(connection);
+            stubJdbcUrl(connection, jdbcUrl);
             when(connection.prepareStatement(anyString())).thenReturn(statement);
             when(statement.executeQuery()).thenReturn(result);
             when(result.next()).thenReturn(true);
-            when(result.getInt(1)).thenReturn(1);
+            when(result.getInt(1)).thenReturn(successCode);
             ProceedingJoinPoint work = mock(ProceedingJoinPoint.class);
             when(work.proceed()).thenThrow(new IllegalStateException("deployment failed"));
             assertThatThrownBy(() -> new NifiMutationAspect(source).serialize(work)).hasMessage("deployment failed");
             var order = inOrder(connection, work);
-            order.verify(connection).prepareStatement("SELECT GET_LOCK(?, 0)");
+            order.verify(connection).prepareStatement(acquireSql);
             order.verify(work).proceed();
-            order.verify(connection).prepareStatement("SELECT RELEASE_LOCK(?)");
+            order.verify(connection).prepareStatement(releaseSql);
             order.verify(connection).close();
         }
+    }
+
+    private void stubJdbcUrl(Connection connection, String url) throws Exception {
+        DatabaseMetaData metadata = mock(DatabaseMetaData.class);
+        when(connection.getMetaData()).thenReturn(metadata);
+        when(metadata.getURL()).thenReturn(url);
     }
 }

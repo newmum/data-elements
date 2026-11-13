@@ -473,7 +473,7 @@ public class PipelineController {
                     : expectedUpdatedAt != null && !Objects.equals(cur.updatedAt(), expectedUpdatedAt);
             if (conflict) throw new org.springframework.web.server.ResponseStatusException(
                     org.springframework.http.HttpStatus.CONFLICT, "平台画布设计已被其他入口修改，请重新加载后再保存；NiFi原生修改不影响此校验");
-            Pipeline next = new Pipeline(cur.id(), prepared.name(), prepared.description(),
+            Pipeline next = new Pipeline(cur.id(), prepared.name(), savedDescription(cur, prepared),
                     cur.createdAt(), cur.updatedAt(), prepared.dsl(), cur.nifiProcessGroupId(), cur.status(),
                     cur.lastDeployedHash(), cur.lastDeployedAt(), cur.lastStoppedAt(), cur.nodeMapping(), cur.lastBulletinId());
             if (mappingProjections != null) mappingProjections.persist(next);
@@ -499,12 +499,17 @@ public class PipelineController {
 
     private Pipeline saveDesign(Pipeline current, Pipeline body) {
         return repo.update(current.id(), cur -> {
-            Pipeline next = new Pipeline(cur.id(), body.name(), body.description(),
+            Pipeline next = new Pipeline(cur.id(), body.name(), savedDescription(cur, body),
                 cur.createdAt(), cur.updatedAt(), body.dsl(), cur.nifiProcessGroupId(), cur.status(),
                 cur.lastDeployedHash(), cur.lastDeployedAt(), cur.lastStoppedAt(), cur.nodeMapping(), cur.lastBulletinId());
             if(mappingProjections!=null)mappingProjections.persist(next);
             return next;
         });
+    }
+
+    /** The canvas omits the description. Match the repository's partial update behavior. */
+    private static String savedDescription(Pipeline current, Pipeline submitted) {
+        return submitted.description() == null ? current.description() : submitted.description();
     }
 
     // Compatibility for existing in-process callers and timestamp-only clients.

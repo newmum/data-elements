@@ -27,7 +27,7 @@ class ElasticsearchRegistrationMagicTest {
 
     @Test void esAliasesSaveConnectionOptionsAndCanClearIndexScopeAndStaleCredentials() throws Exception {
         String full = CanonicalMagicSources.byId("datapd_save_update_datasource_01");
-        String names = full.substring(full.indexOf("var connectionNames ="), full.indexOf("// Existing values"));
+        String names = full.substring(full.indexOf("var connectionNames ="), full.indexOf("var old ="));
         String configuration = full.substring(full.indexOf("var requestedConnectionType ="), full.indexOf("var showConnect ="));
         String prefix = "import java.util.Map\nvar text=v=>v==null?null:v+''; var blank=v=>v==null||text(v).trim()=='';"
                 + "var first=(row,keys)=>{for(key in keys){if(row[key]!=null){return row[key]}}return null};"

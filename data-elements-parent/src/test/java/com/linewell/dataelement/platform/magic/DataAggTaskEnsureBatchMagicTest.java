@@ -4,10 +4,15 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import com.linewell.dataelement.platform.magic.module.JsonModule;
 import com.linewell.dataelement.platform.tenant.domain.TenantContext;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Proxy;
+import java.sql.Connection;
+import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.Function;
@@ -15,7 +20,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.jdbc.core.ConnectionCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.ConnectionProxy;
+import org.springframework.jdbc.datasource.DataSourceUtils;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.ssssssss.magicapi.core.context.RequestEntity;
@@ -31,6 +39,7 @@ import org.ssssssss.magicapi.modules.db.provider.CamelColumnMapperProvider;
 import org.ssssssss.magicapi.modules.db.provider.DefaultColumnMapperProvider;
 import org.ssssssss.script.MagicScript;
 import org.ssssssss.script.MagicScriptContext;
+import org.ssssssss.script.exception.MagicScriptException;
 import org.ssssssss.script.runtime.ExitValue;
 
 /** Executes the canonical ensure API against H2 to guard its multi-target read path. */
@@ -75,13 +84,87 @@ class DataAggTaskEnsureBatchMagicTest {
     @Test
     void creatingTaskAcceptsPendingApplicationButDryRunDoesNot() throws Exception {
         var f = new Fixture(1); f.prepareCreation();
-        f.jdbc.execute("alter table db_table_t add access_request_status int default 0");
         f.jdbc.update("update db_table_t set access_request_status=1 where tid='source-1'");
         assertInstanceOf(Map.class,f.run(Map.of("tableId","source-1","dryRun",true)));
         assertEquals(1,f.jdbc.queryForObject("select access_request_status from db_table_t where tid='source-1'",Integer.class));
         var created=assertInstanceOf(Map.class,f.run());
         assertEquals(false,created.get("repairRequired"));
         assertEquals(2,f.jdbc.queryForObject("select access_request_status from db_table_t where tid='source-1'",Integer.class));
+    }
+
+    @ParameterizedTest
+    @CsvSource({"1,0,2", "0,1,0", "1,1,2"})
+    void multiHopApprovalUsesOnlyTheLockedRootApplication(int rootStatus, int intermediateStatus, int expectedRoot)
+            throws Exception {
+        var fixture = new Fixture(2);
+        fixture.prepareCreation();
+        fixture.jdbc.execute("alter table db_table_t add updated_by varchar(64); alter table db_table_t add updated_time timestamp");
+        var historicalTime = Timestamp.valueOf("2025-01-01 08:30:00");
+        fixture.jdbc.update("update db_table_t set updated_by='validation-auditor',updated_time=?", historicalTime);
+        fixture.jdbc.update("update db_table_t set access_request_status=? where tid='source-1'", rootStatus);
+        fixture.jdbc.update("update db_table_t set access_request_status=? where tid='target-0'", intermediateStatus);
+        fixture.jdbc.update("update db_table_t set access_request_status=1 where tid='target-1'");
+        var before = applicationRows(fixture);
+
+        var preview = assertInstanceOf(Map.class, fixture.run(Map.of("tableId", "source-1", "dryRun", true)));
+        assertEquals(2, preview.get("plannedCreateCount"));
+        assertEquals(false, preview.get("sideEffectsApplied"));
+        assertEquals(0, fixture.writeCount());
+        assertSourceLockAndApproval(fixture, false);
+        assertEquals(before, applicationRows(fixture));
+
+        var saved = assertInstanceOf(Map.class, fixture.run());
+        assertEquals(2, saved.get("createdCount"));
+        assertEquals("source-1", saved.get("sourceTableId"));
+        assertEquals(List.of("target-0", "target-1"), saved.get("targetTableIds"));
+        assertEquals(List.of(Map.of("target_table_id", "target-0", "source_table_id", "source-1"),
+                        Map.of("target_table_id", "target-1", "source_table_id", "target-0")),
+                fixture.jdbc.queryForList("select target_table_id,source_table_id from data_access_agg_task_t order by target_table_id"));
+        var after = applicationRows(fixture);
+        assertEquals(List.of(expectedRoot, intermediateStatus, 1),
+                after.stream().map(row -> row.get("access_request_status")).toList());
+        assertEquals(before.stream().map(row -> row.get("updated_by")).toList(),
+                after.stream().map(row -> row.get("updated_by")).toList());
+        assertEquals(before.stream().map(row -> row.get("updated_time")).toList(),
+                after.stream().map(row -> row.get("updated_time")).toList());
+        assertEquals(rootStatus == 1 ? 4 : 3, fixture.writeCount());
+        assertSourceLockAndApproval(fixture, rootStatus == 1);
+    }
+
+    @Test
+    void rootApprovalFailureRollsBackTheNewPipelineTaskAndMappingBatches() throws Exception {
+        var fixture = new Fixture(2);
+        fixture.prepareCreation();
+        fixture.jdbc.update("update db_table_t set access_request_status=1 where tid in ('source-1','target-0')");
+        fixture.jdbc.execute("""
+                alter table db_table_t add constraint reject_root_approval
+                check (tid <> 'source-1' or access_request_status <> 2)
+                """);
+
+        var failure = assertThrows(MagicScriptException.class, fixture::run);
+        assertTrue(failure.getMessage().toLowerCase(Locale.ROOT).contains("reject_root_approval"));
+        assertEquals(4, fixture.writeCount(), "The three creation batches precede the rejected approval");
+        assertSourceLockAndApproval(fixture, true);
+        assertEquals(List.of(1, 1, 0), fixture.jdbc.queryForList(
+                "select access_request_status from db_table_t order by tid", Integer.class));
+        assertEquals(0, fixture.jdbc.queryForObject("select count(*) from nifi_pipeline_t", Integer.class));
+        assertEquals(0, fixture.jdbc.queryForObject("select count(*) from data_access_agg_task_t", Integer.class));
+        assertEquals(0, fixture.jdbc.queryForObject("select count(*) from data_access_field_mapping", Integer.class));
+    }
+
+    private static List<Map<String, Object>> applicationRows(Fixture fixture) {
+        return fixture.jdbc.queryForList("select tid,access_request_status,updated_by,updated_time from db_table_t order by tid");
+    }
+
+    private static void assertSourceLockAndApproval(Fixture fixture, boolean approval) {
+        var statements = fixture.counter.structuredWriteStatements;
+        assertEquals(approval ? 2 : 1, statements.size());
+        assertTrue(statements.getFirst().startsWith("select") && statements.getFirst().endsWith("for update"));
+        if (approval) {
+            var update = statements.getLast();
+            assertTrue(update.startsWith("update") && update.contains("access_request_status"));
+            assertFalse(update.contains("updated_time") || update.contains("updated_by"));
+        }
     }
 
     @ParameterizedTest @ValueSource(strings={"mysql","postgresql","oracle","kingbase8","ftp"})
@@ -192,7 +275,6 @@ class DataAggTaskEnsureBatchMagicTest {
         };
         fixture.jdbc.update("update db_table_t set field_governance_config=? where tid='source-1'", config);
         if (mode.equals("table")) {
-            fixture.jdbc.execute("alter table db_table_t add timestamp_field varchar(100)");
             fixture.jdbc.update("update db_table_t set timestamp_field='updated_time' where tid='source-1'");
         }
         assertInstanceOf(Map.class, fixture.run());
@@ -815,16 +897,19 @@ class DataAggTaskEnsureBatchMagicTest {
     }
 
     @Test
-    void twentyAndHundredNewHopsUseConstantMetadataReadsAndThreeBatchWrites() throws Exception {
+    void twentyAndHundredNewHopsUseConstantReadsAndOneRootApproval() throws Exception {
         List<Integer> reads=new ArrayList<>();
         for (int size:List.of(20,100)) {
             Fixture fixture=new Fixture(size); fixture.prepareCreation();
+            fixture.jdbc.update("update db_table_t set access_request_status=1 where tid='source-1'");
             Map<?,?> result=assertInstanceOf(Map.class,fixture.run());
             assertEquals(size,result.get("createdCount"));
             assertEquals(size,fixture.jdbc.queryForObject("select count(*) from data_access_agg_task_t",Integer.class));
             reads.add(fixture.counter.queries);
-            assertEquals(3,fixture.counter.writes);
-            System.out.println("Chained tasks="+size+", metadata SQL="+fixture.counter.queries+", batch writes="+fixture.counter.writes);
+            assertEquals(4,fixture.counter.writes);
+            assertSourceLockAndApproval(fixture, true);
+            assertEquals(2, fixture.jdbc.queryForObject("select access_request_status from db_table_t where tid='source-1'", Integer.class));
+            System.out.println("Chained tasks="+size+", metadata SQL="+fixture.counter.queries+", creation batches=3, root approvals=1");
         }
         assertEquals(reads.get(0),reads.get(1));
     }
@@ -999,8 +1084,10 @@ class DataAggTaskEnsureBatchMagicTest {
             jdbc = new JdbcTemplate(source);
             jdbc.execute("""
                     create table db_table_t(tid varchar(64),tenant_id varchar(32),datasource_id varchar(64),
-                        table_name varchar(100),table_name_cn varchar(100),source_table_id varchar(64),source_catalog_id varchar(64),
-                        field_governance_config clob,created_time timestamp,is_del int,asset_status int default 2)
+                        table_name varchar(100),table_name_en varchar(100),table_name_cn varchar(100),
+                        source_table_id varchar(64),source_catalog_id varchar(64),timestamp_field varchar(100),
+                        field_governance_config clob,created_time timestamp,is_del int,asset_status int default 2,
+                        access_request_status int default 0)
                     """);
             jdbc.execute("""
                     create table db_datasource_t(tid varchar(64),tenant_id varchar(32),db_type varchar(32),
@@ -1094,11 +1181,13 @@ class DataAggTaskEnsureBatchMagicTest {
 
         int readCount() { return counter.queries; }
         int writeCount() { return counter.writes; }
-        void resetCounter() { counter.queries=0; counter.writes=0; }
+        void resetCounter() { counter.queries=0; counter.writes=0; counter.structuredWriteStatements.clear(); }
 
         Object run(Map<String, Object> body) throws Exception {
+            // The adjacent materialization test reuses this fixture and provides its own comment column.
+            jdbc.execute("alter table db_table_t add column if not exists table_comment varchar(300)");
             String script = CanonicalMagicSources.byId(SOURCE_ID)
-                    .replaceAll("(?m)^import (jsons|metadataAsset|targetTableSchema|apiPullConfig|tenantRuntime|dataScope|tableRead|com\\.linewell\\.dataelement\\.metautil\\.structured\\.StructuredSourceProbeService as structuredFileProbe)\\r?\\n", "");
+                    .replaceAll("(?m)^import (jsons|metadataAsset|targetTableSchema|apiPullConfig|tenantRuntime|dataScope|tableRead|tableWrite|com\\.linewell\\.dataelement\\.metautil\\.structured\\.StructuredSourceProbeService as structuredFileProbe)\\r?\\n", "");
             Map<String, Object> inputs = new LinkedHashMap<>();
             inputs.put("db", db);
             inputs.put("body", body);
@@ -1112,11 +1201,39 @@ class DataAggTaskEnsureBatchMagicTest {
                         "Domain ranking must read within the source-lock transaction");
                 counter.record(sql);
             }));
-            counter.queries = 0;
-            counter.writes = 0;
+            inputs.put("tableWrite", new StructuredTableWriteMagicModule(countedWriteJdbc()));
+            resetCounter();
             try (var tenant = TenantContext.use(scope.id())) {
                 return MagicScript.create(script, null).execute(new MagicScriptContext(inputs));
             }
+        }
+
+        private JdbcTemplate countedWriteJdbc() {
+            var source = jdbc.getDataSource();
+            return new JdbcTemplate(source) {
+                @Override public <T> T execute(ConnectionCallback<T> action) {
+                    return super.execute((ConnectionCallback<T>) connection -> {
+                        assertTrue(DataSourceUtils.isConnectionTransactional(DataSourceUtils.getTargetConnection(connection), source),
+                                "The structured lock and approval use the Magic SQLModule transaction connection");
+                        return action.doInConnection((Connection) Proxy.newProxyInstance(getClass().getClassLoader(),
+                                new Class<?>[]{ConnectionProxy.class}, (proxy, method, arguments) -> {
+                                    if (method.getName().equals("getTargetConnection")) {
+                                        return DataSourceUtils.getTargetConnection(connection);
+                                    }
+                                    if (method.getName().equals("prepareStatement")) {
+                                        String sql = (String) arguments[0];
+                                        counter.structuredWriteStatements.add(sql.stripLeading().toLowerCase(Locale.ROOT));
+                                        counter.record(sql);
+                                    }
+                                    try {
+                                        return method.invoke(connection, arguments);
+                                    } catch (InvocationTargetException failure) {
+                                        throw failure.getCause();
+                                    }
+                                }));
+                    });
+                }
+            };
         }
     }
 
@@ -1137,6 +1254,7 @@ class DataAggTaskEnsureBatchMagicTest {
     }
 
     private static final class QueryCounter implements SQLInterceptor {
+        final List<String> structuredWriteStatements = new ArrayList<>();
         int queries;
         int writes;
         @Override
