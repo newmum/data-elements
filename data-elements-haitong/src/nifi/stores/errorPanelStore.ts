@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import type { FlowError } from '../api/pipelines';
+import type { FlowError, LiveFlowBulletin } from '../api/pipelines';
+import { bulletinKey, type DismissedFlowErrors } from '../runtime/dismissedFlowErrors';
 import type { FlowAction } from '../utils/flowActionFailure';
 import { onNifiSessionChange } from '../api/bridgeSession';
 
@@ -14,6 +15,8 @@ interface ErrorPanelState {
   failureSequence: number;
   record: (pipelineId: string | null, action: FlowAction, error: FlowError, reveal?: boolean) => void;
   clearFailures: (pipelineId: string | null, action?: FlowAction) => void;
+  dismissed: Record<string, DismissedFlowErrors>;
+  dismiss: (pipelineId: string, history: readonly FlowError[], bulletins: readonly LiveFlowBulletin[]) => void;
 }
 
 export const useErrorPanelStore = create<ErrorPanelState>((set) => ({
@@ -23,6 +26,11 @@ export const useErrorPanelStore = create<ErrorPanelState>((set) => ({
   toggle: () => set((s) => ({ visible: !s.visible })),
   failures: [],
   failureSequence: 0,
+  dismissed: {},
+  dismiss: (pipelineId, history, bulletins) => set(s => ({ dismissed: { ...s.dismissed, [pipelineId]: {
+    historyIds: new Set([...(s.dismissed[pipelineId]?.historyIds ?? []), ...history.map(row => row.id)]),
+    bulletinKeys: new Set([...(s.dismissed[pipelineId]?.bulletinKeys ?? []), ...bulletins.map(bulletinKey)]),
+  } } })),
   record: (pipelineId, action, error, reveal = true) => set(s => ({
     visible: s.visible || reveal, failureSequence: s.failureSequence + 1,
     failures: [{ pipelineId, action, error }, ...s.failures.filter(row => row.pipelineId !== pipelineId || row.action !== action)].slice(0, 100),
@@ -33,4 +41,4 @@ export const useErrorPanelStore = create<ErrorPanelState>((set) => ({
 }));
 
 // A reused iframe must not display diagnostics from another account/tenant session.
-onNifiSessionChange(() => useErrorPanelStore.setState({ visible: false, failures: [], failureSequence: 0 }));
+onNifiSessionChange(() => useErrorPanelStore.setState({ visible: false, failures: [], failureSequence: 0, dismissed: {} }));

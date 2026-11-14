@@ -22,21 +22,12 @@
   "responseBodyDefinition": null
 }
 ================================
-// 接口：01.通用盘点统计
-// 路由：POST /dst/statistics/common
-// 业务说明：通用盘点统计（POST /dst/statistics/common）。应用系统按与分页列表完全相同的 Elasticsearch 快照返回总数和 orgId 聚合，保证左侧“全部/部门”统计与右侧分页一致；请求示例使用当前 ES 中的应用系统数据。当 assetType=db 且仅统计 orgId 时保留数据源兼容逻辑；使用请求参数 countFields、conditions；涉及 db_datasource_t 等业务表。
 import tenantEs
 import '@/common/configData' as configData;
 
-// 接口说明：资产字段聚合统计。
-// 读取范围：ES dataassets 索引。
-// 写入行为：无写入。
-// 校验方式：用 assetType+orgId 聚合对比 ES terms 结果。
-
-// 资产通用统计接口。
-// 读取范围：ES dataassets 索引，统计 da_asset_t 同步到 ES 后的资产快照。
-// 写入行为：无写入，不修改数据库或 ES；仅返回各字段的 terms 聚合计数。
-// 调用场景：my-app/my-db 等低代码页面用它给组织树、系统、数据库等筛选条件标注数量。
+// POST /dst/statistics/common：按 conditions 筛选当前租户的资产投影，返回总数和 countFields 聚合。
+// 应用系统复用分页使用的 Elasticsearch 投影，数据源的部门统计沿用兼容逻辑。
+// 供 my-app、my-db 等低代码页面展示筛选项计数，执行只读查询。
 // 条件规则：match 使用 term 精确匹配，in 使用 terms，like 使用 wildcard；空值条件会被忽略。
 
 var countFields = body?.countFields || [];

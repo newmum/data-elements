@@ -82,7 +82,7 @@ public class ServiceFlowHttpMagicTest {
     }
 
     public static void main(String[] args) throws Exception {
-        String file = Files.readString(Path.of("magic", "function", "01.通用函数", "31.执行服务编排HTTP链路.ms"));
+        String file = Files.readString(Path.of("magic", "function", "01.通用函数", "28.执行服务编排HTTP链路.ms"));
         String script = file.substring(file.indexOf("================================") + 32)
                 .replaceAll("(?m)^import (?:'[^']+' as \\w+|org.springframework.core.env.Environment as environment|dataScope|tenantRuntime)\\r?$", "");
         var calls = new ArrayList<String>();

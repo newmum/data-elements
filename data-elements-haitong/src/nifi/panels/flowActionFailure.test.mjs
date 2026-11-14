@@ -7,6 +7,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { compiler } from '../../../scripts/compiler.mjs';
 import { flowActionFailure, mergeFlowErrors, diagnosticText } from '../utils/flowActionFailure.ts';
+import { visibleFlowErrors, visibleFlowBulletins } from '../runtime/dismissedFlowErrors.ts';
 
 const failure = (count = 20) => ({ response: { status: 422, data: { code: 'MAPPING_PREFLIGHT_FAILED',
   error: 'MAPPING_PREFLIGHT_FAILED', message: '字段映射发布前检查失败', detail: `${count} 个字段：NiFi 缺少 1.1.12 扩展`, traceId: 'trace-fixture' } },
@@ -109,11 +110,14 @@ test('the actual error panel renders the failed response even when the server er
       Segmented: p => React.createElement('div', null, p.options.map(row => row.label).join(' ')),
       Empty: p => React.createElement('div', null, p.description), Button: p => React.createElement('button', null, p.children),
       Tag: p => React.createElement('span', null, p.children), Tooltip: p => p.children, Alert: p => React.createElement('div', null, p.message) };
-    if (id === '@/stores/errorPanelStore') return { useErrorPanelStore: select => select({ visible: true, failures: [{ pipelineId: 'p', error: row }], failureSequence: 1 }) };
-    if (id === '@/stores/canvasStore') return { useCanvasStore: select => select({ currentPipelineId: 'p' }) };
-    if (id === '@/api/pipelines') return { useFlowErrors: () => ({ data: [], isError: true, error: new Error('poll failed') }), useClearFlowErrors: () => ({}) };
+    if (id === '@/stores/errorPanelStore') return { useErrorPanelStore: select => select({ visible: true, failures: [{ pipelineId: 'p', error: row }], failureSequence: 1, dismissed: {} }) };
+    if (id === '@/stores/canvasStore') return { useCanvasStore: select => select({ currentPipelineId: 'p', nodes: {} }) };
+    if (id === '@/api/pipelines') return { useFlowErrors: () => ({ data: [], isError: true, error: new Error('poll failed') }), useClearFlowErrors: () => ({}),
+      useFlowStatus: () => ({ data: { deployed: true } }), useLiveFlowBulletins: () => ({ data: [{ id: '1', level: 'ERROR', sourceName: '来源库', message: '日期解析失败', timestamp: '' }] }) };
     if (id === '../api/bridgeSession') return { useSessionRevision: () => 1, useTokenReady: () => false };
     if (id === '../utils/flowActionFailure') return { mergeFlowErrors };
+    if (id === '../runtime/activeFlowErrors') return { groupActiveFlowErrors: () => ({}) };
+    if (id === '../runtime/dismissedFlowErrors') return { visibleFlowErrors, visibleFlowBulletins };
     return {};
   } });
   const html = renderToStaticMarkup(React.createElement(exports.default));
@@ -121,5 +125,7 @@ test('the actual error panel renders the failed response even when the server er
   assert.match(html, /部署 \(1\)/);
   assert.match(html, /字段映射发布前检查失败/);
   assert.match(html, /NiFi 缺少 1.1.12 扩展/);
+  assert.match(html, /NiFi 告警/);
+  assert.match(html, /日期解析失败/);
   assert.doesNotMatch(html, /暂无错误/);
 });

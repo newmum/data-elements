@@ -44,6 +44,81 @@ test("56 项契约指向真实实现及当前审阅版本", async () => {
   assert.deepEqual(result.errors, []);
 });
 
+test("所属系统选择项一次返回完整租户角色范围，保留线上字段和浏览器搜索所需候选", async () => {
+  const route = "/dst/application/register-options";
+  const contract = JSON.parse(await fs.readFile(new URL("../../mock/contracts/chengtian.json", import.meta.url), "utf8"));
+  const schema = contract.interfaces.find((item) => item.operation === `POST ${route}`).response;
+  for (const role of ["admin", "department", "registrar"]) {
+    const { runtime } = setup(role);
+    const orgId = runtime.session.orgId;
+    const tenantId = runtime.session.tenantId;
+    const row = (tid, appName, extra = {}) => ({ tid, appName, tenantId, orgId, ...extra });
+    runtime.database.applications = [
+      row("validation-z", "同名应用", { isDel: 0, createdBy: "validation-owner" }),
+      row("validation-a", "同名应用", { isDel: null, createdBy: "validation-other" }),
+      row("validation-null", null),
+      row("validation-outside", "另一部门", { orgId: "outside-org" }),
+      row("validation-deleted", "删除系统", { isDel: 1 }),
+      row("validation-foreign", "跨租户", { tenantId: "foreign-tenant" }),
+    ];
+    runtime.persist(runtime.database);
+
+    const before = runtime.requests.length;
+    const actual = (await request(runtime, route)).body.data;
+    assert.equal(runtime.requests.length - before, 1);
+    validateShape(actual, schema);
+    assert.deepEqual(actual[0], { label: null, value: "validation-null", orgid: orgId, createdby: null });
+    assert.deepEqual(actual.filter((item) => item.label === "同名应用"), [
+      { label: "同名应用", value: "validation-a", orgid: orgId, createdby: "validation-other" },
+      { label: "同名应用", value: "validation-z", orgid: orgId, createdby: "validation-owner" },
+    ]);
+    assert.equal(actual.some((item) => item.value === "validation-outside"), role === "admin");
+    assert(actual.every((item) => !["validation-foreign", "validation-deleted"].includes(item.value)));
+    const spoofed = (await request(runtime, route, {
+      keyword: "缺少的系统", limit: 1, tenantId: "foreign-tenant", orgId: "outside-org", scope: "ALL",
+    })).body.data;
+    assert.deepEqual(spoofed, actual);
+  }
+  const { runtime } = setup("registrar");
+  runtime.session.orgId = "";
+  assert.deepEqual((await request(runtime, route)).body.data, []);
+});
+
+test("元数据探查保持独立读范围，刷新按父源角色校验并仅正式保存概览", async () => {
+  const { runtime, storage } = setup("registrar");
+  const tenant = runtime.session.tenantId;
+  const sources = runtime.database.sources;
+  const own = sources.find((row) => row.createdBy === runtime.session.userId);
+  const other = sources.find((row) => row.createdBy !== runtime.session.userId);
+  const table = runtime.database.tables.find((row) => row.datasourceId === own.tid && row.tenantId === tenant);
+  const sourceBefore = structuredClone(own);
+  const tableBefore = structuredClone(table);
+  const probe = "/dst/database/metadata/dbInfo";
+  const refresh = "/dst/database/metadata/refreshDbInfo";
+  const get = (path, query) => request(runtime, path, {}, query, "GET");
+
+  assert.equal((await get(probe, { tid: other.tid })).status, 200);
+  assert.equal((await get(refresh, { tid: other.tid, dryRun: "true" })).body.code, 403);
+  assert.equal((await get(refresh, { tid: other.tid, tableId: table.tid })).body.message, "数据表不属于指定数据源");
+  assert.equal((await get(refresh, { tid: own.tid, tableId: "unknown" })).body.code, 404);
+  assert.equal((await get(refresh, {})).body.code, 400);
+  const dryTable = await get(refresh, { tid: own.tid, tableId: table.tid, dryRun: true });
+  assert.equal(dryTable.body.data.fieldCount, table.fieldCount);
+  assert.equal(dryTable.body.data.ddlCreateTime, null);
+  assert.equal(storage.values.size, 0);
+
+  assert.deepEqual((await get(refresh, { tid: own.tid, tableId: table.tid })).body.data, dryTable.body.data);
+  const savedTable = runtime.database.tables.find((row) => row.tid === table.tid);
+  assert.equal(savedTable.createdBy, tableBefore.createdBy);
+  assert.equal(savedTable.tableComment, tableBefore.tableComment);
+  assert.notEqual(savedTable.updatedTime, tableBefore.updatedTime);
+  const savedSource = (await get(refresh, { tid: own.tid })).body.data;
+  assert.equal(savedSource.tid, own.tid);
+  assert.equal(savedSource.table_num, savedSource.tableCount);
+  assert.equal(savedSource.procedure_count, null);
+  assert.equal(runtime.database.sources.find((row) => row.tid === own.tid).createdBy, sourceBefore.createdBy);
+});
+
 for (const code of Object.keys(scenarios)) {
   test(`${code}：场景关联完整且 20/100 行均为一次列表请求`, async () => {
     const { runtime } = setup("admin", code),
@@ -128,7 +203,7 @@ for (const role of ["admin", "department", "registrar"]) {
             propList: { dbName: "无权修改" },
           })
         ).status,
-        404,
+        403,
       );
       assert.equal(
         (
@@ -190,17 +265,26 @@ test("本地存储失败不提交内存修改，dryRun 不持久化", async () =
   const { runtime, storage } = setup();
   const original = runtime.database.sources[0].dbName;
   const id = runtime.database.sources[0].tid;
-  assert.equal(
-    (
-      await request(runtime, "/dst/database/saveOrUpdate", {
-        tid: id,
-        dryRun: true,
-        propList: { dbName: "预检名称" },
-      })
-    ).status,
-    200,
-  );
-  assert.equal(runtime.database.sources[0].dbName, original);
+  for (const [dryRun, propList] of [
+    [true, { dbName: "预检名称" }],
+    [undefined, { dbName: "预检名称", dryRun: true }],
+  ]) {
+    const preview = await request(runtime, "/dst/database/saveOrUpdate", {
+      tid: id, dryRun, propList, deferIndexRefresh: true,
+    });
+    assert.equal(preview.status, 200);
+    assert.equal(preview.body.data.tid, id);
+    assert.equal(preview.body.data.indexRefreshPending, false);
+    assert.equal(runtime.database.sources[0].dbName, original);
+  }
+  const existingCount = runtime.database.sources.length;
+  const newPreview = await request(runtime, "/dst/database/saveOrUpdate", {
+    propList: { dbName: "拟新增来源", dryRun: true }, deferIndexRefresh: "1",
+  });
+  assert.equal(newPreview.status, 200);
+  assert.equal(newPreview.body.data.assetStatus, 0);
+  assert.equal(newPreview.body.data.indexRefreshPending, false);
+  assert.equal(runtime.database.sources.length, existingCount);
   storage.setItem = () => {
     throw new Error("storage full");
   };
@@ -215,6 +299,114 @@ test("本地存储失败不提交内存修改，dryRun 不持久化", async () =
   );
   assert.equal(runtime.database.sources[0].dbName, original);
 });
+
+test("数据源保存复用索引延期参数，并拒绝覆盖已提交的场景版本", async () => {
+  const { runtime, storage } = setup();
+  const id = runtime.database.sources[0].tid;
+  for (const flag of [true, 1, "1", false]) {
+    const saved = await request(runtime, "/dst/database/saveOrUpdate", {
+      tid: id, deferIndexRefresh: flag, propList: { dbName: "已保存名称" },
+    });
+    assert.equal(saved.status, 200);
+    assert.equal(saved.body.data.indexRefreshPending, flag !== false);
+  }
+  const key = [...storage.values.keys()].find((name) => name.includes("chengtian:v3"));
+  const newer = JSON.parse(storage.getItem(key));
+  newer.sources[0].dbName = "另一窗口已经提交";
+  newer.sources[0].versionNo++;
+  const getItem = storage.getItem;
+  let reads = 0;
+  storage.getItem = (name) => {
+    if (name === key && ++reads === 3) storage.setItem(key, JSON.stringify(newer));
+    return getItem(name);
+  };
+  const conflict = await request(runtime, "/dst/database/saveOrUpdate", {
+    tid: id, propList: { dbName: "不应覆盖" },
+  });
+  assert.equal(conflict.status, 409);
+  assert.equal(JSON.parse(getItem(key)).sources[0].dbName, "另一窗口已经提交");
+});
+
+test("普通结束登记按有效同源表统计，并只保存登记状态", async () => {
+  const { runtime } = setup();
+  const source = runtime.database.sources[0];
+  const tables = runtime.database.tables.filter((row) => row.datasourceId === source.tid);
+  const registered = tables.filter((row) => row.assetStatus === 2).length;
+  runtime.persist(runtime.database);
+  const path = "/dst/database/saveOrUpdate";
+  const payload = { tid: source.tid, propList: { completeOnly: true, dbName: "不应修改" } };
+  const preview = await request(runtime, path, { ...payload, dryRun: true });
+  assert.deepEqual(preview.body.data, {
+    tid: source.tid, assetStatus: 1, displayStatus: 1, completionEligible: true, tableReviewReady: false,
+    tableCount: tables.length, registeredTableCount: registered, pendingTableCount: tables.length - registered, dryRun: true,
+  });
+  assert.equal(runtime.database.sources[0].assetStatus, source.assetStatus);
+  const saved = await request(runtime, path, payload);
+  assert.equal(saved.status, 200);
+  assert.equal(saved.body.data.assetStatus, 1);
+  assert.equal(runtime.database.sources[0].flowStatus, 2);
+  assert.equal(runtime.database.sources[0].dbName, source.dbName);
+});
+
+test("已登记数据源关闭连接时，预检和正式保存都返回待登记状态", async () => {
+  const { runtime } = setup();
+  const source = runtime.database.sources.find((row) => row.assetStatus === 2 && row.showConnect === 1);
+  const payload = { tid: source.tid, propList: { showConnect: 0 } };
+  const preview = await request(runtime, "/dst/database/saveOrUpdate", { ...payload, dryRun: true });
+  assert.equal(preview.body.data.assetStatus, 0);
+  assert.equal(runtime.database.sources.find((row) => row.tid === source.tid).assetStatus, 2);
+  const saved = await request(runtime, "/dst/database/saveOrUpdate", payload);
+  assert.equal(saved.body.data.assetStatus, 0);
+  assert.equal(runtime.database.sources.find((row) => row.tid === source.tid).flowStatus, 0);
+});
+
+for (const role of ["admin", "department", "registrar"]) {
+  test(`${role}：代理完成登记按可见服务预检并在提交时复核`, async () => {
+    const { runtime, storage } = setup(role);
+    const source = runtime.database.sources[0];
+    source.accessMode = "proxy";
+    const witness = { tid: "validation-service", tenantId: runtime.session.tenantId,
+      datasourceId: source.tid, orgId: runtime.session.orgId, createdBy: runtime.session.userId, isDel: 0 };
+    runtime.database.services = [witness,
+      { ...witness, tenantId: "another-tenant" }, { ...witness, datasourceId: "another-source" },
+      { ...witness, isDel: 1 },
+      ...(role === "admin" ? [] : [{ ...witness, orgId: "another-org", createdBy: "another-user" }]),
+    ];
+    runtime.persist(runtime.database);
+    const payload = { tid: source.tid, propList: { completeOnly: true, dbName: "不应覆盖配置" } };
+    const preview = await request(runtime, "/dst/database/saveOrUpdate", { ...payload, dryRun: true });
+    assert.deepEqual(preview.body.data, {
+      tid: source.tid, assetStatus: 2, completionEligible: true, tableReviewReady: true,
+      serviceCount: 1, tableCount: 0, registeredTableCount: 0, pendingTableCount: 0,
+    });
+    const legacyPreview = await request(runtime, "/dst/database/saveOrUpdate", {
+      tid: source.tid, propList: { asset_status: 2, dryRun: true },
+    });
+    assert.deepEqual(legacyPreview.body.data, preview.body.data);
+    const key = [...storage.values.keys()].find((name) => name.includes("chengtian:v3"));
+    const original = storage.getItem(key);
+    const withoutWitness = JSON.parse(original);
+    withoutWitness.services[0].isDel = 1;
+    let reads = 0;
+    const getItem = storage.getItem;
+    storage.getItem = (name) => {
+      if (name === key && ++reads === 3) storage.setItem(key, JSON.stringify(withoutWitness));
+      return getItem(name);
+    };
+    const conflict = await request(runtime, "/dst/database/saveOrUpdate", payload);
+    assert.equal(conflict.status, 409);
+    assert.equal(conflict.body.message, "服务清单已变化，请重新确认后结束登记");
+    assert.equal(JSON.parse(getItem(key)).sources[0].assetStatus, source.assetStatus);
+    storage.getItem = getItem;
+    assert.equal((await request(runtime, "/dst/database/saveOrUpdate", payload)).status, 400);
+    storage.setItem(key, original);
+    const finished = await request(runtime, "/dst/database/saveOrUpdate", payload);
+    assert.equal(finished.status, 200);
+    assert.equal(finished.body.data.assetStatus, 2);
+    assert.equal(finished.body.data.indexSync, "status-patch");
+    assert.equal(runtime.database.sources[0].dbName, source.dbName);
+  });
+}
 
 test("分页边界、排序和缺少身份均明确失败", async () => {
   const { runtime } = setup();

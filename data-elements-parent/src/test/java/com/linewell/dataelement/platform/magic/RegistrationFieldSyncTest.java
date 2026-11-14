@@ -78,12 +78,33 @@ class RegistrationFieldSyncTest {
         }
     }
     @Test void batchReadsRemainThreeSqlAtTwentyAndOneHundredTablesAndCheckEveryId()throws Exception{
-        var f=new Fixture(260);assertEquals(260,((List<?>)f.fields("table")).size());
+        var f=new Fixture(260);
+        assertEquals(260,((List<?>)f.fields("table")).size());
+        f.jdbc.update("INSERT INTO db_datasource_t VALUES('other-owned','tenant-a','mysql','其他登记来源','other-org','other-owner',0)");
         for(int count:List.of(20,100)){
             var ids=new ArrayList<String>();
-            for(int i=0;i<count;i++){String id="table-"+i;ids.add(id);f.jdbc.update("MERGE INTO db_table_t(tid,tenant_id,datasource_id,table_name,is_del) KEY(tid) VALUES(?,'tenant-a','source','wide',0)",id);}
-            f.counter.reads=0;assertInstanceOf(Map.class,f.fields(String.join(",",ids)));assertEquals(3,f.counter.reads);
-            ids.set(count-1,"foreign-table");assertInstanceOf(ExitValue.class,f.fields(String.join(",",ids)));
+            for(int i=0;i<count;i++){
+                String id="table-"+i;
+                ids.add(id);
+                String sourceId=i == count-1 ? "other-owned" : "source";
+                f.jdbc.update("MERGE INTO db_table_t(tid,tenant_id,datasource_id,table_name,is_del) KEY(tid) VALUES(?,'tenant-a',?,'wide',0)",id,sourceId);
+                f.jdbc.update("MERGE INTO db_table_column_t(tid,tenant_id,table_id,column_name,is_del) KEY(tid) VALUES(?,'tenant-a',?,'visible',0)","column-for-"+id,id);
+            }
+            f.jdbc.update("MERGE INTO db_table_column_t(tid,tenant_id,table_id,column_name,is_del) KEY(tid) VALUES('foreign-batch-field','tenant-b',?,'foreign_secret',0)",ids.getLast());
+            // Independent snapshot reads accept active same-tenant parents and exclude foreign rows.
+            f.scope.denied=true;
+            f.counter.reads=0;
+            var groups=StructuredValues.objectMap(f.fields(String.join(",",ids)));
+            assertEquals(3,f.counter.reads);
+            assertEquals(count,groups.size());
+            for(String id:ids){
+                var rows=StructuredValues.objectRows(groups.get(id));
+                assertEquals(1,rows.size());
+                assertEquals("visible",rows.getFirst().get("columnName"));
+            }
+            ids.set(count-1,"foreign-table");
+            var rejected=assertInstanceOf(ExitValue.class,f.fields(String.join(",",ids)));
+            assertEquals(404,rejected.getValues()[0]);
         }
         f.scope.denied=true;assertInstanceOf(List.class,f.fields("table"));assertInstanceOf(List.class,f.sync(false));assertEquals(1,f.physical.calls);
     }

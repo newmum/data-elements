@@ -22,17 +22,10 @@
   "responseBodyDefinition": null
 }
 ================================
-// 接口：06.查询应用系统数据表
-// 路由：POST /dst/application/tables
-// 业务说明：应用系统 06：查询应用系统关联的数据表；使用请求参数 appId；涉及 db_datasource_t、db_table_t 等业务表。
 import java.util.Map
 
-/*
- * 应用系统 06：查询应用系统关联的数据表。
- *
- * 通过 db_datasource_t.app_id -> db_table_t.datasource_id 直接查询主表，
- * 不读取 da_asset_t 或 da_prop_t。
- */
+// POST /dst/application/tables：按 appId 查询应用系统关联的数据表列表。
+// 先按 db_datasource_t.app_id 找到数据源，再按 db_table_t.datasource_id 查询登记表。
 
 var blank = (value) => value == null || (value + '').trim() == ''
 var first = (row, keys) => {

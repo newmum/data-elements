@@ -32,9 +32,10 @@ const detail=await handlers('lowcode/02.数据盘点/02.登记流程组件/详�
  ['titleActions','isTitleActionDisabled','resolveActionValue','handleTitleAction','detailApi','displayDataForDetail']);
 for(const size of [20,100]) {
   const calls=[],values=[],notices=[];
-  const ctx=vm.createContext({detailClass:{value:'table'},props:{tid:'table'},state:{editing:false,actionLoading:{},formData:{datasourceId:'db',recordCount:99}},
+  const ctx=vm.createContext({detailClass:{value:'table'},props:{tid:'table'},detailLoading:{value:false},loadError:{value:''},
+    state:{editing:false,actionLoading:{},formData:{datasourceId:'db',recordCount:99}},
     formRef:{value:{setValue:data=>values.push(data)}},store:{setData:()=>{}},
-    $common:{get:async(url,body)=>{calls.push({url,body});return {recordCount:0};},
+    $common:{getSilently:async(url,body)=>{calls.push({url,body});return {recordCount:0};},
       post:async(url,body)=>{calls.push({url,body});return {detail:{recordCount:0,fieldCount:0,storageSize:'0 B'}};}},
     $message:{success:text=>notices.push(text),error:assert.fail}});
   vm.runInContext(detail,ctx);
@@ -47,6 +48,28 @@ for(const size of [20,100]) {
   assert.equal(notices.length,1);assert.equal(ctx.state.actionLoading.refreshMetadata,false);
   assert.equal(rule.props.actions,undefined,'Dynamic tenant form configuration is not mutated');
 }
+const rejected = [], calls = [];
+const denied = vm.createContext({
+  detailClass: {value: 'table'}, props: {tid: 'table'},
+  detailLoading: {value: false}, loadError: {value: ''},
+  state: {editing: false, actionLoading: {}, formData: {datasourceId: 'db', recordCount: 99}},
+  $common: {
+    getSilently: async (url, body) => {
+      calls.push({url, body});
+      throw new Error('数据源不存在或无权修改');
+    },
+    get: assert.fail, post: assert.fail,
+  },
+  $message: {success: assert.fail, error: (message) => rejected.push(message)},
+  console: {error: () => {}},
+});
+vm.runInContext(detail, denied);
+await denied.actual.handleTitleAction(denied.actual.titleActions({props: {name: '元数据信息'}})[0]);
+assert.deepEqual(rejected, ['数据源不存在或无权修改']);
+assert.equal(calls.length, 1);
+assert.equal(denied.state.formData.recordCount, 99);
+assert.equal(denied.state.actionLoading.refreshMetadata, false);
+
 const display=await handlers('lowcode/02.数据盘点/02.登记流程组件/详情页面(detail-page)/1. 资产【app%7Cdb%7Ctable%7Ccategory】详情(base-detail).vue',['metadataDisplayRule']);
 const displayCtx=vm.createContext({detailClass:{value:'db'}});
 vm.runInContext(display,displayCtx);

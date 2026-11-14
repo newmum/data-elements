@@ -8,7 +8,6 @@ import com.linewell.dataelement.integration.nifi.canvas.lifecycle.PipelineGroupO
 import com.linewell.dataelement.integration.nifi.canvas.lifecycle.PipelineTaskLifecycleSynchronizer;
 import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient;
 import com.linewell.dataelement.integration.nifi.canvas.pipeline.*;
-import com.linewell.dataelement.dataservice.pull.ApiPullConfigurationMagicModule;
 import com.linewell.dataelement.platform.tenant.domain.TenantContext;
 import java.util.List;
 import java.util.Map;
@@ -17,6 +16,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.UnaryOperator;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.PlatformTransactionManager;
 
 class PipelineSaveIdentityTest {
     private final PipelineRepository repo = mock(PipelineRepository.class);
@@ -24,7 +24,7 @@ class PipelineSaveIdentityTest {
     private final NifiClient nifi = mock(NifiClient.class);
     private final PipelineGroupOrganizer groups = mock(PipelineGroupOrganizer.class);
     private final PipelineController controller = new PipelineController(repo, nifi, null, null, jdbc, null,
-            mock(ApiPullConfigurationMagicModule.class), mock(PipelineTaskLifecycleSynchronizer.class), groups);
+            mock(PlatformTransactionManager.class), mock(PipelineTaskLifecycleSynchronizer.class), groups);
 
     @Test
     void catalogWithoutPipelineIdInBrowserReopensAndSavesSamePipeline() {

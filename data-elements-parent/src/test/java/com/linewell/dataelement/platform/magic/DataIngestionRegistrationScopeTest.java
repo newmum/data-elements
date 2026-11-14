@@ -168,7 +168,7 @@ class DataIngestionRegistrationScopeTest {
         bindings.put("tableSort",new TableSortMagicModule());
         bindings.put("tableRead", f.tableRead);
         TaskRuntimeMagicFixture.bindTableFamily(bindings);
-        String classifier = CanonicalMagicSources.byPath("function/01.通用函数/23.ODS来源库分类.ms",
+        String classifier = CanonicalMagicSources.byPath("function/01.通用函数/20.ODS来源库分类.ms",
                 "d2138de2de28456aa57d9ade2305eed7").replaceAll("(?m)^import [^\\r\\n]+\\R", "");
         MagicScript classifierScript = MagicScript.create(classifier, null);
         bindings.put("odsSourceClassifier", (Function<Object[], Object>) arguments -> classifierScript.execute(

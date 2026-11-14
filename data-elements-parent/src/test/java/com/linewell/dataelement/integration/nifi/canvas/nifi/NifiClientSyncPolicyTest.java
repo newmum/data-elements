@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.linewell.dataelement.integration.nifi.canvas.config.NifiNodeRuntimeResolver;
 import com.linewell.dataelement.model.nifi.NifiEntity;
 import com.linewell.dataelement.model.nifi.RevisionDto;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -20,6 +21,23 @@ class NifiClientSyncPolicyTest {
     private final ObjectMapper mapper = new ObjectMapper();
     private final NifiNodeRuntimeResolver runtimeResolver = mock(NifiNodeRuntimeResolver.class);
     private final NifiClient client = spy(new NifiClient(runtimeResolver, mapper));
+
+    @ParameterizedTest
+    @ValueSource(ints = {20, 100})
+    void oneGroupClearCoversAllVisibleBulletinsWhenTheLeafyClockIsAhead(int size) {
+        var board = mapper.createObjectNode();
+        var rows = board.putObject("bulletinBoard").putArray("bulletins");
+        for (int i = 0; i < size; i++) {
+            rows.addObject().putObject("bulletin").put("timestampIso", "2026-11-13T09:00:01.001Z");
+        }
+        doReturn(board).when(client).getBulletinBoard("pg", 0);
+        String path = "/flow/process-groups/pg/bulletins/clear-requests";
+        doReturn(mapper.createObjectNode().put("bulletinsCleared", size)).when(client).post(eq(path), any(), eq(JsonNode.class));
+
+        assertThat(client.clearGroupBulletins("pg", Instant.parse("2026-11-13T09:00:00Z"))).isEqualTo(size);
+        verify(client).getBulletinBoard("pg", 0);
+        verify(client).post(path, Map.of("id", "pg", "fromTimestamp", "2026-11-13T09:00:01.002Z"), JsonNode.class);
+    }
 
     @ParameterizedTest
     @ValueSource(ints = {20, 100})

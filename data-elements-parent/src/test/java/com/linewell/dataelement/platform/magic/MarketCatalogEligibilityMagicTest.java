@@ -40,7 +40,7 @@ import org.ssssssss.script.runtime.ExitValue;
 
 /** Executes the canonical shared eligibility function through the deployed Elasticsearch plugin. */
 class MarketCatalogEligibilityMagicTest {
-    private static final String PATH = "function/01.通用函数/27.超市目录发布资格.ms";
+    private static final String PATH = "function/01.通用函数/24.超市目录发布资格.ms";
     private static final String ID = "09ecb205502244aba26408368d56aad3";
     private static final String TENANT = "validation-tenant";
     private static final String FOREIGN = "validation-other-tenant";

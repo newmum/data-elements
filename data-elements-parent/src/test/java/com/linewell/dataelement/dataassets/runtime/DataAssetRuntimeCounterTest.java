@@ -2,27 +2,20 @@ package com.linewell.dataelement.dataassets.runtime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyList;
-import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.linewell.dataelement.dataassets.base.entity.DataPropT;
-import com.linewell.dataelement.dataassets.base.service.IDaAssetCatalogItemTService;
-import com.linewell.dataelement.dataassets.base.service.IDaAssetTService;
 import com.linewell.dataelement.dataassets.base.service.IDataPropTService;
 import com.linewell.dataelement.elasticsearch.EsCommonService;
-import com.linewell.dataelement.model.dataasset.DataAssetPropBatchSaveRequest;
-import com.linewell.dataelement.model.dataasset.DataAssetPropSaveRequest;
-import com.linewell.dataelement.model.dataasset.DataAssetQueryByIdRequest;
 import com.linewell.dataelement.platform.magic.StructuredTableReadMagicModule;
 import com.linewell.dataelement.platform.tenant.domain.TenantContext;
 import java.lang.reflect.InvocationTargetException;
@@ -32,7 +25,6 @@ import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -81,7 +73,6 @@ class DataAssetRuntimeCounterTest {
         verify(fixture.props, never()).saveBatch(anyCollection());
         verify(fixture.es, never()).getDocument(anyString(), anyString());
         verify(fixture.es, never()).saveOrUpdate(anyString(), anyString(), anyString(), org.mockito.ArgumentMatchers.anyBoolean());
-        verifyNoInteractions(fixture.assets);
         System.out.printf("Runtime catalog callback items=%d, SQL reads=2, property update batches=1, ES merge bulks=1, ES per-id reads=0%n", size);
     }
 
@@ -107,15 +98,20 @@ class DataAssetRuntimeCounterTest {
     }
 
     @Test
-    void singleCallbackUsesTheDatabaseZeroAndMaximumWithoutReadingAnIndexDocument() {
+    void singletonBatchCallbackUsesTheDatabaseZeroAndMaximumWithoutReadingAnIndexDocument() {
         var fixture = new Fixture();
         fixture.catalog("validation-zero", TENANT, 0, 0);
         fixture.catalog("validation-max", TENANT, 0, Long.MAX_VALUE);
         for (var expected : Map.of("validation-zero", 0L, "validation-max", Long.MAX_VALUE).entrySet()) {
-            fixture.single(expected.getKey(), Map.of("viewCount", "1", "marketViewCount_num", "1", "accessTaskId", "task"));
+            fixture.batch(List.of(expected.getKey()), Map.of("viewCount", "1", "marketViewCount_num", "1", "accessTaskId", "task"));
             assertThat(fixture.readSql()).hasSize(2);
-            assertThat(((Number) fixture.singleCount).longValue()).isEqualTo(expected.getValue());
-            assertThat(fixture.singleDoc).containsEntry("accessTaskId", "task");
+            assertThat(fixture.bulkIds).containsExactly(expected.getKey());
+            assertThat(fixture.bulkCounts).hasSize(1);
+            assertThat(((Number) fixture.bulkCounts.getFirst()).longValue()).isEqualTo(expected.getValue());
+            assertThat(fixture.bulkDocs).singleElement().satisfies(document -> {
+                assertThat(document).containsEntry("accessTaskId", "task");
+                assertThat(((Number) document.get("viewCount")).longValue()).isEqualTo(expected.getValue());
+            });
             assertThat(fixture.raw.queryForObject("SELECT market_view_count FROM da_catalog_t WHERE tid=?", Long.class, expected.getKey()))
                     .isEqualTo(expected.getValue());
         }
@@ -141,11 +137,10 @@ class DataAssetRuntimeCounterTest {
         assertThat(result).doesNotContainKey("marketViewCount").doesNotContainValue("foreign").doesNotContainValue("deleted");
         assertThat(fixture.readSql()).hasSize(2);
         verify(fixture.es, never()).getDocument(anyString(), anyString());
-        verifyNoInteractions(fixture.assets);
     }
 
     @Test
-    void deletedAndOrphanCatalogsCannotBeResurrectedWhileNonCatalogViewCountIsPreserved() {
+    void deletedAndOrphanCatalogsCannotBeResurrected() {
         var fixture = new Fixture();
         fixture.catalog("validation-deleted", TENANT, 1, 5);
         fixture.catalog("validation-foreign", "validation-other", 0, 6);
@@ -160,10 +155,34 @@ class DataAssetRuntimeCounterTest {
         assertThat(fixture.query("validation-orphan")).isEmpty();
         assertThat(fixture.query("validation-foreign")).isEmpty();
         assertThat(fixture.query("validation-snake-orphan")).isEmpty();
+        verify(fixture.es).getDocument("dataassets", "validation-orphan");
+        verify(fixture.es).getDocument("dataassets", "validation-foreign");
+        verify(fixture.es).getDocument("dataassets", "validation-snake-orphan");
+        verifyNoMoreInteractions(fixture.es);
+    }
+
+    @Test
+    void missingCatalogUsesOnlyAnAllowedNonCatalogProjectionAndDoesNotWrite() {
+        var fixture = new Fixture();
         Map<String, Object> database = Map.of("tid", "validation-db", "assetType", "db", "viewCount", 17);
+        Map<String, Object> ownTable = Map.of("tid", "validation-table", "asset_type", "table", "tenant_id", TENANT);
         when(fixture.es.getDocument("dataassets", "validation-db")).thenReturn(database);
-        assertThat(fixture.query("validation-db")).containsEntry("viewCount", 17);
-        verify(fixture.es, never()).mergeCatalogProjection(anyString(), anyString(), anyMap(), any());
+        when(fixture.es.getDocument("dataassets", "validation-table")).thenReturn(ownTable);
+        when(fixture.es.getDocument("dataassets", "validation-foreign-db")).thenReturn(
+                Map.of("assetType", "db", "tenantId", "validation-other"));
+        when(fixture.es.getDocument("dataassets", "validation-foreign-table")).thenReturn(
+                Map.of("asset_type", "table", "tenant_id", "validation-other"));
+
+        var expected = Map.of("validation-db", database, "validation-table", ownTable,
+                "validation-missing", Map.<String, Object>of(), "validation-foreign-db", Map.<String, Object>of(),
+                "validation-foreign-table", Map.<String, Object>of());
+        for (var entry : expected.entrySet()) {
+            assertThat(fixture.query(entry.getKey())).isEqualTo(entry.getValue());
+            assertThat(fixture.readSql()).singleElement().satisfies(statement -> assertThat(statement).contains("da_catalog_t"));
+            verify(fixture.es).getDocument("dataassets", entry.getKey());
+        }
+        verifyNoMoreInteractions(fixture.es);
+        verifyNoInteractions(fixture.props);
     }
 
     @Test
@@ -195,7 +214,6 @@ class DataAssetRuntimeCounterTest {
         final JdbcTemplate raw = new JdbcTemplate(source);
         final List<String> sql = new ArrayList<>();
         final IDataPropTService props = mock(IDataPropTService.class);
-        final IDaAssetTService assets = mock(IDaAssetTService.class);
         final EsCommonService es = mock(EsCommonService.class);
         final DataAssetRuntimeAdapter adapter;
         final TransactionTemplate transaction;
@@ -203,8 +221,6 @@ class DataAssetRuntimeCounterTest {
         List<String> bulkIds;
         List<Map<String, Object>> bulkDocs;
         List<?> bulkCounts;
-        Map<String, Object> singleDoc;
-        Object singleCount;
         boolean failIndex;
         int propertyInsertBatches;
         int propertyUpdateBatches;
@@ -245,8 +261,7 @@ class DataAssetRuntimeCounterTest {
                     });
             var jdbc = new JdbcTemplate(counted);
             transaction = new TransactionTemplate(new DataSourceTransactionManager(counted));
-            adapter = new DataAssetRuntimeAdapter(es, assets, props, mock(IDaAssetCatalogItemTService.class),
-                    new ObjectMapper(), new StructuredTableReadMagicModule(jdbc));
+            adapter = new DataAssetRuntimeAdapter(es, props, new StructuredTableReadMagicModule(jdbc));
             doAnswer(invocation -> {
                 propertyInsertBatches++;
                 Collection<DataPropT> rows = invocation.getArgument(0);
@@ -270,12 +285,6 @@ class DataAssetRuntimeCounterTest {
                 if (failIndex) throw new IllegalStateException("validation index unavailable");
                 return bulkIds;
             });
-            when(es.mergeCatalogProjection(anyString(), anyString(), anyMap(), any())).thenAnswer(invocation -> {
-                singleDoc = invocation.getArgument(2);
-                singleCount = invocation.getArgument(3);
-                if (failIndex) throw new IllegalStateException("validation index unavailable");
-                return invocation.getArgument(1);
-            });
         }
 
         void catalog(String id, String tenant, int deleted, long count) {
@@ -291,26 +300,13 @@ class DataAssetRuntimeCounterTest {
         List<String> readSql() { return sql.stream().filter(value -> value.stripLeading().toUpperCase().startsWith("SELECT")).toList(); }
 
         void batch(List<String> ids, Map<String, Object> values) {
-            var request = new DataAssetPropBatchSaveRequest();
-            request.setTids(ids);
-            request.setProps(values);
             sql.clear();
-            TenantContext.run(TENANT, () -> transaction.execute(status -> adapter.propBatchSaveOrUpdate(request)));
-        }
-
-        void single(String id, Map<String, Object> values) {
-            var request = new DataAssetPropSaveRequest();
-            request.setTid(id);
-            request.setProps(values);
-            sql.clear();
-            TenantContext.run(TENANT, () -> transaction.execute(status -> adapter.propSaveOrUpdate(request)));
+            TenantContext.run(TENANT, () -> transaction.executeWithoutResult(status -> adapter.propBatchSaveOrUpdate(ids, values)));
         }
 
         Map<String, Object> query(String id) {
-            var request = new DataAssetQueryByIdRequest();
-            request.setTid(id);
             sql.clear();
-            return TenantContext.call(TENANT, () -> adapter.queryById(request));
+            return TenantContext.call(TENANT, () -> adapter.queryById(id));
         }
     }
 }

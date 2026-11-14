@@ -2594,7 +2594,7 @@ import {
   watch,
 } from "vue";
 import { useRegisterModal } from "@/composables";
-import { useRegisterStore } from "@/store";
+import { useRegisterStore, useSettingStore, useUserStore } from "@/store";
 import { get, set } from "lodash-es";
 import * as ExcelJS from "exceljs";
 // 首次进入时先展示完整骨架，避免接入方式等静态区块先短暂露出、
@@ -2612,11 +2612,15 @@ const rightPanelLoading = computed(
 const formRef = ref();
 const formRules = ref([]);
 const applicationOptions = ref([]);
-// Keep a local option cache so the select can filter immediately while the
-// department-scoped remote lookup is being debounced.
 const applicationOptionCatalog = ref([]);
-let applicationSearchTimer;
-let applicationRequestSequence = 0;
+const applicationSettings = useSettingStore();
+const applicationUser = useUserStore();
+let applicationOptionSession;
+let applicationOptionRequest;
+let applicationOptionsLoaded = false;
+let applicationSearchKeyword = "";
+let currentApplicationOption;
+let applicationOptionsDisposed = false;
 const currentDid = ref("");
 const loadedDatasourceDid = ref("");
 const store = useRegisterStore();
@@ -5110,13 +5114,14 @@ const applicationOptionLabel = (option = {}) => {
 const findApplicationOption = (value) => {
   const normalized = String(value || "").trim();
   if (!normalized) return null;
-  const byValue = applicationOptions.value.find(
+  const options = applicationCandidates();
+  const byValue = options.find(
     (option) =>
       String(applicationOptionValue(option) || "").trim() === normalized,
   );
   if (byValue) return byValue;
   return (
-    applicationOptions.value.find(
+    options.find(
       (option) =>
         String(applicationOptionLabel(option) || "").trim() === normalized,
     ) || null
@@ -5133,18 +5138,20 @@ const normalizeApplicationOptions = (options = []) => {
     return result;
   }, []);
 };
-const mergeApplicationOptionCatalog = (options = []) => {
-  applicationOptionCatalog.value = normalizeApplicationOptions([
-    ...applicationOptionCatalog.value,
-    ...(Array.isArray(options) ? options : []),
-  ]);
-};
+const applicationCandidates = () =>
+  currentApplicationOption
+    ? normalizeApplicationOptions([
+        ...applicationOptionCatalog.value,
+        currentApplicationOption,
+      ])
+    : applicationOptionCatalog.value;
 const filterApplicationOptionCatalog = (keyword = "") => {
+  const options = applicationCandidates();
   const normalizedKeyword = String(keyword || "")
     .trim()
     .toLowerCase();
-  if (!normalizedKeyword) return applicationOptionCatalog.value;
-  return applicationOptionCatalog.value.filter((option) => {
+  if (!normalizedKeyword) return options;
+  return options.filter((option) => {
     const label = String(applicationOptionLabel(option) || "").toLowerCase();
     const value = String(applicationOptionValue(option) || "").toLowerCase();
     return (
@@ -5158,33 +5165,72 @@ const setApplicationOptions = (options = []) => {
   if (rule) rule.options = applicationOptions.value;
   formRef.value?.updateFieldOptions?.("appId", applicationOptions.value);
 };
-const loadApplicationOptions = async (keyword = "") => {
-  const requestSequence = ++applicationRequestSequence;
-  try {
-    const matched = await $common.post("/dst/application/register-options", {
-      keyword: String(keyword || "").trim(),
-    });
-    if (requestSequence !== applicationRequestSequence) return;
-    // The server applies the same ALL / ORG / OWNER decision as the datasource
-    // list. Keep only that authoritative result in the dropdown cache.
-    applicationOptionCatalog.value = normalizeApplicationOptions(
-      Array.isArray(matched) ? matched : [],
-    );
-    setApplicationOptions(filterApplicationOptionCatalog(keyword));
-  } catch (error) {
-    if (requestSequence === applicationRequestSequence) {
-      console.warn("load application options failed", error);
-    }
+const readApplicationOptionSession = () => {
+  // 与主平台的凭证存放方式一致，只用来辨别本表单内的会话变化。
+  const remembered = localStorage.getItem("remember_me") === "true";
+  const token = (remembered ? localStorage : sessionStorage).getItem("token");
+  return JSON.stringify([
+    applicationSettings.brandTenantId,
+    applicationUser.userInfo?.userId,
+    applicationUser.userInfo?.orgId,
+    token,
+  ]);
+};
+const resetApplicationOptions = () => {
+  applicationOptionSession = readApplicationOptionSession();
+  applicationOptionRequest = undefined;
+  applicationOptionsLoaded = false;
+  applicationSearchKeyword = "";
+  applicationOptionCatalog.value = [];
+  currentApplicationOption = undefined;
+  setApplicationOptions([]);
+};
+const ensureApplicationOptionSession = () => {
+  if (readApplicationOptionSession() !== applicationOptionSession) {
+    resetApplicationOptions();
   }
+  return applicationOptionSession;
+};
+const loadApplicationOptions = () => {
+  if (applicationOptionsDisposed) return;
+  const session = ensureApplicationOptionSession();
+  if (applicationOptionsLoaded || applicationOptionRequest) {
+    return applicationOptionRequest;
+  }
+
+  // 接口一次返回当前会话的完整候选。只在第一次打开或上次请求失败时读取。
+  const request = Promise.resolve()
+    .then(async () => {
+      if (applicationOptionsDisposed || applicationOptionRequest !== request) return;
+      if (ensureApplicationOptionSession() !== session) return;
+      const rows = await $common.post("/dst/application/register-options", {});
+      if (applicationOptionsDisposed || applicationOptionRequest !== request) return;
+      if (ensureApplicationOptionSession() !== session) return;
+      if (!Array.isArray(rows)) {
+        throw new Error("所属系统选择项返回格式不正确");
+      }
+      applicationOptionCatalog.value = normalizeApplicationOptions(rows);
+      applicationOptionsLoaded = true;
+      setApplicationOptions(filterApplicationOptionCatalog(applicationSearchKeyword));
+    })
+    .catch((error) => {
+      if (!applicationOptionsDisposed && applicationOptionRequest === request) {
+        console.warn("读取所属系统选择项失败", error);
+      }
+    })
+    .finally(() => {
+      if (applicationOptionRequest === request) applicationOptionRequest = undefined;
+    });
+  applicationOptionRequest = request;
+  return request;
 };
 const searchApplicationOptions = (keyword) => {
-  setApplicationOptions(filterApplicationOptionCatalog(keyword));
-  if (applicationSearchTimer) window.clearTimeout(applicationSearchTimer);
-  applicationSearchTimer = window.setTimeout(
-    () => loadApplicationOptions(keyword),
-    250,
-  );
+  if (applicationOptionsDisposed) return;
+  ensureApplicationOptionSession();
+  applicationSearchKeyword = keyword;
+  setApplicationOptions(filterApplicationOptionCatalog(applicationSearchKeyword));
 };
+watch(readApplicationOptionSession, resetApplicationOptions, { flush: "sync" });
 const upsertApplicationOption = (option = {}) => {
   const value = String(applicationOptionValue(option) || "").trim();
   if (!value) return;
@@ -5201,7 +5247,8 @@ const upsertApplicationOption = (option = {}) => {
   else if (isOpaqueIdentifier(nextOption.label)) nextOption.label = "";
   if (index >= 0) applicationOptions.value.splice(index, 1, nextOption);
   else applicationOptions.value.push(nextOption);
-  mergeApplicationOptionCatalog([nextOption]);
+  // 已登记来源的历史标签只用于当前表单项，切换来源后不加入其他候选。
+  currentApplicationOption = nextOption;
   ensureSelectOption("appId", nextOption);
 };
 const ensureSelectOption = (field, option) => {
@@ -5422,8 +5469,7 @@ const ensureApplicationSystem = async (applicationValue, formData = {}) => {
   if (!createdId) throw new Error("应用系统已保存，但接口未返回系统ID");
 
   const option = { label: applicationName, value: createdId };
-  applicationOptions.value = [...applicationOptions.value, option];
-  formRef.value?.updateFieldOptions("appId", applicationOptions.value);
+  upsertApplicationOption(option);
   formRef.value?.setValue({ appId: createdId });
   $message.success(`已新增应用系统“${applicationName}”`);
   return createdId;
@@ -5482,18 +5528,21 @@ onMounted(() => {
         appIdRule.type = "select";
         const appProps = { ...(appIdRule.props || {}) };
         delete appProps.options;
+        delete appProps.remoteMethod;
         appIdRule.props = {
           ...appProps,
           filterable: true,
-          remote: true,
-          reserveKeyword: true,
-          remoteMethod: (keyword) => searchApplicationOptions(keyword),
+          remote: false,
+          filterMethod: searchApplicationOptions,
           clearable: true,
           placeholder: "请选择所属业务系统",
         };
         appIdRule.on = {
           ...(appIdRule.on || {}),
-          visibleChange: (visible) => visible && loadApplicationOptions(),
+          visibleChange: (visible) => {
+            if (visible) return loadApplicationOptions();
+            searchApplicationOptions("");
+          },
           change: async (value) => {
             await syncSourceDepartment(value);
             syncDatasourceNameWithApplication(value);
@@ -5529,6 +5578,7 @@ onMounted(() => {
       }
       formRules.value = data;
       await loadApplicationOptions();
+      if (applicationOptionsDisposed) return;
       // 详情加载必须在右侧表单实例挂载后执行。此前在骨架状态下先取详情，
       // 回填会落在空的 formRef 上，导致左侧选中已有数据源时基本信息全部为空。
       pageInitializing.value = false;
@@ -5550,7 +5600,8 @@ onMounted(() => {
 onBeforeUnmount(() => {
   ++datasourceListSequence;
   clearInterval(connectionTestTimer);
-  if (applicationSearchTimer) window.clearTimeout(applicationSearchTimer);
+  applicationOptionsDisposed = true;
+  applicationOptionRequest = undefined;
 });
 const handleAction = async (type, item) => {
   switch (type) {
@@ -5559,6 +5610,8 @@ const handleAction = async (type, item) => {
         return;
       }
       syncCurrentDatasourceToStore(item);
+      currentApplicationOption = undefined;
+      searchApplicationOptions("");
       // 重置右侧数据
       formRef.value?.resetFields();
       Object.assign(connectorForm, createConnectorDefaults());

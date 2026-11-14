@@ -43,66 +43,156 @@
   "headers": [],
   "paths": [],
   "responseBody": null,
-  "description": "按当前租户和角色范围刷新元数据概览。默认更新 db_datasource_t；传 tableId 更新当前 db_table_t 的统计字段，不修改字段治理和来源业务数据。支持 dryRun。",
+  "description": "按当前登录租户和数据源角色范围刷新元数据概览。tid 指定数据源，tableId 可选且须归属该数据源；dryRun 仅返回探查结果。正式刷新只更新概览及数据库更新时间，提交后尝试更新资产索引；目标无权限或探查期间记录变化时拒绝写入。",
   "requestBodyDefinition": null,
   "responseBodyDefinition": null
 }
 ================================
-// 接口：10.刷新数据库元信息
-// 路由：GET /dst/database/metadata/refreshDbInfo
-// 业务说明：刷新数据库元信息（GET /dst/database/metadata/refreshDbInfo）。读取物理数据库概览，将表数量、视图数量、存储过程数量、用户数量、容量等元数据写入 db_datasource_t 独立字段，并刷新单条数据源 ES 投影；connection extension property 只保留数据库连接信息，不作为元数据存储。
 import tenantRuntime
+import dataScope
+import tableRead
+import tableWrite
+import log
+import java.util.Objects
 import '@get:/dst/database/metadata/dbInfo' as queryDatabaseInfo
 import '@post:/dst/maintenance/refresh' as refreshAssetIndex
 
-/*
- * 元数据管理 10：刷新并持久化数据库概览。
- *
- * 实时概览来自 09，落库到 db_datasource_t 的物理概览字段；
- * 连接扩展属性仅保存连接参数，不能再写容量、视图数、过程数等元数据。
- * 本接口只刷新数据源概览，不写 da_prop_t，也不隐式登记数据表。
+/**
+ * GET /dst/database/metadata/refreshDbInfo 刷新当前租户内、角色可访问的资产概览。
+ * tid 指定数据源；传 tableId 时仅探查并更新归属该数据源的单张登记表。
+ * dryRun=true 只返回探查结果。正式刷新仅更新主表的概览和更新时间，
+ * 提交后尝试刷新对应资产索引，返回表概览或带兼容字段名的数据源概览。
  */
+var text = value => value == null ? '' : value + ''
+var blank = value => text(value).trim() == ''
+if (blank(tid)) {
+    exit 400, 'tid 不能为空'
+}
+var tenantId = tenantRuntime.id()
+if (blank(tenantId)) {
+    exit 401, '当前登录租户无效，请重新登录'
+}
 
-var blank = (value) => value == null || (value + '').trim() == ''
-if (blank(tid)) { exit 400, 'tid 不能为空' }
-var currentTenantId = tenantRuntime.id()
-if (blank(currentTenantId)) { exit 401, '当前登录租户无效，请重新登录' }
-// 09 validates the tenant, role datasource scope and table/datasource association before probing.
-var info = queryDatabaseInfo()
-if (dryRun == true || dryRun == 'true') { return info }
+var sourceId = tid
 var requestedTableId = tableId
-if (!blank(requestedTableId)) {
-    var affected = db.update("""
-        UPDATE db_table_t
-           SET record_count = #{info.recordCount}, field_count = #{info.fieldCount},
-               storage_size = #{info.storageSize}, total_size_formatted = #{info.totalSizeFormatted},
-               total_size_bytes = #{info.totalSizeBytes}, ddl_create_time = #{info.ddlCreateTime},
-               ddl_update_time = #{info.ddlUpdateTime}, updated_time = CURRENT_TIMESTAMP
-         WHERE tid = #{requestedTableId} AND datasource_id = #{tid}
-           AND tenant_id = #{currentTenantId} AND is_del = 0
-    """)
-    if (affected == 0) { exit 404, '数据表不存在或已删除' }
-    try {
-        body = { tid: requestedTableId, assetType: 'table' }
-        refreshAssetIndex()
-    } catch (e) { /* The database summary remains authoritative when the search index is unavailable. */ }
+var tableRefresh = !blank(requestedTableId)
+var sourceFields = ['tid', 'org_id', 'created_by', 'updated_time']
+var tableFields = ['tid', 'datasource_id', 'table_name', 'updated_time']
+var active = {is_del: 0}
+var sourcePermission = 'MENU:2081000000000000002'
+var readActive = (table, id, columns) => {
+    // 主键查询只取身份、归属和版本，读取与加锁使用同一套 JDBC 值转换。
+    var lookup = tableRead.from(table, 'asset', tenantId)
+    var key = tableRead.column('asset', 'tid', 'TEXT')
+    lookup.where(tableRead.equal(key, id))
+    lookup.where(tableRead.equal(tableRead.column('asset', 'is_del', 'NUMBER'), 0))
+    var projection = {}
+    for (field in columns) {
+        projection[field] = tableRead.column('asset', field, field == 'updated_time' ? 'TIME' : 'TEXT')
+    }
+    var rows = lookup.grouped(projection, [])
+    return rows.size() == 0 ? null : rows[0]
+}
+var authorizeSource = source => {
+    if (source == null) {
+        exit 404, '数据源资产不存在或无访问权限'
+    }
+    if (!dataScope.canReadDataSourceFor(sourcePermission, source)) {
+        exit 403, '数据源不存在或无权修改'
+    }
+}
+
+// 先核对指定表的有效状态和所属数据源，避免以任意表 ID 探查其他数据源。
+var previousTable = tableRefresh ? readActive('db_table_t', requestedTableId, tableFields) : null
+if (tableRefresh) {
+    if (previousTable == null) {
+        exit 404, '数据表不存在或无访问权限'
+    }
+    if (text(previousTable.datasource_id) != text(sourceId)) {
+        exit 403, '数据表不属于指定数据源'
+    }
+}
+// 实时探查可能连接外部库，刷新与预检均先使用数据源保存的角色范围。
+var previousSource = readActive('db_datasource_t', sourceId, sourceFields)
+authorizeSource(previousSource)
+var info = queryDatabaseInfo()
+if (dryRun == true || dryRun == 'true') {
     return info
 }
-var affected = db.update("""
-    UPDATE db_datasource_t
-       SET table_num = #{info.tableCount}, db_version = #{info.dbVersion},
-           view_count = #{info.viewCount}, procedure_count = #{info.procedureCount},
-           user_count = #{info.userCount}, data_size = #{info.dataSize},
-           total_size = #{info.totalSize}, updated_time = CURRENT_TIMESTAMP
-     WHERE tid = #{tid} AND tenant_id = #{currentTenantId} AND is_del = 0
-""")
-if (affected == 0) { exit 404, '数据源不存在或已删除' }
+
+var persistSummary = () => {
+    // 探查结束后才开启短事务，先锁定父源，再复核权限和已探查版本。
+    var currentSource = tableWrite.lockRow('db_datasource_t', tenantId, 'tid', sourceId, sourceFields, active)
+    if (currentSource == null) {
+        exit 404, '数据源不存在或已删除'
+    }
+    authorizeSource(currentSource)
+    if (!Objects.equals(previousSource.updated_time, currentSource.updated_time)) {
+        exit 409, '数据源在探查期间已变化，请重新刷新'
+    }
+
+    if (tableRefresh) {
+        var currentTable = tableWrite.lockRow('db_table_t', tenantId, 'tid', requestedTableId, tableFields, active)
+        if (currentTable == null) {
+            exit 404, '数据表不存在或已删除'
+        }
+        if (text(currentTable.datasource_id) != text(sourceId)) {
+            exit 403, '数据表不属于指定数据源'
+        }
+        if (!Objects.equals(previousTable.updated_time, currentTable.updated_time)
+            || !Objects.equals(previousTable.table_name, currentTable.table_name)) {
+            exit 409, '数据表在探查期间已变化，请重新刷新'
+        }
+
+        // 探查返回的 0、空字符串及 null 都是有效结果；适配层逐项绑定并沿用数据库时钟。
+        var changed = tableWrite.updateWithDatabaseTimestamp('db_table_t', tenantId, 'tid', requestedTableId, {
+            record_count: info.recordCount,
+            field_count: info.fieldCount,
+            storage_size: info.storageSize,
+            total_size_formatted: info.totalSizeFormatted,
+            total_size_bytes: info.totalSizeBytes,
+            ddl_create_time: info.ddlCreateTime,
+            ddl_update_time: info.ddlUpdateTime
+        }, {is_del: 0, datasource_id: sourceId}, 'updated_time')
+        if (changed == 0) {
+            exit 404, '数据表不存在或已删除'
+        }
+        return
+    }
+
+    // 概览属于主表物理列，连接配置及更新人均由原业务流程维护。
+    var changed = tableWrite.updateWithDatabaseTimestamp('db_datasource_t', tenantId, 'tid', sourceId, {
+        table_num: info.tableCount,
+        db_version: info.dbVersion,
+        view_count: info.viewCount,
+        procedure_count: info.procedureCount,
+        user_count: info.userCount,
+        data_size: info.dataSize,
+        total_size: info.totalSize
+    }, active, 'updated_time')
+    if (changed == 0) {
+        exit 404, '数据源不存在或已删除'
+    }
+}
+db.transaction(persistSummary)
+
+// 主表提交后再刷新搜索索引，投影失败保留已保存的概览供重试。
+var submitted = body
+var assetType = tableRefresh ? 'table' : 'db'
 try {
-    body = { tid: tid, assetType: 'db' }
+    body = {tid: tableRefresh ? requestedTableId : sourceId, assetType: assetType}
     refreshAssetIndex()
-} catch (e) { /* Index refresh can be retried; the committed summary is retained. */ }
+} catch (e) {
+    log.warn('元数据概览已保存，资产搜索索引刷新失败，资产类型：{}', assetType)
+} finally {
+    body = submitted
+}
+if (tableRefresh) {
+    return info
+}
 return {
-    tid: tid, dbVersion: info.dbVersion, db_version: info.dbVersion,
+    tid: sourceId,
+    dbVersion: info.dbVersion, db_version: info.dbVersion,
     dataSize: info.dataSize, data_size: info.dataSize,
     tableCount: info.tableCount, tableNum: info.tableCount, table_num: info.tableCount,
     viewCount: info.viewCount, view_count: info.viewCount,

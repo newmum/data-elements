@@ -10,6 +10,7 @@ import com.linewell.dataelement.metautil.service.MetadataExplorerService;
 import com.linewell.dataelement.metautil.service.TargetTableDeletionService;
 import com.linewell.dataelement.platform.magic.module.HiveModule;
 import com.linewell.dataelement.platform.magic.module.JsonModule;
+import com.linewell.dataelement.platform.tenant.domain.TenantContext;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -87,7 +88,7 @@ class HuaweiHiveTargetDeletionMagicTest {
                     pipeline_id varchar(32),process_group_id varchar(32),task_status int,is_del int,updated_time timestamp,
                     task_name varchar(255))
                 """);
-        jdbc.execute("create table data_access_field_mapping(tid varchar(32),task_id varchar(32),is_del int,updated_time timestamp)");
+        jdbc.execute("create table data_access_field_mapping(tid varchar(32),task_id varchar(32),tenant_id varchar(32),is_del int,updated_time timestamp)");
         jdbc.execute("create table data_access_task_monitor_snap_t(tid varchar(32),task_id varchar(32),is_del int)");
         jdbc.execute("create table db_table_column_t(tid varchar(32),table_id varchar(32),tenant_id varchar(32) default 'police',is_del int,updated_time timestamp)");
         jdbc.execute("create table da_prop_t(parent_id varchar(32),tenant_id varchar(32) default 'police',prop_name varchar(100),prop_value varchar(100),is_del int,updated_time timestamp)");
@@ -99,7 +100,10 @@ class HuaweiHiveTargetDeletionMagicTest {
         jdbc.update("insert into db_datasource_t values('target-db','police','hive','{\"database\":\"target_db\",\"metadataAccessMode\":\"server-managed-mrs\",\"hiveConnectionMode\":\"huawei-mrs\"}',0)");
         jdbc.update("insert into data_access_agg_task_t(tid,tenant_id,source_table_id,target_table_id,target_db_id,is_del) values('task-1','police','source-1','target-1','target-db',0)");
         jdbc.update("update data_access_agg_task_t set task_name='验证接入任务' where tid='task-1'");
-        jdbc.update("insert into data_access_field_mapping(tid,task_id,is_del) values('mapping-1','task-1',0)");
+        jdbc.update("""
+                insert into data_access_field_mapping(tid,task_id,tenant_id,is_del)
+                values('mapping-1','task-1','police',0),('foreign-mapping','task-1','other',0)
+                """);
         jdbc.update("insert into db_table_column_t(tid,table_id,is_del) values('target-column','target-1',0),('source-column','source-1',0)");
         hive = mock(HiveModule.class);
         explorer = mock(MetadataExplorerService.class);
@@ -794,6 +798,7 @@ class HuaweiHiveTargetDeletionMagicTest {
         inputs.put("body", body);
         inputs.put("portableDdl", new com.linewell.dataelement.metautil.ddl.PortableDdlConverter());
         inputs.put("db", db);
+        inputs.put("tableWrite", new StructuredTableWriteMagicModule(jdbc));
         inputs.put("fixture", fixture);
         inputs.put("tenantRuntime", fixture);
         inputs.put("dataScope", fixture);
@@ -804,7 +809,10 @@ class HuaweiHiveTargetDeletionMagicTest {
         inputs.put("nifiClient", nifi);
         inputs.put("log", LoggerFactory.getLogger(getClass()));
         inputs.put("auditEvents", audit);
-        return MagicScript.create(prefix + script, null).execute(new MagicScriptContext(inputs));
+        var result = TenantContext.call(fixture.id(), () -> MagicScript.create(prefix + script, null)
+                .execute(new MagicScriptContext(inputs)));
+        assertEquals(0, deleted("data_access_field_mapping", "foreign-mapping"));
+        return result;
     }
 
     private Map<String, Object> request() {

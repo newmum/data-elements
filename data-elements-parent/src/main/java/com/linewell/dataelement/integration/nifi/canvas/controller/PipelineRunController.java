@@ -1,6 +1,7 @@
 package com.linewell.dataelement.integration.nifi.canvas.controller;
 
 import com.linewell.dataelement.integration.nifi.canvas.compile.DslCompiler;
+import com.linewell.dataelement.integration.nifi.canvas.compile.DateTableFetchPolicy;
 import com.linewell.dataelement.integration.nifi.canvas.compile.SyncPolicy;
 import com.linewell.dataelement.integration.nifi.canvas.errors.ErrorService;
 import com.linewell.dataelement.integration.nifi.canvas.errors.FlowError;
@@ -164,8 +165,42 @@ public class PipelineRunController {
             return ResponseEntity.status(409).body(Map.of("error", "cleanup-confirmation-required",
                     "message", "请核对已部署版本的目标表及清空范围，再确认启动。"));
         }
-        if (!force) return fastStart(p, true);
+        if (!force) {
+            try (var runtime = nifi.bindRuntimeNode()) {
+                if (hasLegacyFullFetch(p)) {
+                    return deploymentRequired(p, deploymentHash(p),
+                            "当前 NiFi 流程仍使用旧版全量时间分片。请从保存旁菜单选择“重新部署流程”，再启动。");
+                }
+                return fastStart(p, true);
+            } catch (NifiException ex) {
+                return errorResponse(ex);
+            }
+        }
         return fullDeploy(p, deploymentHash(p), true, null, true);
+    }
+
+    private boolean hasLegacyFullFetch(Pipeline pipeline) {
+        var mapping = pipeline.nodeMapping();
+        if (pipeline.dsl() == null || mapping == null || mapping.primaryProcessorIds() == null) return false;
+        Set<String> fullSources = new LinkedHashSet<>();
+        for (Pipeline.Node node : pipeline.dsl().nodes()) {
+            if (compiler.usesStandardJdbcFullFetch(node)) {
+                String processorId = mapping.primaryProcessorIds().get(node.id());
+                if (processorId != null) fullSources.add(processorId);
+            }
+        }
+        if (fullSources.isEmpty()) return false;
+        JsonNode graph = nifi.get("/process-groups/" + pipeline.nifiProcessGroupId()
+                + "/processors?includeDescendantGroups=true", JsonNode.class);
+        for (JsonNode processor : graph.path("processors")) {
+            JsonNode component = processor.path("component");
+            if (!fullSources.contains(component.path("id").asText())
+                    || !DateTableFetchPolicy.TYPE.equals(component.path("type").asText())) continue;
+            JsonNode properties = component.path("config").path("properties");
+            if (properties.path("Maximum-value Columns").asText("").isBlank()
+                    && !properties.path(DateTableFetchPolicy.PARTITION_COLUMN).asText("").isBlank()) return true;
+        }
+        return false;
     }
 
     private ResponseEntity<?> deploymentRequired(Pipeline pipeline, String currentHash, String message) {
@@ -260,6 +295,7 @@ public class PipelineRunController {
             if (existing != null && saved.designHash().equals(existing.designHash())) {
                 try {
                     nifi.getProcessGroup(existing.processGroupId());
+                    clearResolvedDeploymentErrors(saved.id());
                     return ResponseEntity.ok(candidateResult(saved, existing, "candidate-created"));
                 } catch (NifiException e) {
                     if (e.status() != 404) throw e;
@@ -293,6 +329,7 @@ public class PipelineRunController {
             };
             Map<String, Object> response = transactions == null ? persist.get() : transactions.execute(status -> persist.get());
             createdGroup[0] = null;
+            clearResolvedDeploymentErrors(saved.id());
             return ResponseEntity.ok(response);
         } catch (RuntimeException e) {
             if (!isBlank(createdGroup[0])) {
@@ -305,6 +342,11 @@ public class PipelineRunController {
         }
     }
 
+    private void clearResolvedDeploymentErrors(String id) {
+        errors.replacePhase(id, FlowError.ErrorPhase.VALIDATION, List.of());
+        errors.replacePhase(id, FlowError.ErrorPhase.DEPLOYMENT, List.of());
+    }
+
     private Map<String, Object> bindCandidate(Pipeline saved, NifiNodeMapping.Candidate candidate, String mode) {
         Pipeline updated = repo.update(saved.id(), current -> new Pipeline(current.id(), current.name(),
                 current.description(), current.createdAt(), current.updatedAt(), current.dsl(), candidate.processGroupId(),
@@ -313,8 +355,8 @@ public class PipelineRunController {
         if (mappingVersions != null && candidate.planVersionIds() != null) {
             mappingVersions.activate(saved, candidate.planVersionIds(), candidate.processGroupId());
         }
-        taskLifecycle.updateProcessGroup(saved.id(), candidate.processGroupId());
-        taskLifecycle.statusOnly(saved.id(), 0);
+        taskLifecycle.syncState(saved.id(), "group", candidate.processGroupId());
+        taskLifecycle.syncState(saved.id(), "status", 0);
         return candidateResult(updated, candidate, mode);
     }
 
@@ -361,7 +403,7 @@ public class PipelineRunController {
                 cur.nifiProcessGroupId(), PipelineStatus.STOPPED,
                 cur.lastDeployedHash(), cur.lastDeployedAt(), System.currentTimeMillis(),
                 cur.nodeMapping(), cur.lastBulletinId()));
-        taskLifecycle.stopped(p.id());
+        taskLifecycle.syncState(p.id(), "stopped", null);
         return ResponseEntity.ok(Map.of("processGroupId", p.nifiProcessGroupId(), "state", "STOPPED"));
     }
 
@@ -458,8 +500,8 @@ public class PipelineRunController {
                 null, PipelineStatus.SAVED,
                 null, null, cur.lastStoppedAt(),
                 null, null));
-        taskLifecycle.updateProcessGroup(id, null);
-        taskLifecycle.statusOnly(id, 0);
+        taskLifecycle.syncState(id, "group", null);
+        taskLifecycle.syncState(id, "status", 0);
         errors.clear(id);
         if (lineageAnalysis != null) {
             try { lineageAnalysis.retireDeployment(id); }
@@ -497,7 +539,7 @@ public class PipelineRunController {
                     cur.nifiProcessGroupId(), PipelineStatus.RUNNING,
                     cur.lastDeployedHash(), cur.lastDeployedAt(), cur.lastStoppedAt(),
                     cur.nodeMapping(), cur.lastBulletinId()));
-            taskLifecycle.started(p.id());
+            taskLifecycle.syncState(p.id(), "started", null);
             return ResponseEntity.ok(Map.of(
                     "pipeline", updated,
                     "processGroupId", p.nifiProcessGroupId(),
@@ -506,7 +548,7 @@ public class PipelineRunController {
                     "oneShot", ranOnce));
         } catch (NifiException e) {
             repo.updateStatus(p.id(), PipelineStatus.DEPLOY_FAILED);
-            taskLifecycle.statusOnly(p.id(), 2);
+            taskLifecycle.syncState(p.id(), "status", 2);
             errors.add(p.id(), runtimeErr(FlowError.ErrorPhase.DEPLOYMENT, "快速启动失败", FlowFailureDetails.describe(e)));
             return errorResponse(e);
         } catch (IllegalStateException e) {
@@ -515,7 +557,7 @@ public class PipelineRunController {
                 return ResponseEntity.status(409).body(Map.of("error", "full-source-not-ready", "message", e.getMessage()));
             }
             repo.updateStatus(p.id(), PipelineStatus.DEPLOY_FAILED);
-            taskLifecycle.statusOnly(p.id(), 2);
+            taskLifecycle.syncState(p.id(), "status", 2);
             errors.add(p.id(), runtimeErr(FlowError.ErrorPhase.VALIDATION, "Target cleanup failed", e.getMessage()));
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
@@ -565,7 +607,7 @@ public class PipelineRunController {
                 current.createdAt(), current.updatedAt(), current.dsl(), current.nifiProcessGroupId(), PipelineStatus.RUNNING,
                 current.lastDeployedHash(), current.lastDeployedAt(), current.lastStoppedAt(),
                 current.nodeMapping(), current.lastBulletinId()));
-        taskLifecycle.started(pipeline.id());
+        taskLifecycle.syncState(pipeline.id(), "started", null);
         return ResponseEntity.ok(Map.of(
                 "pipeline", updated,
                 "processGroupId", pipeline.nifiProcessGroupId(),
@@ -633,7 +675,7 @@ public class PipelineRunController {
                     && Objects.equals(currentHash, p.lastDeployedHash()) && groups.isCurrent(layout, p.nifiProcessGroupId())) {
                 if (start) return fastStart(p, false);
                 Pipeline restored = repo.updateStatus(p.id(), p.status());
-                taskLifecycle.updateProcessGroup(p.id(), p.nifiProcessGroupId());
+                taskLifecycle.syncState(p.id(), "group", p.nifiProcessGroupId());
                 return ResponseEntity.ok(Map.of("pipeline", restored, "processGroupId", p.nifiProcessGroupId(),
                         "started", p.status() == PipelineStatus.RUNNING, "mode", "reuse"));
             }
@@ -689,7 +731,7 @@ public class PipelineRunController {
                 } catch (Exception ce) {
                     log.error("Cleanup of old PG {} failed; aborting redeploy to avoid orphan PG", oldPg, ce);
                     repo.updateStatus(p.id(), PipelineStatus.DEPLOY_FAILED);
-                    taskLifecycle.statusOnly(p.id(), 2);
+                    taskLifecycle.syncState(p.id(), "status", 2);
                     errors.add(p.id(), runtimeErr(FlowError.ErrorPhase.DEPLOYMENT,
                             "无法清理旧 Process Group",
                             "旧 PG " + oldPg + " 清理失败：" + FlowFailureDetails.describe(ce)
@@ -703,11 +745,11 @@ public class PipelineRunController {
             }
             groups.pruneEmptyAncestors(previousParents, layout.parentId());
             recordDeploymentGroup(p.id(), null);
-            taskLifecycle.updateProcessGroup(p.id(), null);
+            taskLifecycle.syncState(p.id(), "group", null);
             Consumer<String> onProcessGroupCreated = pgId -> {
                 // Record the ID before creating processors so failure/retry cannot orphan the group.
                 recordDeploymentGroup(deploymentPipeline.id(), pgId);
-                taskLifecycle.updateProcessGroup(deploymentPipeline.id(), pgId);
+                taskLifecycle.syncState(deploymentPipeline.id(), "group", pgId);
             };
             DslCompiler.CompileResult res = compiler.compile(p, onProcessGroupCreated, layout);
             if (res == null || res.processGroupId() == null || res.processGroupId().isBlank()) {
@@ -743,16 +785,16 @@ public class PipelineRunController {
                 }
             }
             if (start) {
-                taskLifecycle.started(p.id());
+                taskLifecycle.syncState(p.id(), "started", null);
             }
             if (!start) {
-                taskLifecycle.statusOnly(p.id(), 0);
+                taskLifecycle.syncState(p.id(), "status", 0);
             }
             return ResponseEntity.ok(body);
             }
         } catch (IllegalStateException ise) {
             repo.updateStatus(p.id(), PipelineStatus.DEPLOY_FAILED);
-            taskLifecycle.statusOnly(p.id(), 2);
+            taskLifecycle.syncState(p.id(), "status", 2);
             String nodeId = null;
             String nodeLabel = null;
             String fieldKey = null;
@@ -769,12 +811,12 @@ public class PipelineRunController {
             return ResponseEntity.status(400).body(Map.of("error", FlowFailureDetails.describe(ise)));
         } catch (NifiException e) {
             repo.updateStatus(p.id(), PipelineStatus.DEPLOY_FAILED);
-            taskLifecycle.statusOnly(p.id(), 2);
+            taskLifecycle.syncState(p.id(), "status", 2);
             return deploymentFailure(p.id(), e.status() > 0 ? e.status() : 502, "NIFI_DEPLOYMENT_FAILED", "部署到 NiFi 失败", e,
                     "请根据 NiFi 响应检查处理器属性、Controller Service 和节点连接。", Map.of());
         } catch (Exception e) {
             repo.updateStatus(p.id(), PipelineStatus.DEPLOY_FAILED);
-            taskLifecycle.statusOnly(p.id(), 2);
+            taskLifecycle.syncState(p.id(), "status", 2);
             log.error("Run pipeline {} failed", p.id(), e);
             return deploymentFailure(p.id(), 500, "DEPLOYMENT_FAILED", "部署异常", e,
                     "请根据错误详情检查部署配置。", Map.of());
@@ -843,7 +885,7 @@ public class PipelineRunController {
                     hash, now, current.lastStoppedAt(), mapping, 0L));
             if(mappingVersions!=null)mappingVersions.activate(pipeline,result.planVersionIds(),result.processGroupId());
             committed = true;
-            taskLifecycle.updateProcessGroup(pipeline.id(), result.processGroupId());
+            taskLifecycle.syncState(pipeline.id(), "group", result.processGroupId());
             List<String> retained = new ArrayList<>();
             for (String group : layout.previousIds()) {
                 try { nifi.cleanupProcessGroup(group); }
@@ -853,8 +895,8 @@ public class PipelineRunController {
                 if (TargetTableCleanupService.requested(pipeline)) targetCleanup.clear(pipeline);
                 startNativeFlow(pipeline, result.processGroupId(), mapping);
                 updated = repo.updateStatus(pipeline.id(), PipelineStatus.RUNNING);
-                taskLifecycle.started(pipeline.id());
-            } else taskLifecycle.statusOnly(pipeline.id(), 0);
+                taskLifecycle.syncState(pipeline.id(), "started", null);
+            } else taskLifecycle.syncState(pipeline.id(), "status", 0);
             if (lineageAnalysis != null) { try { lineageAnalysis.captureDeployment(updated); } catch (RuntimeException ex) { log.warn("流程已部署，血缘索引归档待恢复，pipeline={}",pipeline.id()); } }
             Map<String,Object> response = new LinkedHashMap<>();response.put("pipeline",updated);response.put("processGroupId",result.processGroupId());response.put("started",start);
             response.put("mode", manualHiveTemplate ? "staged-hive-template-deploy"

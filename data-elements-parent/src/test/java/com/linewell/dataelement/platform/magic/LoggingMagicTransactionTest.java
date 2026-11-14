@@ -24,7 +24,7 @@ class LoggingMagicTransactionTest {
         public List<Object> batchRows(Map<String,Object> parent,Map<String,Object> details){return List.of();}
     }
     Object execute(String target)throws Exception{
-        String body=Files.readString(Path.of("../magic/function/01.通用函数/22.记录业务操作.ms")).split("================================",2)[1].replaceAll("(?m)^import[^\\r\\n]*[\\r\\n]+","");
+        String body=Files.readString(Path.of("../magic/function/01.通用函数/19.记录业务操作.ms")).split("================================",2)[1].replaceAll("(?m)^import[^\\r\\n]*[\\r\\n]+","");
         String script="var log=(action,targetType,targetId,targetName,details)=>{"+body+"};return db.transaction(()=>{db.normal().table('validation_business_t').primary('tid').insert({tid:'validation',name:'验证对象'});log('VALIDATION_CREATED','OBJECT','validation',target,{});return true;});";
         return MagicScript.create(script,null).execute(new MagicScriptContext(Map.of("db",db,"auditEvents",new Audit(),"target",target)));
     }

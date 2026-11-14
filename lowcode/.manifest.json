@@ -52,7 +52,7 @@
       "type": "1",
       "sortOrder": 1,
       "path": "01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource)/01.登记数据源(register-db).vue",
-      "baseSha256": "ffa2cf4f334cbb2c162ad8bfa58955705b672bfbd6748b2fdcdb20c141c055ab"
+      "baseSha256": "705cbbdfe42f439538e0cf10cbb7a28bffc9f7524b43972dda5c94a0741bc87a"
     },
     {
       "id": "2074806689771094016",
@@ -352,7 +352,7 @@
       "type": "1",
       "sortOrder": 2,
       "path": "02.数据盘点/02.登记流程组件/详情页面(detail-page)/1. 资产【app%7Cdb%7Ctable%7Ccategory】详情(base-detail).vue",
-      "baseSha256": "57be98fa1efd6e32f7805da3f783c1784505393c40c379aaa1963a0e73760833"
+      "baseSha256": "7198b75ebcc8c8784d86119f9f7b6e387a41ef638090ec1d10c503dce9d552c2"
     },
     {
       "id": "2063240154598391808",

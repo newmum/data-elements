@@ -213,6 +213,35 @@ class DataAggTaskEnsureBatchMagicTest {
         assertEquals(0,f.counter.queries); assertEquals(0,f.counter.writes);
     }
 
+    @Test
+    void apiSourcePreflightReusesTheTenantRowAndRejectsAnUnregisteredDefinitionWithoutWrites() throws Exception {
+        var fixture = new Fixture(0);
+        fixture.prepareCreation();
+        var request = Map.<String, Object>of("tableId", "source-1", "validateSourceOnly", true, "dryRun", true);
+        assertInstanceOf(Map.class, fixture.run(request));
+        int originalReads = fixture.readCount();
+        fixture.registerApiSource("PERSON");
+
+        var result = assertInstanceOf(Map.class, fixture.run(request));
+
+        assertEquals("source.api", result.get("sourceManifestKey"));
+        assertEquals(false, result.get("fileLocatorRequired"));
+        assertEquals(false, result.get("sideEffectsApplied"));
+        assertEquals(originalReads, fixture.readCount());
+        assertEquals(0, fixture.writeCount());
+        assertEquals(0, fixture.fileProbe.locatorCalls);
+
+        fixture.registerApiSource("other_table");
+        var rejected = assertThrows(MagicScriptException.class, () -> fixture.run(request));
+        assertTrue(rejected.getMessage().contains("第一步未找到与逻辑表匹配的 API 定义：person"));
+        assertEquals(0, fixture.writeCount());
+
+        fixture.jdbc.update("update db_datasource_t set tenant_id='other' where tid='source-db'");
+        var foreign = assertInstanceOf(ExitValue.class, fixture.run(request));
+        assertEquals(403, ((Number) foreign.getValues()[0]).intValue());
+        assertEquals(0, fixture.writeCount());
+    }
+
     @ParameterizedTest @CsvSource({"文件服务器连接超时,连接超时","文件服务器认证未通过,认证未通过","登记的来源文件无法唯一定位,无法唯一定位","登记缺少工作表或JSON数据路径,工作表"})
     void fileFailuresKeepActionableCategoryAndNeverLeakUnderlyingDetails(String reason,String expected) throws Exception {
         var f=new Fixture(2); f.prepareCreation();
@@ -423,8 +452,12 @@ class DataAggTaskEnsureBatchMagicTest {
     void multiStandardCreatesTaskForEveryRegisteredSourceWithoutMysqlGuard(String type) throws Exception {
         Fixture fixture = new Fixture(2);
         fixture.prepareCreation();
-        fixture.jdbc.update("update db_datasource_t set db_type=?,pool_cfg=? where tid='source-db'", type,
-                "{\"host\":\"db-host\",\"database\":\"business\",\"compatibleMode\":\"PG\"}");
+        if (type.equals("api")) {
+            fixture.registerApiSource("PERSON");
+        } else {
+            fixture.jdbc.update("update db_datasource_t set db_type=?,pool_cfg=? where tid='source-db'", type,
+                    "{\"host\":\"db-host\",\"database\":\"business\",\"compatibleMode\":\"PG\"}");
+        }
         fixture.jdbc.update("update db_datasource_t set db_type='oceanbaseoracle' where tid='target-db-0'");
         fixture.jdbc.update("update db_datasource_t set db_type='hive' where tid='target-db-1'");
         fixture.jdbc.update("update db_table_t set field_governance_config=? where tid='source-1'", """
@@ -439,6 +472,17 @@ class DataAggTaskEnsureBatchMagicTest {
         assertEquals(2, fixture.jdbc.queryForObject("select count(distinct id) from nifi_pipeline_t", Integer.class),
                 fixture.jdbc.queryForList("select id from nifi_pipeline_t").toString());
         String dsl = fixture.jdbc.queryForObject("select p.dsl_json from nifi_pipeline_t p join data_access_agg_task_t t on t.pipeline_id=p.id where t.target_table_id='target-0'", String.class);
+        if (type.equals("api")) {
+            var firstSource = cn.hutool.json.JSONUtil.parseObj(dsl).getJSONArray("nodes").getJSONObject(0);
+            assertEquals("source.api", firstSource.getStr("manifestKey"));
+            assertEquals("https://validation.example/person", firstSource.getJSONObject("config").getStr("url"));
+            String downstreamDsl = fixture.jdbc.queryForObject(
+                    "select p.dsl_json from nifi_pipeline_t p join data_access_agg_task_t t on t.pipeline_id=p.id where t.target_table_id='target-1'",
+                    String.class);
+            var downstreamSource = cn.hutool.json.JSONUtil.parseObj(downstreamDsl).getJSONArray("nodes").getJSONObject(0);
+            assertEquals("source.oceanbase", downstreamSource.getStr("manifestKey"));
+            assertFalse(downstreamSource.getJSONObject("config").containsKey("credentialRef"));
+        }
         var mappingSpec = cn.hutool.json.JSONUtil.parseObj(dsl).getJSONArray("nodes").getJSONObject(1)
                 .getJSONObject("config").getStr("mappings");
         var rules = cn.hutool.json.JSONUtil.parseObj(mappingSpec).getJSONArray("mappings");
@@ -547,8 +591,12 @@ class DataAggTaskEnsureBatchMagicTest {
     void createsTheRegisteredSourceTypeThroughTheActualEnsureScript(String raw, String manifest) throws Exception {
         Fixture fixture = new Fixture(1);
         fixture.prepareCreation();
-        fixture.jdbc.update("update db_datasource_t set db_type=?,pool_cfg=? where tid='source-db'", raw,
-                "{\"host\":\"db-host\",\"database\":\"business\",\"compatibleMode\":\"PG\",\"bootstrapServers\":\"broker:9092\"}");
+        if (raw.equals("api")) {
+            fixture.registerApiSource("PERSON");
+        } else {
+            fixture.jdbc.update("update db_datasource_t set db_type=?,pool_cfg=? where tid='source-db'", raw,
+                    "{\"host\":\"db-host\",\"database\":\"business\",\"compatibleMode\":\"PG\",\"bootstrapServers\":\"broker:9092\"}");
+        }
 
         Map<?, ?> created = assertInstanceOf(Map.class, fixture.run());
         assertEquals(true, created.get("created"));
@@ -557,9 +605,11 @@ class DataAggTaskEnsureBatchMagicTest {
         assertEquals("source." + manifest, source.getStr("manifestKey"));
         if (raw.equals("api")) {
             var config = source.getJSONObject("config");
-            assertEquals("https://api.test/person", config.getStr("url"));
+            assertEquals("https://validation.example/person", config.getStr("url"));
             assertEquals("$.data", config.getStr("responseExtractPath"));
             assertEquals("1 min", config.getStr("schedulingPeriod"));
+            assertEquals("TIMER_DRIVEN", config.getStr("schedulingStrategy"));
+            assertEquals("validation-credential", config.getStr("credentialRef"));
         }
         if (raw.equals("kingbase8")) {
             assertEquals("KINGBASE", source.getJSONObject("config").getStr("dbType"));
@@ -1029,7 +1079,7 @@ class DataAggTaskEnsureBatchMagicTest {
         var tableRead = TaskRuntimeMagicFixture.structuredReads(f.jdbc, ignored -> {});
         inputs.put("tableRead", tableRead);
         TaskRuntimeMagicFixture.bindTableFamily(inputs);
-        var classifier = MagicScript.create(CanonicalMagicSources.byPath("function/01.通用函数/23.ODS来源库分类.ms",
+        var classifier = MagicScript.create(CanonicalMagicSources.byPath("function/01.通用函数/20.ODS来源库分类.ms",
                 "d2138de2de28456aa57d9ade2305eed7").replaceAll("(?m)^import [^\\r\\n]+\\R", ""), null);
         inputs.put("odsSourceClassifier", (Function<Object[], Object>) arguments -> classifier.execute(
                 new MagicScriptContext(Map.of("tableRead", tableRead, "tenantRuntime", f.scope))));
@@ -1177,6 +1227,16 @@ class DataAggTaskEnsureBatchMagicTest {
             jdbc.update("delete from data_access_agg_task_t");
         }
 
+        void registerApiSource(String tableName) {
+            var item = Map.of("tableName", tableName, "baseUrl", "https://validation.example///",
+                    "endpointPath", "person", "responseExtractPath", "$.data", "authType", "bearer",
+                    "credentialRef", "validation-credential",
+                    "captureSchedule", Map.of("mode", "interval", "intervalMinutes", 1));
+            String pool = cn.hutool.json.JSONUtil.toJsonStr(Map.of("accessMode", "capture", "apiPullItems", List.of(item)));
+            jdbc.update("update db_datasource_t set db_type='api',pool_cfg=? where tid='source-db' and tenant_id='police'",
+                    pool);
+        }
+
         Object run() throws Exception { return run(Map.of("tableId", "source-1")); }
 
         int readCount() { return counter.queries; }
@@ -1187,14 +1247,14 @@ class DataAggTaskEnsureBatchMagicTest {
             // The adjacent materialization test reuses this fixture and provides its own comment column.
             jdbc.execute("alter table db_table_t add column if not exists table_comment varchar(300)");
             String script = CanonicalMagicSources.byId(SOURCE_ID)
-                    .replaceAll("(?m)^import (jsons|metadataAsset|targetTableSchema|apiPullConfig|tenantRuntime|dataScope|tableRead|tableWrite|com\\.linewell\\.dataelement\\.metautil\\.structured\\.StructuredSourceProbeService as structuredFileProbe)\\r?\\n", "");
+                    .replaceAll("(?m)^import (jsons|metadataAsset|targetTableSchema|'@/common/nifiApiSource' as nifiApiSource|tenantRuntime|dataScope|tableRead|tableWrite|com\\.linewell\\.dataelement\\.metautil\\.structured\\.StructuredSourceProbeService as structuredFileProbe)\\r?\\n", "");
             Map<String, Object> inputs = new LinkedHashMap<>();
             inputs.put("db", db);
             inputs.put("body", body);
             inputs.put("tenantRuntime", scope);
             inputs.put("dataScope", scope);
             inputs.put("jsons", new JsonModule());
-            inputs.put("apiPullConfig", new ApiPullStub());
+            inputs.put("nifiApiSource", ApiPullMagicFixture.nifiSource());
             inputs.put("structuredFileProbe", fileProbe);
             inputs.put("tableRead", TaskRuntimeMagicFixture.structuredReads(jdbc, sql -> {
                 assertTrue(TransactionSynchronizationManager.hasResource(jdbc.getDataSource()),
@@ -1234,13 +1294,6 @@ class DataAggTaskEnsureBatchMagicTest {
                     });
                 }
             };
-        }
-    }
-
-    public static final class ApiPullStub {
-        public Map<String, Object> resolvePipelineSource(String datasourceId, String tableName) {
-            return Map.of("url", "https://api.test/person", "method", "GET",
-                    "responseExtractPath", "$.data", "schedulingPeriod", "1 min");
         }
     }
 

@@ -190,6 +190,7 @@ public class DslCompiler {
                     throw new NodeConfigException(node.id(), node.label(), key, ex.getMessage(), ex);
                 }
             }
+            if (useNativeFullFetch(node.manifestKey(), node.config())) continue;
             try { DateTableFetchPolicy.apply(node.config(), new LinkedHashMap<>()); }
             catch (IllegalStateException ex) {
                 throw new NodeConfigException(node.id(), node.label(), "incrementalColumn", ex.getMessage(), ex);
@@ -201,6 +202,11 @@ public class DslCompiler {
     private static boolean currentMaximumSource(Map<String, Object> config) {
         return "INCREMENTAL".equals(SyncPolicy.mode(config))
                 && "START_AT_CURRENT_MAX".equals(SyncPolicy.text(config, "initialStrategy"));
+    }
+
+    private static boolean useNativeFullFetch(String manifestKey, Map<String, Object> config) {
+        return Set.of("FULL", "PERIODIC_FULL").contains(SyncPolicy.mode(config))
+                && (!HiveTemporalJsonPolicy.isHive(manifestKey, config) || SyncPolicy.text(config, "incrementalColumn").isBlank());
     }
 
     private static Map<String,JsonNode> javaMappingSpecifications(Pipeline pipeline){
@@ -648,7 +654,20 @@ public class DslCompiler {
                     }
                     applyIncrementalSourceOptions(m, pSpec.localId(), cfg, resolved);
                     applySourceFetchDatabaseType(m, pSpec.type(), cfg, resolved);
-                    if (DateTableFetchPolicy.isTableFetch(pSpec.type())) DateTableFetchPolicy.apply(cfg, resolved);
+                    if (DateTableFetchPolicy.isTableFetch(pSpec.type())) {
+                        if (useNativeFullFetch(m.key(), cfg)) {
+                            DateTableFetchPolicy.useNativeFullFetch(resolved);
+                            String databaseType = nifiDatabaseType(configText(cfg, "dbType"));
+                            resolved.put("Database Type", databaseType);
+                            if ("Generic".equals(databaseType)) {
+                                // NiFi's generic paging uses LIMIT/OFFSET, which is not portable.
+                                resolved.put("Partition Size", "0");
+                                resolved.remove("Custom ORDER BY Column");
+                            }
+                        } else {
+                            DateTableFetchPolicy.apply(cfg, resolved);
+                        }
+                    }
                     applySourceRecordQueryOptions(m, pSpec.type(), cfg, resolved, sharedCs);
                     // Processors in one DSL component stay on the same row;
                     // NodeLayout has already separated topological columns and
@@ -794,6 +813,12 @@ public class DslCompiler {
         ComponentManifest manifest = registry.get(manifestKey);
         return manifest != null && manifest.compile() != null && manifest.compile().processors() != null
                 && manifest.compile().processors().stream().anyMatch(p -> DateTableFetchPolicy.isTableFetch(p.type()));
+    }
+
+    public boolean usesStandardJdbcFullFetch(Pipeline.Node node) {
+        return "source".equals(node.category()) && supportsSyncSettings(node.manifestKey())
+                && !HiveTemporalJsonPolicy.isHive(node.manifestKey(), node.config())
+                && useNativeFullFetch(node.manifestKey(), node.config());
     }
 
     private void validatePeriodicPolicy(Pipeline pipeline, Pipeline.Node source) {
@@ -3473,7 +3498,9 @@ public class DslCompiler {
     private String resolveProcessorType(ComponentManifest manifest, String localId, String declaredType,
                                         Map<String, Object> cfg) {
         if (manifest == null || !"put".equals(localId)) {
-            return DateTableFetchPolicy.isTableFetch(declaredType) ? DateTableFetchPolicy.TYPE : declaredType;
+            if (!DateTableFetchPolicy.isTableFetch(declaredType)) return declaredType;
+            return manifest != null && useNativeFullFetch(manifest.key(), cfg)
+                    ? DateTableFetchPolicy.NATIVE_TYPE : DateTableFetchPolicy.TYPE;
         }
         if ("sink.jdbc".equals(manifest.key())) {
             String writerType = effectiveJdbcWriterType(cfg);
@@ -3922,7 +3949,8 @@ public class DslCompiler {
         }
 
         if ("FULL".equals(syncMode) || "PERIODIC_FULL".equals(syncMode)) {
-            String order = firstNonBlankStatic(configText(cfg, "fullOrderColumn"), configText(cfg, "incrementalColumn"));
+            String order = useNativeFullFetch(manifest.key(), cfg) ? configText(cfg, "fullOrderColumn")
+                    : firstNonBlankStatic(configText(cfg, "fullOrderColumn"), configText(cfg, "incrementalColumn"));
             if (order.isBlank() && cfg.get("sourceColumns") instanceof List<?> columns) {
                 order = columns.stream().filter(Map.class::isInstance).map(Map.class::cast)
                         .filter(column -> Boolean.parseBoolean(String.valueOf(column.get("primaryKey"))))

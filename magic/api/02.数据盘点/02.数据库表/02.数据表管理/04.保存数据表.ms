@@ -22,9 +22,6 @@
   "responseBodyDefinition": null
 }
 ================================
-// 接口：04.保存数据表
-// 路由：POST /dst/database/table/saveOrUpdate
-// 业务说明：数据表管理 04：新增或修改 db_table_t；使用请求参数 propList；执行数据库写入并返回处理结果。
 import cn.hutool.core.util.IdUtil
 import com.linewell.dataelement.elasticsearch.EsCommonService as esCommonService
 import jsons
@@ -33,12 +30,8 @@ import '@post:/dst/maintenance/refresh' as refreshAssetIndex
 import tenantRuntime
 import metadataAsset
 
-/*
- * 数据表管理 04：新增或修改 db_table_t。
- *
- * 全部表属性写入 db_table_t 物理字段，并同步 dataassets ES 文档。表 ID 沿用
- * 调用方传入的 tid；不写 da_prop_t、da_asset_t 或审批关系。
- */
+// POST /dst/database/table/saveOrUpdate：按 tid 和 propList 保存当前租户的数据表登记并返回处理结果。
+// 表属性写入 db_table_t 的物理列，并同步 dataassets 检索投影。
 
 var textOf = (value) => value == null ? null : value + ''
 var blank = (value) => value == null || textOf(value).trim() == ''

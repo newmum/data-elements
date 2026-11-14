@@ -4,10 +4,21 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 import cn.dev33.satoken.stp.StpUtil;
+import com.linewell.dataelement.platform.tenant.domain.TenantContext;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Proxy;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.sql.Connection;
+import java.sql.DatabaseMetaData;
+import java.sql.SQLException;
 import java.util.*;
+import javax.sql.DataSource;
 import org.junit.jupiter.api.Test;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.DelegatingDataSource;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.ssssssss.magicapi.datasource.model.MagicDynamicDataSource;
 import org.ssssssss.script.MagicScript;
 import org.ssssssss.script.MagicScriptContext;
 import org.ssssssss.script.runtime.ExitValue;
@@ -20,14 +31,27 @@ class ReportRegistrationMagicTest {
         return content.substring(content.indexOf("================================") + 32);
     }
     public static class Metadata {
-        public void refreshRegistrationStatus(String id, boolean finish) { }
+        boolean fail;
+        public void refreshRegistrationStatus(String id, boolean finish) {
+            if (fail) {
+                throw new IllegalStateException("validation metadata refresh failed");
+            }
+        }
     }
     static class Fixture {
         final TableDetailFieldSaveMagicTest.Fixture base;
         final Map<String,Object> captured = new HashMap<>();
+        final Metadata metadata = new Metadata();
+        final List<Statement> statements = new ArrayList<>();
+        final StructuredTableReadMagicModule tableRead;
+        final StructuredTableWriteMagicModule tableWrite;
+        Runnable beforeLock;
+
         Fixture(int count) {
             base = new TableDetailFieldSaveMagicTest.Fixture(count);
             base.jdbc.execute("alter table db_datasource_t add pool_cfg clob");
+            base.jdbc.execute("alter table db_datasource_t add org_id varchar(64)");
+            base.jdbc.execute("alter table db_datasource_t add created_by varchar(64)");
             base.jdbc.update("update db_datasource_t set pool_cfg=?", "{\"accessMode\":\"upload\"}");
             base.jdbc.execute("alter table db_table_column_t add ordinal_position int default 0");
             base.jdbc.execute("alter table db_table_t add table_name varchar(64) default 'registered_table'");
@@ -36,6 +60,14 @@ class ReportRegistrationMagicTest {
             base.jdbc.execute("alter table db_table_t add record_count bigint default 0");
             base.jdbc.execute("create table data_access_agg_task_t(tenant_id varchar(64),source_table_id varchar(64),target_table_id varchar(64),is_del int)");
             base.jdbc.execute("create table file_upload_t(tid varchar(64),tenant_id varchar(64),created_by varchar(64),is_del int)");
+            var source = new TracedDataSource(base.jdbc.getDataSource(), this);
+            var jdbc = new JdbcTemplate(source);
+            tableRead = new StructuredTableReadMagicModule(jdbc);
+            tableWrite = new StructuredTableWriteMagicModule(jdbc);
+            var sources = new MagicDynamicDataSource();
+            sources.setDefault(source);
+            base.db.setDataSourceNode(sources.getDataSource());
+            base.db.setSqlInterceptors(List.of());
         }
         Object run(Map<String,Object> body) throws Exception {
             return run(body,false);
@@ -43,10 +75,68 @@ class ReportRegistrationMagicTest {
         Object run(Map<String,Object> body,boolean captureImport) throws Exception {
             String script = source().replaceAll("(?m)^import (?!java\\.|cn\\.hutool\\.|cn\\.dev33\\.|org\\.apache\\.poi\\.|com\\.linewell\\.|com\\.fasterxml\\.jackson\\.)[^\\r\\n]*\\r?\\n", "");
             script = (captureImport?"var importSnapshot=()=>{captured.payload=body;return {rows:body.tables.map(row=>{tableName:row.tableName,tid:row.tableName=='registered_table'?'table':row.tableName.replace('_','-')})}}\n":"var importSnapshot=()=>{throw new IllegalStateException('existing tables must not be reimported')}\n")+"var configData=()=>{throw new IllegalStateException('storage must not be reached')}\n" + script;
+            return execute(script, Map.of("body", body, "db", base.db, "tenantRuntime", base.scope,
+                    "dataScope", base.scope, "metadataAsset", metadata, "jsons", new TableDetailFieldSaveMagicTest.Jsons(),
+                    "captured", captured));
+        }
+
+        Object execute(String script, Map<String, Object> inputs) {
+            var bindings = new HashMap<>(inputs);
+            bindings.put("tableRead", tableRead);
+            bindings.put("tableWrite", tableWrite);
             base.reads = 0;
-            try (var login = mockStatic(StpUtil.class)) {
+            statements.clear();
+            try (var tenant = TenantContext.use(base.scope.id()); var login = mockStatic(StpUtil.class)) {
                 login.when(StpUtil::getLoginIdAsString).thenReturn("validation-user");
-                return MagicScript.create(script, null).execute(new MagicScriptContext(Map.of("body",body,"db",base.db,"tenantRuntime",base.scope,"dataScope",base.scope,"metadataAsset",new Metadata(),"jsons",new TableDetailFieldSaveMagicTest.Jsons(),"captured",captured)));
+                return MagicScript.create(script, null).execute(new MagicScriptContext(bindings));
+            }
+        }
+    }
+
+    record Statement(String sql, Connection connection, boolean transaction) {
+        boolean reads() { return sql.startsWith("select"); }
+        boolean locks() { return reads() && sql.contains("for update"); }
+    }
+
+    private static final class TracedDataSource extends DelegatingDataSource {
+        private final Fixture fixture;
+
+        TracedDataSource(DataSource source, Fixture fixture) {
+            super(source);
+            this.fixture = fixture;
+        }
+
+        @Override
+        public Connection getConnection() throws SQLException {
+            Connection physical = super.getConnection();
+            return (Connection) Proxy.newProxyInstance(getClass().getClassLoader(), new Class<?>[]{Connection.class},
+                    (proxy, method, arguments) -> {
+                        if (method.getName().equals("prepareStatement")) {
+                            var statement = new Statement(((String) arguments[0]).stripLeading().toLowerCase(Locale.ROOT),
+                                    physical, TransactionSynchronizationManager.hasResource(this));
+                            fixture.statements.add(statement);
+                            if (statement.reads()) {
+                                fixture.base.reads++;
+                            }
+                            if (statement.locks() && fixture.beforeLock != null) {
+                                fixture.beforeLock.run();
+                            }
+                        }
+                        if (method.getName().equals("getMetaData")) {
+                            var metadata = physical.getMetaData();
+                            return Proxy.newProxyInstance(getClass().getClassLoader(), new Class<?>[]{DatabaseMetaData.class},
+                                    (unused, operation, parameters) -> operation.getName().equals("getURL")
+                                            ? "jdbc:mysql://reporting-validation" : invoke(metadata, operation, parameters));
+                        }
+                        return invoke(physical, method, arguments);
+                    });
+        }
+
+        private static Object invoke(Object receiver, java.lang.reflect.Method method, Object[] arguments) throws Throwable {
+            try {
+                return method.invoke(receiver, arguments);
+            } catch (InvocationTargetException failure) {
+                throw failure.getCause();
             }
         }
     }
@@ -85,6 +175,80 @@ class ReportRegistrationMagicTest {
             System.out.println("Report registration save: tables="+count+", SQL=4 including batch file ownership, mixed tenant IDs rejected before writes");
         }
     }
+
+    @Test
+    void twentyAndHundredRemovalsCheckBothTaskLinksInOneReadAndRejectForeignTableIds() throws Exception {
+        for (int count : List.of(20, 100)) {
+            var f = new Fixture(1);
+            var ids = new ArrayList<String>();
+            for (int i = 0; i < count; i++) {
+                String id = "removed-" + i;
+                ids.add(id);
+                f.base.jdbc.update("insert into db_table_t(tid,tenant_id,datasource_id,is_del) values(?,'police','source',0)", id);
+            }
+            var body = new LinkedHashMap<String, Object>(Map.of("action", "save", "dbId", "source",
+                    "revision", "", "files", List.of(), "tables", List.of(), "removedTableIds", ids));
+            ids.set(count - 1, "foreign");
+            assertEquals(403, assertInstanceOf(ExitValue.class, f.run(body)).getValues()[0]);
+            assertEquals(2, f.base.reads, "拒绝越权列表后无任务查询或写入");
+            ids.set(count - 1, "removed-" + (count - 1));
+            f.base.jdbc.update("insert into data_access_agg_task_t values('other',?,null,0)", ids.getFirst());
+            f.base.jdbc.update("insert into data_access_agg_task_t values('police',?,null,1)", ids.getFirst());
+            for (boolean sourceLink : List.of(true, false)) {
+                f.base.jdbc.update("insert into data_access_agg_task_t values('police',?,?,0)",
+                        sourceLink ? ids.getFirst() : null, sourceLink ? null : ids.getLast());
+                assertEquals(409, assertInstanceOf(ExitValue.class, f.run(body)).getValues()[0]);
+                assertEquals(3, f.base.reads);
+                assertEquals(1, f.statements.stream().filter(s -> s.sql().contains("data_access_agg_task_t")).count());
+                assertTrue(f.statements.stream().allMatch(Statement::reads));
+                f.base.jdbc.update("delete from data_access_agg_task_t where tenant_id='police' and is_del=0");
+            }
+            assertInstanceOf(Map.class, f.run(body));
+            assertEquals(4, f.base.reads, "合法删除使用一次源、一次表集合、一次任务集合及一次锁读取");
+            assertEquals(count, f.base.jdbc.queryForObject(
+                    "select count(*) from db_table_t where tenant_id='police' and is_del=1", Integer.class));
+            assertEquals(0, f.base.jdbc.queryForObject("select is_del from db_table_t where tid='foreign'", Integer.class));
+        }
+    }
+
+    @Test
+    void unchangedRegistrationRevisionDoesNotOverwriteConcurrentReceipt() {
+        var f = new Fixture(1);
+        String updated = """
+                {"accessMode":"upload","reportRegistration":{"revision":"","files":[],"tables":[],"receipts":[{"id":"concurrent","status":"sending"}]}}
+                """.strip();
+        f.beforeLock = () -> f.base.jdbc.update("update db_datasource_t set pool_cfg=? where tid='source'", updated);
+        var body = Map.<String, Object>of("action", "save", "dbId", "source",
+                "revision", "", "files", List.of(), "tables", List.of());
+        Exception failure = assertThrows(Exception.class, () -> f.run(body));
+        assertTrue(failure.getMessage().contains("数据源已被更新"), failure::getMessage);
+        assertEquals(updated, f.base.jdbc.queryForObject("select pool_cfg from db_datasource_t where tid='source'", String.class));
+        assertEquals(1, f.statements.stream().filter(Statement::locks).count());
+        assertTrue(f.statements.stream().allMatch(Statement::reads));
+    }
+
+    @Test
+    void registrationFailureRollsBackPoolAndRowChangesOnTheSameLockedConnection() {
+        var f = new Fixture(1);
+        f.metadata.fail = true;
+        var table = new LinkedHashMap<String, Object>(Map.of("tid", "table", "tableName", "renamed_table",
+                "tableNameCn", "登记改名", "recordCount", 2, "legacy", true,
+                "fields", List.of(Map.of("columnName", "id"))));
+        var body = Map.<String, Object>of("action", "save", "dbId", "source",
+                "revision", "", "files", List.of(), "tables", List.of(table));
+        Exception failure = assertThrows(Exception.class, () -> f.run(body));
+        assertTrue(failure.getMessage().contains("validation metadata refresh failed"), failure::getMessage);
+        assertEquals("registered_table", f.base.jdbc.queryForObject("select table_name from db_table_t where tid='table'", String.class));
+        assertEquals("{\"accessMode\":\"upload\"}", f.base.jdbc.queryForObject(
+                "select pool_cfg from db_datasource_t where tid='source'", String.class));
+        assertEquals(4, f.base.reads);
+        var locked = f.statements.stream().filter(Statement::locks).findFirst().orElseThrow();
+        var writes = f.statements.stream().filter(statement -> !statement.reads()).toList();
+        assertEquals(2, writes.size());
+        assertTrue(locked.transaction());
+        assertTrue(writes.stream().allMatch(statement -> statement.connection() == locked.connection() && statement.transaction()));
+    }
+
     @Test void missingSourceForeignFileAndStaleRevisionAreRejected() throws Exception {
         Fixture f = new Fixture(1);
         assertInstanceOf(ExitValue.class,f.run(Map.of("action","list","dbId","missing")));

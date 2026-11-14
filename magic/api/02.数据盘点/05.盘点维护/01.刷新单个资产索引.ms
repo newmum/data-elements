@@ -32,7 +32,7 @@ var tenantId = tenantRuntime.id()
 var tid = body?.tid == null ? '' : (body.tid + '').trim()
 if (tid == '') { exit 400, 'tid不能为空' }
 var type = null
-// 存在性只取当前租户有效主记录，目录不依赖可选的 da_asset_t 兼容视图。
+// 按各业务主表核对当前租户的有效记录，确定要重建的投影类型。
 if (db.table('sym_application_t').where().eq('tenant_id', tenantId).eq('tid', tid).eq('is_del', 0).selectOne() != null) {
     type = 'app'
 } else if (db.table('db_datasource_t').where().eq('tenant_id', tenantId).eq('tid', tid).eq('is_del', 0).selectOne() != null) {

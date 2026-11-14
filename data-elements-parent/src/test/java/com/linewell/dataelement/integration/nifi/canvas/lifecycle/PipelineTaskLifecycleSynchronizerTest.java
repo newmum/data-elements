@@ -1,14 +1,15 @@
 package com.linewell.dataelement.integration.nifi.canvas.lifecycle;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
-import static org.mockito.Mockito.clearInvocations;
 
-import com.linewell.dataelement.model.dataasset.DataAssetPropBatchSaveRequest;
 import com.linewell.dataelement.dataassets.runtime.DataAssetRuntimeAdapter;
 import com.linewell.dataelement.feature.dataaccess.infrastructure.persistence.service.IDataAccessAggTaskTService;
 import com.linewell.dataelement.integration.nifi.canvas.pipeline.Pipeline;
@@ -17,9 +18,10 @@ import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.ssssssss.magicapi.core.service.MagicAPIService;
+import org.ssssssss.script.exception.MagicScriptException;
 
 @ExtendWith(MockitoExtension.class)
 class PipelineTaskLifecycleSynchronizerTest {
@@ -30,54 +32,66 @@ class PipelineTaskLifecycleSynchronizerTest {
     @Mock
     private DataAssetRuntimeAdapter dataAssetRuntimeAdapter;
 
-    @Test
-    void mapsPipelineStatusToTaskStatus() {
-        assertThat(PipelineTaskLifecycleSynchronizer.taskStatus(PipelineStatus.RUNNING)).isEqualTo(1);
-        assertThat(PipelineTaskLifecycleSynchronizer.taskStatus(PipelineStatus.DEPLOY_FAILED)).isEqualTo(2);
-        assertThat(PipelineTaskLifecycleSynchronizer.taskStatus(PipelineStatus.STOPPED)).isZero();
-        assertThat(PipelineTaskLifecycleSynchronizer.taskStatus(null)).isZero();
-    }
+    @Mock
+    private MagicAPIService magic;
 
     @Test
-    void normalizesMissingCatalogIdentifiers() {
-        assertThat(PipelineTaskLifecycleSynchronizer.normalizeCatalogTid(null)).isNull();
-        assertThat(PipelineTaskLifecycleSynchronizer.normalizeCatalogTid(" undefined ")).isNull();
-        assertThat(PipelineTaskLifecycleSynchronizer.normalizeCatalogTid(" catalog-1 "))
-                .isEqualTo("catalog-1");
+    void stateBridgeKeepsExplicitNullAndPropagatesTheOriginalFailure() {
+        var synchronizer = new PipelineTaskLifecycleSynchronizer(taskService, dataAssetRuntimeAdapter, magic);
+        var original = new IllegalStateException("test transaction rejected");
+        when(magic.invoke(eq("/common/nifiTaskState"), any())).thenThrow(
+                new MagicScriptException("script failure", "script failure", original, null));
+
+        assertThatThrownBy(() -> synchronizer.syncState("pipeline-1", "group", null)).isSameAs(original);
+        verify(magic).invoke(eq("/common/nifiTaskState"), org.mockito.ArgumentMatchers.<Map<String, Object>>argThat(
+                arguments -> arguments.size() == 3 && "pipeline-1".equals(arguments.get("pipelineId"))
+                        && "group".equals(arguments.get("operation"))
+                        && arguments.containsKey("value") && arguments.get("value") == null));
     }
 
     @Test
     void synchronizesGeneratedTaskIdBackToCatalog() {
         Pipeline pipeline = pipeline();
-        when(taskService.ensureTaskForCatalog("catalog-1", pipeline.id(), pipeline.name(), pipeline.dsl()))
-                .thenReturn("task-1");
-        when(dataAssetRuntimeAdapter.queryById(any()))
+        when(magic.invoke(eq("/common/ensureNifiCatalogAccessTask"), any()))
+                .thenReturn(Map.of("taskId", "task-1", "catalogId", "catalog-1", "mirrorEligible", true));
+        when(dataAssetRuntimeAdapter.queryById("catalog-1"))
                 .thenReturn(Map.of("accessTaskId", "old-task"));
 
         PipelineTaskLifecycleSynchronizer synchronizer =
-                new PipelineTaskLifecycleSynchronizer(taskService, dataAssetRuntimeAdapter);
+                new PipelineTaskLifecycleSynchronizer(taskService, dataAssetRuntimeAdapter, magic);
         synchronizer.ensureCatalogAccessTask(" catalog-1 ", pipeline);
 
-        ArgumentCaptor<DataAssetPropBatchSaveRequest> request =
-                ArgumentCaptor.forClass(DataAssetPropBatchSaveRequest.class);
-        verify(dataAssetRuntimeAdapter).propBatchSaveOrUpdate(request.capture());
-        assertThat(request.getValue().getTids()).containsExactly("catalog-1");
-        assertThat(request.getValue().getProps()).containsEntry("accessTaskId", "task-1");
+        verify(magic).invoke("/common/ensureNifiCatalogAccessTask", Map.of("rawCatalogTid", " catalog-1 ",
+                "pipelineId", pipeline.id(), "pipelineName", pipeline.name(), "dsl", pipeline.dsl()));
+        verifyNoInteractions(taskService);
+
+        verify(dataAssetRuntimeAdapter).propBatchSaveOrUpdate(List.of("catalog-1"), Map.of("accessTaskId", "task-1"));
     }
 
     @Test
     void leavesCatalogUntouchedWhenTaskIdAlreadyMatches() {
         Pipeline pipeline = pipeline();
-        when(taskService.ensureTaskForCatalog("catalog-1", pipeline.id(), pipeline.name(), pipeline.dsl()))
-                .thenReturn("task-1");
-        when(dataAssetRuntimeAdapter.queryById(any()))
+        when(magic.invoke(eq("/common/ensureNifiCatalogAccessTask"), any()))
+                .thenReturn(Map.of("taskId", "task-1", "catalogId", "catalog-1", "mirrorEligible", true));
+        when(dataAssetRuntimeAdapter.queryById("catalog-1"))
                 .thenReturn(Map.of("accessTaskId", "task-1"));
 
         PipelineTaskLifecycleSynchronizer synchronizer =
-                new PipelineTaskLifecycleSynchronizer(taskService, dataAssetRuntimeAdapter);
+                new PipelineTaskLifecycleSynchronizer(taskService, dataAssetRuntimeAdapter, magic);
         synchronizer.ensureCatalogAccessTask("catalog-1", pipeline);
 
-        verify(dataAssetRuntimeAdapter, never()).propBatchSaveOrUpdate(any());
+        verify(dataAssetRuntimeAdapter, never()).propBatchSaveOrUpdate(any(), any());
+    }
+
+    @Test
+    void leavesTheCatalogProjectionUntouchedForAnIndependentlySavedFlow() {
+        when(magic.invoke(eq("/common/ensureNifiCatalogAccessTask"), any()))
+                .thenReturn(Map.of("taskId", "task-1", "mirrorEligible", false));
+        var synchronizer = new PipelineTaskLifecycleSynchronizer(taskService, dataAssetRuntimeAdapter, magic);
+
+        synchronizer.ensureCatalogAccessTask("another-catalog", pipeline());
+
+        verifyNoInteractions(taskService, dataAssetRuntimeAdapter);
     }
 
     private Pipeline pipeline() {
@@ -92,31 +106,29 @@ class PipelineTaskLifecycleSynchronizerTest {
         var task = new com.linewell.dataelement.feature.dataaccess.infrastructure.persistence.entity.DataAccessAggTaskT()
                 .setTid("task-1").setDataCatalogId("catalog-1");
         when(taskService.list(org.mockito.ArgumentMatchers.<com.baomidou.mybatisplus.core.conditions.Wrapper<com.linewell.dataelement.feature.dataaccess.infrastructure.persistence.entity.DataAccessAggTaskT>>any())).thenReturn(List.of(task));
-        when(dataAssetRuntimeAdapter.queryById(any())).thenReturn(Map.of("accessTaskId", "task-1"));
-        var synchronizer = new PipelineTaskLifecycleSynchronizer(taskService, dataAssetRuntimeAdapter);
+        when(dataAssetRuntimeAdapter.queryById("catalog-1")).thenReturn(Map.of("accessTaskId", "task-1"));
+        var synchronizer = new PipelineTaskLifecycleSynchronizer(taskService, dataAssetRuntimeAdapter, magic);
         synchronizer.unlinkCatalogTasks("pipeline-1");
-        ArgumentCaptor<DataAssetPropBatchSaveRequest> request = ArgumentCaptor.forClass(DataAssetPropBatchSaveRequest.class);
-        verify(dataAssetRuntimeAdapter).propBatchSaveOrUpdate(request.capture());
-        assertThat(request.getValue().getProps()).containsEntry("accessTaskId", "");
+        verify(dataAssetRuntimeAdapter).propBatchSaveOrUpdate(List.of("catalog-1"), Map.of("accessTaskId", ""));
         clearInvocations(dataAssetRuntimeAdapter);
-        when(dataAssetRuntimeAdapter.queryById(any())).thenReturn(Map.of("accessTaskId", "new-task"));
+        when(dataAssetRuntimeAdapter.queryById("catalog-1")).thenReturn(Map.of("accessTaskId", "new-task"));
         synchronizer.unlinkCatalogTasks("pipeline-1");
-        verify(dataAssetRuntimeAdapter, never()).propBatchSaveOrUpdate(any());
+        verify(dataAssetRuntimeAdapter, never()).propBatchSaveOrUpdate(any(), any());
     }
 
     @Test
-    void keepsCurrentTaskAssociationWhenRetiredAssetCatalogIsUnavailable() {
+    void keepsCurrentTaskAssociationWhenCatalogReadFails() {
         Pipeline pipeline = pipeline();
-        when(taskService.ensureTaskForCatalog("catalog-1", pipeline.id(), pipeline.name(), pipeline.dsl()))
-                .thenReturn("task-1");
-        when(dataAssetRuntimeAdapter.queryById(any()))
-                .thenThrow(new RuntimeException("Table 'da_asset_t' doesn't exist"));
+        when(magic.invoke(eq("/common/ensureNifiCatalogAccessTask"), any()))
+                .thenReturn(Map.of("taskId", "task-1", "catalogId", "catalog-1", "mirrorEligible", true));
+        when(dataAssetRuntimeAdapter.queryById("catalog-1"))
+                .thenThrow(new IllegalStateException("目录读取失败"));
 
         PipelineTaskLifecycleSynchronizer synchronizer =
-                new PipelineTaskLifecycleSynchronizer(taskService, dataAssetRuntimeAdapter);
+                new PipelineTaskLifecycleSynchronizer(taskService, dataAssetRuntimeAdapter, magic);
 
         assertThatCode(() -> synchronizer.ensureCatalogAccessTask("catalog-1", pipeline))
                 .doesNotThrowAnyException();
-        verify(dataAssetRuntimeAdapter, never()).propBatchSaveOrUpdate(any());
+        verify(dataAssetRuntimeAdapter, never()).propBatchSaveOrUpdate(any(), any());
     }
 }

@@ -42,7 +42,8 @@ function fixture(type = 'ftp') {
   const state = {
     sourceType: { value: type }, accessMode: { value: 'explore' }, connectionEnabled: { value: '0' },
     templateDownloadState: {}, metadataImportState: {}, currentDb: { value: {} }, isFilePush: { value: false },
-    isRelationalSource: { value: type === 'mysql' }, formRef: { value: undefined },
+    isRelationalSource: { value: type === 'mysql' }, isOfflineApiCapture: { value: false },
+    formRef: { value: undefined },
     ExcelJS, Blob, computed: get => ({ get value() { return get(); } }), nextTick: async () => {},
     URL: { createObjectURL(value) { blob = value; return 'blob:validation'; }, revokeObjectURL() {} },
     window: { setTimeout(fn) { fn(); } },

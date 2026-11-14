@@ -76,6 +76,37 @@ mvn -f data-elements-parent/pom.xml spring-boot:run -DskipTests
 ```
 
 
+<a id="linux-launchers"></a>
+
+### Linux 启停
+
+共享后端使用 [start.sh](../tools/backend-linux/start.sh) 和 [stop.sh](../tools/backend-linux/stop.sh)。把两个脚本放在同一部署目录。从其他目录调用时，脚本也会以自身所在目录为工作目录。
+
+```text
+data-elements/
+  start.sh
+  stop.sh
+  jdk21/bin/java
+  data-element-runtime.jar
+  config/
+    backend.env
+    application.yml
+```
+
+将对应服务器架构的 Linux JDK 21 解压为 `jdk21/`，将当前运行包放在同级并命名为 `data-element-runtime.jar`。服务器需有 Bash、`curl` 和 util-linux 的 `flock`。
+
+- **使用 Nacos**时，在进程环境或受限的 `config/backend.env` 中提供目标环境的 `NACOS_HOST`、`NACOS_NAMESPACE`、`NACOS_CONFIG_IMPORTS` 和已有认证配置。若同时保留了本地 YAML，在 `backend.env` 中显式设置 `BACKEND_MODE=nacos`。YAML 和 Nacos 的凭据引用继续使用目标环境已有的业务密钥。
+- **使用本地配置**时，将目标环境的完整业务 YAML 放到 `config/application.yml`。脚本检测到该文件时默认采用本地配置并关闭 Nacos。可设置 `BACKEND_MODE=file` 明确选择。若 YAML 中还有 Windows 绝对路径，应改为服务器路径。
+
+`backend.env` 是 Bash 变量文件，例如 `SERVER_PORT=8088`。含空格、`&` 等字符的值需按 Bash 规则引用。包含凭据时设置为部署账号可读（如 `chmod 600 config/backend.env`）。`SERVER_PORT` 默认为 8088，`BACKEND_HEALTH_URL` 可覆盖默认的本机 `/actuator/health` 地址。需要调整 JVM 内存时可设置 `JAVA_TOOL_OPTIONS`。
+
+```bash
+bash /opt/data-elements/start.sh
+bash /opt/data-elements/stop.sh
+```
+
+启动检查当前实例及端口，默认等待健康状态 `UP` 最长 120 秒，可通过 `BACKEND_START_TIMEOUT` 调整。控制台日志在 `logs/backend-console.log`。用同一部署账号停止，脚本根据 `run/data-element.pid` 和进程身份确认本目录启动的后端，再发送 `SIGTERM` 等待退出。
+
 <a id="overview--常用环境变量"></a>
 
 ### 常用环境变量
@@ -175,7 +206,7 @@ mvn -f data-elements-parent/pom.xml "-Dtest=ErrorDetailSanitizerTest,VendorDrive
 
 ### magic-api 说明
 
-当前共享后端从控制库 `baseline.api_file_t` 加载 Magic 资源，本地可维护源码在根目录 `magic/`。业务实现遵守 [Magic API 优先与数据库访问抽象](data-elements.md#magic-first-data-access) 和 [Magic 脚本可读性与注释规范](data-elements.md#lowcode-magic--magic-api-readability-and-documentation)，发布流程见[本地资源版本管理](data-elements.md#resource-versioning)。
+当前共享后端从控制库 `baseline.api_file_t` 加载 Magic 资源，本地可维护源码在根目录 `magic/`。业务实现遵守 [Magic API 优先与数据库访问抽象](data-elements.md#magic-first-data-access)、[Java 文件、旧对象与测试清理](data-elements.md#backend-simplification) 和 [Magic 脚本可读性与注释规范](data-elements.md#lowcode-magic--magic-api-readability-and-documentation)，发布流程见[本地资源版本管理](data-elements.md#resource-versioning)。
 
 Magic 与普通接口共用 `ApiErrorResolver`。异常链或调用栈明确来自 Elasticsearch 客户端时，连接拒绝、连接重置、DNS/TLS/连接关闭分别归入全文检索连接错误，超时归入全文检索超时；服务返回 401/403、429/502/503/504、其他查询错误时分别显示认证授权、暂时不可用及查询配置提示。对应错误码为 `SEARCH-CONNECTION-001`、`SEARCH-TIMEOUT-002`、`SEARCH-AUTH-003`、`SEARCH-UNAVAILABLE-001`、`SEARCH-QUERY-004`。页面优先展示可执行的中文提示，详情保留原异常和跟踪号。不能只凭 `Connection reset` 字样把数据库、HTTP 或脚本参数错误判成全文检索故障，也不能用空结果冒充查询成功。
 
@@ -199,6 +230,15 @@ magic-api:
 		type: file
 		location: D:/data/magic-api
 ```
+
+
+<a id="backend-simplification-handoff"></a>
+
+#### 后端精简与接手顺序
+
+1. NiFi 任务链的 `/nifi/api/pipelines/task-chain`、`/{id}/chain` 和 `/task-chain/native` 已直接注册为 Magic GET 及 HEAD，后两条路径沿用 `/nifi/api/pipelines` 前缀。原 `AccessTaskChainController` 和 `AccessTaskChainService` 已删除。GET 和 HEAD 共用业务函数，测试直接执行现用 Magic 并核对原 HTTP 契约。`ManifestController` 可整组迁移组件清单的列表和详情，保留 GET、HEAD、原始 JSON、缺失条目的空体 HTTP 404、匿名响应和 OPTIONS。将四个脚本直接登记到现有 `/nifi/api` 分组，避免 Magic 2.2.2 拼出列表路径尾斜杠。验证脚本直接调用 `ManifestRegistry`，该注册表也供 `DslCompiler` 使用。切换时先移除冲突的 Spring MVC 映射，再登记 Magic。随后可评估单路由的 `LineageController`，复用 NiFi 客户端协议方法，在 Magic 处理属主检查、轮询和任务清理编排、图数据组装。`PipelineController` 可先从已有 Magic 业务的流程分页与运行总览切入，再迁移同组的画布模板、保存及删除。NiFi 协议客户端、原生代理、编译器和并发原语按实际技术用途保留。启停、部署、删除和重试需验证锁、事务、失败补偿和状态回读。
+2. 登记表删除使用 `db_table_t`、`da_catalog_t` 及实际关联表。NiFi 画布和任务目录读取现行登记表、目录主表与租户检索投影，Java 旧视图回退及其专用实体、Mapper、服务和实现已删除。现用目录数据项由 Magic 保存到 `da_catalog_item_t`，旧 Java 保存方法和专用持久化链已删除。`/common/getPropMap` 和 `/common/saveGatewayAsset` 已在 86 环境退役。公安、海渔的 MySQL 和广电的达梦均已应用 `da_asset_t` 退役增量，澄天金仓原无此对象。`/dst/catalog/list` 已按实际主表和属性来源说明，仍需将拼接 SQL、分页和关联属性查询改为结构化数据访问。迁移前核对其与现行目录分页的数据范围差异，同步验证个人中心、数据超市和目录同步的角色契约。`DataAssetRuntimeAdapter` 仍供画布资产读取和任务镜像回调使用，迁移这两条链并批量预取解除任务关联所需的数据后，再核对整类退役。
+3. 测试清理从同一批次的 Surefire 报告和同等条件下的 Maven `install` 计时开始，先处理随生产类退役的用例及重复夹具。`ResourceTablePagingTest`、`DataAggTaskEnsureBatchMagicTest`、`TaskCategoryWarehouseScopeMagicTest` 是已有执行时间较长的审查入口。分别核对实际查询、权限和回滚覆盖后，合并同类场景或复用数据库准备。记录各用例在现用 Magic 或 HTTP 契约中的覆盖去向，全量回归须仍可用固定命令执行。每批报告前后生产 Java 文件与类数、Spring MVC Controller 数、迁入 Magic 的业务路由数、测试文件与用例数，以及同等编译缓存和依赖条件下的 Maven 耗时。实际报告统一保存在忽略的 `logs/`。
 
 
 <a id="overview--前端联调"></a>
@@ -993,7 +1033,11 @@ FTPS 密码保存在 NiFi 敏感动态属性中，脚本正文不含凭据。发
 
 ## 时间窗口抓取扩展
 
-数据库来源使用现有的 `com.linewell.microservice.processors.database.GenerateDateTableFetch`，完整扩展坐标为 `com.linewell.microservice:datadevs-database-nar:2.9.0`。后端发布前核对该类型及三个坐标字段，创建时显式选择 `2.9.0`；不要求安装其他后缀版本，也不修改已有 NAR 的名字或内容。
+普通 JDBC 来源的单次全量与定时全量使用标准 `org.apache.nifi.processors.standard.GenerateTableFetch`，已填写增量时间字段也不改用时间窗口分片。优先按显式排序列或登记主键稳定分页，没有稳定排序或目标方言不支持分页时使用单次查询；保留各数据库适配层的 SQL 方言，不增加 MySQL 专用 JDBC 参数。全量无需填写增量时间字段，避免自定义时间窗口组件处理 JDBC 时间值时触发 `Illegal pattern character 'n'`。该规则覆盖普通 JDBC 数据库来源，Hive 和增量模式继续按各自既有策略处理。
+
+修改生成逻辑后必须加载包含修复的后端运行包，再使用「重新部署流程」生成并绑定新图，回读来源处理器类型才能证明生效。只修改源码、打包或保存画布不会替换运行包和 NiFi 处理器。重新部署入口传入 `forceRebuild=true`，不能因为设计内容相同而复用旧图。尚未更新的全量时间窗口处理器在启动前给出重新部署提示；既有增量与 Hive 不受该检查影响。重新部署仍保留空队列检查，不能以清队列应用修复。
+
+需要时间窗口分片的来源使用现有的 `com.linewell.microservice.processors.database.GenerateDateTableFetch`，完整扩展坐标为 `com.linewell.microservice:datadevs-database-nar:2.9.0`。后端发布前核对该类型及三个坐标字段，创建时显式选择 `2.9.0`；不要求安装其他后缀版本，也不修改已有 NAR 的名字或内容。
 
 发布属性使用现有 2.9.0 的真实描述符：
 
@@ -1030,7 +1074,7 @@ FTPS 密码保存在 NiFi 敏感动态属性中，脚本正文不含凭据。发
 
 认证、操作、接口、安全及任务关联见[系统日志管理详细设计](data-elements.md#logging-design)。沿用行业日志表与控制库 `iam_audit_event_t`。通用参数快照链路已在已授权的本机 86 后端换包重启，所选 31 个 class 字节与当前 Maven classes 全部相等；日志 Magic 和唯一共享组件已发布、两级缓存刷新及运行回读，函数冷加载脚本存在，所选资源无未发布差异。范围不含 14／生产，不改变 IDAAS 身份域、参数能力或授权。
 
-`platform.audit` 负责可信上下文、已解析参数的安全采集、递归脱敏、不可变快照及同源检索投影，不重读请求流、不猜业务语义。[日志参数关键词条件函数](../magic/function/01.通用函数/34.日志参数关键词条件.ms)（ID `log_parameter_condition_v1`，`/common/log-parameter-keyword-condition`）负责行业 `operations/requests` 的 `parameterKeyword` 类型、200 个 UTF-16 单位上限及结构化包含条件；Java 查询层先限定可信租户／角色范围，再绑定条件、分页，每条 SQL 超时 15 秒，不是整个 HTTP 或导出任务的总期限。旧 `parameterName + parameterValue` 精确匹配仍兼容并按 AND 叠加，但拒绝敏感原文，禁止先掩码再命中旧索引的检索旁路；该修正已有测试并部署。列表、统计、在线导出复用条件，默认 7 天、最多 90 天。普通成功 GET 的采样策略未变，不能承诺每次均落库；现有查询／导出 Java 业务仍是待迁移范围，不因新增技术原语视为全部已迁 Magic。
+`platform.audit` 负责可信上下文、已解析参数的安全采集、递归脱敏、不可变快照及同源检索投影，不重读请求流、不猜业务语义。[日志参数关键词条件函数](../magic/function/01.通用函数/31.日志参数关键词条件.ms)（ID `log_parameter_condition_v1`，`/common/log-parameter-keyword-condition`）负责行业 `operations/requests` 的 `parameterKeyword` 类型、200 个 UTF-16 单位上限及结构化包含条件；Java 查询层先限定可信租户／角色范围，再绑定条件、分页，每条 SQL 超时 15 秒，不是整个 HTTP 或导出任务的总期限。旧 `parameterName + parameterValue` 精确匹配仍兼容并按 AND 叠加，但拒绝敏感原文，禁止先掩码再命中旧索引的检索旁路；该修正已有测试并部署。列表、统计、在线导出复用条件，默认 7 天、最多 90 天。普通成功 GET 的采样策略未变，不能承诺每次均落库；现有查询／导出 Java 业务仍是待迁移范围，不因新增技术原语视为全部已迁 Magic。
 
 `AuditParameterSnapshot.fromLegacy(Object)` 只取旧 `details.requestParameters` 的 `display` 白名单并再次统一脱敏，安全结果放额外 `legacy` 对象，保持 `LEGACY`／来源未记录，不伪造 `path/query/body/verified`。这是已实现并测试的技术入口，不是历史自动重建或回填。批量读取先拒绝空白等非法 ID，一次预取后逐 ID 授权并恢复输入序；20／100 行均为两条事件 SQL，20／100 ID 均为一次批量 SQL，身份与范围解析另有固定开销。
 

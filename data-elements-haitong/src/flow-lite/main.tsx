@@ -101,11 +101,14 @@ function FlowList() {
       </Space>
     </div>
     {flows.isError && <Alert type="error" showIcon message={description(flows.error)} action={<Button onClick={() => void flows.refetch()}>重试</Button>} />}
-    <Table rowKey="id" loading={flows.isFetching} dataSource={flows.data?.list ?? []}
+    <Table rowKey="id" tableLayout="fixed" scroll={{x:480}} loading={flows.isFetching} dataSource={flows.data?.list ?? []}
       pagination={{ current: page, pageSize: size, pageSizeOptions: [20, 50, 100], showSizeChanger: true,
         total: flows.data?.total ?? 0, onChange: (current, nextSize) => { setPage(nextSize === size ? current : 1); setSize(nextSize); } }}
       columns={[
-        { title: '流程名称', key: 'name', render: (_, item) => <Button type="link" onClick={() => navigate(editorPath + '/' + item.id)}>{item.name}</Button> },
+        { title: '流程名称', key: 'name', width: 220, ellipsis: { showTitle: false }, render: (_, item) =>
+          <Button type="link" title={item.name} style={{maxWidth:'100%',minWidth:0,paddingInline:0}} onClick={() => navigate(editorPath + '/' + item.id)}>
+            <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{item.name}</span>
+          </Button> },
         { title: '部署状态', key: 'deployment', render: (_, item) => item.nifiProcessGroupId ? <Tag color="blue">已部署</Tag> : <Tag>草稿</Tag> },
         { title: '更新时间', key: 'time', render: (_, item) => new Date(item.updatedAt).toLocaleString('zh-CN') },
       ]} />

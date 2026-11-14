@@ -36,6 +36,7 @@ import java.util.Map
 import java.util.List
 import log
 import tenantRuntime
+import tableWrite
 import auditEvents
 import portableDdl
 import com.linewell.dataelement.metautil.jdbc.JdbcDriverPropertyResolver
@@ -936,16 +937,28 @@ for (task in (targetUnlinked ? [] : (tasks == null ? [] : tasks))) {
 var pipelineCount = completedPipelineIds.size()
 // 只结算任务与目标登记，监控历史由独立保留策略清理。
 var deletedTaskCount = db.transaction(() => {
+// 物化表的来源标识指向登记根表。若根表仍有效，先取得与绑定和创建任务相同的行锁。
+var activeSource = { is_del: 0 }
+var rootTableId = text(first(sourceTable, ['sourceTableId', 'source_table_id']))
+if (!blank(rootTableId) && rootTableId != sourceTableId) {
+    tableWrite.lockRow('db_table_t', tenantId, 'tid', rootTableId, ['tid'], activeSource)
+}
+var lockedSource = tableWrite.lockRow('db_table_t', tenantId, 'tid', sourceTableId,
+    ['tid', 'datasource_id', 'source_table_id'], activeSource)
+if (lockedSource == null || text(lockedSource.tid) != sourceTableId
+    || text(lockedSource.datasource_id) != sourceDatasourceId || text(lockedSource.source_table_id) != rootTableId) {
+    exit 409, '来源表登记已变化，请重新读取后重试'
+}
 var updatedTaskCount = 0
 if (pendingTaskIds.size() > 0) {
-    db.table('data_access_agg_task_t').where().in('tid', pendingTaskIds).eq('is_del', 0).update({task_status:0, updated_time:now})
+    db.table('data_access_agg_task_t').where().in('tid', pendingTaskIds).eq('tenant_id', tenantId).eq('is_del', 0).update({task_status:0, updated_time:now})
 }
 if (completedTaskIds.size() > 0) {
-    db.table('data_access_field_mapping').where().in('task_id', completedTaskIds).eq('is_del', 0).update({is_del:1, updated_time:now})
-    updatedTaskCount = db.table('data_access_agg_task_t').where().in('tid', completedTaskIds).eq('is_del', 0).update({is_del:1, task_status:0, updated_time:now})
+    db.table('data_access_field_mapping').where().in('task_id', completedTaskIds).eq('tenant_id', tenantId).eq('is_del', 0).update({is_del:1, updated_time:now})
+    updatedTaskCount = db.table('data_access_agg_task_t').where().in('tid', completedTaskIds).eq('tenant_id', tenantId).eq('is_del', 0).update({is_del:1, task_status:0, updated_time:now})
 }
 if (completedPipelineIds.size() > 0) {
-    db.table('nifi_pipeline_t').where().in('id', completedPipelineIds).eq('is_del', 0).update({is_del:1, updated_at:now.getTime()})
+    db.table('nifi_pipeline_t').where().in('id', completedPipelineIds).eq('tenant_id', tenantId).eq('is_del', 0).update({is_del:1, updated_at:now.getTime()})
 }
 
 if (deleteTargetTable && !targetCleanupPending) {
@@ -976,7 +989,7 @@ if (deleteTargetTable && !targetCleanupPending) {
                 .update({ is_del: 1, updated_time: now })
             try { esCommonService.deleteById('dataassets', catalogId) } catch (ignored) {}
         }
-        db.table('db_table_t').where().eq('tid', sourceTableId).eq('is_del', 0)
+        db.table('db_table_t').where().eq('tid', sourceTableId).eq('tenant_id', tenantId).eq('is_del', 0)
             .update({ source_catalog_id: null, catalog_name: null, updated_time: now })
     } else {
         // 多目标场景删除其中一个目标后，其余目标仍然有效。目录保留并把兼容的

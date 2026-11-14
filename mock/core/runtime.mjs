@@ -304,17 +304,122 @@ export class ChengtianMockRuntime {
     };
   }
 
+  metadataSummary(query, refresh) {
+    const { tid, tableId, dryRun } = query;
+    const database = this.database;
+    const tenantId = this.session.tenantId;
+    assert(String(tid ?? "").trim(), 400, "tid 不能为空");
+
+    const table = String(tableId ?? "").trim()
+      ? database.tables.find((row) => row.tid === tableId && row.tenantId === tenantId && !row.isDel)
+      : null;
+    if (String(tableId ?? "").trim()) {
+      assert(table, 404, "数据表不存在或无访问权限");
+      assert(table.datasourceId === tid, 403, "数据表不属于指定数据源");
+    }
+    const source = database.sources.find((row) => row.tid === tid && row.tenantId === tenantId && !row.isDel);
+    assert(source, 404, "数据源资产不存在或无访问权限");
+    if (refresh) {
+      // 独立探查允许当前租户的有效资产，刷新入口使用数据源管理的写入范围。
+      assert(visibleSources(database, this.session).includes(source), 403, "数据源不存在或无权修改");
+    }
+
+    const persist = refresh && dryRun !== true && dryRun !== "true";
+    if (table) {
+      const summary = {
+        tid: table.tid,
+        datasourceId: tid,
+        recordCount: table.recordCount ?? null,
+        fieldCount: table.fieldCount ?? null,
+        storageSize: table.storageSize ?? null,
+        totalSizeFormatted: table.totalSizeFormatted ?? null,
+        totalSizeBytes: table.totalSizeBytes ?? null,
+        ddlCreateTime: table.ddlCreateTime ?? null,
+        ddlUpdateTime: table.ddlUpdateTime ?? null,
+      };
+      if (persist) {
+        const updated = clone(database);
+        Object.assign(updated.tables.find((row) => row.tid === table.tid), summary, { updatedTime: now() });
+        this.persist(updated);
+      }
+      return summary;
+    }
+
+    const tables = database.tables.filter((row) => row.datasourceId === tid && row.tenantId === tenantId && !row.isDel);
+    const summary = {
+      dbVersion: source.dbVersion || "",
+      db_version: source.dbVersion || "",
+      dataSize: source.dataSize ?? "0 B",
+      totalSize: source.totalSize ?? "0 B",
+      tableCount: tables.filter((row) => row.objectType === "TABLE").length,
+      viewCount: tables.filter((row) => row.objectType === "VIEW").length,
+      procedureCount: source.procedureCount ?? null,
+      userCount: source.userCount ?? null,
+    };
+    if (!persist) return summary;
+
+    const updated = clone(database);
+    Object.assign(updated.sources.find((row) => row.tid === tid), {
+      dbVersion: summary.dbVersion,
+      tableNum: summary.tableCount,
+      viewCount: summary.viewCount,
+      procedureCount: summary.procedureCount,
+      userCount: summary.userCount,
+      dataSize: summary.dataSize,
+      totalSize: summary.totalSize,
+      updatedTime: now(),
+    });
+    this.persist(updated);
+    return {
+      ...summary,
+      tid,
+      tableNum: summary.tableCount,
+      table_num: summary.tableCount,
+      view_count: summary.viewCount,
+      procedure_count: summary.procedureCount,
+      user_count: summary.userCount,
+      data_size: summary.dataSize,
+      total_size: summary.totalSize,
+    };
+  }
+
   saveSource(body) {
-    const database = clone(this.database),
-      props = body.propList;
+    const originalSnapshot = this.storage?.getItem(`data-elements:mock:chengtian:v3:${this.session.code}`);
+    const current = this.database;
+    const database = clone(current);
+    const props = body.propList;
     assert(
       props && typeof props === "object" && !Array.isArray(props),
       400,
       "缺少数据源 propList",
     );
-    const existing = body.tid
-      ? requireSources(database, this.session, body.tid)[0]
-      : null;
+    const tid = String(body.tid ?? "").trim();
+    const existing = tid ? database.sources.find((row) =>
+      row.tid === tid && row.tenantId === this.session.tenantId && !row.isDel) : null;
+    const requestedStatus = String(props.assetStatus ?? props.asset_status ?? "");
+    const completeOnly = props.completeOnly === true;
+    const dryRun = body.dryRun === true || props.dryRun === true;
+    const wantsCompletion = completeOnly || ["1", "2"].includes(requestedStatus);
+    if (wantsCompletion) assert(existing, 404, "数据源不存在或不属于当前租户");
+    if (existing) {
+      assert(visibleSources(database, this.session).includes(existing), 403, "数据源不存在或无权修改");
+    } else if (tid) {
+      assert(!database.sources.some((row) => row.tid === tid), 404, "数据源不存在或不属于当前租户");
+    }
+    const version = existing?.versionNo;
+    const proxy = ["proxy", "agent"].includes(String(existing?.accessMode || "").toLowerCase());
+    const review = wantsCompletion ? this.reviewSourceRegistration(database, existing, proxy) : null;
+    if (review && dryRun) return review;
+    if (completeOnly) {
+      assert(review.completionEligible, 400, "请先登记至少一项当前数据范围内的数据服务，再结束登记");
+      this.assertSourceSaveCurrent(current, originalSnapshot, tid, version, proxy);
+      Object.assign(existing, { assetStatus: review.assetStatus, displayStatus: review.assetStatus,
+        flowStatus: 2, updatedTime: now(), versionNo: version + 1 });
+      this.persist(database);
+      const { assetStatus, tableReviewReady, tableCount, registeredTableCount, pendingTableCount } = review;
+      return { tid, assetStatus, displayStatus: assetStatus, completionEligible: true, tableReviewReady,
+        tableCount, registeredTableCount, pendingTableCount, indexSync: "status-patch" };
+    }
     assert(
       props.dbName === undefined ||
         (typeof props.dbName === "string" &&
@@ -357,7 +462,7 @@ export class ChengtianMockRuntime {
     }
     assert(existing || changes.dbName, 400, "请输入数据源名称");
     const row = existing || {
-      tid: `${database.code}-source-${crypto.randomUUID()}`,
+      tid: tid || `${database.code}-source-${crypto.randomUUID()}`,
       tenantId: this.session.tenantId,
       orgId: this.session.orgId,
       orgName: this.user().orgName,
@@ -383,19 +488,67 @@ export class ChengtianMockRuntime {
       );
       Object.assign(row, { appId: app.tid, appName: app.appName });
     }
+    const connectionChanged = existing && (
+      (changes.dbType && changes.dbType !== existing.dbType) ||
+      (String(changes.showConnect) === "0" && String(existing.showConnect) === "1")
+    );
     Object.assign(row, changes, {
       id: row.tid,
       updatedTime: now(),
       versionNo: row.versionNo + 1,
     });
+    if (review || requestedStatus === "0" || (connectionChanged && [1, 2].includes(row.assetStatus))) {
+      row.assetStatus = review?.assetStatus ?? 0;
+      row.displayStatus = row.assetStatus;
+      row.flowStatus = review ? 2 : 0;
+    }
     if (!existing) database.sources.push(row);
-    const dryRun = body.dryRun || props.dryRun;
-    if (!dryRun) this.persist(database);
+    if (!dryRun) {
+      this.assertSourceSaveCurrent(current, originalSnapshot, existing?.tid, version, proxy && review?.completionEligible === true);
+      this.persist(database);
+    }
     return {
       tid: row.tid,
       assetStatus: row.assetStatus,
-      indexRefreshPending: !dryRun && body.deferIndexRefresh === true,
+      indexRefreshPending: !dryRun && [true, 1, "1"].includes(body.deferIndexRefresh),
     };
+  }
+
+  reviewSourceRegistration(database, source, proxy) {
+    const tid = source.tid;
+    if (proxy) {
+      const serviceCount = (database.services ?? []).filter((row) =>
+        row.tenantId === this.session.tenantId && row.datasourceId === tid && !row.isDel && (
+          this.session.scope === "ALL" ||
+          (this.session.scope === "ORG" && this.session.orgId && row.orgId === this.session.orgId) ||
+          (this.session.scope === "OWNER" && this.session.userId && row.createdBy === this.session.userId)
+        )).length;
+      const eligible = serviceCount > 0;
+      return { tid, assetStatus: eligible ? 2 : 1, completionEligible: eligible,
+        tableReviewReady: eligible, serviceCount, tableCount: 0, registeredTableCount: 0, pendingTableCount: 0 };
+    }
+    const tables = database.tables.filter((row) =>
+      row.tenantId === this.session.tenantId && row.datasourceId === tid && !row.isDel);
+    const registeredTableCount = tables.filter((row) => row.assetStatus === 2).length;
+    const tableReviewReady = tables.length > 0 && tables.length === registeredTableCount;
+    const assetStatus = tableReviewReady ? 2 : 1;
+    return { tid, assetStatus, displayStatus: assetStatus, completionEligible: true, tableReviewReady,
+      tableCount: tables.length, registeredTableCount, pendingTableCount: tables.length - registeredTableCount, dryRun: true };
+  }
+
+  assertSourceSaveCurrent(current, originalSnapshot, tid, version, requireProxyService) {
+    // 另一窗口已保存场景时拒绝覆盖，调用方重新读取后再提交。
+    const stored = this.storage?.getItem(`data-elements:mock:chengtian:v3:${current.code}`);
+    if (stored !== originalSnapshot) this.databases.delete(current.code);
+    const latest = this.database;
+    const row = tid && latest.sources.find((item) =>
+      item.tid === tid && item.tenantId === this.session.tenantId && !item.isDel);
+    if (requireProxyService) {
+      assert(row && row.versionNo === version && this.reviewSourceRegistration(latest, row, true).completionEligible,
+        409, "服务清单已变化，请重新确认后结束登记");
+    }
+    assert(stored === originalSnapshot && latest === current && (!tid || (row && row.versionNo === version)),
+      409, "数据源记录已变化，请重新读取后保存");
   }
 
   tables(params) {
@@ -580,13 +733,8 @@ export class ChengtianMockRuntime {
       requireSources(this.database, this.session, body.tid);
       return { tid: body.tid, refreshed: true };
     }
-    if (
-      [
-        "GET /dst/database/metadata/dbInfo",
-        "GET /dst/database/metadata/refreshDbInfo",
-      ].includes(key)
-    )
-      return this.sourceDetail(query.tid || query.dbId);
+    if (key === "GET /dst/database/metadata/dbInfo") return this.metadataSummary(query, false);
+    if (key === "GET /dst/database/metadata/refreshDbInfo") return this.metadataSummary(query, true);
     if (key === "GET /dst/database/metadata/tables") {
       const result = this.tables(query);
       return query.paged || query.catalogPaged ? result : result.list;
@@ -629,26 +777,36 @@ export class ChengtianMockRuntime {
         completedTables: 6,
       };
     }
-    if (
-      [
-        "POST /dst/application/register-options",
-        "POST /dst/application/detail",
-      ].includes(key)
-    ) {
+    if (key === "POST /dst/application/register-options") {
+      // 登记选择器读取当前租户完整候选，页面再对名称和 ID 搜索。
+      return this.database.applications
+        .filter((row) =>
+          row.tenantId === this.session.tenantId &&
+          (row.isDel == null || row.isDel === 0) &&
+          (this.session.scope === "ALL" ||
+            (Boolean(this.session.orgId) && row.orgId === this.session.orgId)),
+        )
+        .map((row) => ({
+          label: row.appName ?? null,
+          value: row.tid,
+          orgid: row.orgId ?? null,
+          createdby: row.createdBy ?? null,
+        }))
+        .sort((left, right) =>
+          (Number(left.label != null) - Number(right.label != null)) ||
+          (left.label ?? "").localeCompare(right.label ?? "", "zh-CN") ||
+          left.value.localeCompare(right.value),
+        );
+    }
+    if (key === "POST /dst/application/detail") {
       const rows = this.database.applications.filter(
         (row) =>
           this.session.scope === "ALL" || row.orgId === this.session.orgId,
       );
-      if (key.endsWith("/detail"))
-        return clone(
-          rows.find(
-            (row) => row.tid === body.tid || row.appName === body.appName,
-          ) || null,
-        );
       return clone(
-        rows.filter(
-          (row) => !body.keyword || row.appName.includes(body.keyword),
-        ),
+        rows.find(
+          (row) => row.tid === body.tid || row.appName === body.appName,
+        ) || null,
       );
     }
     throw new MockError(501, `首阶段尚未覆盖接口：${key}，已阻止访问真实服务`);

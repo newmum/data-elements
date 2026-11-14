@@ -12,11 +12,11 @@ const source=fs.readFileSync(path.join(root,'lowcode/01.系统门户/01.数据�
 const script=source.match(/<script setup[^>]*>([\s\S]*?)<\/script>/)[1];
 const nodes=sandbox.Babel.transform(script,{ast:true,code:false,sourceType:'module',parserOpts:{plugins:['typescript']}}).ast.program.body;
 function extract(name){const node=nodes.find(n=>n.type==='FunctionDeclaration'?n.id.name===name:n.type==='VariableDeclaration'&&n.declarations.some(d=>d.id.name===name));assert.ok(node,name);return script.slice(node.start,node.end);}
-const constants=['integrationTemplateTableHeaders','integrationTemplateFieldHeaders','requiredIntegrationTemplateTableHeaders','requiredIntegrationTemplateFieldHeaders','businessTypeTemplateOptions','booleanTemplateOptions','resourceCatalogFieldTypes','integrationStandardFormatOptions'];
+const constants=['integrationTemplateTableHeaders','integrationTemplateFieldHeaders','requiredIntegrationTemplateTableHeaders','requiredIntegrationTemplateFieldHeaders','businessTypeTemplateOptions','booleanTemplateOptions','resourceCatalogFieldTypes','integrationStandardFormatOptions','apiCaptureSheetName','apiCaptureTemplateHeaders','apiMethods','apiCaptureTemplateSchedules','apiCaptureTemplateWeekdays'];
 const functions=['excelColumnName','getCellText','normalizeTemplateHeader','styleWorksheetHeader','autoFitColumns','setWorksheetColumnWidth','addTemplateSheet','addIntegrationTemplateOptionSheet','applyListValidation','markRequiredColumns','formulaText','applyIntegrationTemplateAutoDefaults','downloadIntegrationMetadataTemplate'];
 function fixture(mode='receive'){
  let buffer;const accessMode={value:mode};
- const state={accessMode,isFilePush:{value:false},ExcelJS,Blob,URL:{createObjectURL(blob){buffer=blob;return 'blob:test'},revokeObjectURL(){}},document:{createElement(){return {style:{},click(){}}},body:{appendChild(){},removeChild(){}}},window:{setTimeout(fn){fn()}},$message:{success(){}}};
+ const state={accessMode,isFilePush:{value:false},isApiPullRegistration:{value:mode==='capture'},ExcelJS,Blob,URL:{createObjectURL(blob){buffer=blob;return 'blob:test'},revokeObjectURL(){}},document:{createElement(){return {style:{},click(){}}},body:{appendChild(){},removeChild(){}}},window:{setTimeout(fn){fn()}},$message:{success(){}}};
  const api=new Function(...Object.keys(state),constants.map(extract).join('\n')+'\n'+functions.map(extract).join('\n')+'\nreturn {downloadIntegrationMetadataTemplate}')( ...Object.values(state));
  return {...api,async workbook(){await api.downloadIntegrationMetadataTemplate();const workbook=new ExcelJS.Workbook();await workbook.xlsx.load(await buffer.arrayBuffer());return workbook;}};
 }
@@ -28,6 +28,7 @@ test('structured push and collection workbook retain ordinary table/field defini
   assert.equal(fields.getCell('E2').dataValidation.type,'list');
   const guide=JSON.stringify(workbook.getWorksheet('填写说明').getSheetValues());assert.doesNotMatch(guide,/关联附件|fileId|附件大小/);
   if(mode==='receive')assert.match(guide,/分片上传规范/);
+  assert.equal(Boolean(workbook.getWorksheet('接口配置')), mode==='capture');
  }
 });
 test('template parser no longer produces field attachment associations from old optional columns',()=>{

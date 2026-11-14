@@ -193,7 +193,7 @@ class PipelineRedeployTest {
         when(groups.existingIds(any())).thenReturn(List.of("task-only-group"));
         assertThat(controller.undeploy("p1").getStatusCode().value()).isEqualTo(200);
         verify(nifi).cleanupProcessGroup("task-only-group");
-        verify(tasks).updateProcessGroup("p1", null);
+        verify(tasks).syncState("p1", "group", null);
         assertThat(stored.get().lastDeployedHash()).isNull();
     }
 
@@ -211,7 +211,7 @@ class PipelineRedeployTest {
         order.verify(compiler).compile(any(), any(), any());
         order.verify(cleanup).clear(any());
         order.verify(nifi).setProcessGroupState("new-group", "RUNNING");
-        order.verify(tasks).started("p1");
+        order.verify(tasks).syncState("p1", "started", null);
         verify(cleanup, times(1)).clear(any());
         assertThat(stored.get().nifiProcessGroupId()).isEqualTo("new-group");
         assertThat(stored.get().status()).isEqualTo(PipelineStatus.RUNNING);
@@ -226,8 +226,8 @@ class PipelineRedeployTest {
         assertThat(controller.start("p1", true, true).getStatusCode().value()).isEqualTo(400);
 
         verify(nifi, never()).setProcessGroupState(anyString(), eq("RUNNING"));
-        verify(tasks, never()).started(anyString());
-        verify(tasks).statusOnly("p1", 2);
+        verify(tasks, never()).syncState(anyString(), eq("started"), any());
+        verify(tasks).syncState("p1", "status", 2);
         assertThat(stored.get().status()).isEqualTo(PipelineStatus.DEPLOY_FAILED);
         assertThat(stored.get().nifiProcessGroupId()).isEqualTo("new-group");
         assertThat(stored.get().lastDeployedHash()).isNull();
@@ -325,6 +325,28 @@ class PipelineRedeployTest {
     }
 
     @Test
+    void normalStartRejectsTheBrokenFullFetchButPreservesDeployedIncrementalFetch() {
+        setFullLoad("FULL", false);
+        var p = stored.get();
+        var source = p.dsl().nodes().getFirst();
+        stored.set(new Pipeline(p.id(), p.name(), p.description(), p.createdAt(), p.updatedAt(), p.dsl(),
+                p.nifiProcessGroupId(), p.status(), p.lastDeployedHash(), p.lastDeployedAt(), p.lastStoppedAt(),
+                new NifiNodeMapping(Map.of(source.id(), "fetch"), Map.of("fetch", source.id()), Map.of()), null));
+        when(compiler.usesStandardJdbcFullFetch(source)).thenReturn(true);
+        var graph = JsonNodeFactory.instance.objectNode();
+        var properties = graph.putArray("processors").addObject().putObject("component")
+                .put("id", "fetch").put("type", "com.linewell.microservice.processors.database.GenerateDateTableFetch")
+                .putObject("config").putObject("properties").put("gen-table-column-for-val-partitioning", "updated_at");
+        when(nifi.get("/process-groups/old-group/processors?includeDescendantGroups=true", JsonNode.class)).thenReturn(graph);
+
+        assertThat(controller.start("p1").getStatusCode().value()).isEqualTo(409);
+        verify(nifi, never()).setProcessGroupState(anyString(), anyString());
+        properties.put("Maximum-value Columns", "updated_at");
+        assertThat(controller.start("p1").getStatusCode().value()).isEqualTo(200);
+        verify(nifi).setProcessGroupState("old-group", "RUNNING");
+    }
+
+    @Test
     void candidateCanDeployWithoutReadingOldProcessorStateOrChangingTheActiveGroup() {
         compileNewGroup();
         when(groups.prepareCandidate(any())).thenReturn(new PipelineGroupOrganizer.Layout("top", "task", "application",
@@ -349,7 +371,7 @@ class PipelineRedeployTest {
         verify(nifi, never()).getProcessGroupStatus("old-group");
         verify(nifi, never()).cleanupProcessGroup(anyString());
         verify(nifi, never()).setProcessGroupState(anyString(), anyString());
-        verify(tasks, never()).updateProcessGroup(anyString(), anyString());
+        verify(tasks, never()).syncState(anyString(), eq("group"), any());
 
         when(nifi.getProcessGroupStatus("old-group")).thenThrow(new NifiException("missing", 404, null));
         var status = JsonNodeFactory.instance.objectNode();
@@ -361,7 +383,7 @@ class PipelineRedeployTest {
                 .containsEntry("mode", "candidate-activated");
         assertThat(stored.get().nifiProcessGroupId()).isEqualTo("new-group");
         assertThat(stored.get().nodeMapping().candidate()).isNull();
-        verify(tasks).updateProcessGroup("p1", "new-group");
+        verify(tasks).syncState("p1", "group", "new-group");
     }
 
     @Test
@@ -376,7 +398,7 @@ class PipelineRedeployTest {
         verify(nifi).cleanupProcessGroup("old-group");
         verify(compiler).compile(any(), any(), any());
         verify(nifi).setProcessGroupState("new-group", "RUNNING");
-        verify(tasks).started("p1");
+        verify(tasks).syncState("p1", "started", null);
         assertThat(stored.get().nifiProcessGroupId()).isEqualTo("new-group");
     }
 

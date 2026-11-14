@@ -1,45 +1,28 @@
 package com.linewell.dataelement.dataassets.runtime;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.linewell.dataelement.model.dataasset.CatalogItemSaveOrUpdateRequest;
-import com.linewell.dataelement.model.dataasset.CatalogItemValueRequest;
-import com.linewell.dataelement.model.dataasset.DataAssetPropBatchSaveRequest;
-import com.linewell.dataelement.model.dataasset.DataAssetPropSaveRequest;
-import com.linewell.dataelement.model.dataasset.DataAssetQueryByIdRequest;
-import com.linewell.dataelement.dataassets.base.entity.DaAssetCatalogItemT;
-import com.linewell.dataelement.dataassets.base.entity.DaAssetT;
 import com.linewell.dataelement.dataassets.base.entity.DataPropT;
-import com.linewell.dataelement.dataassets.base.service.IDaAssetCatalogItemTService;
-import com.linewell.dataelement.dataassets.base.service.IDaAssetTService;
 import com.linewell.dataelement.dataassets.base.service.IDataPropTService;
 import com.linewell.dataelement.elasticsearch.EsCommonService;
 import com.linewell.dataelement.model.common.BizException;
 import com.linewell.dataelement.platform.magic.StructuredTableReadMagicModule;
+import com.linewell.dataelement.platform.persistence.id.NumericId;
 import com.linewell.dataelement.platform.tenant.domain.TenantContext;
-import java.util.LinkedHashSet;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import com.linewell.dataelement.platform.persistence.id.NumericId;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Persistence bridge for Java runtime callbacks.
+ * Asset lookup and catalog link persistence for the NiFi runtime.
  *
  * <p>Page queries and ordinary asset operations live in Magic API. This adapter is intentionally
- * limited to callbacks that originate inside Warm-Flow or the NiFi runtime and therefore cannot
- * enter through a Magic HTTP route.</p>
+ * used by canvas template assembly and pipeline lifecycle callbacks.</p>
  */
 @Component
 public class DataAssetRuntimeAdapter {
@@ -47,10 +30,7 @@ public class DataAssetRuntimeAdapter {
     private static final String INDEX_NAME = "dataassets";
 
     private final EsCommonService esCommonService;
-    private final IDaAssetTService assetService;
     private final IDataPropTService propService;
-    private final IDaAssetCatalogItemTService catalogItemService;
-    private final ObjectMapper objectMapper;
     private final StructuredTableReadMagicModule tableRead;
     private static final int MAX_CALLBACK_IDS = 100;
     private static final Set<String> COUNTER_NAMES = Set.of("viewCount", "view_count", "marketViewCount", "market_view_count");
@@ -58,21 +38,15 @@ public class DataAssetRuntimeAdapter {
 
     public DataAssetRuntimeAdapter(
             EsCommonService esCommonService,
-            IDaAssetTService assetService,
             IDataPropTService propService,
-            IDaAssetCatalogItemTService catalogItemService,
-            ObjectMapper objectMapper,
             StructuredTableReadMagicModule tableRead) {
         this.esCommonService = esCommonService;
-        this.assetService = assetService;
         this.propService = propService;
-        this.catalogItemService = catalogItemService;
-        this.objectMapper = objectMapper;
         this.tableRead = tableRead;
     }
 
-    public Map<String, Object> queryById(DataAssetQueryByIdRequest request) {
-        String tid = validId(request == null ? null : request.getTid());
+    public Map<String, Object> queryById(String assetId) {
+        String tid = validId(assetId);
         String tenant = TenantContext.requireTenantId();
         // 当前目录主表先判定归属和删除状态；旧索引不能把失效目录恢复成有效记录。
         Map<String, Map<String, Object>> catalogs = catalogRows(List.of(tid), true);
@@ -83,55 +57,29 @@ public class DataAssetRuntimeAdapter {
             return catalogDocument(primary, properties(List.of(tid), null), Map.of());
         }
         Map<String, Object> document = esCommonService.getDocument(INDEX_NAME, tid);
-        if (document != null) {
-            Object type = document.get("assetType") == null ? document.get("asset_type") : document.get("assetType");
-            Object owner = document.get("tenantId") == null ? document.get("tenant_id") : document.get("tenantId");
-            if ("catalog".equals(stringValue(type)) || owner != null && !tenant.equals(stringValue(owner))) {
-                return Map.of();
-            }
-            return document;
+        if (document == null) return Map.of();
+        Object type = document.get("assetType") == null ? document.get("asset_type") : document.get("assetType");
+        Object owner = document.get("tenantId") == null ? document.get("tenant_id") : document.get("tenantId");
+        if ("catalog".equals(stringValue(type)) || owner != null && !tenant.equals(stringValue(owner))) {
+            return Map.of();
         }
-        // 非目录兼容入口仍供 PipelineController 使用，不改写其数据库视图数量等同名业务字段。
-        DaAssetT asset = assetService.getOne(new LambdaQueryWrapper<DaAssetT>()
-                .eq(DaAssetT::getTenantId, tenant).eq(DaAssetT::getTid, tid).eq(DaAssetT::getIsDel, 0), false);
-        if (asset == null || "catalog".equals(asset.getAssetType())) return Map.of();
-        Map<String, Object> result = objectMapper.convertValue(asset, new TypeReference<LinkedHashMap<String, Object>>() {});
-        for (DataPropT prop : activeProps(tid)) {
-            if (prop.getPropName() != null) result.put(prop.getPropName(), prop.getPropValue());
-        }
-        result.put("tid", tid);
-        result.put("tenantId", tenant);
-        result.put("assetType", asset.getAssetType());
-        saveDocument(tid, result);
-        return result;
+        return document;
     }
 
     @Transactional(rollbackFor = Exception.class)
-    public Object propSaveOrUpdate(DataAssetPropSaveRequest request) {
-        if (request == null) throw new BizException(400, "属性保存参数不能为空");
-        saveProperties(List.of(validId(request.getTid())), request.getProps(), false);
-        return true;
-    }
-
-    @Transactional(rollbackFor = Exception.class)
-    public Object propBatchSaveOrUpdate(DataAssetPropBatchSaveRequest request) {
-        if (request == null || request.getTids() == null || request.getTids().isEmpty()
-                || request.getTids().size() > MAX_CALLBACK_IDS) {
+    public void propBatchSaveOrUpdate(List<String> catalogIds, Map<String, Object> supplied) {
+        if (catalogIds == null || catalogIds.isEmpty() || catalogIds.size() > MAX_CALLBACK_IDS) {
             throw new BizException(400, "目录属性回调单次须包含1至100个目录");
         }
         var ids = new LinkedHashSet<String>();
-        for (String id : request.getTids()) ids.add(validId(id));
-        saveProperties(new ArrayList<>(ids), request.getProps(), true);
-        return true;
-    }
-
-    private void saveProperties(List<String> ids, Map<String, Object> supplied, boolean bulk) {
+        for (String id : catalogIds) ids.add(validId(id));
+        List<String> distinctIds = new ArrayList<>(ids);
         String tenant = TenantContext.requireTenantId();
         Map<String, Patch> patches = patches(supplied);
         // 全批主表归属预检在任何属性写入前完成，不逐 ID 查询或用 ES 孤儿替代目录。
-        Map<String, Map<String, Object>> catalogs = catalogRows(ids, false);
+        Map<String, Map<String, Object>> catalogs = catalogRows(distinctIds, false);
         if (catalogs.size() != ids.size()) throw new BizException(404, "目录不存在、已删除或不属于当前租户");
-        List<DataPropT> oldProps = properties(ids, patches.keySet());
+        List<DataPropT> oldProps = properties(distinctIds, patches.keySet());
         Map<String, Map<String, DataPropT>> byOwner = new LinkedHashMap<>();
         for (DataPropT prop : oldProps) byOwner.computeIfAbsent(prop.getParentId(), ignored -> new LinkedHashMap<>())
                 .putIfAbsent(prop.getPropName(), prop);
@@ -163,8 +111,7 @@ public class DataAssetRuntimeAdapter {
             counters.add(document.get("viewCount"));
         }
         // 回调只合并已验证主表的属性，保留既有发布字段；一个批次只发一次有界 bulk。
-        if (bulk) esCommonService.bulkMergeCatalogProjections(INDEX_NAME, ids, documents, counters);
-        else saveDocument(ids.getFirst(), documents.getFirst());
+        esCommonService.bulkMergeCatalogProjections(INDEX_NAME, distinctIds, documents, counters);
     }
 
     private String validId(String value) {
@@ -260,119 +207,6 @@ public class DataAssetRuntimeAdapter {
             else { result.append(upper ? Character.toUpperCase(character) : character); upper = false; }
         }
         return result.toString();
-    }
-
-    @Transactional(rollbackFor = Exception.class)
-    public Object catalogItemSaveOrUpdate(CatalogItemSaveOrUpdateRequest request) {
-        String catalogId = request == null ? null : request.getCatalogId();
-        if (catalogId == null || catalogId.isBlank()) {
-            throw new BizException(500, "catalogId不能为空");
-        }
-        List<CatalogItemValueRequest> input = request.getCatalogItems();
-        if (input == null) {
-            return null;
-        }
-
-        LocalDateTime now = LocalDateTime.now();
-        List<DaAssetCatalogItemT> oldItems = catalogItemService.list(
-                new LambdaQueryWrapper<DaAssetCatalogItemT>()
-                        .eq(DaAssetCatalogItemT::getCatalogId, catalogId)
-                        .eq(DaAssetCatalogItemT::getIsDel, 0));
-        Map<String, DaAssetCatalogItemT> remaining = new HashMap<>();
-        oldItems.forEach(item -> remaining.put(item.getTid(), item));
-        List<DaAssetCatalogItemT> inserts = new ArrayList<>();
-        List<DaAssetCatalogItemT> updates = new ArrayList<>();
-
-        for (int index = 0; index < input.size(); index++) {
-            CatalogItemValueRequest value = input.get(index);
-            if (value == null) {
-                continue;
-            }
-            String itemId = value.getTid() == null || value.getTid().isBlank() ? value.getId() : value.getTid();
-            DaAssetCatalogItemT item = itemId == null || itemId.isBlank() ? null : remaining.remove(itemId);
-            if (item == null && itemId != null && !itemId.isBlank()) {
-                continue;
-            }
-            if (item == null) {
-                item = new DaAssetCatalogItemT();
-                item.setTid(simpleId());
-                item.setCatalogId(catalogId);
-                item.setIsDel(0);
-                item.setCreatedTime(now);
-                copyCatalogItem(item, value, index);
-                item.setUpdatedTime(now);
-                inserts.add(item);
-            } else if (catalogItemChanged(item, value, index)) {
-                copyCatalogItem(item, value, index);
-                item.setUpdatedTime(now);
-                updates.add(item);
-            }
-        }
-        if (!inserts.isEmpty()) {
-            catalogItemService.saveBatch(inserts);
-        }
-        if (!updates.isEmpty()) {
-            catalogItemService.updateBatchById(updates);
-        }
-        if (!remaining.isEmpty()) {
-            catalogItemService.update(new LambdaUpdateWrapper<DaAssetCatalogItemT>()
-                    .eq(DaAssetCatalogItemT::getCatalogId, catalogId)
-                    .in(DaAssetCatalogItemT::getTid, remaining.keySet())
-                    .set(DaAssetCatalogItemT::getIsDel, 1)
-                    .set(DaAssetCatalogItemT::getUpdatedTime, now));
-        }
-        return null;
-    }
-
-    private List<DataPropT> activeProps(String tid) {
-        return propService.list(new LambdaQueryWrapper<DataPropT>()
-                .eq(DataPropT::getTenantId, TenantContext.requireTenantId())
-                .eq(DataPropT::getParentId, tid)
-                .eq(DataPropT::getIsDel, 0));
-    }
-
-    private void copyCatalogItem(DaAssetCatalogItemT target, CatalogItemValueRequest source, int sortNo) {
-        target.setSortNo(sortNo);
-        target.setColName(source.getColName());
-        target.setColEn(source.getColEn());
-        target.setColType(source.getColType());
-        target.setColLength(source.getColLength());
-        target.setIsPk(source.getIsPk());
-        target.setIsNullable(source.getIsNullable());
-        target.setDataStandardId(source.getDataStandardId());
-        target.setQualityRule(source.getQualityRule());
-        target.setEnableCodeTable(source.getEnableCodeTable());
-        target.setCodeTableId(source.getCodeTableId());
-        target.setSourceTableColumnId(source.getSourceTableColumnId());
-        target.setTargetTableColumnId(source.getTargetTableColumnId());
-    }
-
-    private boolean catalogItemChanged(DaAssetCatalogItemT old, CatalogItemValueRequest item, int sortNo) {
-        return !Objects.equals(old.getSortNo(), sortNo)
-                || !Objects.equals(old.getColName(), item.getColName())
-                || !Objects.equals(old.getColEn(), item.getColEn())
-                || !Objects.equals(old.getColType(), item.getColType())
-                || !Objects.equals(old.getColLength(), item.getColLength())
-                || !Objects.equals(old.getIsPk(), item.getIsPk())
-                || !Objects.equals(old.getIsNullable(), item.getIsNullable())
-                || !Objects.equals(old.getDataStandardId(), item.getDataStandardId())
-                || !Objects.equals(old.getQualityRule(), item.getQualityRule())
-                || !Objects.equals(old.getEnableCodeTable(), item.getEnableCodeTable())
-                || !Objects.equals(old.getCodeTableId(), item.getCodeTableId())
-                || !Objects.equals(old.getSourceTableColumnId(), item.getSourceTableColumnId())
-                || !Objects.equals(old.getTargetTableColumnId(), item.getTargetTableColumnId());
-    }
-
-    private void saveDocument(String tid, Map<String, Object> document) {
-        if ("catalog".equals(stringValue(document.get("assetType")))) {
-            esCommonService.mergeCatalogProjection(INDEX_NAME, tid, document, document.get("viewCount"));
-            return;
-        }
-        try {
-            esCommonService.saveOrUpdate(INDEX_NAME, tid, objectMapper.writeValueAsString(document), false);
-        } catch (JsonProcessingException e) {
-            throw new BizException(500, "资产索引序列化失败");
-        }
     }
 
     private String propType(String key) {

@@ -70,6 +70,28 @@ class DatasourceCompletionMagicTest {
     }
 
     @Test
+    void apiSavePreviewKeepsGenericValidationMessageAndNeverWrites() throws Exception {
+        var fixture = new SaveFixture(false);
+        var before = fixture.row("db");
+        var definition = new LinkedHashMap<String, Object>(Map.of(
+                "tableName", "validation_table", "tableComment", "验证表", "serviceName", "验证服务",
+                "baseUrl", "https://validation.example", "endpointPath", "/items", "authType", "NONE"));
+        var properties = Map.<String, Object>of("dbType", "api", "apiPullItems", List.of(definition));
+        var preview = Map.<String, Object>of("dryRun", true);
+
+        assertThat(fixture.save("db", "capture", properties, preview)).isInstanceOf(Map.class);
+
+        definition.put("requestHeadersJson", "{\"Authorization\":\"validation\"}");
+        assertThat(fixture.save("db", "capture", properties, preview))
+                .isInstanceOfSatisfying(ExitValue.class, exit -> {
+                    assertThat(((Number) exit.getValues()[0]).intValue()).isEqualTo(400);
+                    assertThat(exit.getValues()[1]).isEqualTo("API 抓取登记定义无效，请核对地址、表名及凭据引用");
+                });
+        assertThat(fixture.connection.saveCalls).isZero();
+        assertThat(fixture.row("db")).isEqualTo(before);
+    }
+
+    @Test
     void failedSecondConnectionWriteRollsBackMasterAndFirstPoolWrite() throws Exception {
         var fixture = new SaveFixture(false);
         var before = fixture.row("db");
@@ -152,6 +174,44 @@ class DatasourceCompletionMagicTest {
         assertThat(fixture.connection.completedSaves).isEqualTo(2);
     }
 
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void ordinaryDryRunReturnsProposedValuesWithoutMasterConfigOrIndexChanges(boolean nested) throws Exception {
+        var fixture = new SaveFixture(false);
+        fixture.jdbc.update("UPDATE db_datasource_t SET asset_status=2, show_connect=0 WHERE tid='db'");
+        var before = fixture.row("db");
+        var properties = nested ? Map.<String, Object>of("dryRun", true) : Map.<String, Object>of();
+        var request = nested ? Map.<String, Object>of("deferIndexRefresh", false)
+                : Map.<String, Object>of("dryRun", true, "deferIndexRefresh", false);
+
+        assertThat(fixture.save("db", "explore", properties, request)).isEqualTo(
+                Map.of("tid", "db", "assetStatus", 2, "indexRefreshPending", false));
+        assertThat(fixture.save("new-db", "explore", properties, request)).isEqualTo(
+                Map.of("tid", "new-db", "assetStatus", 0, "indexRefreshPending", false));
+
+        assertThat(fixture.row("db")).isEqualTo(before);
+        assertThat(fixture.jdbc.queryForObject("SELECT COUNT(*) FROM db_datasource_t", Integer.class)).isEqualTo(1);
+        assertThat(fixture.connection.saveCalls).isZero();
+        assertThat(fixture.index.refreshCalls).isZero();
+    }
+
+    @Test
+    void ordinaryDryRunStillRejectsInvalidPushConfiguration() throws Exception {
+        var fixture = new SaveFixture(false);
+        var before = fixture.row("db");
+
+        var result = fixture.save("new-db", "receive", Map.of(), Map.of("dryRun", true, "deferIndexRefresh", false));
+
+        assertThat(result).isInstanceOfSatisfying(ExitValue.class, exit -> {
+            assertThat(((Number) exit.getValues()[0]).intValue()).isEqualTo(400);
+            assertThat(exit.getValues()[1]).isEqualTo("请填写数据来源地址");
+        });
+        assertThat(fixture.row("db")).isEqualTo(before);
+        assertThat(fixture.jdbc.queryForObject("SELECT COUNT(*) FROM db_datasource_t", Integer.class)).isEqualTo(1);
+        assertThat(fixture.connection.saveCalls).isZero();
+        assertThat(fixture.index.refreshCalls).isZero();
+    }
+
     @Test
     void legacyProxyFullSaveRechecksWitnessBeforeChangingMasterAndPool() throws Exception {
         var stale = new SaveFixture(false);
@@ -198,6 +258,7 @@ class DatasourceCompletionMagicTest {
         final SQLModule db;
         final ConnectionRuntime connection;
         final SaveScope scope = new SaveScope();
+        final IndexRuntime index = new IndexRuntime();
 
         SaveFixture(boolean nullVersion) throws Exception {
             var source = new DriverManagerDataSource("jdbc:h2:mem:source_save_" + UUID.randomUUID()
@@ -236,6 +297,11 @@ class DatasourceCompletionMagicTest {
         }
 
         Object save(String id, String mode, Map<String, Object> extraProperties) throws Exception {
+            return save(id, mode, extraProperties, Map.of());
+        }
+
+        Object save(String id, String mode, Map<String, Object> extraProperties, Map<String, Object> request)
+                throws Exception {
             String canonical = CanonicalMagicSources.byId(SAVE_RESOURCE)
                     .replaceAll("(?m)^import [^\r\n]+\r?\n", "");
             String importsAndBridge = """
@@ -244,15 +310,19 @@ class DatasourceCompletionMagicTest {
                     import java.util.Map
                     var datasourceConnectionConfig = (action, id, values, clearAll) =>
                         connectionRuntime.invoke(action, id, values, clearAll)
+                    var refreshAssetIndex = () => indexRuntime.refresh()
                     """;
             var properties = new LinkedHashMap<String, Object>(Map.of(
                     "dbName", "Edited datasource", "dbType", "mysql", "showConnect", 0,
                     "sourceOrgId", "submitted-org", "accessMode", mode));
             properties.putAll(extraProperties);
-            var body = Map.of("tid", id, "deferIndexRefresh", true, "propList", properties);
+            var body = new LinkedHashMap<String, Object>(Map.of("tid", id, "deferIndexRefresh", true,
+                    "propList", properties));
+            body.putAll(request);
             var inputs = Map.of("db", db, "body", body, "tenantRuntime", scope, "dataScope", scope,
                     "connectionRuntime", connection, "tableRead", new StructuredTableReadMagicModule(jdbc),
-                    "tableWrite", new StructuredTableWriteMagicModule(jdbc));
+                    "tableWrite", new StructuredTableWriteMagicModule(jdbc), "indexRuntime", index,
+                    "apiPullDefinitionError", ApiPullMagicFixture.definitionError());
             return TenantContext.call("ga", () -> MagicScript.create(importsAndBridge + canonical, null)
                     .execute(new MagicScriptContext(inputs)));
         }
@@ -354,7 +424,9 @@ class DatasourceCompletionMagicTest {
     }
     public static class IndexRuntime {
         int calls;
+        int refreshCalls;
         public boolean existsById(String index,String id){return true;}
         public void partialUpdateFieldsFast(String index,String id,Map<String,Object> fields){calls++;}
+        public void refresh() { refreshCalls++; }
     }
 }

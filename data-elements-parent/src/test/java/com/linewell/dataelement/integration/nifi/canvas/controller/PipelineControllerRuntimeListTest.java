@@ -12,52 +12,66 @@ import com.linewell.dataelement.platform.tenant.domain.TenantContext;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.IntStream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
-import org.springframework.jdbc.core.ConnectionCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.ssssssss.magicapi.core.service.MagicAPIService;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.*;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 class PipelineControllerRuntimeListTest {
     private static final ObjectMapper JSON = new ObjectMapper();
 
     @ParameterizedTest
     @ValueSource(ints = {20, 100})
-    void flowListUsesOneCountAndOneTenantScopedPageQuery(int size) {
+    void flowPageDelegatesOnceAndReturnsTheLegacyRawResponse(int size) throws Exception {
         var jdbc = mock(JdbcTemplate.class);
         var nifi = mock(NifiClient.class);
         var repo = mock(PipelineRepository.class);
-        var controller = new PipelineController(repo, nifi, null, null, jdbc, null, null, null, null);
-        var rows = IntStream.range(0, size)
-                .mapToObj(i -> Map.<String, Object>of("id", "validation-flow-" + i, "name", "测试流程", "node_count", 1))
-                .toList();
-        when(jdbc.queryForObject(contains("WHERE tenant_id=? AND is_del=0"), eq(Long.class),
-                eq("tenant-a"), eq(""), eq(""))).thenReturn((long) size);
-        when(jdbc.queryForList(contains("WHERE p.tenant_id=? AND p.is_del=0"),
-                eq("tenant-a"), eq("tenant-a"), eq(""), eq(""), eq(size), eq(0L))).thenReturn(rows);
+        var magic = mock(MagicAPIService.class);
+        var controller = new PipelineController(repo, nifi, magic, null, jdbc, null, null, null, null);
+        var parameters = Map.<String, Object>of("page", 2, "size", size,
+                "sortField", "nodeCount", "sortDir", "asc", "q", "%_");
+        when(magic.invoke("/common/nifiPipelinePage", parameters))
+                .thenReturn(Map.of("page", 2, "size", size, "total", 1L, "list", List.of()));
+        var mvc = MockMvcBuilders.standaloneSetup(controller).build();
 
         try (var scope = TenantContext.use("tenant-a")) {
-            var result = controller.listPage(1, size, null, null);
-            assertThat(result).containsEntry("total", (long) size).containsEntry("size", size);
-            assertThat((List<?>) result.get("list")).hasSize(size);
+            mvc.perform(get("/nifi/api/pipelines/page").param("page", "2").param("size", String.valueOf(size))
+                            .param("sortField", "nodeCount").param("sortDir", "asc").param("q", "%_")
+                            .param("tenantId", "tenant-b"))
+                    .andExpect(status().isOk())
+                    .andExpect(content().json("{\"page\":2,\"size\":" + size + ",\"total\":1,\"list\":[]}", true));
         }
-        verify(jdbc).execute(org.mockito.ArgumentMatchers.<ConnectionCallback<Boolean>>any());
-        verify(jdbc).queryForObject(contains("WHERE tenant_id=? AND is_del=0"), eq(Long.class),
-                eq("tenant-a"), eq(""), eq(""));
-        verify(jdbc).queryForList(contains("WHERE p.tenant_id=? AND p.is_del=0"),
-                eq("tenant-a"), eq("tenant-a"), eq(""), eq(""), eq(size), eq(0L));
-        verifyNoMoreInteractions(jdbc);
-        verifyNoInteractions(repo, nifi);
+        verify(magic).invoke("/common/nifiPipelinePage", parameters);
+        verifyNoMoreInteractions(magic);
+        verifyNoInteractions(jdbc, repo, nifi);
+    }
+
+    @Test
+    void flowPageRequiresAnIndustryTenantBeforeInvokingMagic() {
+        var magic = mock(MagicAPIService.class);
+        var controller = new PipelineController(null, null, magic, null, null, null, null, null, null);
+
+        assertThatThrownBy(() -> controller.listPage(1, 20, null, null, null))
+                .hasMessage("当前请求未绑定租户");
+        try (var tenant = TenantContext.use("tenant-a"); var control = TenantContext.control()) {
+            assertThatThrownBy(() -> controller.listPage(1, 20, null, null, null))
+                    .hasMessage("流程查询必须绑定行业租户");
+        }
+        verifyNoInteractions(magic);
     }
 
     @ParameterizedTest

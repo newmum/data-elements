@@ -17,21 +17,14 @@
   "headers": [],
   "paths": [],
   "responseBody": "{\n  \"tid\": \"85368b91972c4a35b83b8fa73e34e740\",\n  \"assetType\": \"catalog\",\n  \"catalogName\": \"生成目录信息(sys_gen_info)\",\n  \"dbId\": \"38ef1b566eb4477ebfc07b4c0c8aa973\",\n  \"sourceTableId\": \"fb64c63470c14ee286a29fcea82a259c\"\n}",
-  "description": "数据目录资产列表兼容接口（POST /dst/catalog/list）。读取 da_asset_t 与 da_prop_t 中的目录资产，兼容个人中心、数据超市和文件目录同步中对旧 /dst/catalog/list 的 import；请求示例使用当前库中真实 catalog tid；使用请求参数 pageNum、pageSize、tid。",
+  "description": "分页读取 da_catalog_t 的目录登记及 da_prop_t 的扩展属性。传入 tid 时限定目录，供个人中心、数据超市和文件目录同步使用。",
   "requestBodyDefinition": null,
   "responseBodyDefinition": null
 }
 ================================
-// 接口：02.数据目录列表
-// 路由：POST /dst/catalog/list
-// 业务说明：数据目录资产列表兼容接口（POST /dst/catalog/list）。读取 da_asset_t 与 da_prop_t 中的目录资产，兼容个人中心、数据超市和文件目录同步中对旧 /dst/catalog/list 的 import；请求示例使用当前库中真实 catalog tid；使用请求参数 pageNum、pageSize、tid。
-/*
- * 数据目录资产列表兼容接口。
- *
- * 旧个人中心、数据超市浏览和目录同步脚本会 import @post:/dst/catalog/list。
- * 当前登记主链路已经迁移到 db_datasource_t / db_table_t，但目录资产仍保留在 da_asset_t + da_prop_t，
- * 因此这里补回只读兼容层，避免登录后门户统计因为 import 缺失而失败。
- */
+// POST /dst/catalog/list：按 pageNum、pageSize 分页读取目录，按可选的 tid 限定目录。
+// 从 da_catalog_t 读取目录登记，从 da_prop_t 读取扩展属性，返回调用方沿用的字段别名。
+// 供个人中心、数据超市浏览和文件目录同步调用，执行只读查询。
 var text = (value) => value == null ? '' : value + ''
 var blank = (value) => value == null || text(value).trim() == ''
 var sqlValue = (value) => "'" + text(value).replace("'", "''") + "'"

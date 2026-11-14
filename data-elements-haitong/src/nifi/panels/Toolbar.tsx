@@ -45,6 +45,7 @@ import {
   useDeployPipeline,
   useActivateCandidate,
   useFlowStatus,
+  useLiveFlowBulletins,
   usePipelineList,
   usePipeline,
   type PipelineStatus,
@@ -126,7 +127,6 @@ function statusWorkScore(payload?: FlowStatusPayload): number {
   walkStatusGroups(root, (group) => {
     for (const processor of group?.processorStatusSnapshots ?? []) {
       const snapshot = processor?.processorStatusSnapshot ?? processor;
-      score += numericMetric(snapshot?.taskCount);
       score += numericMetric(snapshot?.flowFilesIn);
       score += numericMetric(snapshot?.flowFilesOut);
     }
@@ -184,6 +184,7 @@ export default function Toolbar() {
   const openErrorPanel = useErrorPanelStore((s) => s.open);
 
   const statusQuery = useFlowStatus(currentPipelineId, 3000);
+  const liveBulletins = useLiveFlowBulletins(currentPipelineId, statusQuery.data?.deployed === true, false);
   const liveStatus = statusQuery.data?.status;
   const errorCount = statusQuery.data?.errors?.length ?? 0;
   const [optimisticStatus, setOptimisticStatus] = useState<PipelineStatus | null>(null);
@@ -239,7 +240,7 @@ export default function Toolbar() {
   const otherSourcesNeedCleanup = sourceNodes.slice(1).some(node => needsCleanupConfirmation(syncSettings(node.config)));
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const completionWatchRef = useRef<{ pipelineId: string; baseline: number; armedAt: number; syncMode: string } | null>(null);
+  const completionWatchRef = useRef<{ pipelineId: string; baseline: number; armedAt: number; syncMode: string; bulletinIds: Set<string> } | null>(null);
   const completionNotifiedRef = useRef<string | null>(null);
   const completionErrorNotifiedRef = useRef<string | null>(null);
 
@@ -392,11 +393,12 @@ export default function Toolbar() {
   };
 
   const startDeployedPipeline = async (pipelineId: string, options: SyncSettings, cleanup: boolean, confirmed = cleanup) => {
+    const bulletinIds = new Set((liveBulletins.data ?? []).map(bulletin => bulletin.id));
     const result = await start.mutateAsync({ id: pipelineId, force: cleanup, confirmCleanup: confirmed });
     if (!isCurrentSession()) return;
     setOptimisticStatus('RUNNING');
     completionWatchRef.current = result?.oneShot === true
-      ? { pipelineId, baseline: statusWorkScore(statusQuery.data), armedAt: Date.now(), syncMode: options.syncMode }
+      ? { pipelineId, baseline: statusWorkScore(statusQuery.data), armedAt: Date.now(), syncMode: options.syncMode, bulletinIds }
       : null;
     completionNotifiedRef.current = null;
     completionErrorNotifiedRef.current = null;
@@ -518,15 +520,18 @@ export default function Toolbar() {
     const data = statusQuery.data;
     if (!watch || !data || data.id !== watch.pipelineId) return;
 
-    if (data.errors?.length && completionErrorNotifiedRef.current !== watch.pipelineId) {
-      completionErrorNotifiedRef.current = watch.pipelineId;
-      notification.error({
-        message: '本次同步出现异常',
-        description: '流程运行时产生错误，请打开错误详情查看具体节点与日志。',
-        placement: 'topRight',
-        duration: 8,
-      });
-      openErrorPanel();
+    const newBulletin = liveBulletins.data?.some(bulletin => bulletin.level === 'ERROR' && !watch.bulletinIds.has(bulletin.id));
+    if (data.errors?.length || newBulletin) {
+      if (completionErrorNotifiedRef.current !== watch.pipelineId) {
+        completionErrorNotifiedRef.current = watch.pipelineId;
+        notification.error({
+          message: '本次同步出现异常',
+          description: '流程运行时产生错误，请打开错误详情查看具体节点与日志。',
+          placement: 'topRight',
+          duration: 8,
+        });
+        openErrorPanel();
+      }
       return;
     }
 
@@ -535,6 +540,8 @@ export default function Toolbar() {
     if (
       completionNotifiedRef.current !== watch.pipelineId
       && currentScore > watch.baseline
+      && liveBulletins.isSuccess
+      && liveBulletins.dataUpdatedAt >= watch.armedAt
       && statusIsSettled(data)
     ) {
       completionNotifiedRef.current = watch.pipelineId;
@@ -564,7 +571,7 @@ export default function Toolbar() {
         stop.mutateAsync(watch.pipelineId).catch(() => undefined);
       }
     }
-  }, [statusQuery.data, notification, openErrorPanel, setSyncCompletion, stop]);
+  }, [statusQuery.data, liveBulletins.data, liveBulletins.dataUpdatedAt, liveBulletins.isSuccess, notification, openErrorPanel, setSyncCompletion, stop]);
 
   const handleStop = async () => {
     if (!isCurrentSession()) return;

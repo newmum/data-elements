@@ -34,6 +34,7 @@ class ResourceTablePagingTest {
     private static final String RESOURCE_COMMAND = "b6aaff9e31925977b94369d347e7c32a";
     private static final String CATALOG_ITEMS = "datapd_catalog_items_list_01";
     private static final String TABLE_PAGE = "datapd_db_table_page_01";
+    private static final String TABLE_LIST = "datapd_db_table_list_01";
     private static final String LAYER_PAGE = "resource_layer_page_01";
     private static final String DWD_LIST = "5ab722975fb242aa9944638c3fa9c51b";
     private static final String DWS_LIST = "ea38fe47d5324bf0be61209dbfef3791";
@@ -856,7 +857,7 @@ class ResourceTablePagingTest {
             }
         }
         String publicPage = CanonicalMagicSources.byId(TABLE_PAGE)
-                .replaceAll("(?m)^import (tenantRuntime|tableSort)[^\\r\\n]*\\r?\\n", "");
+                .replaceAll("(?m)^import (tenantRuntime|tableSort|tableRead)[^\\r\\n]*\\r?\\n", "");
         for (var invalid : List.of(
                 Map.of("field", "catalogName) OR 1=1 --", "type", "like", "value", literal),
                 Map.of("field", dwdField, "type", "eq", "value", literal),
@@ -868,6 +869,82 @@ class ResourceTablePagingTest {
             assertEquals(0, fixture.counter.count);
         }
         System.out.printf("DWD/DWS catalog search %s: 20/100 rows each 2 SQL, literal search and tenant/deletion checks passed%n", mode);
+    }
+
+    @ParameterizedTest
+    @EnumSource(DatabaseMode.class)
+    void registeredTablePageKeepsIdentityFallbackAndTenantScope(DatabaseMode mode) throws Exception {
+        var fixture = new Fixture(mode, 0);
+        fixture.prepareWarehouseTableSearch();
+        fixture.database.update("UPDATE db_datasource_t SET db_name='登记库', app_id='app-a' WHERE tid='permitted'");
+        fixture.database.update("UPDATE db_datasource_t SET org_id='org-b' WHERE tid='forbidden'");
+        fixture.warehouseTable("validation-winner", "tenant-a", "permitted", "dwd",
+                "same_table", null, null, "A".repeat(512) + "B", 5, 0);
+        fixture.warehouseTable("validation-loser", "tenant-a", "permitted", "dwd",
+                "SAME_TABLE", "旧行", "旧行独有", null, 1, 0);
+        fixture.warehouseTable("validation-fallback", "tenant-a", "permitted", "dwd",
+                "fallback", null, null, "A".repeat(512) + "Z", 5, 0);
+        fixture.warehouseTable("validation-other-org", "tenant-a", "forbidden", "dwd",
+                "same_table", "同租户其他部门", null, null, 5, 0);
+        fixture.warehouseTable("validation-foreign", "tenant-b", "permitted", "dwd",
+                "other", "跨租户", null, null, 5, 0);
+        fixture.warehouseTable("validation-deleted", "tenant-a", "permitted", "dwd",
+                "deleted", "已删除", null, null, 5, 1);
+        fixture.database.update("""
+                UPDATE db_table_t SET table_name_en='registered_name', org_id=NULL,
+                  total_size_bytes=123, storage_size='123 B', ddl_create_time='2020-01-01',
+                  source_table_id=NULL, field_governance_config='{"retained":true}'
+                WHERE tid='validation-winner'
+                """);
+
+        var pageSource = CanonicalMagicSources.byId(TABLE_PAGE)
+                .replaceAll("(?m)^import (tenantRuntime|tableSort|tableRead)[^\\r\\n]*\\R", "");
+        var base = new LinkedHashMap<String, Object>(Map.of("datasourceId", "permitted", "tenantId", "tenant-b",
+                "sortField", "catalogName", "sortDir", "asc", "pageSize", 100));
+        base.put("conditions", List.of(Map.of("field", "dataSourceType", "value", "dwd")));
+        fixture.counter.reset();
+        var page = fixture.execute(pageSource, Map.of("body", base));
+        assertEquals(List.of("validation-fallback", "validation-winner"), warehouseIds(page));
+        assertEquals(2, fixture.counter.count);
+        assertEquals(0, fixture.counter.writes);
+        var row = StructuredValues.objectRows(page.get("list")).getLast();
+        assertEquals("validation-winner", row.get("id"));
+        assertEquals("registered_name", row.get("tableNameEn"));
+        assertEquals("validation-winner", row.get("sourceTableId"));
+        assertEquals("登记库", row.get("dbName"));
+        assertEquals("app-a", row.get("appId"));
+        assertEquals("123 B", row.get("totalSizeFormatted"));
+        assertEquals("2020-01-01", row.get("ddlCreatTime"));
+        assertEquals("{\"retained\":true}", row.get("fieldGovernanceConfig"));
+        assertNull(row.get("orgId"));
+
+        var filter = Map.<String, Object>of("field", "tableNameEn", "value", "same_table", "type", "eq");
+        var org = Map.<String, Object>of("field", "orgId", "value", "org-a", "type", "match");
+        assertEquals(List.of("validation-winner"), warehouseIds(fixture.execute(pageSource,
+                Map.of("body", Map.of("dbId", "permitted", "conditions", List.of(filter, org))))));
+        assertEquals(List.of("validation-other-org", "validation-winner"), warehouseIds(fixture.execute(pageSource,
+                Map.of("body", Map.of("sortField", "tableNameEn", "sortDir", "asc", "conditions", List.of(filter))))));
+        for (String rejected : List.of("validation-loser", "validation-foreign", "validation-deleted")) {
+            fixture.counter.reset();
+            var empty = fixture.execute(pageSource, Map.of("body", Map.of("tid", rejected, "pageSize", 100)));
+            assertEquals(List.of(), warehouseIds(empty));
+            assertEquals(1, fixture.counter.count);
+        }
+        var nullEquality = new LinkedHashMap<String, Object>();
+        nullEquality.put("field", "orgId");
+        nullEquality.put("type", "eq");
+        nullEquality.put("value", null);
+        fixture.counter.reset();
+        var empty = fixture.execute(pageSource, Map.of("body", Map.of("conditions", List.of(nullEquality))));
+        assertEquals(List.of(), warehouseIds(empty));
+        assertEquals(1, fixture.counter.count);
+        String legacy = "import java.util.List\nimport java.util.Map\nvar tablePage = () => {\n"
+                + pageSource.replaceAll("(?m)^import [^\\r\\n]*\\R", "") + "\n}\n"
+                + CanonicalMagicSources.byId(TABLE_LIST).replaceAll("(?m)^import [^\\r\\n]*\\R", "");
+        fixture.counter.reset();
+        Object legacyRows = fixture.executeValue(legacy, Map.of("body", base));
+        assertEquals(page.get("list"), legacyRows);
+        assertEquals(2, fixture.counter.count);
     }
 
     private static List<String> warehouseIds(Map<String, Object> result) {
@@ -978,12 +1055,22 @@ class ResourceTablePagingTest {
             database.execute("ALTER TABLE db_datasource_t ADD db_name VARCHAR");
             database.execute("ALTER TABLE db_datasource_t ADD app_id VARCHAR");
             for (String column : List.of("table_name", "table_name_cn", "table_name_en", "catalog_name",
-                    "table_comment", "data_source_type")) {
+                    "catalog_name_en", "table_type", "business_type", "business_type_reason", "storage_size",
+                    "total_size_formatted", "ddl_create_time", "ddl_update_time", "org_id", "related_directory",
+                    "data_source_type", "timestamp_field", "dictionary_structure_type", "source_catalog_id",
+                    "source_table_id", "source_table_name", "manage_unit", "table_comment", "org_path",
+                    "field_governance_config", "dictionary_profiles", "dictionary_profile", "dictionary_categories", "asset_desc")) {
                 database.execute("ALTER TABLE db_table_t ADD " + column + " VARCHAR");
             }
-            database.execute("ALTER TABLE db_table_t ADD field_count INT");
-            database.execute("ALTER TABLE db_table_t ADD annotated INT");
-            database.execute("ALTER TABLE db_table_t ADD updated_time TIMESTAMP");
+            for (String column : List.of("field_count", "annotated", "dictionary_table_flag", "asset_status", "flow_status")) {
+                database.execute("ALTER TABLE db_table_t ADD " + column + " INT");
+            }
+            for (String column : List.of("record_count", "total_size_bytes")) {
+                database.execute("ALTER TABLE db_table_t ADD " + column + " BIGINT");
+            }
+            for (String column : List.of("created_time", "updated_time", "reg_time")) {
+                database.execute("ALTER TABLE db_table_t ADD " + column + " TIMESTAMP");
+            }
             datasource("foreign-only", "tenant-b", "owner", "org-a", 0);
             datasource("deleted-source", "tenant-a", "owner", "org-a", 1);
         }

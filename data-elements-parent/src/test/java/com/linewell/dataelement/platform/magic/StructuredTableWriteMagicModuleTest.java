@@ -15,6 +15,7 @@ import java.sql.Statement;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -56,6 +57,38 @@ class StructuredTableWriteMagicModuleTest {
             } finally {
                 transaction.rollback();
             }
+        });
+    }
+
+    @Test
+    void locksABoundedSetOfKeysOnOneScopedTransactionConnection() {
+        var fixture = new Fixture();
+        var fields = List.of("tid", "payload");
+        var keys = List.of("row-b", "row-a", "row-a' OR '1'='1");
+        var active = Map.of("is_del", 0);
+
+        TenantContext.run(TENANT, () -> {
+            assertThrows(IllegalStateException.class,
+                    () -> fixture.module.lockRows(TABLE, TENANT, "tid", keys, fields, active));
+            assertThrows(IllegalArgumentException.class,
+                    () -> fixture.module.lockRows(TABLE, OTHER_TENANT, "tid", keys, fields, active));
+            assertThrows(IllegalArgumentException.class,
+                    () -> fixture.module.lockRows(TABLE, TENANT, "tid", List.of("row-a", "row-a"), fields, active));
+            var oversized = IntStream.rangeClosed(0, 1000).mapToObj(String::valueOf).toList();
+            assertThrows(IllegalArgumentException.class,
+                    () -> fixture.module.lockRows(TABLE, TENANT, "tid", oversized, fields, active));
+
+            fixture.source.opens = 0;
+            fixture.db.transaction(ignored -> {
+                assertEquals(List.of(), fixture.module.lockRows(TABLE, TENANT, "tid", List.of(), fields, active));
+                assertEquals(List.of("row-a", "row-b"), fixture.module.lockRows(TABLE, TENANT, "tid", keys, fields, active)
+                        .stream().map(row -> row.get("tid")).toList());
+                var scope = Map.of("is_del", 0, "scope_id", "organization-a");
+                assertEquals(List.of(Map.of("tid", "row-a", "payload", "validation payload")),
+                        fixture.module.lockRows(TABLE, TENANT, "tid", keys, fields, scope));
+                assertEquals(1, fixture.source.opens);
+                return null;
+            });
         });
     }
 
@@ -135,6 +168,96 @@ class StructuredTableWriteMagicModuleTest {
             }
         });
         assertEquals("first", fixture.note(TENANT, "row-a"));
+    }
+
+    @Test
+    void updatesOnlyScopedRowWithDatabaseTimeAndKeepsItsAuditActor() {
+        var fixture = new Fixture();
+        fixture.jdbc.execute("ALTER TABLE validation_row ADD updated_by VARCHAR DEFAULT 'original-actor'");
+        fixture.jdbc.execute("ALTER TABLE validation_row ADD record_count BIGINT DEFAULT 99");
+        var values = new LinkedHashMap<String, Object>();
+        values.put("note", null);
+        values.put("record_count", 0L);
+        var scope = Map.of("is_del", 0, "parent_key", "parent-a", "scope_id", List.of("organization-a"));
+
+        TenantContext.run(TENANT, () -> fixture.db.transaction(ignored -> {
+            var databaseTime = fixture.jdbc.queryForObject("SELECT CAST(CURRENT_TIMESTAMP AS TIMESTAMP)", Timestamp.class);
+            assertEquals(0, fixture.module.updateWithDatabaseTimestamp(TABLE, TENANT, "tid", "row-b", values, scope, "changed_at"));
+            assertEquals(0, fixture.module.updateWithDatabaseTimestamp(TABLE, TENANT, "tid", "row-a' OR '1'='1", values, scope, "changed_at"));
+            assertEquals(1, fixture.module.updateWithDatabaseTimestamp(TABLE, TENANT, "tid", "row-a", values, scope, "changed_at"));
+
+            var row = fixture.jdbc.queryForMap("SELECT note, record_count, changed_at, updated_by FROM validation_row "
+                    + "WHERE tenant_id=? AND tid=?", TENANT, "row-a");
+            assertNull(row.get("note"));
+            assertEquals(0L, row.get("record_count"));
+            assertEquals(databaseTime, row.get("changed_at"));
+            assertEquals("original-actor", row.get("updated_by"));
+            assertEquals("second", fixture.note(TENANT, "row-b"));
+            assertEquals("foreign", fixture.note(OTHER_TENANT, "row-a"));
+            return null;
+        }));
+    }
+
+    @Test
+    void acceptsOnlySupportedDatabaseTimePrecisionAndKeepsTheSameTransactionClock() {
+        var fixture = new Fixture();
+        var values = Map.of("note", "updated at database time");
+        var active = Map.of("is_del", 0);
+        TenantContext.run(TENANT, () -> fixture.db.transaction(ignored -> {
+            for (int precision : List.of(-1, 7)) {
+                assertThrows(IllegalArgumentException.class,
+                        () -> fixture.module.updateWithDatabaseTimestamp(TABLE, TENANT, "tid", "row-a", values,
+                                active, "changed_at", precision));
+            }
+            assertEquals("first", fixture.note(TENANT, "row-a"));
+            var expected = fixture.jdbc.queryForObject("SELECT CAST(CURRENT_TIMESTAMP(6) AS TIMESTAMP)", Timestamp.class);
+            assertEquals(1, fixture.module.updateWithDatabaseTimestamp(TABLE, TENANT, "tid", "row-a", values,
+                    active, "changed_at", 6));
+            assertEquals(expected, fixture.jdbc.queryForObject("SELECT changed_at FROM validation_row "
+                    + "WHERE tenant_id=? AND tid=?", Timestamp.class, TENANT, "row-a"));
+            return null;
+        }));
+    }
+
+    @Test
+    void rejectsUnsafeTimestampUpdatesAndRollsBackMultipleMatches() {
+        var fixture = new Fixture();
+        var values = Map.of("note", "must roll back");
+        var active = Map.of("is_del", 0);
+        TenantContext.run(TENANT, () -> {
+            assertThrows(IllegalStateException.class,
+                    () -> fixture.module.updateWithDatabaseTimestamp(TABLE, TENANT, "tid", "row-a", values, active, "changed_at"));
+            var readOnly = new TransactionTemplate(new DataSourceTransactionManager(fixture.source));
+            readOnly.setReadOnly(true);
+            readOnly.executeWithoutResult(status -> assertThrows(IllegalStateException.class,
+                    () -> fixture.module.updateWithDatabaseTimestamp(TABLE, TENANT, "tid", "row-a", values, active, "changed_at")));
+
+            fixture.db.transaction(ignored -> {
+                assertThrows(IllegalArgumentException.class,
+                        () -> fixture.module.updateWithDatabaseTimestamp(TABLE, OTHER_TENANT, "tid", "row-a", values, active, "changed_at"));
+                assertThrows(IllegalArgumentException.class,
+                        () -> fixture.module.updateWithDatabaseTimestamp(TABLE, TENANT, "tid", "row-a", values, active, "changed_at = NULL"));
+                assertThrows(IllegalArgumentException.class,
+                        () -> fixture.module.updateWithDatabaseTimestamp(TABLE, TENANT, "tid", "row-a", values, active, "TID"));
+                assertThrows(IllegalArgumentException.class,
+                        () -> fixture.module.updateWithDatabaseTimestamp(TABLE, TENANT, "tid", "row-a", values, active, "TENANT_ID"));
+                for (String reserved : List.of("TID", "TENANT_ID", "CHANGED_AT")) {
+                    var forbidden = Map.of(reserved, "unsafe");
+                    assertThrows(IllegalArgumentException.class,
+                            () -> fixture.module.updateWithDatabaseTimestamp(TABLE, TENANT, "tid", "row-a", forbidden, active, "changed_at"));
+                    assertThrows(IllegalArgumentException.class,
+                            () -> fixture.module.updateWithDatabaseTimestamp(TABLE, TENANT, "tid", "row-a", values, forbidden, "changed_at"));
+                }
+                return null;
+            });
+
+            fixture.jdbc.update("UPDATE validation_row SET parent_key='shared' WHERE tenant_id=?", TENANT);
+            assertThrows(IllegalStateException.class,
+                    () -> fixture.db.transaction(ignored -> fixture.module.updateWithDatabaseTimestamp(TABLE, TENANT,
+                            "parent_key", "shared", values, active, "changed_at")));
+        });
+        assertEquals("first", fixture.note(TENANT, "row-a"));
+        assertEquals("second", fixture.note(TENANT, "row-b"));
     }
 
     @Test

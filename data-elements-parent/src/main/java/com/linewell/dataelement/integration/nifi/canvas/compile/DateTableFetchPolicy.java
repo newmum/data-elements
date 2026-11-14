@@ -5,6 +5,7 @@ import java.util.Map;
 /** Native date-fetch contract, using NiFi descriptor names rather than UI labels. */
 public final class DateTableFetchPolicy {
     public static final String TYPE = "com.linewell.microservice.processors.database.GenerateDateTableFetch";
+    public static final String NATIVE_TYPE = "org.apache.nifi.processors.standard.GenerateTableFetch";
     public static final String BUNDLE_VERSION = "2.9.0";
     public static final String PARTITION_SIZE = "gen-table-fetch-partition-size";
     public static final String PARTITION_COLUMN = "gen-table-column-for-val-partitioning";
@@ -44,7 +45,17 @@ public final class DateTableFetchPolicy {
         properties.remove("Partition Size");
     }
 
+    /** Keep the native paging and WHERE options already resolved by the compiler. */
+    static void useNativeFullFetch(Map<String, String> properties) {
+        properties.remove(PARTITION_COLUMN);
+        properties.remove(PARTITION_SIZE);
+        properties.remove("fetch-partition-type");
+        properties.remove("fetch-partition-type-count");
+        properties.putIfAbsent("Partition Size", "10000");
+    }
+
     private static void move(Map<String, String> properties, String label, String descriptor) {
         if (properties.containsKey(label)) properties.put(descriptor, properties.remove(label));
     }
+
 }

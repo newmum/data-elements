@@ -28,6 +28,7 @@ import { useTaskChainStore } from '../stores/taskChainStore';
 import { buildCompositeCanvas } from '../utils/compositeCanvas';
 import { selectTaskNode } from '../utils/taskSelection';
 import { groupActiveFlowErrors } from '../runtime/activeFlowErrors';
+import { visibleFlowErrors, visibleFlowBulletins } from '../runtime/dismissedFlowErrors';
 
 const NODE_WIDTH = 360;
 const NODE_HEIGHT = 220; // approximate; X6 will keep node at this size
@@ -171,8 +172,11 @@ export default function Canvas() {
   const manifestsByKey = useMemo(() => Object.fromEntries((manifests ?? []).map(item => [item.key, item])), [manifests]);
   const statusQuery = useFlowStatus(currentPipelineId, canvasMode === 'EDIT' ? 5000 : 3000);
   const liveBulletins = useLiveFlowBulletins(currentPipelineId, statusQuery.data?.deployed === true);
-  const nodeErrors = useMemo(() => groupActiveFlowErrors(statusQuery.data, liveBulletins.data ?? [], new Set(Object.keys(nodes))),
-    [statusQuery.data, liveBulletins.data, nodes]);
+  const dismissed = useErrorPanelStore(s => currentPipelineId ? s.dismissed[currentPipelineId] : undefined);
+  const nodeErrors = useMemo(() => groupActiveFlowErrors(statusQuery.data && { ...statusQuery.data,
+    errors: visibleFlowErrors(statusQuery.data.errors ?? [], dismissed) },
+    visibleFlowBulletins(liveBulletins.data ?? [], dismissed), new Set(Object.keys(nodes))),
+    [statusQuery.data, liveBulletins.data, nodes, dismissed]);
   const runtimeMetrics = useMemo(
     () => buildFlowRuntimeMetrics(statusQuery.data, nodes, edges),
     [statusQuery.data, nodes, edges],

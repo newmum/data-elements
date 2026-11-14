@@ -622,11 +622,11 @@ class MultiTableGroupMagicTest {
                     """);
             candidates = script(CanonicalMagicSources.byId("c8754c53bb644104a178b88fbcebb7cd"));
             save = script(CanonicalMagicSources.byId("c276687fa7cb4a0fada25b972ccda4b1"));
-            visibleQuery = script(CanonicalMagicSources.byPath("function/01.通用函数/25.多表编组可见任务查询.ms",
+            visibleQuery = script(CanonicalMagicSources.byPath("function/01.通用函数/22.多表编组可见任务查询.ms",
                     "b407fbd38e4c4d048c10eb9e92845d91"));
             delete = script(CanonicalMagicSources.byId("59ce9120d637482a8b63cdc643510727"));
             relink = script(CanonicalMagicSources.byId("9dc102c8fc8845d2a48c161b442385b8"));
-            editQuery = script(CanonicalMagicSources.byPath("function/01.通用函数/26.多表编组写权限查询.ms",
+            editQuery = script(CanonicalMagicSources.byPath("function/01.通用函数/23.多表编组写权限查询.ms",
                     "19e712f3e2ab4b529d0910896dfc1c39"));
         }
 

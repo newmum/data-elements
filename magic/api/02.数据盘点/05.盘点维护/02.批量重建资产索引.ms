@@ -396,7 +396,7 @@ if (hasTargetTids) {
                 tableById[text(first(tableRow, ['tid']))] = tableRow
             }
         }
-        // 目录主表与动态属性统一批量预取；不依赖租户可选的 da_asset_t 兼容视图。
+        // 批量读取目录主表与动态属性，再组装目录检索投影。
         if (typeEnabled('catalog') && requestedIds.size() > 0) {
             for (catalogPrefetchRow in db.table('da_catalog_t').where()
                 .in('tid', requestedIds).eq('tenant_id', tenantId).eq('is_del', 0).select()) {

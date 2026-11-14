@@ -328,7 +328,7 @@ class MarketShoppingCartWriteMagicTest {
             elasticsearch = new ElasticSearchModule(client);
             script = "var me = () => authUser(body)\n"
                     + CanonicalMagicSources.byId(CART).replaceAll("(?m)^import (?!cn\\.hutool\\.)[^\\r\\n]*\\R", "");
-            var sharedSource = CanonicalMagicSources.byPath("function/01.通用函数/27.超市目录发布资格.ms",
+            var sharedSource = CanonicalMagicSources.byPath("function/01.通用函数/24.超市目录发布资格.ms",
                     "09ecb205502244aba26408368d56aad3");
             eligibility = MagicScript.create(sharedSource.replaceAll("(?m)^import [^\\r\\n]+\\R", ""), null);
             jdbc.execute("""

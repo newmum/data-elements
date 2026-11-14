@@ -25,7 +25,7 @@
 import cn.hutool.core.util.IdUtil
 import jsons
 import cn.hutool.json.JSONUtil as poolJsons
-import apiPullConfig
+import '@/common/nifiApiSource' as nifiApiSource
 import tenantRuntime
 import com.linewell.dataelement.metautil.structured.StructuredSourceProbeService as structuredFileProbe
 import java.util.Map
@@ -971,7 +971,7 @@ if (body?.validateSourceOnly == true) {
     var needsFileLocator = ['source.ftp', 'source.sftp'].contains(preflightManifest)
         && !['receive', 'upload', 'push'].contains(preflightMode)
     if (preflightManifest == 'source.api') {
-        apiPullConfig.resolvePipelineSource(sourceDbId, text(first(sourceTable, ['tableName','table_name'])))
+        nifiApiSource(sourceDb, sourceDbId, text(first(sourceTable, ['tableName', 'table_name'])))
     }
     if (needsFileLocator) { directFileLocator(preflightCfg, sourceTable) }
     return {valid:true, sourcePreflight:true, sourceTableId:sourceTableId,
@@ -1603,10 +1603,9 @@ if (pushFileSource != null) {
         sourceNodeConfig.fileFilterRegex = ''
     }
 }
-// API 拉取的请求、分页、增量与调度来自第一步的同一条 API 定义。这里仅在
-// 明确创建任务时读取并写入 NiFi 画布；不在第二步新增任何规则编辑入口。
+// 复用本次事务已读取的根来源，从登记定义解析请求、分页、增量及调度，再写入画布。
 if (pushFileSource == null && sourceManifestKey == 'source.api') {
-    var apiRuntimeConfig = apiPullConfig.resolvePipelineSource(sourceDbId, text(sourceTableName))
+    var apiRuntimeConfig = nifiApiSource(rootSourceDb, sourceDbId, text(sourceTableName))
     sourceNodeConfig.putAll(apiRuntimeConfig)
     sourceNodeConfig.sourceDbId = sourceDbId
     sourceNodeConfig.sourceDbName = sourceDb == null ? '' : sourceDb.dbName

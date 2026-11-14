@@ -178,8 +178,12 @@ const handleTitleAction = async (action: any) => {
   try {
     const method = String(request.method || "post").toLowerCase();
     const payload = resolveActionValue(request.payload || {});
-    const data = method === "get" ? await $common.get(request.url, payload) : await $common.post(request.url, payload);
-    const refreshed = action.reloadDetail || request.url === "/dst/database/metadata/refreshDbInfo"
+    const refreshMetadata = request.url === "/dst/database/metadata/refreshDbInfo";
+    // 资产详情读取范围可能更宽，刷新权限由服务端校验并在这里提示一次。
+    const data = refreshMetadata && method === "get"
+      ? await $common.getSilently(request.url, payload)
+      : method === "get" ? await $common.get(request.url, payload) : await $common.post(request.url, payload);
+    const refreshed = action.reloadDetail || refreshMetadata
       ? await detailApi(props.tid) : data;
     if (refreshed && typeof refreshed === "object") {
       state.formData = { ...state.formData, ...refreshed };

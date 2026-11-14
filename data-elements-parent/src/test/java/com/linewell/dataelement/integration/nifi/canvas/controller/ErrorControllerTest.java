@@ -5,10 +5,14 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.times;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.linewell.dataelement.integration.nifi.canvas.errors.ErrorService;
 import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient;
+import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiException;
 import com.linewell.dataelement.integration.nifi.canvas.pipeline.Pipeline;
 import com.linewell.dataelement.integration.nifi.canvas.pipeline.PipelineRepository;
 import com.linewell.dataelement.integration.nifi.canvas.pipeline.PipelineStatus;
@@ -67,5 +71,22 @@ class ErrorControllerTest {
         assertThat(rows).hasSize(1);
         assertThat(rows.getFirst()).containsEntry("level", "ERROR").containsEntry("message", "failed");
         verifyNoInteractions(errors);
+    }
+
+    @Test
+    void clearingAFlowFallsBackToCanvasWhenNiFiRejectsButReportsNativeSuccessAccurately() {
+        PipelineRepository pipelines = mock(PipelineRepository.class);
+        NifiClient nifi = mock(NifiClient.class);
+        ErrorService errors = mock(ErrorService.class);
+        when(pipelines.findById("flow-1")).thenReturn(Optional.of(new Pipeline(
+                "flow-1", "flow", null, null, null, null, "pg-1",
+                PipelineStatus.STOPPED, null, null, null, null, null)));
+        when(nifi.clearGroupBulletins(eq("pg-1"), any()))
+                .thenThrow(new NifiException("forbidden", 403, null)).thenReturn(2);
+        var controller = new ErrorController(errors, pipelines, nifi);
+
+        assertThat(controller.clear("flow-1").getBody()).isEqualTo(Map.of("historyCleared", true, "bulletinsCleared", 0, "nativeCleared", false));
+        assertThat(controller.clear("flow-1").getBody()).isEqualTo(Map.of("historyCleared", true, "bulletinsCleared", 2, "nativeCleared", true));
+        verify(errors, times(2)).clear("flow-1");
     }
 }

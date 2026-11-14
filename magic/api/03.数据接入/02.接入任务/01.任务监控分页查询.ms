@@ -17,32 +17,26 @@
   "headers": [],
   "paths": [],
   "responseBody": "{\n  \"code\": 0,\n  \"msg\": \"success\",\n  \"success\": true,\n  \"data\": {\n    \"total\": 1,\n    \"list\": [\n      {\n        \"tid\": \"示例任务ID\",\n        \"taskName\": \"数据接入同步任务\",\n        \"taskStatus\": 1,\n        \"sourceDbName\": \"出入境人员动管系统数据库\",\n        \"sourceTableSummary\": \"3 张表\",\n        \"targetDbName\": \"目标库\",\n        \"targetTableSummary\": \"3 张表\",\n        \"syncTables\": [\n          {\n            \"sourceTableName\": \"police_person_info\",\n            \"targetTableName\": \"ods_police_person_info\",\n            \"syncStatus\": 1,\n            \"syncStatusText\": \"运行中\"\n          }\n        ]\n      }\n    ]\n  }\n}",
-  "description": "任务监控分页查询（POST /ods/task/page）。只读接口；优先读取 data_access_agg_task_t，并补充 db_datasource_t、db_table_t 形成任务-表同步明细；旧任务表为空时兼容读取 nifi_pipeline_t 流水线快照；用于任务管理页面主表展开查看表同步情况；使用请求参数 pageNum、pageSize、taskStatus、taskName、nifiNetworkCode、nifiNodeId。",
+  "description": "分页读取接入任务、表同步明细和 NiFi 运行状态快照。按当前登录租户及有效来源数据源的 ALL、ORG 或 OWNER 范围查询。支持 pageNum、pageSize、taskName、taskStatus、nifiNetworkCode、nifiNodeId、sortField 和 sortDir，返回分页数据和状态快照信息。仅当当前租户无有效业务任务时，ALL 范围可读取历史流水线。租户或数据范围无效时拒绝，不支持的任务状态返回 400。只读。",
   "requestBodyDefinition": null,
   "responseBodyDefinition": null
 }
 ================================
 
-
-import tableSort
-var sortColumn = tableSort.field(body, {'taskName': 'task_name', 'lastRunning': 'last_running', 'endRunning': 'end_running', 'createdTime': 'created_time', 'updatedTime': 'updated_time','flowFilesIn':'flow_files_in','flowFilesOut':'flow_files_out','queuedCount':'queued_count','bytesIn':'bytes_in','bytesOut':'bytes_out','activeThreadCount':'active_thread_count'}, 'updatedTime')
-var sortDirection = tableSort.direction(body)
-
-// 接口：01.任务监控分页查询
-// 路由：POST /ods/task/page
-// 业务说明：任务监控分页查询（POST /ods/task/page）。只读接口；优先读取 data_access_agg_task_t，并补充 db_datasource_t、db_table_t 形成任务-表同步明细；旧任务表为空时兼容读取 nifi_pipeline_t 流水线快照；用于任务管理页面主表展开查看表同步情况；使用请求参数 pageNum、pageSize、taskStatus、taskName、nifiNetworkCode、nifiNodeId。
-/*
- * 任务监控分页查询（POST /ods/task/page）
- *
- * 业务语义：任务管理页面以“任务”为主行，展开后查看该任务下每张表的同步情况。
- * 读取范围：data_access_agg_task_t / db_datasource_t / db_table_t / nifi_pipeline_t。
- * 兼容策略：新登记的接入任务读 data_access_agg_task_t；如果旧任务表为空，则回退 nifi_pipeline_t。
- * 写入行为：只读，不创建任务、不启动任务、不更新运行状态。
- */
-import java.util.ArrayList
+import dataScope
 import jsons
-import tenantRuntime
+import org.ssssssss.magicapi.modules.db.provider.CamelColumnMapperProvider
+import tableRead
+import tableSort
 import taskRuntime
+import tenantRuntime
+
+/**
+ * POST /ods/task/page 分页读取接入任务和表同步明细，附带本次 NiFi 运行状态快照。
+ * 支持任务名称、状态、节点、网络筛选和白名单排序，返回 pageNum、pageSize、total 和 list。
+ * 按可信租户及来源数据源的 ALL、ORG、OWNER 范围读取。仅租户没有有效任务且范围为 ALL 时，
+ * 兼容显示旧流水线。接口只读取数据和运行状态快照，无业务写入。
+ */
 
 var text = value => {
     if (value == null) {
@@ -66,14 +60,27 @@ var firstText = (config, keys) => {
     return null
 }
 
+var sortField = tableSort.field(body, {
+    taskName: 'taskName',
+    lastRunning: 'lastRunning',
+    endRunning: 'endRunning',
+    createdTime: 'createdTime',
+    updatedTime: 'updatedTime',
+    flowFilesIn: 'flowFilesIn',
+    flowFilesOut: 'flowFilesOut',
+    queuedCount: 'queuedCount',
+    bytesIn: 'bytesIn',
+    bytesOut: 'bytesOut',
+    activeThreadCount: 'activeThreadCount'
+}, 'updatedTime')
+var sortDirection = tableSort.direction(body)
 var pageNum = body?.pageNum == null ? 1 : body.pageNum::long
 var pageSize = body?.pageSize == null ? 20 : body.pageSize::long
-pageNum = pageNum < 1 ? 1 : pageNum
-pageSize = Math.min(100,pageSize < 1 ? 20 : pageSize)
-var offset = (pageNum - 1) * pageSize
+pageNum = Math.max(1, pageNum)
+pageSize = Math.min(100, pageSize < 1 ? 20 : pageSize)::int
 var status = text(body?.taskStatus)
-var keyword = text(body?.taskName).toLowerCase()
-var tenantId = text(tenantRuntime.id()).trim()
+var keyword = text(body?.taskName)
+var tenantId = text(tenantRuntime.id())
 if (blank(tenantId)) {
     exit 401, '当前登录租户无效，请重新登录后查看接入任务'
 }
@@ -94,25 +101,76 @@ if (!matchesRuntimeNode) {
     return { pageNum: pageNum, pageSize: pageSize, total: 0, list: [] }
 }
 var live = taskRuntime.snapshot()
-var runtimePg = 'CASE WHEN p.id IS NOT NULL THEN p.nifi_process_group_id ELSE a.process_group_id END'
-var hasPg = '('+runtimePg+" IS NOT NULL AND "+runtimePg+"<>'')"
-var groupSql = groupStatus => {
-    var parts=[]
-    var batches=live.get('groups'+groupStatus)||[]
-    var index=0
-    for(batch in batches) {
-        parts.add(runtimePg+' IN <foreach collection="live.groups'+groupStatus+'['+index+']" item="pg" open="(" close=")" separator=",">#{pg}</foreach>')
-        index=index+1
-    }
-    return parts.size()==0?'1=0':'('+parts.join(' OR ')+')'
+var scope = dataScope.dataSource()
+var scopeMode = text(scope?.scope)
+var scopeUserId = text(scope?.userId)
+var scopeOrgIds = scope?.organizationIds || []
+if (!['ALL', 'ORG', 'OWNER'].contains(scopeMode) || scopeUserId == '') {
+    exit 403, '无法确定当前数据范围'
 }
-var stoppedSql=groupSql(0)
-var runningSql=groupSql(1)
-var invalidSql=groupSql(2)
-var unknownSql=groupSql(3)
-var knownSql='('+stoppedSql+' OR '+runningSql+' OR '+invalidSql+')'
-var undeployedSql='(NOT '+hasPg+' AND COALESCE(p.status,\'\')<>\'RUNNING\' AND COALESCE(p.status,\'\')<>\'DEPLOY_FAILED\')'
-var failedSql='(NOT '+hasPg+' AND p.status=\'DEPLOY_FAILED\')'
+if (status != '' && status != 'all' && !['0', '1', '2', '3'].contains(status)) {
+    exit 400, '不支持的任务状态'
+}
+
+var textColumn = (alias, name) => tableRead.column(alias, name, 'TEXT')
+var numberColumn = (alias, name) => tableRead.column(alias, name, 'NUMBER')
+var timeColumn = (alias, name) => tableRead.column(alias, name, 'TIME')
+var active = alias => tableRead.equal(numberColumn(alias, 'is_del'), 0)
+
+var groupMatches = (processGroup, groupStatus) => {
+    var batches = []
+    for (batch in live.get('groups' + groupStatus) || []) {
+        batches.add(tableRead.in(processGroup, batch))
+    }
+    return tableRead.any(batches)
+}
+
+var statusFilter = (query, processGroup, lifecycle) => {
+    if (status == '' || status == 'all') {
+        return
+    }
+    // 运行组从同一份快照分批匹配。空分组和缺失生命周期按未部署状态处理。
+    var hasGroup = tableRead.not(tableRead.isNull(tableRead.blankAsNull(processGroup)))
+    var noGroup = tableRead.not(hasGroup)
+    var running = tableRead.equal(lifecycle, 'RUNNING')
+    var failed = tableRead.equal(lifecycle, 'DEPLOY_FAILED')
+    if (status == '0') {
+        var undeployed = tableRead.any([tableRead.isNull(lifecycle), tableRead.not(tableRead.any([running, failed]))])
+        query.where(tableRead.any([groupMatches(processGroup, 0), tableRead.all([noGroup, undeployed])]))
+    } else if (status == '1') {
+        query.where(groupMatches(processGroup, 1))
+    } else if (status == '2') {
+        query.where(tableRead.any([groupMatches(processGroup, 2), tableRead.all([noGroup, failed])]))
+    } else {
+        var knownGroup = tableRead.any([
+            groupMatches(processGroup, 0), groupMatches(processGroup, 1), groupMatches(processGroup, 2)
+        ])
+        query.where(tableRead.any([
+            tableRead.all([hasGroup, tableRead.not(knownGroup)]), tableRead.all([noGroup, running])
+        ]))
+    }
+}
+
+var pageResult = (query, readRows) => {
+    if (pageNum > 2147483647) {
+        // 兼容长整型页码。超出分页组件整数范围时仍返回筛选总数和原请求页码。
+        return { total: query.grouped({ total: tableRead.count() }, [])[0].total, rows: [] }
+    }
+    return readRows(pageNum::int)
+}
+
+var response = (total, list) => {
+    return {
+        pageNum: pageNum,
+        pageSize: pageSize,
+        total: total,
+        list: list,
+        runtimeRevision: live.revision,
+        runtimeFresh: live.fresh,
+        runtimeObservedAt: live.observedAt,
+        runtimeMessage: live.message
+    }
+}
 
 // 运行状态归一：0 未启用，1 运行中，2 运行异常。
 var statusOf = value => {
@@ -126,11 +184,10 @@ var statusOf = value => {
     return 0
 }
 
-// Page enrichment is two bulk reads, independent of row count.
-var datasourceById={}
-var tableById={}
-var datasourceName=id=>datasourceById[text(id)]?.dbName
-var tableRow=id=>tableById[text(id)]
+var datasourceById = {}
+var tableById = {}
+var datasourceName = id => datasourceById[text(id)]?.dbName
+var tableRow = id => tableById[text(id)]
 var tableDisplayName = row => {
     if (row == null) {
         return null
@@ -166,20 +223,6 @@ var statusTextOf = value => {
         return '运行异常'
     }
     return '未启用'
-}
-
-var matchesKeyword = row => {
-    if (blank(keyword)) {
-        return true
-    }
-    var content = (
-        text(row.taskName) + ' ' +
-        text(row.sourceDbName) + ' ' +
-        text(row.sourceTableName) + ' ' +
-        text(row.targetDbName) + ' ' +
-        text(row.targetTableName)
-    ).toLowerCase()
-    return content.contains(keyword)
 }
 
 var decorateTaskRow = row => {
@@ -219,63 +262,97 @@ var decorateTaskRow = row => {
     return row
 }
 
-// 主任务表查询：这里保持按 data_access_agg_task_t 分页，避免一次性读取大量运行监控数据。
-import dataScope
-var scope=dataScope.dataSource();
-var scopeMode=text(scope?.scope);
-var scopeUserId=text(scope?.userId);
-var scopeOrgIds=scope?.organizationIds||[];
-if(!['ALL','ORG','OWNER'].contains(scopeMode)||scopeUserId=='') {exit 403,'无法确定当前数据范围';}
-var sourceScope=scopeMode=='ALL'?'1=1':scopeMode=='OWNER'?'d.created_by=#{scopeUserId}':scopeOrgIds.size()==0?'1=0':'d.org_id in <foreach collection="scopeOrgIds" item="orgId" open="(" close=")" separator=",">#{orgId}</foreach>';
-var keywordPattern='%'+text(body?.taskName)+'%';
-var statusSql='';
-if(!blank(status)&&status!='all') {
- if(!['0','1','2','3'].contains(status)) {exit 400,'不支持的任务状态';}
- var condition=status=='0'?'('+stoppedSql+' OR '+undeployedSql+')':status=='1'?runningSql:status=='2'?'('+invalidSql+' OR '+failedSql+')':'(('+hasPg+' AND NOT '+knownSql+') OR (NOT '+hasPg+' AND p.status=\'RUNNING\'))';
- statusSql=' AND ('+condition+')';
+// 来源数据源关联参与 ORG、OWNER 权限过滤。ALL 仍可查看来源已失效的本租户任务。
+var tasks = tableRead.from('data_access_agg_task_t', 'a', tenantId)
+tasks.leftJoin('db_datasource_t', 'd', 'tid', 'source_db_id', [active('d')])
+tasks.leftJoin('nifi_pipeline_t', 'p', 'id', 'pipeline_id', [active('p')])
+tasks.where(active('a'))
+if (scopeMode == 'OWNER') {
+    tasks.where(tableRead.equal(textColumn('d', 'created_by'), scopeUserId))
+} else if (scopeMode == 'ORG') {
+    tasks.where(tableRead.in(textColumn('d', 'org_id'), scopeOrgIds))
 }
-var result=db.page("""
- SELECT a.*,p.status lifecycle_status,CASE WHEN p.id IS NOT NULL THEN p.nifi_process_group_id ELSE a.process_group_id END runtime_process_group_id
- FROM data_access_agg_task_t a
- LEFT JOIN db_datasource_t d ON d.tid=a.source_db_id AND d.tenant_id=a.tenant_id AND d.is_del=0
- LEFT JOIN nifi_pipeline_t p ON p.id=a.pipeline_id AND p.tenant_id=a.tenant_id AND p.is_del=0
- WHERE a.tenant_id=#{tenantId} AND a.is_del=0 AND (${sourceScope})
- AND (#{keyword}='' OR a.task_name LIKE #{keywordPattern})
- """+statusSql+" ORDER BY CASE WHEN a."+sortColumn+" IS NULL THEN 1 ELSE 0 END ASC,a."+sortColumn+" "+sortDirection+",a.tid ASC",pageSize,offset);
-var taskFields={task_name:'taskName',task_desc:'taskDesc',source_db_id:'sourceDbId',target_db_id:'targetDbId',source_table_id:'sourceTableId',target_table_id:'targetTableId',source_table_primary_key:'sourceTablePrimaryKey',source_table_increment_key:'sourceTableIncrementKey',schedule_strategy:'scheduleStrategy',schedule_cycle:'scheduleCycle',schedule_running:'scheduleRunning',last_running:'lastRunning',end_running:'endRunning',created_time:'createdTime',updated_time:'updatedTime',pipeline_id:'pipelineId',process_group_id:'processGroupId',task_status:'taskStatus',monitor_status:'monitorStatus',monitor_msg:'monitorMsg',flow_files_in:'flowFilesIn',flow_files_out:'flowFilesOut',queued_count:'queuedCount',bytes_in:'bytesIn',bytes_out:'bytesOut',active_thread_count:'activeThreadCount',monitor_time:'monitorTime'};
-for(row in result.list||[]) {for(field in taskFields.keySet()) {var camel=taskFields.get(field);row[camel]=row[camel]==null?row[field]:row[camel];}}
-result.list = result.list == null ? [] : result.list
-var pageDatasourceIds=[]
-var pageTableIds=[]
-for(row in result.list) {
-    for(value in [row.sourceDbId,row.targetDbId]) {if(!blank(value) && !pageDatasourceIds.contains(value)) {pageDatasourceIds.add(value)}}
-    for(value in [row.sourceTableId,row.targetTableId]) {if(!blank(value) && !pageTableIds.contains(value)) {pageTableIds.add(value)}}
+var keywordPattern = '%' + keyword + '%'
+if (keyword != '') {
+    // 保留旧查询的 LIKE 通配符及数据库自身的任务名排序规则。
+    tasks.where(tableRead.like(textColumn('a', 'task_name'), keywordPattern))
 }
-if(pageDatasourceIds.size()>0) {
-    var sources=db.table('db_datasource_t').columns('tid','db_name').where()
-        .eq('tenant_id',tenantId).eq('is_del',0).in('tid',pageDatasourceIds).select()
-    for(source in sources) {datasourceById[text(source.tid)]=source}
-}
-if(pageTableIds.size()>0) {
-    var tables=db.table('db_table_t').columns('tid','table_name','table_name_cn','record_count').where()
-        .eq('tenant_id',tenantId).eq('is_del',0).in('tid',pageTableIds).select()
-    for(table in tables) {tableById[text(table.tid)]=table}
-}
-var decorated = new ArrayList()
-for (row in result.list) {
-    var item = decorateTaskRow(row)
-    decorated.add(item)
-}
-result.list = decorated
-taskRuntime.decorate(result.list,live)
-var liveResult={pageNum:pageNum,pageSize:pageSize,total:result.total,list:result.list,runtimeRevision:live.revision,runtimeFresh:live.fresh,runtimeObservedAt:live.observedAt,runtimeMessage:live.message}
 
-// 如果业务任务表为空，兼容展示 data-elements-yunti 迁移过来的 NiFi 流水线。
+// 流水线记录存在时使用它的运行组。流水线的空运行组表示尚未部署。
+var lifecycle = textColumn('p', 'status')
+var processGroup = tableRead.when(tableRead.isNull(textColumn('p', 'id')),
+    textColumn('a', 'process_group_id'), textColumn('p', 'nifi_process_group_id'))
+statusFilter(tasks, processGroup, lifecycle)
+
+var taskSorts = {
+    taskName: textColumn('a', 'task_name'),
+    lastRunning: textColumn('a', 'last_running'),
+    endRunning: textColumn('a', 'end_running'),
+    createdTime: timeColumn('a', 'created_time'),
+    updatedTime: timeColumn('a', 'updated_time'),
+    flowFilesIn: numberColumn('a', 'flow_files_in'),
+    flowFilesOut: numberColumn('a', 'flow_files_out'),
+    queuedCount: numberColumn('a', 'queued_count'),
+    bytesIn: numberColumn('a', 'bytes_in'),
+    bytesOut: numberColumn('a', 'bytes_out'),
+    activeThreadCount: numberColumn('a', 'active_thread_count')
+}
+var taskPage = pageResult(tasks, number => tasks.pageRootRows({
+    lifecycle_status: lifecycle,
+    runtime_process_group_id: processGroup
+}, taskSorts[sortField], sortDirection, 'tid', number, pageSize))
+
+// 沿用 Magic API 的列名映射，保留不同部署中的全部任务列及其驼峰键名。
+var camelColumns = new CamelColumnMapperProvider()
+var taskRows = []
+var pageDatasourceIds = []
+var pageTableIds = []
+var collectIds = (ids, values) => {
+    for (value in values) {
+        if (!blank(value) && !ids.contains(value)) {
+            ids.add(value)
+        }
+    }
+}
+for (row in taskPage.rows) {
+    var task = {}
+    for (key in row.keySet()) {
+        task[camelColumns.mapping(key)] = row[key]
+    }
+    taskRows.add(task)
+    collectIds(pageDatasourceIds, [task.sourceDbId, task.targetDbId])
+    collectIds(pageTableIds, [task.sourceTableId, task.targetTableId])
+}
+
+// 只对本页任务批量补齐来源和目标名称，查询数不随页内任务数量增长。
+if (pageDatasourceIds.size() > 0) {
+    var sources = db.table('db_datasource_t').columns('tid', 'db_name').where()
+        .eq('tenant_id', tenantId).eq('is_del', 0).in('tid', pageDatasourceIds).select()
+    for (source in sources) {
+        datasourceById[text(source.tid)] = source
+    }
+}
+if (pageTableIds.size() > 0) {
+    var tables = db.table('db_table_t').columns('tid', 'table_name', 'table_name_cn', 'record_count').where()
+        .eq('tenant_id', tenantId).eq('is_del', 0).in('tid', pageTableIds).select()
+    for (table in tables) {
+        tableById[text(table.tid)] = table
+    }
+}
+var decorated = []
+for (row in taskRows) {
+    decorated.add(decorateTaskRow(row))
+}
+taskRuntime.decorate(decorated, live)
+
+// 有效任务存在时，即使请求页或筛选结果为空也不会回退到旧流水线。
+if (scopeMode != 'ALL' || taskPage.total > 0) {
+    return response(taskPage.total, decorated)
+}
 var existingTask = db.table('data_access_agg_task_t').columns('tid').where()
     .eq('tenant_id', tenantId).eq('is_del', 0).selectOne()
-var taskTotal = existingTask == null ? 0 : 1
-if (taskTotal > 0) {
-    return liveResult
+if (existingTask != null) {
+    return response(taskPage.total, decorated)
 }
 
 var parseDatabaseFromJdbcUrl = jdbcUrl => {
@@ -335,20 +412,42 @@ var extractDslInfo = pipeline => {
     return info
 }
 
-var filtered = new ArrayList()
-var pipelineSortColumn=tableSort.field(body,{taskName:'name',lastRunning:'last_deployed_at',endRunning:'last_stopped_at',createdTime:'created_at',updatedTime:'updated_at',flowFilesIn:'NULLIF(id,id)',flowFilesOut:'NULLIF(id,id)',queuedCount:'NULLIF(id,id)',bytesIn:'NULLIF(id,id)',bytesOut:'NULLIF(id,id)',activeThreadCount:'NULLIF(id,id)'},'updatedTime');
-var pipelineStatusSql='';
-if(!blank(status)&&status!='all') {
- pipelineStatusSql=statusSql.replace(runtimePg,'nifi_process_group_id').replace('p.status','status');
+// 无来源归属的历史流水线仅在 ALL 范围可见。历史时间排序沿用各数据库的空值顺序。
+var pipelineFields = {
+    id: textColumn('p', 'id'),
+    name: textColumn('p', 'name'),
+    description: textColumn('p', 'description'),
+    status: textColumn('p', 'status'),
+    dslJson: tableRead.column('p', 'dsl_json', 'LOB'),
+    nifiProcessGroupId: textColumn('p', 'nifi_process_group_id'),
+    lastDeployedAt: numberColumn('p', 'last_deployed_at'),
+    lastStoppedAt: numberColumn('p', 'last_stopped_at'),
+    createdAt: numberColumn('p', 'created_at'),
+    updatedAt: numberColumn('p', 'updated_at')
 }
-// Unbound legacy pipelines are visible only to the all-data role. They have no source ownership relation.
-var pipelineScopeSql=scopeMode=='ALL'?'1=1':'1=0';
-var pipelinePage=db.page("SELECT * FROM nifi_pipeline_t WHERE tenant_id=#{tenantId} AND is_del=0 AND (${pipelineScopeSql}) AND (#{keyword}='' OR LOWER(name) LIKE #{keywordPattern})"+pipelineStatusSql+" ORDER BY "+pipelineSortColumn+" "+sortDirection+",id ASC",pageSize,offset);
-var pipelines=pipelinePage.list||[];
+var pipelines = tableRead.from('nifi_pipeline_t', 'p', tenantId)
+pipelines.where(active('p'))
+if (keyword != '') {
+    pipelines.where(tableRead.like(tableRead.lower(pipelineFields.name), keywordPattern))
+}
+statusFilter(pipelines, pipelineFields.nifiProcessGroupId, pipelineFields.status)
 
-var pipelineFields={dsl_json:'dslJson',nifi_process_group_id:'nifiProcessGroupId',last_deployed_at:'lastDeployedAt',last_stopped_at:'lastStoppedAt',created_at:'createdAt',updated_at:'updatedAt'};
-for (pipeline in pipelines) {
-    for(field in pipelineFields.keySet()) {var camel=pipelineFields.get(field);pipeline[camel]=pipeline[camel]==null?pipeline[field]:pipeline[camel];}
+var pipelineSorts = {
+    taskName: pipelineFields.name,
+    lastRunning: pipelineFields.lastDeployedAt,
+    endRunning: pipelineFields.lastStoppedAt,
+    createdTime: pipelineFields.createdAt,
+    updatedTime: pipelineFields.updatedAt
+}
+var pipelineSort = pipelineSorts[sortField]
+// 旧流水线没有任务监控指标，指标排序只按流水线 ID 升序。
+var pipelineDirection = pipelineSort == null ? 'asc' : sortDirection
+var pipelineOrder = pipelineSort == null ? pipelineFields.id : pipelineSort
+var pipelinePage = pageResult(pipelines, number => pipelines.page(pipelineFields,
+    pipelineOrder, pipelineDirection, 'id', 'asc', number, pageSize, true))
+
+var filtered = []
+for (pipeline in pipelinePage.rows) {
     var taskStatus = statusOf(pipeline.status)
     var dslInfo = extractDslInfo(pipeline)
     var item = {
@@ -392,5 +491,5 @@ for (pipeline in pipelines) {
     filtered.add(item)
 }
 
-taskRuntime.decorate(filtered,live)
-return {pageNum:pageNum,pageSize:pageSize,total:pipelinePage.total,list:filtered,runtimeRevision:live.revision,runtimeFresh:live.fresh,runtimeObservedAt:live.observedAt,runtimeMessage:live.message};
+taskRuntime.decorate(filtered, live)
+return response(pipelinePage.total, filtered)

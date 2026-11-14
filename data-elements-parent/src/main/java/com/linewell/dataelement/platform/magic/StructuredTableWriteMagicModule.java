@@ -36,7 +36,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import org.ssssssss.magicapi.core.annotation.MagicModule;
 import org.ssssssss.script.annotation.Comment;
 
-/** 为 Magic 的现有租户写事务提供主键行锁和参数化更新。 */
+/** 为 Magic 的现有租户写事务提供有界行锁和参数化更新。 */
 @Component
 @MagicModule("tableWrite")
 public class StructuredTableWriteMagicModule {
@@ -62,20 +62,54 @@ public class StructuredTableWriteMagicModule {
         var projection = columns(columns);
         var filters = tenantFilters(tenantId, conditions, Set.of(key));
         filters.put(key, keyValue(keyValue));
+        var rows = lockMatchingRows(target, tenantId, projection, filters, null, 1);
+        return rows.isEmpty() ? null : rows.getFirst();
+    }
+
+    @Comment("在当前写事务中一次锁定指定租户的有界键集合，并返回现行记录")
+    public List<Map<String, Object>> lockRows(String table, String tenantId, String keyColumn, List<?> keyValues,
+            List<String> columns, Map<String, ?> conditions) {
+        requireTenant(tenantId);
+        String target = identifier(table);
+        String key = identifier(keyColumn);
+        var projection = columns(columns);
+        var filters = tenantFilters(tenantId, conditions, Set.of(key));
+        if (keyValues.size() > MAX_IN_VALUES) {
+            throw new IllegalArgumentException("批量行锁最多接受 1000 个行键");
+        }
+        var keys = keyValues.stream().map(value -> jdbcScalar(keyValue(value))).distinct().toList();
+        if (keys.size() != keyValues.size()) {
+            throw new IllegalArgumentException("批量行锁行键不能重复");
+        }
+        if (keys.isEmpty()) return List.of();
+        filters.put(key, keys);
+        validateJdbcFilters(filters);
+        return lockMatchingRows(target, tenantId, projection, filters, key, keys.size());
+    }
+
+    private List<Map<String, Object>> lockMatchingRows(String target, String tenantId, List<String> projection,
+            Map<String, Object> filters, String orderColumn, int maximumRows) {
         return inTransaction(tenantId, (connection, quote) -> {
             var arguments = new ArrayList<Object>();
             String fields = projection.stream().map(column -> quoted(quote, column)).collect(Collectors.joining(", "));
+            String order = orderColumn == null ? "" : " ORDER BY " + quoted(quote, orderColumn);
             String sql = "SELECT " + fields + " FROM " + quoted(quote, target) + " WHERE "
-                    + where(quote, filters, arguments) + " FOR UPDATE";
+                    + where(quote, filters, arguments) + order + " FOR UPDATE";
             try (var statement = connection.prepareStatement(sql)) {
                 prepare(statement, arguments);
                 try (var rows = statement.executeQuery()) {
-                    if (!rows.next()) return null;
-                    var result = new LinkedHashMap<String, Object>();
-                    for (int index = 0; index < projection.size(); index++) {
-                        result.put(projection.get(index), JdbcValueNormalizer.normalize(rows.getObject(index + 1)));
+                    var result = new ArrayList<Map<String, Object>>();
+                    while (rows.next()) {
+                        if (result.size() == maximumRows) {
+                            throw new IllegalStateException(orderColumn == null ? "结构化行锁匹配多条记录"
+                                    : "批量行锁匹配行数超过指定键数");
+                        }
+                        var row = new LinkedHashMap<String, Object>();
+                        for (int index = 0; index < projection.size(); index++) {
+                            row.put(projection.get(index), JdbcValueNormalizer.normalize(rows.getObject(index + 1)));
+                        }
+                        result.add(row);
                     }
-                    if (rows.next()) throw new IllegalStateException("结构化行锁匹配多条记录");
                     return result;
                 }
             }
@@ -122,6 +156,59 @@ public class StructuredTableWriteMagicModule {
                     statement.addBatch();
                 }
                 return matchedRows(statement.executeBatch(), valueArguments.size());
+            }
+        });
+    }
+
+    @Comment("在当前事务中按租户、行键和附加条件更新，使用数据库当前时间写入指定时间列")
+    public int updateWithDatabaseTimestamp(String table, String tenantId, String keyColumn, Object keyValue,
+            Map<String, ?> values, Map<String, ?> conditions, String timestampColumn) {
+        return updateWithTimestampExpression(table, tenantId, keyColumn, keyValue, values, conditions,
+                timestampColumn, "CURRENT_TIMESTAMP");
+    }
+
+    @Comment("在当前事务中使用指定小数秒精度的数据库时间，精度范围为 0 至 6")
+    public int updateWithDatabaseTimestamp(String table, String tenantId, String keyColumn, Object keyValue,
+            Map<String, ?> values, Map<String, ?> conditions, String timestampColumn, int fractionalPrecision) {
+        if (fractionalPrecision < 0 || fractionalPrecision > 6) {
+            throw new IllegalArgumentException("数据库时间精度必须在 0 至 6 之间");
+        }
+        return updateWithTimestampExpression(table, tenantId, keyColumn, keyValue, values, conditions,
+                timestampColumn, "CURRENT_TIMESTAMP(" + fractionalPrecision + ")");
+    }
+
+    private int updateWithTimestampExpression(String table, String tenantId, String keyColumn, Object keyValue,
+            Map<String, ?> values, Map<String, ?> conditions, String timestampColumn, String clockExpression) {
+        requireTenant(tenantId);
+        String target = identifier(table);
+        String key = identifier(keyColumn);
+        String timestamp = identifier(timestampColumn);
+        if (key.equalsIgnoreCase(timestamp)) {
+            throw new IllegalArgumentException("数据库时间列不能作为行键");
+        }
+        var filters = tenantFilters(tenantId, conditions, Set.of(key, timestamp));
+        filters.put(key, jdbcScalar(keyValue(keyValue)));
+        validateJdbcFilters(filters);
+
+        var fields = columns(new ArrayList<>(values.keySet()));
+        if (fields.stream().anyMatch(field -> field.equalsIgnoreCase(TENANT_COLUMN)
+                || field.equalsIgnoreCase(key) || field.equalsIgnoreCase(timestamp))) {
+            throw new IllegalArgumentException("数据库时间更新不能直接修改租户、行键或时间列");
+        }
+        var boundValues = fields.stream().map(field -> jdbcScalar(values.get(field))).toList();
+
+        return inTransaction(tenantId, (connection, quote) -> {
+            var arguments = new ArrayList<>(boundValues);
+            String sql = "UPDATE " + quoted(quote, target) + " SET " + equalsMarkers(quote, fields, ", ")
+                    + ", " + quoted(quote, timestamp) + " = " + clockExpression
+                    + " WHERE " + where(quote, filters, arguments);
+            try (var statement = connection.prepareStatement(sql)) {
+                prepare(statement, arguments);
+                int count = statement.executeUpdate();
+                if (count < 0 || count > 1) {
+                    throw new IllegalStateException("数据库时间更新匹配行数无效");
+                }
+                return count;
             }
         });
     }
@@ -298,7 +385,7 @@ public class StructuredTableWriteMagicModule {
                 || BIND_NUMBERS.contains(value.getClass())) {
             return value;
         }
-        throw new IllegalArgumentException("关联条件更新只接受 JDBC 标量值");
+        throw new IllegalArgumentException("结构化更新只接受 JDBC 标量值");
     }
 
     private static String identifier(String value) {

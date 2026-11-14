@@ -17,174 +17,265 @@
   "headers": [],
   "paths": [],
   "responseBody": null,
-  "description": "数据表管理 01：分页查询已登记数据表；使用请求参数 tid、dbId、datasourceId、conditions、keyword、pageNum、pageSize；涉及 db_table_t、db_datasource_t 等业务表。",
+  "description": "分页读取当前登录租户的有效登记表及所属数据源。支持标识、筛选条件、关键词及白名单排序。先选取每个来源的同名表代表记录，再筛选和分页，返回 pageNum、pageSize、total、list。分层目录搜索可匹配完整注释，目录排序仅用回退注释的前 512 字符。只读。",
   "requestBodyDefinition": null,
   "responseBodyDefinition": null
 }
 ================================
 import java.util.List
-import java.util.Map
+import tableRead
 import tableSort
 import tenantRuntime
 
-// POST /dst/database/table/page：分页查询当前行业的登记数据表和所属数据源。
-// 数仓目录检索与首列排序使用和列表显示一致的目录名称。
-var tenantId = tenantRuntime.id()
+/**
+ * POST /dst/database/table/page 查询登记数据表及所属来源，供数源层、数仓分层和登记页面使用。
+ * 支持 tid、dbId、datasourceId、conditions、keyword 和排序参数，返回 pageNum、pageSize、total、list。
+ * 只读取当前登录租户的有效登记表及来源，沿用分层目录的共享范围。每页最多 100 条，无业务写入。
+ */
 
-var textOf = (value) => value == null ? '' : value + ''
-var blank = (value) => value == null || textOf(value).trim() == ''
-var literalPattern = (value) => '%'+textOf(value).replace('!','!!').replace('%','!%').replace('_','!_')+'%'
-var rowValue = (row, keys) => {
-    if (row == null) {
-        // 返回当前业务分支的标准结果。
-        return null
-    }
-    for (key in keys) {
-        var value = row instanceof Map ? row.get(key) : row[key]
-        if (value != null) {
-            // 返回当前业务分支的标准结果。
-            return value
-        }
-    }
-    // 返回当前业务分支的标准结果。
-    return null
-}
-var firstValue = (row, keys) => {
-    for (key in keys) {
-        var value = rowValue(row, [key])
+var tenantId = tenantRuntime.id()
+var textOf = value => value == null ? '' : value + ''
+var blank = value => textOf(value).trim() == ''
+var nonBlank = values => {
+    for (value in values) {
         if (!blank(value)) {
-            // 返回当前业务分支的标准结果。
             return value
         }
     }
-    // 返回当前业务分支的标准结果。
     return null
 }
-var tableData = (row) => {
-    var tid = rowValue(row, ['tid'])
-    var item = {
-        tid: tid,
-        id: tid,
-        assetType: 'table',
-        datasourceId: firstValue(row, ['datasourceId', 'datasource_id']),
-        dbId: firstValue(row, ['datasourceId', 'datasource_id']),
-        tableName: firstValue(row, ['tableName', 'table_name']),
-        tableNameEn: firstValue(row, ['tableNameEn', 'table_name_en', 'tableName', 'table_name']),
-        tableNameCn: firstValue(row, ['tableNameCn', 'table_name_cn', 'tableComment', 'table_comment']),
-        tableComment: firstValue(row, ['tableComment', 'table_comment', 'tableNameCn', 'table_name_cn']),
-        tableType: firstValue(row, ['tableType', 'table_type']),
-        businessType: firstValue(row, ['businessType', 'business_type']),
-        businessTypeReason: firstValue(row, ['businessTypeReason', 'business_type_reason']),
-        annotated: rowValue(row, ['annotated']),
-        recordCount: rowValue(row, ['recordCount', 'record_count']),
-        fieldCount: rowValue(row, ['fieldCount', 'field_count']),
-        storageSize: firstValue(row, ['storageSize', 'storage_size']),
-        totalSizeBytes: rowValue(row, ['totalSizeBytes', 'total_size_bytes']),
-        totalSizeFormatted: firstValue(row, ['totalSizeFormatted', 'total_size_formatted', 'storageSize', 'storage_size']),
-        ddlCreatTime: firstValue(row, ['ddlCreateTime', 'ddl_create_time']),
-        ddlUpdateTime: firstValue(row, ['ddlUpdateTime', 'ddl_update_time']),
-        orgId: firstValue(row, ['orgId', 'org_id']),
-        orgPath: firstValue(row, ['orgPath', 'org_path']),
-        relatedDirectory: firstValue(row, ['relatedDirectory', 'related_directory']),
-        dataSourceType: firstValue(row, ['dataSourceType', 'data_source_type']),
-        timestampField: firstValue(row, ['timestampField', 'timestamp_field']),
-        dictionaryStructureType: firstValue(row, ['dictionaryStructureType', 'dictionary_structure_type']),
-        dictionaryTableFlag: rowValue(row, ['dictionaryTableFlag', 'dictionary_table_flag']),
-        fieldGovernanceConfig: rowValue(row, ['fieldGovernanceConfig', 'field_governance_config']),
-        dictionaryProfiles: rowValue(row, ['dictionaryProfiles', 'dictionary_profiles']),
-        dictionaryProfile: rowValue(row, ['dictionaryProfile', 'dictionary_profile']),
-        dictionaryCategories: rowValue(row, ['dictionaryCategories', 'dictionary_categories']),
-        sourceCatalogId: firstValue(row, ['sourceCatalogId', 'source_catalog_id']),
-        sourceTableId: firstValue(row, ['sourceTableId', 'source_table_id', 'tid']),
-        sourceTableName: firstValue(row, ['sourceTableName', 'source_table_name', 'tableName', 'table_name']),
-        manageUnit: firstValue(row, ['manageUnit', 'manage_unit', 'orgId', 'org_id']),
-        assetDesc: firstValue(row, ['assetDesc', 'asset_desc', 'tableComment', 'table_comment']),
-        catalogName: firstValue(row, ['catalogName', 'catalog_name', 'tableNameCn', 'table_name_cn']),
-        catalogNameEn: firstValue(row, ['catalogNameEn', 'catalog_name_en', 'tableName', 'table_name']),
-        tenantId: firstValue(row, ['tenantId', 'tenant_id']),
-        assetStatus: rowValue(row, ['assetStatus', 'asset_status']),
-        flowStatus: rowValue(row, ['flowStatus', 'flow_status']),
-        regTime: rowValue(row, ['regTime', 'reg_time']),
-        createdTime: rowValue(row, ['createdTime', 'created_time']),
-        updatedTime: rowValue(row, ['updatedTime', 'updated_time'])
-    }
-    item.regTime_date = item.regTime
-    item.createdTime_date = item.createdTime
-    item.updatedTime_date = item.updatedTime
-    // 返回当前业务分支的标准结果。
-    return item
+
+var columnKinds = {
+    TEXT: [
+        'tid', 'datasource_id', 'table_name', 'table_name_en', 'table_name_cn', 'table_type',
+        'business_type', 'business_type_reason', 'storage_size', 'total_size_formatted', 'ddl_create_time',
+        'ddl_update_time', 'org_id', 'related_directory', 'data_source_type', 'timestamp_field',
+        'dictionary_structure_type', 'source_catalog_id', 'source_table_id', 'source_table_name',
+        'manage_unit', 'catalog_name', 'catalog_name_en'
+    ],
+    LOB: [
+        'table_comment', 'org_path', 'field_governance_config', 'dictionary_profiles',
+        'dictionary_profile', 'dictionary_categories', 'asset_desc'
+    ],
+    NUMBER: [
+        'annotated', 'record_count', 'field_count', 'total_size_bytes', 'dictionary_table_flag',
+        'asset_status', 'flow_status'
+    ],
+    TIME: ['reg_time', 'created_time', 'updated_time']
 }
-// 数据表列表按当前行业库和 tenant_id 查询，不再叠加 OWNER/ORG 角色范围。
-var whereSql=' WHERE t.tenant_id=#{tenantId} AND t.is_del=0 AND t._row_rank=1';
-var catalogNameSql="coalesce(nullif(trim(t.catalog_name),''),nullif(trim(t.table_name_cn),''))";
-var fields={tid:'t.tid',dbId:'t.datasource_id',datasourceId:'t.datasource_id',tableName:'t.table_name',
-    tableNameEn:'t.table_name',tableNameCn:'t.table_name_cn',tableComment:'t.table_comment',
-    appId:'d.app_id',orgId:'coalesce(t.org_id,d.org_id)',businessType:'t.business_type',
-    dataSourceType:'t.data_source_type',assetStatus:'t.asset_status',fieldCount:'t.field_count',
-    recordCount:'t.record_count',createdTime:'t.created_time',updatedTime:'t.updated_time',regTime:'t.reg_time'};
-var conditions=[];
-if(body?.conditions!=null) {conditions.addAll(body.conditions);}
-for(field in ['tid','dbId','datasourceId','businessType','dataSourceType','orgId','assetStatus']) {
-    if(!blank(body?.get(field))) {conditions.add({field:field,value:body.get(field),type:'match'});}
-}
-var values={};
-for(i,condition in conditions) {
-    var field=condition?.field;
-    if(field=='assetType') {if(condition.value!='table') {whereSql=whereSql+' AND 1=0';};continue;}
-    var catalogSearch=field=='catalogName' || field=='catalogOrTableName';
-    if(!catalogSearch && fields.get(field)==null) {exit 400,'不支持的数据表筛选字段：'+field;}
-    var key='filter'+i;
-    var type=condition.type||'match';
-    if(catalogSearch) {
-        if(type!='like') {exit 400,'不支持的数据表筛选方式：'+type;}
-        values.put(key,literalPattern(condition.value));
-        var likeClause=" LIKE #{values."+key+"} ESCAPE '!'";
-        // 注释可能是达梦的大字段，回退时直接匹配全文，避免隐式转换为定长字符串。
-        var nameMatch=catalogNameSql+likeClause+' OR ('+catalogNameSql+' IS NULL AND t.table_comment'+likeClause+')';
-        if(field=='catalogOrTableName') {
-            nameMatch=nameMatch+' OR t.table_name'+likeClause+' OR t.table_name_cn'+likeClause+' OR t.table_name_en'+likeClause;
+var tableColumns = alias => {
+    var columns = {}
+    for (kind, names in columnKinds) {
+        for (name in names) {
+            columns[name] = tableRead.column(alias, name, kind)
         }
-        whereSql=whereSql+' AND ('+nameMatch+')';
-        continue;
     }
-    values.put(key,condition.value);
-    if(type=='null') {whereSql=whereSql+' AND '+fields.get(field)+' IS NULL';}
-    else if(type=='in') {
-        if(!(condition.value instanceof List) || condition.value.size()>1000) {exit 400,'多值筛选最多 1000 项';}
-        whereSql=whereSql+(condition.value.size()==0?' AND 1=0':' AND '+fields.get(field)+' IN (#{values.'+key+'})');
-    } else if(type=='like') {
-        values.put(key,literalPattern(condition.value));
-        whereSql=whereSql+' AND '+fields.get(field)+" LIKE #{values."+key+"} ESCAPE '!'";
-    } else if(type=='match' || type=='eq') {whereSql=whereSql+' AND '+fields.get(field)+'=#{values.'+key+'}';}
-    else {exit 400,'不支持的数据表筛选方式：'+type;}
+    return columns
 }
-var keyword=body?.keyword;
-if(!blank(keyword)) {
-    keyword=literalPattern(keyword);
-    whereSql=whereSql+" AND (t.table_name LIKE #{keyword} ESCAPE '!' OR t.table_name_cn LIKE #{keyword} ESCAPE '!' OR t.table_comment LIKE #{keyword} ESCAPE '!')";
+
+// 同来源同名表先选出代表行，再按标识或关键词筛选，避免旧重复记录重新出现在列表。
+var registered = tableRead.from('db_table_t', 'original', tenantId)
+var original = tableColumns('original')
+registered.where(tableRead.equal(tableRead.column('original', 'is_del', 'NUMBER'), 0))
+var blankPhysicalName = tableRead.isNull(tableRead.blankAsNull(tableRead.trim(original.table_name)))
+var nameKey = tableRead.when(blankPhysicalName, original.tid, tableRead.lower(original.table_name))
+var tables = registered.ranked('t', original, [original.datasource_id, nameKey], [
+    tableRead.coalesce([original.field_count, 0]),
+    tableRead.coalesce([original.annotated, 0]),
+    original.updated_time,
+    original.tid
+], ['desc', 'desc', 'desc', 'asc'], true)
+
+// 分层目录共享当前行业的登记表。缺少当前租户有效来源的记录不会进入结果。
+tables.leftJoin('db_datasource_t', 'd', 'tid', 'datasource_id', [
+    tableRead.equal(tableRead.column('d', 'is_del', 'NUMBER'), 0)
+])
+tables.where(tableRead.not(tableRead.isNull(tableRead.column('d', 'tid', 'TEXT'))))
+var columns = tableColumns('t')
+columns.tenant_id = tableRead.column('t', 'tenant_id', 'TEXT')
+columns.db_name = tableRead.column('d', 'db_name', 'TEXT')
+columns.app_id = tableRead.column('d', 'app_id', 'TEXT')
+var catalogName = tableRead.coalesce([
+    tableRead.blankAsNull(tableRead.trim(columns.catalog_name)),
+    tableRead.blankAsNull(tableRead.trim(columns.table_name_cn))
+])
+
+// 筛选沿用物理英文名和来源组织回退。返回值仍保留表记录自身的英文名和组织。
+var filterColumns = {
+    tid: columns.tid,
+    dbId: columns.datasource_id,
+    datasourceId: columns.datasource_id,
+    tableName: columns.table_name,
+    tableNameEn: columns.table_name,
+    tableNameCn: columns.table_name_cn,
+    // 保留注释在各数据库原生字符比较中的排序规则和尾部空格语义。
+    tableComment: tableRead.column('t', 'table_comment', 'TEXT'),
+    appId: columns.app_id,
+    orgId: tableRead.coalesce([columns.org_id, tableRead.column('d', 'org_id', 'TEXT')]),
+    businessType: columns.business_type,
+    dataSourceType: columns.data_source_type,
+    assetStatus: columns.asset_status,
+    fieldCount: columns.field_count,
+    recordCount: columns.record_count,
+    createdTime: columns.created_time,
+    updatedTime: columns.updated_time,
+    regTime: columns.reg_time
 }
-var fromSql="""
- FROM (SELECT original.*,ROW_NUMBER() OVER (
-    PARTITION BY original.tenant_id,original.datasource_id,
-        CASE WHEN original.table_name IS NULL OR trim(original.table_name)='' THEN original.tid ELSE lower(original.table_name) END
-    ORDER BY coalesce(original.field_count,0) DESC,coalesce(original.annotated,0) DESC,original.updated_time DESC,original.tid ASC
- ) _row_rank FROM db_table_t original WHERE original.tenant_id=#{tenantId} AND original.is_del=0) t
- JOIN db_datasource_t d ON d.tid=t.datasource_id AND d.tenant_id=t.tenant_id AND d.is_del=0
-""";
-var pageNum=Math.max(1,body?.pageNum::int(1));
-var pageSize=Math.min(100,Math.max(1,body?.pageSize::int(20)));
-var offset=(pageNum-1)*pageSize;
-// 目录名称排序回退到注释前 512 字符。2048 字节缓冲兼容达梦的多字节字符。
-var catalogSortSql="coalesce("+catalogNameSql+",nullif(substr(trim(cast(t.table_comment as char(2048))),1,512),''))";
-var allowed={tableName:"coalesce(nullif(t.table_name_cn,''),nullif(t.table_comment,''),t.table_name)",tableNameEn:'t.table_name',catalogName:catalogSortSql,
-    tableNameCn:'t.table_name_cn',name:"coalesce(nullif(t.table_name_cn,''),nullif(t.table_comment,''),t.table_name)",
-    fieldCount:'t.field_count',recordCount:'t.record_count',totalSizeBytes:'t.total_size_bytes',
-    ddlCreatTime:'t.ddl_create_time',ddlCreateTime:'t.ddl_create_time',ddlUpdateTime:'t.ddl_update_time',
-    regTime:'t.reg_time',createdTime:'t.created_time',updatedTime:'t.updated_time'};
-var field=tableSort.field(body,allowed,'updatedTime');
-var direction=tableSort.direction(body);
-var total=db.selectOne('SELECT COUNT(*) total'+fromSql+whereSql).total;
-var rows=db.select('SELECT t.*,d.db_name,d.app_id'+fromSql+whereSql+' ORDER BY CASE WHEN '+field+' IS NULL THEN 1 ELSE 0 END ASC,'+field+' '+direction+',t.tid ASC LIMIT #{pageSize} OFFSET #{offset}');
-return {pageNum:pageNum,pageSize:pageSize,total:total,list:rows.map(row=>{
-    var item=tableData(row);item.dbName=rowValue(row,['dbName','db_name']);item.appId=rowValue(row,['appId','app_id']);return item;
-})};
+var conditions = []
+if (body?.conditions != null) {
+    conditions.addAll(body.conditions)
+}
+for (field in ['tid', 'dbId', 'datasourceId', 'businessType', 'dataSourceType', 'orgId', 'assetStatus']) {
+    if (!blank(body?.get(field))) {
+        conditions.add({field: field, value: body.get(field), type: 'match'})
+    }
+}
+var noMatch = tableRead.any([])
+for (condition in conditions) {
+    var field = condition?.field
+    if (field == 'assetType') {
+        if (condition.value != 'table') {
+            tables.where(noMatch)
+        }
+        continue
+    }
+    var type = condition?.type || 'match'
+    var value = condition?.value
+    if (field == 'catalogName' || field == 'catalogOrTableName') {
+        if (type != 'like') {
+            exit 400, '不支持的数据表筛选方式：' + type
+        }
+        var keyword = textOf(value)
+        // 目录名和中文名都为空时才匹配完整注释。基础层还匹配三个表名字段。
+        var matches = [
+            tableRead.containsLiteral(catalogName, keyword),
+            tableRead.all([
+                tableRead.isNull(catalogName),
+                tableRead.containsLiteral(columns.table_comment, keyword)
+            ])
+        ]
+        if (field == 'catalogOrTableName') {
+            matches.add(tableRead.containsLiteral(columns.table_name, keyword))
+            matches.add(tableRead.containsLiteral(columns.table_name_cn, keyword))
+            matches.add(tableRead.containsLiteral(columns.table_name_en, keyword))
+        }
+        tables.where(tableRead.any(matches))
+        continue
+    }
+    var column = filterColumns[field]
+    if (column == null) {
+        exit 400, '不支持的数据表筛选字段：' + field
+    }
+    if (type == 'null') {
+        tables.where(tableRead.isNull(column))
+    } else if (type == 'in') {
+        if (!(value instanceof List) || value.size() > 1000) {
+            exit 400, '多值筛选最多 1000 项'
+        }
+        tables.where(tableRead.in(column, value))
+    } else if (type == 'like') {
+        tables.where(tableRead.containsLiteral(column, textOf(value)))
+    } else if (type == 'match' || type == 'eq') {
+        // 空值匹配须显式用 null 筛选，普通等值空参数保持无结果。
+        tables.where(value == null ? noMatch : tableRead.equal(column, value))
+    } else {
+        exit 400, '不支持的数据表筛选方式：' + type
+    }
+}
+var keyword = body?.keyword
+if (!blank(keyword)) {
+    var literal = textOf(keyword)
+    tables.where(tableRead.any([
+        tableRead.containsLiteral(columns.table_name, literal),
+        tableRead.containsLiteral(columns.table_name_cn, literal),
+        tableRead.containsLiteral(columns.table_comment, literal)
+    ]))
+}
+
+// 目录排序只取回退注释的前 512 字符，普通表名排序仍使用完整的回退值。
+var displayName = tableRead.coalesce([
+    tableRead.blankAsNull(columns.table_name_cn),
+    tableRead.blankAsNull(columns.table_comment),
+    columns.table_name
+])
+var sortColumns = {
+    tableName: displayName,
+    name: displayName,
+    tableNameEn: columns.table_name,
+    catalogName: tableRead.coalesce([
+        catalogName,
+        tableRead.blankAsNull(tableRead.trimmedTextPrefix(columns.table_comment, 512))
+    ]),
+    tableNameCn: columns.table_name_cn,
+    fieldCount: columns.field_count,
+    recordCount: columns.record_count,
+    totalSizeBytes: columns.total_size_bytes,
+    ddlCreatTime: columns.ddl_create_time,
+    ddlCreateTime: columns.ddl_create_time,
+    ddlUpdateTime: columns.ddl_update_time,
+    regTime: columns.reg_time,
+    createdTime: columns.created_time,
+    updatedTime: columns.updated_time
+}
+var sortNames = {}
+for (name in sortColumns.keySet()) {
+    sortNames[name] = name
+}
+var sortField = tableSort.field(body, sortNames, 'updatedTime')
+var pageNum = Math.max(1, body?.pageNum::int(1))
+var pageSize = Math.min(100, Math.max(1, body?.pageSize::int(20)))
+var page = tables.page(columns, sortColumns[sortField], tableSort.direction(body), 'tid', pageNum, pageSize)
+
+// 兼容现用页面的中文名、目录和时间字段，完整注释与治理配置只随当前页返回。
+var list = page.rows.map(row => ({
+    tid: row.tid,
+    id: row.tid,
+    assetType: 'table',
+    datasourceId: nonBlank([row.datasource_id]),
+    dbId: nonBlank([row.datasource_id]),
+    tableName: nonBlank([row.table_name]),
+    tableNameEn: nonBlank([row.table_name_en, row.table_name]),
+    tableNameCn: nonBlank([row.table_name_cn, row.table_comment]),
+    tableComment: nonBlank([row.table_comment, row.table_name_cn]),
+    tableType: nonBlank([row.table_type]),
+    businessType: nonBlank([row.business_type]),
+    businessTypeReason: nonBlank([row.business_type_reason]),
+    annotated: row.annotated,
+    recordCount: row.record_count,
+    fieldCount: row.field_count,
+    storageSize: nonBlank([row.storage_size]),
+    totalSizeBytes: row.total_size_bytes,
+    totalSizeFormatted: nonBlank([row.total_size_formatted, row.storage_size]),
+    ddlCreatTime: nonBlank([row.ddl_create_time]),
+    ddlUpdateTime: nonBlank([row.ddl_update_time]),
+    orgId: nonBlank([row.org_id]),
+    orgPath: nonBlank([row.org_path]),
+    relatedDirectory: nonBlank([row.related_directory]),
+    dataSourceType: nonBlank([row.data_source_type]),
+    timestampField: nonBlank([row.timestamp_field]),
+    dictionaryStructureType: nonBlank([row.dictionary_structure_type]),
+    dictionaryTableFlag: row.dictionary_table_flag,
+    fieldGovernanceConfig: row.field_governance_config,
+    dictionaryProfiles: row.dictionary_profiles,
+    dictionaryProfile: row.dictionary_profile,
+    dictionaryCategories: row.dictionary_categories,
+    sourceCatalogId: nonBlank([row.source_catalog_id]),
+    sourceTableId: nonBlank([row.source_table_id, row.tid]),
+    sourceTableName: nonBlank([row.source_table_name, row.table_name]),
+    manageUnit: nonBlank([row.manage_unit, row.org_id]),
+    assetDesc: nonBlank([row.asset_desc, row.table_comment]),
+    catalogName: nonBlank([row.catalog_name, row.table_name_cn]),
+    catalogNameEn: nonBlank([row.catalog_name_en, row.table_name]),
+    tenantId: nonBlank([row.tenant_id]),
+    assetStatus: row.asset_status,
+    flowStatus: row.flow_status,
+    regTime: row.reg_time,
+    createdTime: row.created_time,
+    updatedTime: row.updated_time,
+    regTime_date: row.reg_time,
+    createdTime_date: row.created_time,
+    updatedTime_date: row.updated_time,
+    dbName: row.db_name,
+    appId: row.app_id
+}))
+return {pageNum: pageNum, pageSize: pageSize, total: page.total, list: list}

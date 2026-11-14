@@ -508,11 +508,11 @@ export interface LiveFlowBulletin {
 }
 
 /** A single authorized read covers all nodes in the selected, deployed flow. */
-export function useLiveFlowBulletins(id: string | null, deployed: boolean) {
+export function useLiveFlowBulletins(id: string | null, deployed: boolean, poll = true) {
   const tokenReady = useTokenReady();
   const sessionRevision = useSessionRevision();
   return useQuery<LiveFlowBulletin[]>({
-    enabled: tokenReady && !!id && deployed,
+    enabled: poll && tokenReady && !!id && deployed,
     queryKey: ['pipeline-live-bulletins', id, sessionRevision],
     queryFn: async ({ signal }) => requireListResponse<LiveFlowBulletin>((await api.get<unknown>(
       `/pipelines/${id}/bulletins/live`, { ...BACKGROUND_REQUEST_OPTIONS, signal })).data, 'NiFi 当前告警'),
@@ -524,11 +524,32 @@ export function useClearFlowErrors() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      await api.post(`/pipelines/delete/${id}/errors`);
-    },
-    onSuccess: (_, id) => {
-      qc.invalidateQueries({ queryKey: ['pipeline-errors', id] });
-      qc.invalidateQueries({ queryKey: ['pipeline-status', id] });
+      const revision = getSessionRevision();
+      // Capture before submitting so diagnostics arriving during the request are not hidden.
+      const history = [
+        ...(qc.getQueryData<FlowError[]>(['pipeline-errors', id, revision]) ?? []),
+        ...(qc.getQueryData<FlowStatusPayload>(['pipeline-status', id, revision])?.errors ?? []),
+        ...useErrorPanelStore.getState().failures.filter(row => row.pipelineId === id).map(row => row.error),
+      ];
+      const bulletins = qc.getQueryData<LiveFlowBulletin[]>(['pipeline-live-bulletins', id, revision]) ?? [];
+      let result = { historyCleared: false, bulletinsCleared: 0, nativeCleared: false };
+      try {
+        const { data } = await api.post<Partial<typeof result>>(`/pipelines/delete/${id}/errors`);
+        result = { historyCleared: data?.historyCleared === true, bulletinsCleared: data?.bulletinsCleared ?? 0,
+          nativeCleared: data?.nativeCleared === true || (data?.nativeCleared === undefined && data?.historyCleared === true) };
+      } catch (error) {
+        const status = (error as { response?: { status?: number } }).response?.status;
+        if (status && status < 500 && status !== 405) throw error;
+        // A native API outage must not make the already displayed canvas diagnostics impossible to clear.
+      }
+      if (revision !== getSessionRevision()) throw new Error('登录状态已变化，请在当前会话重试');
+      useErrorPanelStore.getState().dismiss(id, history, bulletins);
+      void Promise.all([
+        qc.invalidateQueries({ queryKey: ['pipeline-errors', id, revision] }),
+        qc.invalidateQueries({ queryKey: ['pipeline-status', id, revision] }),
+        qc.invalidateQueries({ queryKey: ['pipeline-live-bulletins', id, revision] }),
+      ]);
+      return result;
     },
   });
 }

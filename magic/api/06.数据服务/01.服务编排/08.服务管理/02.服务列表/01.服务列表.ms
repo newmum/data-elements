@@ -17,215 +17,252 @@
   "headers": [],
   "paths": [],
   "responseBody": "{\n  \"list\": [],\n  \"total\": 0,\n  \"stats\": {\"total\": 0, \"draft\": 0, \"published\": 0, \"offline\": 0}\n}",
-  "description": "服务编排管理列表（POST /dws/flowserve/gateway/api/list）。读取 api_info_t 主表、api_param_t 参数表、api_file_t 脚本关联和 sym_dict_t 服务分组字典；按分组、方法、状态、关键字分页查询，是服务编排管理页面主接口；使用请求参数 pageNum、pageSize、keyword、groupId、method、status。",
+  "description": "分页查询当前租户角色可见的服务及状态统计。支持关键字、分组、方法、状态、创建类型和白名单排序，指定部门时按当前会话收窄范围。按 datasourceId 查询时先检查数据源访问权限。无部门或数据范围时返回 403，标识或创建类型无效时返回 400，父数据源不可访问时返回 404。只读。",
   "requestBodyDefinition": null,
   "responseBodyDefinition": null
 }
 ================================
-// 接口：01.服务列表
-// 路由：POST /dws/flowserve/gateway/api/list
-// 业务说明：服务编排管理列表（POST /dws/flowserve/gateway/api/list）。读取 api_info_t 主表、api_param_t 参数表、api_file_t 脚本关联和 sym_dict_t 服务分组字典；按分组、方法、状态、关键字分页查询，是服务编排管理页面主接口；使用请求参数 pageNum、pageSize、keyword、groupId、method、status。
-import magicResourceLink
-
-/*
- * 服务编排管理列表。
- * 读取 api_info_t 作为服务主表，api_param_t/api_file_t 只聚合当前页服务，
- * sym_dict_t 中 biz_type=apiServiceGroup 的字典项作为左侧分组名称。
- */
 import "@post:/sym/user/me" as me
-import tenantRuntime
 import dataScope
+import java.util.Locale
+import magicResourceLink
+import tableRead
 import tableSort
-var tenantId=tenantRuntime.id()
-var scope=dataScope.dataSource()
-var scopeOrgIds=scope.organizationIds
-var scopeUserId=scope.userId
+import tenantRuntime
+
+/**
+ * POST /dws/flowserve/gateway/api/list 分页读取服务编排和代理数据源登记的服务列表。
+ * 支持 pageNum、pageSize、keyword、groupId、method、status、serviceCreateType 和白名单排序。
+ * 按可信租户与角色的数据范围返回服务、参数数、关联脚本数及当前筛选条件下的状态统计。
+ * departmentOnly 按会话部门收窄范围，datasourceId 还须通过数据源登记权限检查。接口只读。
+ */
 var blank = value => value == null || (value + '').trim() == ''
-var sqlValue = value => "'" + ((value + '').replace("'", "''")) + "'"
-var likeValue = value => "'%" + ((value + '').replace("'", "''")) + "%'"
+var tenantId = tenantRuntime.id()
+var scope = dataScope.dataSource()
 var pageNum = body?.pageNum == null ? 1 : body.pageNum::int(1)
 var pageSize = body?.pageSize == null ? 20 : body.pageSize::int(20)
-if (pageNum < 1) { pageNum = 1 }
-if (pageSize < 1) { pageSize = 20 }
-if (pageSize > 100) { pageSize = 100 }
+pageNum = Math.max(1, pageNum)
+pageSize = Math.min(100, pageSize < 1 ? 20 : pageSize)
 
-var statusExpr = "coalesce(a.status, case when coalesce(a.is_use, 1) = 1 then 'published' else 'offline' end)"
-var whereSql = " where a.is_del = 0 AND a.tenant_id=#{tenantId} "
-// 本部门入口只收窄范围；组织标识由真实会话确定，不能由请求体指定。
-var currentOrgId = ''
+var services = tableRead.from('api_info_t', 'service', tenantId)
+var field = (name, kind) => tableRead.column('service', name, kind)
+var text = name => field(name, 'TEXT')
+var number = name => field(name, 'NUMBER')
+var filters = [tableRead.equal(number('is_del'), 0)]
+
+// 本部门视图使用会话部门，与角色范围取交集，请求中的组织标识不参与授权。
 if (body?.departmentOnly == true) {
-    currentOrgId = me()?.orgId
-    if (blank(currentOrgId)) { exit 403, '当前账号未关联部门，无法查看本部门服务' }
-    whereSql += ' AND a.org_id=#{currentOrgId}'
+    var orgId = me()?.orgId
+    if (blank(orgId)) {
+        exit 403, '当前账号未关联部门，无法查看本部门服务'
+    }
+    filters.add(tableRead.equal(text('org_id'), orgId))
 }
-if(scope.scope=='OWNER') {whereSql=whereSql+' AND a.created_by=#{scopeUserId}'}
-else if(scope.scope=='ORG') {whereSql=whereSql+(scopeOrgIds.size()==0?' AND 1=0':' AND a.org_id IN (#{scopeOrgIds})')}
-else if(scope.scope!='ALL') {exit 403,'数据范围无效'}
+if (scope.scope == 'OWNER') {
+    filters.add(tableRead.in(text('created_by'), blank(scope.userId) ? [] : [scope.userId]))
+} else if (scope.scope == 'ORG') {
+    filters.add(tableRead.in(text('org_id'), scope.organizationIds || []))
+} else if (scope.scope != 'ALL') {
+    exit 403, '数据范围无效'
+}
 
-// 按数据源登记的入口必须先核验父数据源；过滤条件不扩大服务自身数据范围。
-var datasourceId=body?.datasourceId==null?'':(body.datasourceId+'').trim()
-if (datasourceId.length()>32) { exit 400,'数据源标识格式不正确' }
-if (body?.containsKey('datasourceId') == true && blank(datasourceId)) { exit 400,'请选择已保存的数据源' }
+// 指定父数据源时校验登记菜单的范围，服务行仍受自身的角色条件限制。
+var datasourceId = body?.datasourceId == null ? '' : (body.datasourceId + '').trim()
+if (datasourceId.length() > 32) {
+    exit 400, '数据源标识格式不正确'
+}
+if (body?.containsKey('datasourceId') == true && blank(datasourceId)) {
+    exit 400, '请选择已保存的数据源'
+}
 if (!blank(datasourceId)) {
-    var source=db.table('db_datasource_t').where().eq('tid',datasourceId).eq('tenant_id',tenantId).eq('is_del',0).selectOne()
-    if (source==null || !dataScope.canReadDataSourceFor('MENU:2081000000000000002',source)) { exit 404,'数据源不存在或不在当前数据范围内' }
-    whereSql+=' AND a.datasource_id=#{datasourceId}'
+    var source = db.table('db_datasource_t').columns('tid', 'tenant_id', 'org_id', 'created_by').where()
+        .eq('tid', datasourceId).eq('tenant_id', tenantId).eq('is_del', 0).selectOne()
+    if (source == null || !dataScope.canReadDataSourceFor('MENU:2081000000000000002', source)) {
+        exit 404, '数据源不存在或不在当前数据范围内'
+    }
+    filters.add(tableRead.equal(text('datasource_id'), datasourceId))
 }
 
-// 关键字同时命中服务名称、服务编码、服务地址，避免前端多个输入框造成理解成本。
+var defaultGroup = 'api_service_group_default'
+var storedGroup = text('group_id')
+var group = tableRead.coalesce([storedGroup, defaultGroup])
+var creationType = tableRead.coalesce([text('service_create_type'), 'api'])
+var method = tableRead.coalesce([text('method'), 'GET'])
+// 历史服务没有 status 时仍按 is_use 判断发布状态，列表和统计共用同一条件。
+var status = tableRead.coalesce([text('status'), tableRead.when(
+    tableRead.equal(tableRead.coalesce([number('is_use'), 1]), 1), 'published', 'offline')])
+
 if (!blank(body?.keyword)) {
-    var keyword = body.keyword
-    whereSql += " and (a.service_name like " + likeValue(keyword) +
-        " or a.service_code like " + likeValue(keyword) +
-        " or a.uri like " + likeValue(keyword) +
-        " or a.publish_address like " + likeValue(keyword) + ") "
+    var pattern = '%' + body.keyword + '%'
+    filters.add(tableRead.any([
+        tableRead.like(text('service_name'), pattern),
+        tableRead.like(text('service_code'), pattern),
+        tableRead.like(text('uri'), pattern),
+        tableRead.like(text('publish_address'), pattern)
+    ]))
 }
-
-// 左侧分组树点击后只过滤对应服务分组；未分组服务归入默认分组。
 if (!blank(body?.groupId)) {
-    whereSql += " and coalesce(a.group_id, 'api_service_group_default') = " + sqlValue(body.groupId) + " "
+    var requestedGroup = body.groupId + ''
+    var groupMatch = tableRead.equal(group, requestedGroup)
+    if (requestedGroup == defaultGroup) {
+        // 默认分组也包含历史空字符串。追加分隔符可区分空字符串与仅有空格的旧标识。
+        var emptyGroup = tableRead.equal(tableRead.concat(storedGroup, '|'), '|')
+        groupMatch = tableRead.any([groupMatch, emptyGroup])
+    }
+    filters.add(groupMatch)
 }
 if (!blank(body?.method)) {
-    whereSql += " and upper(coalesce(a.method, 'GET')) = " + sqlValue((body.method + '').toUpperCase()) + " "
+    filters.add(tableRead.equal(tableRead.lower(method), (body.method + '').toLowerCase(Locale.ROOT)))
 }
 if (!blank(body?.status)) {
-    whereSql += " and " + statusExpr + " = " + sqlValue(body.status) + " "
+    filters.add(tableRead.equal(status, body.status + ''))
 }
-// 登记工作区只列出直接登记的服务，避免将编排生成的服务作为登记表单编辑。
-var serviceCreateType = body?.serviceCreateType
-if (!blank(serviceCreateType)) {
-    if (serviceCreateType != 'api' && serviceCreateType != 'apiBuild') {
+if (!blank(body?.serviceCreateType)) {
+    if (body.serviceCreateType != 'api' && body.serviceCreateType != 'apiBuild') {
         exit 400, '服务创建类型无效'
     }
-    whereSql += " AND coalesce(a.service_create_type, 'api')=#{serviceCreateType} "
+    filters.add(tableRead.equal(creationType, body.serviceCreateType))
+}
+var eligible = tableRead.all(filters)
+services.where(eligible)
+
+var sortKey = tableSort.field(body, {
+    serviceName: 'serviceName',
+    name: 'serviceName',
+    createdTime: 'createdTime',
+    updatedTime: 'updatedTime',
+    requestCount: 'requestCount',
+    successPercent: 'successPercent',
+    paramCount: 'paramCount'
+}, 'updatedTime')
+var direction = tableSort.direction(body)
+
+var stats = services.grouped({
+    total: tableRead.count(),
+    draft: tableRead.countIf(tableRead.equal(status, 'draft')),
+    published: tableRead.countIf(tableRead.equal(status, 'published')),
+    offline: tableRead.countIf(tableRead.equal(status, 'offline'))
+}, [])[0]
+// 保留旧接口空集合的统计桶及请求页码，越界时无需再读取分页结果。
+if (stats.total == 0) {
+    stats = {total: 0, draft: null, published: null, offline: null}
+}
+if ((pageNum - 1L) * pageSize >= stats.total) {
+    return {list: [], total: stats.total, pageNum: pageNum, pageSize: pageSize, stats: stats}
 }
 
-var offset = (pageNum - 1) * pageSize
-
-var sortColumn=tableSort.field(body,{serviceName:'a.service_name',name:'a.service_name',createdTime:'a.created_time',updatedTime:'a.updated_time',requestCount:'coalesce(a.call_count,0)',successPercent:'coalesce(a.success_percent,0)',paramCount:'(select count(*) from api_param_t param where param.api_id=a.tid and param.tenant_id=#{tenantId} and param.is_del=0)'},'updatedTime')
-var sortDirection=tableSort.direction(body)
-var listSql = """
-select
-  a.tid as id,
-  a.tid as tid,
-  a.service_name as serviceName,
-  a.service_name as name,
-  a.service_code as serviceCode,
-  a.service_code as code,
-  a.resource_id as resourceId,
-  a.datasource_id as datasourceId,
-  coalesce(a.group_id, 'api_service_group_default') as groupId,
-  a.service_type as serviceType,
-  coalesce(a.service_create_type, 'api') as serviceCreateType,
-  """ + statusExpr + """ as status,
-  coalesce(a.protocol, 'HTTP') as protocol,
-  coalesce(a.uri, '') as uri,
-  coalesce(a.address, a.uri, '') as upstreamAddress,
-  upper(coalesce(a.method, 'GET')) as method,
-  coalesce(a.publish_address, a.uri, '') as publishAddress,
-  coalesce(a.publish_address_full, a.publish_address, a.uri, '') as publishAddressFull,
-  a.service_desc as serviceDesc,
-  a.version as version,
-  a.labels as labels,
-  a.catalog_id as catalogId,
-  a.org_id as orgId,
-  a.provider_config as providerConfig,
-  a.publish_config as publishConfig,
-  a.flow_id as flowId,
-  coalesce(a.call_count, 0) as requestCount,
-  coalesce(a.success_percent, 0) as successPercent,
-  (select count(1)
-     from api_param_t p
-    where p.api_id = a.tid
-      and p.is_del = 0 AND p.tenant_id=#{tenantId}) as paramCount,
-  0 as apiFileCount,
-  a.created_time as createdTime,
-  a.updated_time as updatedTime
-from api_info_t a
-""" + whereSql + """
-"""+' ORDER BY CASE WHEN '+sortColumn+' IS NULL THEN 1 ELSE 0 END ASC,'+sortColumn+' '+sortDirection+',a.tid ASC LIMIT #{pageSize} OFFSET #{offset}'
-
-var list = db.select(listSql)
-list = magicResourceLink.attachApiFileCounts(list)
-
-// 分组字典与服务主表可能来自不同时期建表，字符集排序规则不一定一致；
-// 这里用内存映射规避跨表 collation 问题，也方便后续切换达梦。
-var groupRows = db.select("""
-select tid as id, dict_name as name
-  from sym_dict_t
- where is_del = 0
-   and biz_type = 'apiServiceGroup' AND tenant_id=#{tenantId}
-""")
-var groupMap = {}
-for (group in groupRows) {
-    groupMap[(group.id || group.ID || group.tid || '') + ''] = group.name || group.dictName || group.dict_name
+var serviceId = text('tid')
+var fields = {
+    id: serviceId,
+    serviceName: text('service_name'),
+    serviceCode: text('service_code'),
+    resourceId: text('resource_id'),
+    datasourceId: text('datasource_id'),
+    groupId: group,
+    serviceType: text('service_type'),
+    serviceCreateType: creationType,
+    status: status,
+    protocol: text('protocol'),
+    uri: text('uri'),
+    upstreamAddress: tableRead.coalesce([text('address'), text('uri')]),
+    method: method,
+    publishAddress: tableRead.coalesce([text('publish_address'), text('uri')]),
+    publishAddressFull: tableRead.coalesce([text('publish_address_full'), text('publish_address'), text('uri')]),
+    serviceDesc: field('service_desc', 'LOB'),
+    version: text('version'),
+    labels: text('labels'),
+    catalogId: text('catalog_id'),
+    orgId: text('org_id'),
+    providerConfig: field('provider_config', 'LOB'),
+    publishConfig: field('publish_config', 'LOB'),
+    flowId: text('flow_id'),
+    requestCount: tableRead.coalesce([number('call_count'), 0]),
+    successPercent: tableRead.coalesce([number('success_percent'), 0]),
+    createdTime: field('created_time', 'TIME'),
+    updatedTime: field('updated_time', 'TIME')
 }
-var viewList = []
-for (row in list) {
-    var gid = row.groupId || row.groupid || row.group_id || 'api_service_group_default'
-    row.groupId = gid
-    row.groupName = groupMap[gid + ''] || '默认分组'
-    row.name = row.serviceName || row.servicename || row.service_name || row.name
-    row.serviceName = row.name
-    row.code = row.serviceCode || row.servicecode || row.service_code || row.code
-    row.serviceCode = row.code
-    // 输出给前端的 DTO 只保留一套字段，避免 DB 返回的小写别名和 camelCase 字段并存。
-    viewList.add({
-        id: row.id || row.tid,
-        tid: row.tid || row.id,
+
+// 通过已授权服务关联有效参数，并以服务主键聚合，保留数据库原有标识比较规则。
+var params = tableRead.from('api_param_t', 'param', tenantId)
+params.leftJoin('api_info_t', 'service', 'tid', 'api_id', [])
+params.where(tableRead.equal(tableRead.column('param', 'is_del', 'NUMBER'), 0))
+params.where(eligible)
+var counts = {service_id: serviceId, total: tableRead.count()}
+
+// 仅按参数数排序时需要先聚合整个可见结果；其他排序只补齐本页服务的计数。
+if (sortKey == 'paramCount') {
+    services.leftJoinGroupedProjection(params, 'param_count', 'service_id', 'tid', counts, [serviceId])
+    fields.paramCount = tableRead.coalesce([tableRead.column('param_count', 'total', 'NUMBER'), 0])
+}
+var page = services.page(fields, fields[sortKey], direction, 'tid', pageNum, pageSize)
+var rows = page.rows
+if (rows.isEmpty()) {
+    return {list: [], total: stats.total, pageNum: pageNum, pageSize: pageSize, stats: stats}
+}
+
+var paramsByService = {}
+if (sortKey != 'paramCount') {
+    params.where(tableRead.in(serviceId, rows.map(row => row.id)))
+    for (entry in params.grouped(counts, [serviceId])) {
+        paramsByService[entry.service_id] = entry.total
+    }
+}
+
+// 只为当前页批量读取分组名称和控制库脚本数，保留分组名称匹配规则。
+var groupIds = rows.map(row => row.groupId || defaultGroup).distinct()
+var groups = tableRead.from('sym_dict_t', 'dict_row', tenantId)
+var groupId = tableRead.column('dict_row', 'tid', 'TEXT')
+groups.where(tableRead.equal(tableRead.column('dict_row', 'is_del', 'NUMBER'), 0))
+groups.where(tableRead.equal(tableRead.column('dict_row', 'biz_type', 'TEXT'), 'apiServiceGroup'))
+groups.where(tableRead.in(groupId, groupIds))
+var groupNames = {}
+for (entry in groups.grouped({
+    id: groupId,
+    name: tableRead.column('dict_row', 'dict_name', 'TEXT')
+}, [])) {
+    groupNames[entry.id] = entry.name
+}
+rows = magicResourceLink.attachApiFileCounts(rows)
+
+var list = []
+for (row in rows) {
+    var gid = row.groupId || defaultGroup
+    list.add({
+        id: row.id,
+        tid: row.id,
         serviceName: row.serviceName || '',
         name: row.serviceName || '',
         serviceCode: row.serviceCode || '',
         code: row.serviceCode || '',
-        datasourceId: row.datasourceId || row.datasourceid || row.datasource_id || '',
-        resourceId: row.resourceId || row.resourceid || row.resource_id,
-        groupId: row.groupId || gid,
-        groupName: row.groupName || '默认分组',
-        serviceType: row.serviceType || row.servicetype || row.service_type,
-        serviceCreateType: row.serviceCreateType || row.servicecreatetype || row.service_create_type || 'api',
+        datasourceId: row.datasourceId || '',
+        resourceId: row.resourceId || null,
+        groupId: gid,
+        groupName: groupNames[gid] || '默认分组',
+        serviceType: row.serviceType || null,
+        serviceCreateType: row.serviceCreateType || 'api',
         status: row.status || 'published',
         protocol: row.protocol || 'HTTP',
         uri: row.uri || '',
-        upstreamAddress: row.upstreamAddress || row.upstreamaddress || row.uri || '',
-        method: row.method || 'GET',
-        publishAddress: row.publishAddress || row.publishaddress || row.publish_address || '',
-        publishAddressFull: row.publishAddressFull || row.publishaddressfull || row.publish_address_full || '',
-        serviceDesc: row.serviceDesc || row.servicedesc || row.service_desc,
+        upstreamAddress: row.upstreamAddress || row.uri || '',
+        method: (row.method || 'GET').toUpperCase(Locale.ROOT),
+        publishAddress: row.publishAddress || '',
+        publishAddressFull: row.publishAddressFull || '',
+        serviceDesc: row.serviceDesc || null,
         version: row.version,
         labels: row.labels,
-        catalogId: row.catalogId || row.catalogid || row.catalog_id,
-        orgId: row.orgId || row.orgid || row.org_id,
-        providerConfig: row.providerConfig || row.providerconfig || row.provider_config,
-        publishConfig: row.publishConfig || row.publishconfig || row.publish_config,
+        catalogId: row.catalogId || null,
+        orgId: row.orgId || null,
+        providerConfig: row.providerConfig || null,
+        publishConfig: row.publishConfig || null,
         extendInfo: {},
-        flowId: row.flowId || row.flowid || row.flow_id,
-        requestCount: row.requestCount || row.requestcount || row.request_count || 0,
-        successPercent: row.successPercent || row.successpercent || row.success_percent || 0,
-        paramCount: row.paramCount || row.paramcount || row.param_count || 0,
-        apiFileCount: row.apiFileCount || row.apifilecount || row.api_file_count || 0,
-        createdTime: row.createdTime || row.createdtime || row.created_time,
-        updatedTime: row.updatedTime || row.updatedtime || row.updated_time
+        flowId: row.flowId || null,
+        requestCount: row.requestCount || 0,
+        successPercent: row.successPercent || 0,
+        paramCount: row.paramCount || paramsByService[row.id] || 0,
+        apiFileCount: row.apiFileCount || 0,
+        createdTime: row.createdTime,
+        updatedTime: row.updatedTime
     })
 }
 
-// 统计当前过滤条件下不同服务状态的数量，供顶部卡片筛选使用。
-var statsRows = db.select("""
-select
-  count(1) as total,
-  sum(case when """ + statusExpr + """ = 'draft' then 1 else 0 end) as draft,
-  sum(case when """ + statusExpr + """ = 'published' then 1 else 0 end) as published,
-  sum(case when """ + statusExpr + """ = 'offline' then 1 else 0 end) as offline
-from api_info_t a
-""" + whereSql)
-var stats = statsRows == null || statsRows.size() == 0
-    ? {total: 0, draft: 0, published: 0, offline: 0}
-    : statsRows[0]
-var total = stats.total == null ? 0 : stats.total
-
-return {
-    list: viewList,
-    total: total,
-    pageNum: pageNum,
-    pageSize: pageSize,
-    stats: stats
-}
+return {list: list, total: stats.total, pageNum: pageNum, pageSize: pageSize, stats: stats}

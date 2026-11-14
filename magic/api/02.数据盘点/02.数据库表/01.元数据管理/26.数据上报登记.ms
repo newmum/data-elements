@@ -10,11 +10,13 @@
   "options": [],
   "headers": [],
   "paths": [],
-  "description": "数据上报登记：批量识别 CSV、TXT、JSON、Excel 的工作表及连续数据区域，保存文件与登记表关联；按可信租户和逐 ID 归属校验，文件及上报表分页使用数据源菜单 ALL/ORG/OWNER 范围。"
+  "description": "按 action 识别文件区域、查询登记清单、分页记录或回执，以及保存文件与登记表的规范。按认证租户及逐 ID 归属校验，专用列表分页和保存应用数据源菜单的 ALL/ORG/OWNER 范围。保存需传入清单版本并在事务内更新登记快照和清单，归属不符或版本已变化时拒绝。"
 }
 ================================
 import tenantRuntime
 import dataScope
+import tableRead
+import tableWrite
 import metadataAsset
 import jsons
 import systemConfig
@@ -51,23 +53,41 @@ import com.fasterxml.jackson.core.JsonToken
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.DeserializationFeature
 
-var tenantId = tenantRuntime.id()
+// POST /dst/database/metadata/report-registration 按 action 解析文件、查询登记或保存数据规范。
+// 查询接收 dbId、分页及筛选参数，返回登记清单、分页记录或回执。解析按文件归属返回识别结果。
+// 保存接收清单版本、文件和表定义，按当前租户与数据源菜单范围更新登记快照，并在事务内保留上报回执。
 StpUtil.checkLogin()
+var tenantId = tenantRuntime.id()
+if (tenantId == null || (tenantId + '').trim() == '') {
+    exit 401, '请重新登录后办理数据上报登记'
+}
 var actorId = StpUtil.getLoginIdAsString()
 var text = value => value == null ? '' : (value + '').trim()
 var first = (row, a, b) => row[a] == null ? row[b] : row[a]
 var object = value => value instanceof Map ? value : text(value) == '' ? {} : JSONUtil.parseObj(value + '')
 var action = text(body.action)
 var dbId = text(body.dbId)
+var sourcePermission = 'MENU:2081000000000000002'
 var source = null
 var pool = {}
 var saved = { revision: '', files: [], tables: [] }
 if (dbId != '') {
-    source = db.table('db_datasource_t').where().eq('tid', dbId).eq('tenant_id', tenantId).eq('is_del', 0).selectOne()
-    if (source == null) { exit 404, '数据源不存在或不属于当前租户' }
+    // 租户来自认证上下文，请求只能定位本租户的有效数据源。
+    source = db.table('db_datasource_t').where()
+        .eq('tid', dbId)
+        .eq('tenant_id', tenantId)
+        .eq('is_del', 0).selectOne()
+    if (source == null) {
+        exit 404, '数据源不存在或不属于当前租户'
+    }
     pool = object(first(source, 'poolCfg', 'pool_cfg'))
-    if (!['upload', 'report'].contains(text(pool.accessMode == null ? pool.dataAccessMode : pool.accessMode))) { exit 400, '仅数据上报方式支持上传登记' }
-    if (pool.reportRegistration != null) { saved = pool.reportRegistration }
+    var accessMode = text(pool.accessMode == null ? pool.dataAccessMode : pool.accessMode)
+    if (!['upload', 'report'].contains(accessMode)) {
+        exit 400, '仅数据上报方式支持上传登记'
+    }
+    if (pool.reportRegistration != null) {
+        saved = pool.reportRegistration
+    }
 }
 var publicManifest = value => {
     var latest = {}
@@ -117,7 +137,9 @@ var asTime = value => {
 }
 if (['list','table-page','file-page','report-page'].contains(action)) {
     if (source == null) { exit 400, '请选择数据源' }
-    if (action != 'list' && dataScope.visibleDataSourcesFor('MENU:2081000000000000002', [source]).size() != 1) { exit 403, '当前角色无权查看此数据源登记清单' }
+    if (action != 'list' && dataScope.visibleDataSourcesFor(sourcePermission, [source]).size() != 1) {
+        exit 403, '当前角色无权查看此数据源登记清单'
+    }
     var view = publicManifest(saved)
     if (saved.tables == null || (saved.tables.size() == 0 && text(saved.revision) == '')) {
         var legacy = db.table('db_table_t').where().eq('tenant_id', tenantId).eq('datasource_id', dbId).eq('is_del', 0).select()
@@ -146,7 +168,7 @@ if (['list','table-page','file-page','report-page'].contains(action)) {
     var sortDir = text(body.sortDir) == '' ? 'desc' : text(body.sortDir)
     if (!['fileName','tableName','tableNameCn','fieldCount','recordCount','updatedAt'].contains(sortField) || !['asc','desc'].contains(sortDir)) { exit 400, '不支持的排序参数' }
     if (action == 'file-page' && !['fileName','fieldCount','recordCount','updatedAt'].contains(sortField)) { exit 400, '不支持的文件排序参数' }
-    // One batch per relation, never one read per row. Validate every persisted ID before paging.
+    // 各关联一次批量读取，先逐 ID 核验表和文件归属，再按当前清单分页。
     var ids = view.tables.map(row => text(row.tid)).filter(id => id != '').distinct()
     var snapshots = ids.size() == 0 ? [] : db.table('db_table_t').where().eq('tenant_id', tenantId).eq('datasource_id', dbId).eq('is_del', 0).in('tid', ids).select()
     if (snapshots.size() != ids.size()) { exit 403, '登记清单包含不属于当前数据源的数据表' }
@@ -179,7 +201,7 @@ if (['list','table-page','file-page','report-page'].contains(action)) {
         return compared == 0 ? text(a.key).compareTo(text(b.key)) : sortDir == 'desc' ? -compared : compared
     })
     if (action == 'file-page') {
-        // Page whole files, with every child key in the same response. No per-file reads.
+        // 按完整文件分组分页，一次响应带回组内所有子项标识。
         var groups = []; var byFile = {}
         for (file in view.files) {
             var id = text(file.fileId)
@@ -241,7 +263,7 @@ if (['list','table-page','file-page','report-page'].contains(action)) {
     return { revision: text(view.revision), total: rows.size(), list: rows.subList(start, Math.min(rows.size(), start + size)).map(row => { key: row.key, updatedAt: row.updatedAt }) }
 }
 
-// No row values leave the parser: the original file remains in authenticated file storage.
+// 识别只返回表头和区域元数据，原始记录保留在须认证的文件存储中。
 var positions = (start, end) => { var result = []; var cursor = start; while (cursor < end) { result.add(cursor); cursor++ }; return result }
 var readUploadBytes = stream => {
     try {
@@ -296,7 +318,7 @@ var csvRows = bytes => {
     })
     return rows
 }
-// Match Object.entries ordering in the browser, including numeric JSON field names.
+// 按浏览器 Object.entries 的顺序识别 JSON 字段，保留数字键的排序语义。
 var jsonKeys = record => {
     var indices = new TreeMap(); var remaining = []
     for (key in record.keySet()) {
@@ -482,9 +504,16 @@ if (action == 'parse') {
     }
     return { files: output }
 }
-if (action != 'save' || source == null) { exit 400, '操作无效或尚未保存数据源' }
-if (dataScope.visibleDataSourcesFor('MENU:2081000000000000002', [source]).size() != 1) { exit 403, '当前角色无权保存此数据源登记信息' }
-if (text(body.revision) != text(saved.revision)) { exit 409, '上传清单已被更新，请重新打开数据源后再保存' }
+if (action != 'save' || source == null) {
+    exit 400, '操作无效或尚未保存数据源'
+}
+// 在读取文件与表的登记关系前先应用菜单数据范围和清单版本。
+if (dataScope.visibleDataSourcesFor(sourcePermission, [source]).size() != 1) {
+    exit 403, '当前角色无权保存此数据源登记信息'
+}
+if (text(body.revision) != text(saved.revision)) {
+    exit 409, '上传清单已被更新，请重新打开数据源后再保存'
+}
 var files = body.files
 var tables = body.tables
 var removedIds = body.removedTableIds == null ? [] : body.removedTableIds
@@ -501,7 +530,7 @@ for (file in ownedFiles) { if (text(first(file, 'createdBy', 'created_by')) != a
 var existing = db.table('db_table_t').where().eq('tenant_id', tenantId).eq('datasource_id', dbId).eq('is_del', 0).select()
 var existingMap = {}; for (table in existing) { existingMap[text(table.tid)] = table }
 var savedByKey = {}; var savedById = {}; for (old in saved.tables == null ? [] : saved.tables) { savedByKey[text(old.key)] = old; if (text(old.tid) != '') { savedById[text(old.tid)] = old } }
-// Only server-confirmed, unchanged schema keeps its approval; client flags never grant approval.
+// 只有服务端确认过且内容未变的规范可以保留通过状态。
 var fieldTimeRoles = field => field.timeRoles == null ? (field.isTimestamp == true ? ['timestamp'] : []) : field.timeRoles
 var schemaSignature = table => {
     var fields = []
@@ -520,7 +549,7 @@ for (candidate in tables) {
         submittedById[candidateId] = candidate
     }
 }
-// Editable registration and immutable receipt metadata are separate versions.
+// 登记可继续编辑，成功回执保留当次投递的规范快照。
 for (receipt in saved.receipts == null ? [] : saved.receipts) {
     var previous = savedById[text(receipt.tableId)]
     var submitted = submittedById[text(receipt.tableId)]
@@ -583,7 +612,7 @@ for (table in tables) {
     var retained = previous != null && previous.normalized == true && previous.normalizationVersion == 1 && table.normalized != false && schemaSignature(previous) == schemaSignature(table)
     table.normalized = approving || retained
     table.normalizationVersion = table.normalized ? 1 : 0
-    // Audit times are assigned by the server; client supplied times are never trusted.
+    // 审计时间由服务端赋值，沿用已有记录的创建时间。
     var now = Instant.now().toString()
     table.createdAt = previous == null ? now : text(previous.createdAt)
     table.updatedAt = previous == null || approving || schemaSignature(previous) != schemaSignature(table) ? now : text(previous.updatedAt)
@@ -591,37 +620,104 @@ for (table in tables) {
     if ((modernWorkflow ? approving : (id == '' || body.configureFields == true)) && table.legacy != true) { snapshot.add({ tableName: name, tableComment: comment.matches('.*[\u4e00-\u9fff].*') ? comment : '数据表 ' + comment, tableType: '数据表', businessType: modernWorkflow ? table.businessType : '业务表', businessTypeReason: '数据文件上传登记', annotated: true, recordCount: table.recordCount }) }
     fieldMap[name] = table.fields
 }
-for (id in removedIds) { if (existingMap[text(id)] == null) { exit 403, '待删除表不存在或不属于当前数据源' } }
-var changedIds = tables.filter(table => (!modernWorkflow || normalizedKeys.contains(text(table.key))) && text(table.tid) != '' && text(table.tableName) != text(first(existingMap[text(table.tid)], 'tableName', 'table_name'))).map(table => table.tid)
+for (id in removedIds) {
+    if (existingMap[text(id)] == null) {
+        exit 403, '待删除表不存在或不属于当前数据源'
+    }
+}
+var updatesTable = table => !modernWorkflow || normalizedKeys.contains(text(table.key))
+var changedIds = tables.filter(table => {
+    var id = text(table.tid)
+    return updatesTable(table) && id != ''
+        && text(table.tableName) != text(first(existingMap[id], 'tableName', 'table_name'))
+}).map(table => table.tid)
 changedIds.addAll(removedIds)
 if (changedIds.size() > 0) {
-    var used = db.selectInt('select count(*) from data_access_agg_task_t where tenant_id=#{tenantId} and is_del=0 and (source_table_id in (#{changedIds}) or target_table_id in (#{changedIds}))')
-    if (used > 0) { exit 409, '已关联接入任务的数据表不能在上传清单中重命名或删除' }
+    // 已逐项确认表归属，其来源或目标关联一次批量查询即可保护现有任务。
+    var task = tableRead.from('data_access_agg_task_t', 'task', tenantId)
+    task.where(tableRead.equal(tableRead.column('task', 'is_del', 'NUMBER'), 0))
+    task.where(tableRead.any([
+        tableRead.in(tableRead.column('task', 'source_table_id', 'TEXT'), changedIds),
+        tableRead.in(tableRead.column('task', 'target_table_id', 'TEXT'), changedIds)
+    ]))
+    var counts = task.grouped({ used: tableRead.count() }, [])
+    if (counts[0].used > 0) {
+        exit 409, '已关联接入任务的数据表不能在上传清单中重命名或删除'
+    }
 }
 var originalBody = body
 var result = db.transaction(() => {
-    var locked = db.selectOne('select pool_cfg from db_datasource_t where tid=#{dbId} and tenant_id=#{tenantId} and is_del=0 for update')
-    if (text(first(locked, 'poolCfg', 'pool_cfg')) != text(first(source, 'poolCfg', 'pool_cfg'))) { throw new IllegalStateException('数据源已被更新，请重新加载后保存') }
+    // 上报可在清单 revision 不变时新增回执。锁内比对完整配置，防止覆盖并发回执或越过原归属范围。
+    var locked = tableWrite.lockRow('db_datasource_t', tenantId, 'tid', dbId,
+        ['pool_cfg', 'org_id', 'created_by'], { is_del: 0 })
+    if (locked == null
+        || text(locked.pool_cfg) != text(first(source, 'poolCfg', 'pool_cfg'))
+        || text(locked.org_id) != text(first(source, 'orgId', 'org_id'))
+        || text(locked.created_by) != text(first(source, 'createdBy', 'created_by'))) {
+        throw new IllegalStateException('数据源已被更新，请重新加载后保存')
+    }
     for (table in tables) {
-        if (text(table.tid) != '' && (!modernWorkflow || normalizedKeys.contains(text(table.key)))) { db.table('db_table_t').where().eq('tid', table.tid).eq('tenant_id', tenantId).eq('datasource_id', dbId).update({ table_name: table.tableName, table_name_cn: table.tableNameCn, table_comment: table.tableNameCn, record_count: table.recordCount }) }
+        if (text(table.tid) != '' && updatesTable(table)) {
+            db.table('db_table_t').where()
+                .eq('tid', table.tid)
+                .eq('tenant_id', tenantId)
+                .eq('datasource_id', dbId)
+                .update({
+                    table_name: table.tableName,
+                    table_name_cn: table.tableNameCn,
+                    table_comment: table.tableNameCn,
+                    record_count: table.recordCount
+                })
+        }
     }
-    body = { dbId: dbId, dataSourceType: 'mysql', tables: snapshot, fieldMap: fieldMap, batchIndex: true }
-    var imported = snapshot.size() == 0 ? { rows: [] } : importSnapshot()
-    body = originalBody
+    // 快照变更与登记清单在同一事务内写入，内部调用结束后恢复外层请求体。
+    var imported = { rows: [] }
+    if (snapshot.size() > 0) {
+        try {
+            body = { dbId: dbId, dataSourceType: 'mysql', tables: snapshot, fieldMap: fieldMap, batchIndex: true }
+            imported = importSnapshot()
+        } finally {
+            body = originalBody
+        }
+    }
     if (removedIds.size() > 0) {
-        db.table('db_table_column_t').where().eq('tenant_id', tenantId).in('table_id', removedIds).update({ is_del: 1 })
-        db.table('db_table_t').where().eq('tenant_id', tenantId).eq('datasource_id', dbId).in('tid', removedIds).update({ is_del: 1 })
+        db.table('db_table_column_t').where()
+            .eq('tenant_id', tenantId)
+            .in('table_id', removedIds).update({ is_del: 1 })
+        db.table('db_table_t').where()
+            .eq('tenant_id', tenantId)
+            .eq('datasource_id', dbId)
+            .in('tid', removedIds).update({ is_del: 1 })
     }
-    var importedByName = {}; for (table in imported.rows) { importedByName[text(table.tableName)] = table }
+    var importedByName = {}
+    for (table in imported.rows) {
+        importedByName[text(table.tableName)] = table
+    }
     var recorded = []
-    for (table in tables) { var row = table; if (importedByName[text(table.tableName)] != null) { row.tid = importedByName[text(table.tableName)].tid }; recorded.add(row) }
+    for (table in tables) {
+        if (importedByName[text(table.tableName)] != null) {
+            table.tid = importedByName[text(table.tableName)].tid
+        }
+        recorded.add(table)
+    }
     var failedTables = []
     for (row in originalBody.failedTables == null ? [] : originalBody.failedTables) {
-        failedTables.add({ key: text(row.key), fileId: text(row.fileId), fileName: text(row.fileName), sheetName: text(row.sheetName), tableName: '', tableNameCn: text(row.tableNameCn), fieldCount: 0, fields: [], recordCount: 0, status: 'failed', error: text(row.error).substring(0, Math.min(500, text(row.error).length())) })
+        var error = text(row.error)
+        failedTables.add({
+            key: text(row.key), fileId: text(row.fileId), fileName: text(row.fileName), sheetName: text(row.sheetName),
+            tableName: '', tableNameCn: text(row.tableNameCn), fieldCount: 0, fields: [], recordCount: 0,
+            status: 'failed', error: error.substring(0, Math.min(500, error.length()))
+        })
     }
-    var manifest = { revision: IdUtil.fastSimpleUUID(), files: files, tables: recorded, failedTables: failedTables, receipts: saved.receipts == null ? [] : saved.receipts }
+    var manifest = {
+        revision: IdUtil.fastSimpleUUID(), files: files, tables: recorded, failedTables: failedTables,
+        receipts: saved.receipts == null ? [] : saved.receipts
+    }
     pool.reportRegistration = manifest
-    db.table('db_datasource_t').where().eq('tid', dbId).eq('tenant_id', tenantId).eq('is_del', 0).update({ pool_cfg: jsons.toJSONStr(pool) })
+    db.table('db_datasource_t').where()
+        .eq('tid', dbId)
+        .eq('tenant_id', tenantId)
+        .eq('is_del', 0).update({ pool_cfg: jsons.toJSONStr(pool) })
     metadataAsset.refreshRegistrationStatus(dbId, false)
     return manifest
 })

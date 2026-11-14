@@ -17,34 +17,25 @@
   "headers": [],
   "paths": [],
   "responseBody": "{\n  \"id\": \"2436540554061808637\",\n  \"name\": \"数据组织\",\n  \"publishParams\": []\n}",
-  "description": "服务详情（POST /dws/flowserve/gateway/api/detail）。只读 api_info_t 服务主表、api_param_t 参数表、api_file_t 脚本关联和 sym_dict_t 分组字典；用于服务编排管理详情页按 api_id 回填登记/构建表单。",
+  "description": "按 apiId 读取服务登记详情、分组、参数、扩展配置及关联脚本数量。仅查询当前租户并按角色限定服务范围。传入 datasourceId 时同时校验登记菜单的来源数据源权限及服务归属。标识缺失返回 400，服务或来源不可见返回 404。只读。",
   "requestBodyDefinition": null,
   "responseBodyDefinition": null
 }
 ================================
-// 接口：02.服务详情
-// 路由：POST /dws/flowserve/gateway/api/detail
-// 业务说明：服务详情（POST /dws/flowserve/gateway/api/detail）。只读 api_info_t 服务主表、api_param_t 参数表、api_file_t 脚本关联和 sym_dict_t 分组字典；用于服务编排管理详情页按 api_id 回填登记/构建表单。
-/*
- * 服务详情接口。
- * 以 api_info_t 为主表读取服务登记信息，api_param_t 回填请求参数，
- * api_file_t 仅统计关联脚本数量，接口不写入业务数据。
- */
-import tenantRuntime
-import dataScope
-import magicResourceLink
-var tenantId=tenantRuntime.id()
-var scope=dataScope.dataSource()
-var scopeOrgIds=scope.organizationIds
-var scopeUserId=scope.userId
-var scopeSql=' AND tenant_id=#{tenantId}'
-if(scope.scope=='OWNER') {scopeSql+=' AND created_by=#{scopeUserId}'}
-else if(scope.scope=='ORG') {scopeSql+=scopeOrgIds.size()==0?' AND 1=0':' AND org_id IN (#{scopeOrgIds})'}
-else if(scope.scope!='ALL') {exit 403,'数据范围无效'}
 import cn.hutool.json.JSONUtil
+import dataScope
+import java.util.Locale
+import magicResourceLink
+import tableRead
+import tenantRuntime
+
+/**
+ * POST /dws/flowserve/gateway/api/detail 按 apiId 读取服务登记详情，回填分组、配置和全部参数。
+ * 当前登录租户内按 ALL、ORG、OWNER 范围查询。代理登记传入 datasourceId 时，还需通过来源菜单授权。
+ * 只读接口，控制库仅提供已授权服务的关联脚本数量。
+ */
 
 var blank = value => value == null || (value + '').trim() == ''
-var sqlValue = value => "'" + ((value + '').replace("'", "''")) + "'"
 var asObj = value => {
     if (blank(value)) {
         return {}
@@ -56,178 +47,206 @@ var asObj = value => {
     }
 }
 
+var tenantId = tenantRuntime.id()
+var scope = dataScope.dataSource()
+if (!['ALL', 'ORG', 'OWNER'].contains(scope?.scope)) {
+    exit 403, '数据范围无效'
+}
+
 var apiId = body?.apiId || body?.api_id || body?.id || body?.tid || parameter?.apiId || parameter?.id
 if (blank(apiId)) {
     exit 400, 'apiId不能为空'
 }
+apiId = apiId + ''
 
-var datasourceId=body?.datasourceId==null?'':(body.datasourceId+'').trim()
-if (datasourceId.length()>32) { exit 400,'数据源标识格式不正确' }
+var datasourceId = body?.datasourceId == null ? '' : (body.datasourceId + '').trim()
+if (datasourceId.length() > 32) {
+    exit 400, '数据源标识格式不正确'
+}
 if (!blank(datasourceId)) {
-    var source=db.table('db_datasource_t').where().eq('tid',datasourceId).eq('tenant_id',tenantId).eq('is_del',0).selectOne()
-    if (source==null || !dataScope.canReadDataSourceFor('MENU:2081000000000000002',source)) { exit 404,'数据源不存在或不在当前数据范围内' }
-    scopeSql+=' AND datasource_id=#{datasourceId}'
+    // 来源菜单的权限和服务行的角色范围分别校验，两项都通过才能读取代理登记详情。
+    var source = db.table('db_datasource_t').columns('tid', 'tenant_id', 'org_id', 'created_by').where()
+        .eq('tid', datasourceId).eq('tenant_id', tenantId).eq('is_del', 0).selectOne()
+    if (source == null || !dataScope.canReadDataSourceFor('MENU:2081000000000000002', source)) {
+        exit 404, '数据源不存在或不在当前数据范围内'
+    }
 }
 
-// 基础信息来自服务主表，兼容早期迁移数据中 method/status 为空的情况。
-var rows = db.select("""
-select
-  tid as id,
-  tid,
-  service_name as serviceName,
-  service_code as serviceCode,
-  resource_id as resourceId,
-  datasource_id as datasourceId,
-  coalesce(group_id, 'api_service_group_default') as groupId,
-  service_type as serviceType,
-  coalesce(service_create_type, 'api') as serviceCreateType,
-  coalesce(status, case when coalesce(is_use, 1) = 1 then 'published' else 'offline' end) as status,
-  coalesce(protocol, 'HTTP') as protocol,
-  coalesce(uri, '') as uri,
-  upper(coalesce(method, 'GET')) as method,
-  coalesce(address, uri, '') as address,
-  coalesce(publish_address, uri, '') as publishAddress,
-  coalesce(publish_address_full, publish_address, uri, '') as publishAddressFull,
-  service_desc as serviceDesc,
-  version,
-  labels,
-  catalog_id as catalogId,
-  org_id as orgId,
-  provider_config as providerConfig,
-  publish_config as publishConfig,
-  flow_id as flowId,
-  return_type as returnType,
-  share_type as shareType,
-  data_domain as dataDomain,
-  data_category as dataCategory,
-  data_level as dataLevel,
-  source_business_name as sourceBusinessName,
-  source_business_item as sourceBusinessItem,
-  request_example as requestExample,
-  response_example as responseExample,
-  coalesce(call_count, 0) as requestCount,
-  coalesce(success_percent, 0) as successPercent,
-  service_sql as serviceSql,
-  created_time as createdTime,
-  updated_time as updatedTime
-from api_info_t
-where coalesce(is_del, 0) = 0
-  and tid = #{apiId}
-""" + scopeSql + """
-limit 1
-""")
-if (rows == null || rows.size() == 0) {
+var textColumn = (alias, column) => tableRead.column(alias, column, 'TEXT')
+var numberColumn = (alias, column) => tableRead.column(alias, column, 'NUMBER')
+var longTextColumn = (alias, column) => tableRead.column(alias, column, 'LOB')
+var timeColumn = (alias, column) => tableRead.column(alias, column, 'TIME')
+var active = alias => tableRead.equal(tableRead.coalesce([numberColumn(alias, 'is_del'), 0]), 0)
+
+// 服务行通过可信租户和角色范围后，再读取参数、扩展配置和关联资源。
+var services = tableRead.from('api_info_t', 'a', tenantId)
+var serviceId = textColumn('a', 'tid')
+services.where(active('a'))
+services.where(tableRead.equal(serviceId, apiId))
+if (scope.scope == 'OWNER') {
+    if (blank(scope.userId)) { exit 404, '服务不存在或已删除' }
+    services.where(tableRead.equal(textColumn('a', 'created_by'), scope.userId))
+} else if (scope.scope == 'ORG') {
+    services.where(tableRead.in(textColumn('a', 'org_id'), scope.organizationIds || []))
+}
+if (!blank(datasourceId)) {
+    services.where(tableRead.equal(textColumn('a', 'datasource_id'), datasourceId))
+}
+var rows = services.rows({
+    tid: serviceId,
+    serviceName: textColumn('a', 'service_name'),
+    serviceCode: textColumn('a', 'service_code'),
+    resourceId: textColumn('a', 'resource_id'),
+    datasourceId: textColumn('a', 'datasource_id'),
+    groupId: textColumn('a', 'group_id'),
+    serviceType: textColumn('a', 'service_type'),
+    serviceCreateType: textColumn('a', 'service_create_type'),
+    status: textColumn('a', 'status'),
+    isUse: numberColumn('a', 'is_use'),
+    protocol: textColumn('a', 'protocol'),
+    uri: textColumn('a', 'uri'),
+    method: textColumn('a', 'method'),
+    address: textColumn('a', 'address'),
+    publishAddress: textColumn('a', 'publish_address'),
+    publishAddressFull: textColumn('a', 'publish_address_full'),
+    serviceDesc: longTextColumn('a', 'service_desc'),
+    version: textColumn('a', 'version'),
+    labels: textColumn('a', 'labels'),
+    catalogId: textColumn('a', 'catalog_id'),
+    orgId: textColumn('a', 'org_id'),
+    providerConfig: longTextColumn('a', 'provider_config'),
+    publishConfig: longTextColumn('a', 'publish_config'),
+    flowId: textColumn('a', 'flow_id'),
+    returnType: textColumn('a', 'return_type'),
+    shareType: textColumn('a', 'share_type'),
+    dataDomain: textColumn('a', 'data_domain'),
+    dataCategory: textColumn('a', 'data_category'),
+    dataLevel: textColumn('a', 'data_level'),
+    sourceBusinessName: textColumn('a', 'source_business_name'),
+    sourceBusinessItem: textColumn('a', 'source_business_item'),
+    requestExample: longTextColumn('a', 'request_example'),
+    responseExample: longTextColumn('a', 'response_example'),
+    requestCount: numberColumn('a', 'call_count'),
+    successPercent: numberColumn('a', 'success_percent'),
+    createdTime: timeColumn('a', 'created_time'),
+    updatedTime: timeColumn('a', 'updated_time')
+}, serviceId, 'asc', 1)
+if (rows.isEmpty()) {
     exit 404, '服务不存在或已删除'
 }
 var row = rows[0]
 
-// 参数表按 sort_no 回填为登记表单使用的 publishParams 结构。
-var paramRows = db.select("""
-select
-  tid,
-  param_name as paramName,
-  param_desc as description,
-  param_type as paramType,
-  param_position as paramPosition,
-  required_flag as required,
-  default_value as defaultValue,
-  showcase_value as showcaseValue,
-  param_scope as paramScope,
-  sort_no as sortNo
-from api_param_t
-where coalesce(is_del, 0) = 0
-  and tenant_id=#{tenantId} and api_id = #{apiId}
-order by coalesce(sort_no, 9999), created_time
-""")
+// 一次读取本服务的完整参数，按历史默认序号稳定排序，同序号保留数据库的创建时间顺序。
+var paramRows = db.camel().table('api_param_t').columns(
+    'tid', 'param_name', 'param_desc', 'param_type', 'param_position',
+    'required_flag', 'default_value', 'showcase_value', 'param_scope', 'sort_no'
+).where().eq('tenant_id', tenantId).eq('api_id', apiId)
+    .and(filter => filter.eq('is_del', 0).or().isNull('is_del'))
+    .orderBy('created_time', 'asc').orderBy('tid', 'asc').select()
+paramRows = paramRows.sort((left, right) => {
+    var leftSort = left.sortNo == null ? 9999 : left.sortNo
+    var rightSort = right.sortNo == null ? 9999 : right.sortNo
+    return leftSort == rightSort ? 0 : leftSort < rightSort ? -1 : 1
+})
 var publishParams = []
 for (p in paramRows) {
     publishParams.add({
         id: p.tid,
-        paramName: p.paramName || p.paramname || '',
-        description: p.description || '',
-        paramType: p.paramType || p.paramtype || '',
-        paramPosition: p.paramPosition || p.paramposition || '',
-        required: p.required || '',
-        defaultValue: p.defaultValue || p.defaultvalue || '',
-        showcaseValue: p.showcaseValue || p.showcasevalue || '',
-        paramScope: p.paramScope || p.paramscope || 'request',
-        sortNo: p.sortNo || p.sortno
+        paramName: p.paramName || '',
+        description: p.paramDesc || '',
+        paramType: p.paramType || '',
+        paramPosition: p.paramPosition || '',
+        required: p.requiredFlag || '',
+        defaultValue: p.defaultValue || '',
+        showcaseValue: p.showcaseValue || '',
+        paramScope: p.paramScope || 'request',
+        sortNo: p.sortNo
     })
 }
 
-var provider = asObj(row.providerConfig || row.providerconfig || row.provider_config)
-var publish = asObj(row.publishConfig || row.publishconfig || row.publish_config)
+var provider = asObj(row.providerConfig)
+var publish = asObj(row.publishConfig)
 var ext = {}
-var extRows = db.table('da_prop_t').where().eq('tenant_id',tenantId).eq('parent_id', apiId).eq('data_type', 'api').eq('is_del', 0).select()
+var extRows = db.camel().table('da_prop_t').columns('prop_name', 'prop_value').where()
+    .eq('tenant_id', tenantId).eq('parent_id', apiId).eq('data_type', 'api').eq('is_del', 0).select()
 for (prop in extRows) {
-    var propName = prop.propName || prop.prop_name
-    if (!blank(propName)) {
-        ext[propName] = prop.propValue == null ? prop.prop_value : prop.propValue
+    if (!blank(prop.propName)) {
+        ext[prop.propName] = prop.propValue
     }
 }
 
-// 老数据可能只写了物理字段，没有写 JSON 配置；这里补齐表单需要的配置键。
-provider.protocol = provider.protocol || row.protocol || 'HTTP'
-provider.address = provider.address || row.address || row.uri || ''
-provider.httpMethod = provider.httpMethod || provider.httpmethod || row.method || 'GET'
-publish.publishAddress = publish.publishAddress || publish.publishaddress || row.publishAddress || row.publishaddress || row.uri || ''
-publish.publishMethod = publish.publishMethod || publish.publishmethod || row.method || 'GET'
-ext.catalogId = ext.catalogId || ext.catalogid || row.catalogId || row.catalogid || ''
-ext.orgId = ext.orgId || ext.orgid || row.orgId || row.orgid || ''
-ext.dataDomain = ext.dataDomain || ext.datadomain || row.dataDomain || row.datadomain || ''
-ext.dataCategory = ext.dataCategory || ext.datacategory || row.dataCategory || row.datacategory || ''
-ext.dataLevel = ext.dataLevel || ext.datalevel || row.dataLevel || row.datalevel || ''
-ext.sourceBusinessName = ext.sourceBusinessName || row.sourceBusinessName || row.sourcebusinessname || ''
-ext.sourceBusinessItem = ext.sourceBusinessItem || row.sourceBusinessItem || row.sourcebusinessitem || ''
-ext.returnType = ext.returnType || row.returnType || row.returntype || ''
-ext.shareType = ext.shareType || row.shareType || row.sharetype || ''
-ext.requestExample = ext.requestExample || row.requestExample || row.requestexample || ''
-ext.responseExample = ext.responseExample || row.responseExample || row.responseexample || ''
+// 主表兼容旧状态和地址，显式空地址仍保留在主响应中。仅在表单配置缺项时补齐显示值。
+var uri = row.uri || ''
+var address = row.address == null ? uri : row.address
+var publishAddress = row.publishAddress == null ? uri : row.publishAddress
+var publishAddressFull = row.publishAddressFull == null ? publishAddress : row.publishAddressFull
+var method = (row.method || 'GET').toUpperCase(Locale.ROOT)
+var protocol = row.protocol || 'HTTP'
+var status = row.status
+if (status == null) {
+    status = row.isUse == null || row.isUse == 1 ? 'published' : 'offline'
+}
+provider.protocol = provider.protocol || protocol
+provider.address = provider.address || address || uri
+provider.httpMethod = provider.httpMethod || provider.httpmethod || method
+publish.publishAddress = publish.publishAddress || publish.publishaddress || publishAddress || uri
+publish.publishMethod = publish.publishMethod || publish.publishmethod || method
+ext.catalogId = ext.catalogId || ext.catalogid || row.catalogId || ''
+ext.orgId = ext.orgId || ext.orgid || row.orgId || ''
+ext.dataDomain = ext.dataDomain || ext.datadomain || row.dataDomain || ''
+ext.dataCategory = ext.dataCategory || ext.datacategory || row.dataCategory || ''
+ext.dataLevel = ext.dataLevel || ext.datalevel || row.dataLevel || ''
+ext.sourceBusinessName = ext.sourceBusinessName || row.sourceBusinessName || ''
+ext.sourceBusinessItem = ext.sourceBusinessItem || row.sourceBusinessItem || ''
+ext.returnType = ext.returnType || row.returnType || ''
+ext.shareType = ext.shareType || row.shareType || ''
+ext.requestExample = ext.requestExample || row.requestExample || ''
+ext.responseExample = ext.responseExample || row.responseExample || ''
 
-var groupRows = db.select("""
-select dict_name as name
-from sym_dict_t
-where coalesce(is_del, 0) = 0
-  and tenant_id=#{tenantId} and biz_type = 'apiServiceGroup'
-  and tid = """ + sqlValue(row.groupId || row.groupid || 'api_service_group_default') + """
-limit 1
-""")
-var apiFileCount = magicResourceLink.countByApiId(apiId + '')
+// 分组只从当前租户的服务字典取值，控制库脚本计数只使用已通过权限校验的服务 ID。
+var groupId = row.groupId || 'api_service_group_default'
+var groups = tableRead.from('sym_dict_t', 'g', tenantId)
+var dictionaryId = textColumn('g', 'tid')
+groups.where(active('g'))
+groups.where(tableRead.equal(textColumn('g', 'biz_type'), 'apiServiceGroup'))
+groups.where(tableRead.equal(dictionaryId, groupId))
+var groupRows = groups.rows({name: textColumn('g', 'dict_name')}, dictionaryId, 'asc', 1)
+var apiFileCount = magicResourceLink.countByApiId(apiId)
 
 return {
-    id: row.id || row.tid,
-    tid: row.tid || row.id,
-    name: row.serviceName || row.servicename || '',
-    serviceName: row.serviceName || row.servicename || '',
-    serviceCode: row.serviceCode || row.servicecode || '',
-    code: row.serviceCode || row.servicecode || '',
-    datasourceId: row.datasourceId || row.datasourceid || row.datasource_id || '',
-    resourceId: row.resourceId || row.resourceid,
-    groupId: row.groupId || row.groupid || 'api_service_group_default',
-    groupName: groupRows == null || groupRows.size() == 0 ? '默认分组' : groupRows[0].name,
-    serviceType: row.serviceType || row.servicetype || '数据服务',
-    serviceCreateType: row.serviceCreateType || row.servicecreatetype || 'api',
-    status: row.status || 'draft',
-    protocol: row.protocol || 'HTTP',
-    uri: row.uri || '',
-    method: row.method || 'GET',
-    address: row.address || '',
-    publishAddress: row.publishAddress || row.publishaddress || '',
-    publishAddressFull: row.publishAddressFull || row.publishaddressfull || '',
-    description: row.serviceDesc || row.servicedesc || '',
-    serviceDesc: row.serviceDesc || row.servicedesc || '',
+    id: row.tid,
+    tid: row.tid,
+    name: row.serviceName || '',
+    serviceName: row.serviceName || '',
+    serviceCode: row.serviceCode || '',
+    code: row.serviceCode || '',
+    datasourceId: row.datasourceId || '',
+    resourceId: row.resourceId,
+    groupId: groupId,
+    groupName: groupRows.isEmpty() ? '默认分组' : groupRows[0].name,
+    serviceType: row.serviceType || '数据服务',
+    serviceCreateType: row.serviceCreateType || 'api',
+    status: status || 'draft',
+    protocol: protocol,
+    uri: uri,
+    method: method,
+    address: address,
+    publishAddress: publishAddress,
+    publishAddressFull: publishAddressFull,
+    description: row.serviceDesc || '',
+    serviceDesc: row.serviceDesc || '',
     version: row.version || '1.0',
     labels: row.labels || '',
     providerConfig: provider,
     publishConfig: publish,
     extendInfo: ext,
-    flowId: row.flowId || row.flowid || row.flow_id || provider.flowId || provider.flowid || '',
+    flowId: row.flowId || provider.flowId || provider.flowid || '',
     publishParams: publishParams,
     requestExample: ext.requestExample || '',
     responseExample: ext.responseExample || '',
-    requestCount: row.requestCount || row.requestcount || 0,
-    successPercent: row.successPercent || row.successpercent || 0,
+    requestCount: row.requestCount || 0,
+    successPercent: row.successPercent || 0,
     apiFileCount: apiFileCount,
-    createdTime: row.createdTime || row.createdtime,
-    updatedTime: row.updatedTime || row.updatedtime
+    createdTime: row.createdTime,
+    updatedTime: row.updatedTime
 }

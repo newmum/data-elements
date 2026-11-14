@@ -24,7 +24,7 @@ class TaskCategoryWarehouseScopeMagicTest {
     private static final String DISTRIBUTE_PAGE = "1f475a245fda4ba4a885b3ac4f8e2d59";
     private static final String INGEST_TREE = "ods_data_agg_tree_statistics_01";
     private static final String DISTRIBUTE_TREE = "2b8dd89d130a4738a8aa1d0c8584e401";
-    private static final String CLASSIFIER_PATH = "function/01.通用函数/23.ODS来源库分类.ms";
+    private static final String CLASSIFIER_PATH = "function/01.通用函数/20.ODS来源库分类.ms";
     private static final String CLASSIFIER_ID = "d2138de2de28456aa57d9ade2305eed7";
 
     @ParameterizedTest @ValueSource(ints = {20, 100})

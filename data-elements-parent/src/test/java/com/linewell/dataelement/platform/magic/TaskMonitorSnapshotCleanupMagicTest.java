@@ -166,7 +166,7 @@ class TaskMonitorSnapshotCleanupMagicTest {
                 }
             }));
             script = MagicScript.create(CanonicalMagicSources.byPath(
-                    "function/01.通用函数/33.清理到期任务监控快照.ms", "377fbf22fd334ef1b29464ba6a42fe31")
+                    "function/01.通用函数/30.清理到期任务监控快照.ms", "377fbf22fd334ef1b29464ba6a42fe31")
                     .replaceAll("(?m)^import tenantRuntime\\s*\\R", ""), null);
         }
 

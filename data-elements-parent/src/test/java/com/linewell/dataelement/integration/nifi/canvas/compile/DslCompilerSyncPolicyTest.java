@@ -26,13 +26,13 @@ class DslCompilerSyncPolicyTest {
     DslCompilerSyncPolicyTest() throws Exception {
         ManifestRegistry registry = mock(ManifestRegistry.class);
         ObjectMapper mapper = new ObjectMapper();
-        for (String[] item : List.of(new String[]{"source.mysql", "/manifests/sources/mysql.json"},
-                new String[]{"source.oracle", "/manifests/sources/oracle.json"},
-                new String[]{"source.oceanbase", "/manifests/sources/oceanbase.json"},
-                new String[]{"sink.jdbc", "/manifests/sinks/jdbc-sink.json"})) {
-            try (var input = getClass().getResourceAsStream(item[1])) {
-                when(registry.get(item[0])).thenReturn(mapper.readValue(input, ComponentManifest.class));
+        for (String name : List.of("mysql", "kingbase", "postgresql", "oracle", "oceanbase", "dameng", "sqlserver", "db2")) {
+            try (var input = getClass().getResourceAsStream("/manifests/sources/" + name + ".json")) {
+                when(registry.get("source." + name)).thenReturn(mapper.readValue(input, ComponentManifest.class));
             }
+        }
+        try (var input = getClass().getResourceAsStream("/manifests/sinks/jdbc-sink.json")) {
+            when(registry.get("sink.jdbc")).thenReturn(mapper.readValue(input, ComponentManifest.class));
         }
         when(nifi.getRootProcessGroupId()).thenReturn("root");
         HiveServiceFixtures.stubGlobals(nifi);
@@ -62,7 +62,9 @@ class DslCompilerSyncPolicyTest {
                     Map.<String, Object>of("batchSize", "5000", "maxRowsPerRun", "0"))) {
                 processors.clear();
                 clearInvocations(nifi);
-                Pipeline base = flow(options, target());
+                var incrementalOptions = new LinkedHashMap<>(options);
+                incrementalOptions.put("syncMode", "FULL_THEN_INCR");
+                Pipeline base = flow(incrementalOptions, target());
                 Pipeline.Node original = base.dsl().nodes().getFirst();
                 Map<String, Object> config = new LinkedHashMap<>(original.config());
                 config.put("compatibleMode", "ORACLE");
@@ -137,7 +139,7 @@ class DslCompilerSyncPolicyTest {
         verify(nifi).requireDateFetchExtension();
         verifyNoMoreInteractions(nifi);
         clearInvocations(nifi);
-        assertThatThrownBy(() -> compiler.preflightSources(flow(Map.of("tieBreakerColumn", "id"), target())))
+        assertThatThrownBy(() -> compiler.preflightSources(flow(Map.of("syncMode", "INCREMENTAL", "tieBreakerColumn", "id"), target())))
                 .hasMessageContaining("次级");
         verifyNoInteractions(nifi);
     }
@@ -147,10 +149,10 @@ class DslCompilerSyncPolicyTest {
         for (String mode : List.of("FULL", "PERIODIC_FULL")) {
             processors.clear();
             clearInvocations(nifi);
-            compiler.compile(flow(Map.of("syncMode", mode, "incrementalColumn", "id", "batchSize", 200), target()));
+            compiler.compile(flow(Map.of("syncMode", mode, "incrementalColumn", "UPDATED_AT", "fullOrderColumn", "id", "batchSize", 200), target()));
             assertThat(processor("来源/fetch").props()).doesNotContainKey("Maximum-value Columns")
-                    .containsEntry("gen-table-custom-orderby-column", "id").containsEntry(DateTableFetchPolicy.PARTITION_SIZE, "10000")
-                    .containsEntry(DateTableFetchPolicy.PARTITION_COLUMN, "id");
+                    .containsEntry("Custom ORDER BY Column", "id").containsEntry("Partition Size", "10000")
+                    .doesNotContainKey(DateTableFetchPolicy.PARTITION_COLUMN);
             if ("PERIODIC_FULL".equals(mode)) {
                 verify(nifi, never()).executeOnPrimaryNode(processor("来源/fetch").id());
                 verify(nifi).executeOnPrimaryNode(processor("定时全量触发").id());
@@ -161,14 +163,77 @@ class DslCompilerSyncPolicyTest {
     }
 
     @Test
-    void dateFetchWithoutTimestampFailsBeforeCreatingAnyNativeGroup() {
-        assertThatThrownBy(() -> compiler.compile(flow(Map.of("syncMode", "FULL", "incrementalColumn", ""), target())))
+    void fullFetchUsesTheSameProcessorAndKeepsTheSourceDialectAcrossDatabases() {
+        for (String[] source : List.of(new String[]{"source.mysql", "MySQL"},
+                new String[]{"source.kingbase", "PostgreSQL"}, new String[]{"source.postgresql", "PostgreSQL"},
+                new String[]{"source.oracle", "Oracle"}, new String[]{"source.oceanbase", "Oracle"},
+                new String[]{"source.dameng", "Oracle 12+"}, new String[]{"source.sqlserver", "MS SQL 2012+"},
+                new String[]{"source.db2", "Generic"})) {
+            clearInvocations(nifi);
+            processors.clear();
+            Pipeline original = flow(Map.of("syncMode", "FULL", "compatibleMode", "ORACLE", "sid", "test",
+                    "sourceColumns", List.of(Map.of("columnName", "id", "primaryKey", true))), target());
+            Pipeline.Node from = original.dsl().nodes().getFirst();
+            Pipeline pipeline = new Pipeline(original.id(), original.name(), null, null, null,
+                    new Pipeline.Dsl(1, List.of(new Pipeline.Node(from.id(), source[0], from.label(), "source", 0, 0,
+                            from.config()), original.dsl().nodes().getLast()), original.dsl().edges()),
+                    null, null, null, null, null, null, null);
+            compiler.preflightSources(pipeline);
+            verifyNoInteractions(nifi);
+            compiler.compile(pipeline);
+            Processor fetch = processor("来源/fetch");
+            assertThat(fetch.type()).isEqualTo(DateTableFetchPolicy.NATIVE_TYPE);
+            assertThat(fetch.props()).containsEntry("Database Type", source[1])
+                    .doesNotContainKeys("Maximum-value Columns", DateTableFetchPolicy.PARTITION_COLUMN);
+            if ("Generic".equals(source[1])) {
+                assertThat(fetch.props()).containsEntry("Partition Size", "0").doesNotContainKey("Custom ORDER BY Column");
+            } else {
+                assertThat(fetch.props()).containsEntry("Partition Size", "10000").containsEntry("Custom ORDER BY Column", "id");
+            }
+        }
+    }
+
+    @Test
+    void incrementalWithoutTimestampFailsBeforeCreatingAnyNativeGroup() {
+        assertThatThrownBy(() -> compiler.compile(flow(Map.of("syncMode", "FULL_THEN_INCR", "incrementalColumn", ""), target())))
                 .isInstanceOfSatisfying(NodeConfigException.class, error -> {
                     assertThat(error.nodeId()).isEqualTo("source");
                     assertThat(error.fieldKey()).isEqualTo("incrementalColumn");
                 })
                 .hasMessageContaining("时间戳");
         verifyNoInteractions(nifi);
+    }
+
+    @Test
+    void fullWithoutTimestampUsesNativeFetchAndStablePagingOnlyWhenOrdered() {
+        for (String mode : List.of("FULL", "PERIODIC_FULL")) {
+            for (boolean hasKey : List.of(false, true)) {
+                processors.clear();
+                clearInvocations(nifi);
+                var columns = hasKey ? List.of(Map.of("columnName", "id", "primaryKey", true)) : List.of();
+                var pipeline = flow(Map.of("syncMode", mode, "incrementalColumn", "", "sourceColumns", columns,
+                        "customWherePredicate", "enabled = 1"), target());
+                compiler.preflightSources(pipeline);
+                verifyNoInteractions(nifi);
+                compiler.compile(pipeline);
+                Processor fetch = processor("来源/fetch");
+                Processor execute = processor("来源/execute");
+                assertThat(fetch.type()).isEqualTo(DateTableFetchPolicy.NATIVE_TYPE);
+                assertThat(fetch.props()).containsEntry("Partition Size", hasKey ? "10000" : "0")
+                        .containsEntry("Database Type", "MySQL").containsEntry("Additional WHERE Clause", "enabled = 1")
+                        .doesNotContainKeys("Maximum-value Columns", DateTableFetchPolicy.PARTITION_COLUMN,
+                                DateTableFetchPolicy.PARTITION_SIZE, "fetch-partition-type", "fetch-partition-type-count");
+                if (hasKey) assertThat(fetch.props()).containsEntry("Custom ORDER BY Column", "id");
+                else assertThat(fetch.props()).doesNotContainKey("Custom ORDER BY Column");
+                verify(nifi).createConnection(fetch.group(), fetch.id(), "PROCESSOR", execute.id(), "PROCESSOR", List.of("success"));
+                if ("PERIODIC_FULL".equals(mode)) {
+                    verify(nifi).createConnection("batch", "input", "INPUT_PORT", fetch.id(), "PROCESSOR", List.of());
+                    verify(nifi, never()).executeOnPrimaryNode(fetch.id());
+                } else {
+                    verify(nifi).executeOnPrimaryNode(fetch.id());
+                }
+            }
+        }
     }
 
     @Test

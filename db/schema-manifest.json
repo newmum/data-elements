@@ -55,7 +55,7 @@
       "file": "baseline_beijing_gd/init.sql",
       "objects": {
         "tables": 219,
-        "views": 5,
+        "views": 4,
         "indexes": 920,
         "explicitIndexes": 477,
         "foreignKeys": 2,
@@ -64,7 +64,7 @@
         "functions": 0,
         "sequences": 0
       },
-      "sha256": "5c9fe58fefa3ec7b526345bca0584d674e91fff5bc1593d7d9193214f950291e",
+      "sha256": "9ad78903d6e59899b0c97ab0410165c8c7979c3777e0777de58048b01ab40b91",
       "exportNotes": {
         "definitions": "DBMS_METADATA.GET_DDL",
         "comments": "DBA_TAB_COMMENTS/DBA_COL_COMMENTS",
@@ -100,7 +100,7 @@
       "file": "baseline_ga/init.sql",
       "objects": {
         "tables": 219,
-        "views": 5,
+        "views": 4,
         "indexes": 780,
         "foreignKeys": 2,
         "triggers": 0,
@@ -108,7 +108,7 @@
         "functions": 0,
         "events": 0
       },
-      "sha256": "d877f544ce749d2cff8cb84f567a81043ca73a8aa9434acec300e3ac3d2d60c4",
+      "sha256": "57fbc19c6bbec563101d2a4179b305786872f1c6fc6473938696fb9209fba43c",
       "exportNotes": {
         "definitions": "SHOW CREATE",
         "routineDefiners": "omitted",
@@ -122,7 +122,7 @@
       "file": "baseline_sea_fishery/init.sql",
       "objects": {
         "tables": 219,
-        "views": 5,
+        "views": 4,
         "indexes": 780,
         "foreignKeys": 2,
         "triggers": 0,
@@ -130,7 +130,7 @@
         "functions": 0,
         "events": 0
       },
-      "sha256": "015e7cd2dc329597286d2bfdd295f190cf7cce712ef6d451b6b17ce5d51850fb",
+      "sha256": "72e9adeea2cb4ccef401240b9a2ec488547f4eccb9eedce9a398709b445fe854",
       "exportNotes": {
         "definitions": "SHOW CREATE",
         "routineDefiners": "omitted",

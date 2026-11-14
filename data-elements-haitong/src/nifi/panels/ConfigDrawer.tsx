@@ -428,7 +428,7 @@ function expandIncrementalField(field: FieldSchema): FieldSchema[] {
       group: 'incremental',
       visibleWhen: { key: 'syncMode', equals: 'INCREMENTAL' },
       placeholder: '来源表时间戳列，如 updated_time',
-      help: '独立画布可直接填写来源表的时间戳列；登记集成任务会自动带入，仍可手工调整。该字段用于按月分片，增量模式同时作为水位字段。',
+      help: '增量同步需要此字段记录水位，全量同步可留空。新建登记任务会带入已登记的时间戳列，可手工调整。',
     },
     {
       key: 'tieBreakerColumn',
@@ -1857,7 +1857,7 @@ export default function ConfigDrawer() {
                   icon={<SaveOutlined />}
                   onClick={() => {
                     if (!handleSave()) return;
-                    message.success('组件配置已保存');
+                    message.success('组件配置已更新，请点击画布顶部「保存」写入流程');
                     openDrawer(null);
                   }}
                 >

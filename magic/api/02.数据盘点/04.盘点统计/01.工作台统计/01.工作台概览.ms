@@ -9,7 +9,7 @@
   "updateTime": null,
   "parameters": [],
   "options": [],
-  "description": "只读汇总当前租户及工作台授权范围内的标注、登记、五步进度、字段治理、采集状态与接入任务，返回首屏事项；未记录的审查结论与整改历史明确声明不可统计，不伪造真实指标。",
+  "description": "只读汇总当前租户和工作台角色范围内的首屏概览。scope 选择视图，section 选择登记、治理、健康、任务或变更，省略时返回完整结果。字段治理从同名代表行统计已保存配置，并在单次数据库读取中判断体积上限；越限或格式异常时返回不可用原因。",
   "method": "POST",
   "requestBody": "{\"scope\":\"auto\"}",
   "headers": [],
@@ -17,27 +17,33 @@
   "responseBody": null
 }
 ================================
-// 固定五个区域独立查询；未传 section 的既有调用继续取得完整概览。
 import '@/common/workbenchData' as workbenchData
 import '@/common/workbenchChanges' as workbenchChanges
 import cn.hutool.json.JSONUtil
+import tableRead
 import tableSort
-var section=body?.section==null?'all':body.section+''
-if(!['all','registration','governance','health','tasks','changes'].contains(section)) {exit 400,'工作台区域参数无效'}
-var context=workbenchData(body)
-var tenantId=context.tenantId
-var userId=context.userId
-var scopeOrgIds=context.scopeOrgIds
-var cte=context.cte
-var lightCte=context.lightCte
-var counts={}
-var stages=[]
-var types=[]
-var governance={}
-var pending=[]
-var health=[]
-var taskList=[]
-var changes={}
+
+// POST /dst/statistics/workbench/overview 在当前租户和工作台角色授权范围内汇总首屏指标和待办。
+// scope 选择可用视图，section 可单独查询登记、治理、健康、任务或变更，省略时返回完整概览。
+// 字段治理按代表行的已保存配置统计，越限和异常会注明不可用原因。接口只读，不连接来源库。
+var section = body?.section == null ? 'all' : body.section + ''
+if (!['all', 'registration', 'governance', 'health', 'tasks', 'changes'].contains(section)) {
+    exit 400, '工作台区域参数无效'
+}
+var context = workbenchData(body)
+var tenantId = context.tenantId
+var userId = context.userId
+var scopeOrgIds = context.scopeOrgIds
+var cte = context.cte
+var lightCte = context.lightCte
+var counts = {}
+var stages = []
+var types = []
+var governance = {}
+var pending = []
+var health = []
+var taskList = []
+var changes = {}
 if(section=='all'||section=='registration') {
 var summaryRows=db.select(cte+"""
  SELECT totals.*, kinds.type_name,kinds.type_count FROM (
@@ -88,41 +94,114 @@ pending=db.select(cte+"""
  FROM table_scope t JOIN source_scope s ON s.datasource_id=t.datasource_id WHERE COALESCE(t.annotated,0)<>1) q WHERE item_rank<=5 ORDER BY item_rank
 """)
 }
-if(section=='all'||section=='governance') {
-// 治理字段按已保存配置批量读取并在内存统计，不调用逐字段详情接口。
-governance={available:true,standardFields:0,dictionaryFields:0,timestampRate:0}
-var volume=db.selectOne(lightCte+"""
- SELECT COUNT(*) total,COALESCE(SUM(LENGTH(COALESCE(raw.field_governance_config,''))),0) bytes
- FROM table_scope t JOIN db_table_t raw ON raw.tid=t.tid AND raw.tenant_id=#{tenantId}
- WHERE raw.field_governance_config IS NOT NULL AND raw.field_governance_config<>''
-""")
-if(volume.total>20000 || volume.bytes>67108864) {
-    governance.available=false
-    governance.reason='治理配置超过单次安全统计范围，保留静态参考值'
-} else {
-    var configs=db.select(lightCte+"""
-        SELECT raw.field_governance_config config FROM table_scope t
-        JOIN db_table_t raw ON raw.tid=t.tid AND raw.tenant_id=#{tenantId}
-        WHERE raw.field_governance_config IS NOT NULL AND raw.field_governance_config<>''
-    """)
-    var businessTotal=0
-    var timestampTotal=0
-    try {
-        for(row in configs) {
-            var config=JSONUtil.parseObj(row.config+'')
-            var fields=config.fields==null?[]:config.fields
-            for(field in fields) {
-                if(field.standardField!=null && (field.standardField+'').trim()!='') {governance.standardFields=governance.standardFields+1}
-                if(field.dictionaryRelation?.enabled==true && field.dictionaryRelation?.sql!=null && (field.dictionaryRelation.sql+'').trim()!='') {governance.dictionaryFields=governance.dictionaryFields+1}
+if (section == 'all' || section == 'governance') {
+    governance = {available: true, standardFields: 0, dictionaryFields: 0, timestampRate: 0}
+    var text = (alias, field) => tableRead.column(alias, field, 'TEXT')
+    var number = (alias, field) => tableRead.column(alias, field, 'NUMBER')
+    var configColumn = (alias, field) => tableRead.column(alias, field, 'LOB')
+    var maxGovernanceConfigs = 20000
+    var maxGovernanceLength = 67108864
+
+    // 仅从当前角色可读的有效数据源选表。ALL 的“我负责的”仍限为本人创建的来源。
+    var sources = [tableRead.equal(number('s', 'is_del'), 0)]
+    if (context.scope == 'ORG') {
+        sources.add(tableRead.in(text('s', 'org_id'), scopeOrgIds))
+    } else if (context.scope == 'OWNER' || (context.scope == 'ALL' && context.mode == 'mine')) {
+        sources.add(tableRead.equal(text('s', 'created_by'), userId))
+    }
+    var tables = tableRead.from('db_table_t', 't', tenantId)
+    tables.leftJoin('db_datasource_t', 's', 'tid', 'datasource_id', sources)
+    tables.where(tableRead.not(tableRead.isNull(text('s', 'tid'))))
+    tables.where(tableRead.equal(number('t', 'is_del'), 0))
+
+    // 先按来源和表名选择代表行，再排除空配置，避免旧快照的配置重新参与统计。
+    var tableId = text('t', 'tid')
+    var sourceId = text('t', 'datasource_id')
+    var updatedAt = tableRead.column('t', 'updated_time', 'TIME')
+    var ranked = tables.ranked('r', {tid: tableId, config: configColumn('t', 'field_governance_config')}, [
+        sourceId, tableRead.lower(text('t', 'table_name'))
+    ], [
+        tableRead.coalesce([number('t', 'annotated'), 0]), tableRead.coalesce([number('t', 'field_count'), 0]),
+        updatedAt, tableId
+    ], ['desc', 'desc', 'desc', 'desc'], true)
+    var savedConfig = configColumn('r', 'config')
+    var rankedId = text('r', 'tid')
+    ranked.where(tableRead.not(tableRead.isNull(savedConfig)))
+    ranked.where(tableRead.not(tableRead.equal(savedConfig, '')))
+
+    // 同一次读取完成数量、原生文本长度和配置获取。越限时只投影一条标记，配置列置空。
+    var volume = ranked.projected('v', {
+        tid: rankedId,
+        config: savedConfig,
+        total_configs: tableRead.overAll(tableRead.count()),
+        total_length: tableRead.overAll(tableRead.sum(tableRead.textLength(savedConfig))),
+        marker_id: tableRead.overAll(tableRead.max(rankedId))
+    })
+    var overBudget = tableRead.any([
+        tableRead.greaterThan(number('v', 'total_configs'), maxGovernanceConfigs),
+        tableRead.greaterThan(number('v', 'total_length'), maxGovernanceLength)
+    ])
+    volume.where(tableRead.any([
+        tableRead.not(overBudget), tableRead.equal(text('v', 'tid'), text('v', 'marker_id'))
+    ]))
+    // 只投影统计所需的标志和计数。旧格式按原文返回，继续走同一 Hutool 解析规则。
+    var projectedConfig = tableRead.jsonProjection(configColumn('v', 'config'), [
+        tableRead.jsonTextEquals(['registrationSavedPhase'], 'business'),
+        tableRead.jsonNonblank(['timestampField'])
+    ], 'fields', [
+        [tableRead.jsonNonblank(['standardField'])],
+        [tableRead.jsonTrue(['dictionaryRelation', 'enabled']), tableRead.jsonNonblank(['dictionaryRelation', 'sql'])]
+    ])
+    var configs = volume.grouped({
+        overBudget: tableRead.when(overBudget, 'exceeded', 'within'),
+        config: tableRead.when(overBudget, null, projectedConfig)
+    }, [])
+    if (!configs.isEmpty() && 'exceeded'.equals(configs[0].overBudget)) {
+        governance.available = false
+        governance.reason = '治理配置超过单次安全统计范围，保留静态参考值'
+    } else {
+        // 沿用已保存治理配置的解析规则。历史配置格式异常时向页面明确报告不可用。
+        var businessTotal = 0
+        var timestampTotal = 0
+        try {
+            for (row in configs) {
+                var encoded = row.config + ''
+                if (encoded.startsWith('P')) {
+                    var tuple = JSONUtil.parseArray(encoded.substring(1))
+                    governance.standardFields = governance.standardFields + tuple.getInt(2)
+                    governance.dictionaryFields = governance.dictionaryFields + tuple.getInt(3)
+                    if (tuple.getInt(0) == 1) {
+                        businessTotal = businessTotal + 1
+                        if (tuple.getInt(1) == 1) {
+                            timestampTotal = timestampTotal + 1
+                        }
+                    }
+                    continue
+                }
+                var config = JSONUtil.parseObj(encoded.substring(1))
+                var fields = config.fields == null ? [] : config.fields
+                for (field in fields) {
+                    if (field.standardField != null && (field.standardField + '').trim() != '') {
+                        governance.standardFields = governance.standardFields + 1
+                    }
+                    var dictionary = field.dictionaryRelation
+                    if (dictionary?.enabled == true && dictionary.sql != null && (dictionary.sql + '').trim() != '') {
+                        governance.dictionaryFields = governance.dictionaryFields + 1
+                    }
+                }
+                if (config.registrationSavedPhase == 'business') {
+                    businessTotal = businessTotal + 1
+                    if (config.timestampField != null && (config.timestampField + '').trim() != '') {
+                        timestampTotal = timestampTotal + 1
+                    }
+                }
             }
-            if(config.registrationSavedPhase=='business') {
-                businessTotal=businessTotal+1
-                if(config.timestampField!=null && (config.timestampField+'').trim()!='') {timestampTotal=timestampTotal+1}
-            }
+            governance.timestampRate = businessTotal == 0 ? 0 : Math.round(100.0 * timestampTotal / businessTotal)
+        } catch (error) {
+            governance.available = false
+            governance.reason = '部分历史治理配置格式异常，暂不能准确统计'
         }
-        governance.timestampRate=businessTotal==0?0:Math.round(100.0*timestampTotal/businessTotal)
-    } catch(error) {governance.available=false;governance.reason='部分历史治理配置格式异常，暂不能准确统计'}
-}
+    }
 }
 if(section=='all'||section=='health') {
 health=db.select(lightCte+"""

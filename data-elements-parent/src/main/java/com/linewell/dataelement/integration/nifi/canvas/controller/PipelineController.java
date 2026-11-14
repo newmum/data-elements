@@ -1,9 +1,7 @@
 package com.linewell.dataelement.integration.nifi.canvas.controller;
 
-import com.linewell.dataelement.model.dataasset.DataAssetQueryByIdRequest;
 import com.linewell.dataelement.dataassets.runtime.DataAssetRuntimeAdapter;
 import com.linewell.dataelement.dataassets.runtime.DataSourceConnectionPropertyResolver;
-import com.linewell.dataelement.dataservice.pull.ApiPullConfigurationMagicModule;
 import com.linewell.dataelement.metautil.jdbc.JdbcDriverPropertyResolver;
 import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient;
 import com.linewell.dataelement.integration.nifi.canvas.compile.RegisteredDatasourceType;
@@ -15,9 +13,11 @@ import com.linewell.dataelement.integration.nifi.canvas.pipeline.PipelineStatus;
 import com.linewell.dataelement.integration.nifi.canvas.lifecycle.SerializedNifiMutation;
 import com.linewell.dataelement.integration.nifi.canvas.lifecycle.PipelineTaskLifecycleSynchronizer;
 import com.linewell.dataelement.integration.nifi.canvas.lifecycle.PipelineGroupOrganizer;
-import com.linewell.dataelement.integration.nifi.canvas.mapping.AccessTaskFieldMappingBinder;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import com.linewell.dataelement.platform.tenant.domain.TenantContext;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -25,6 +25,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.swagger.annotations.Api;
 import io.swagger.v3.oas.annotations.Operation;
 import org.ssssssss.magicapi.core.service.MagicAPIService;
+import org.ssssssss.script.exception.MagicScriptException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
@@ -47,6 +48,11 @@ import java.util.Objects;
 public class PipelineController {
     private static final Logger log = LoggerFactory.getLogger(PipelineController.class);
     private static final ObjectMapper JSON = new ObjectMapper();
+    private static final List<String> API_TEMPLATE_SOURCE_FIELDS = List.of(
+            "apiPullItems", "api_pull_items", "poolCfg", "pool_cfg", "apiUrl", "api_url", "url",
+            "apiMethod", "api_method", "method", "apiBody", "api_body", "requestBody", "request_body",
+            "connectTimeout", "connect_timeout", "connectionTimeout", "readTimeout", "read_timeout",
+            "apiTimeoutSeconds", "api_timeout_seconds");
     /**
      * 数据推送的落地文件统一保存在资源中心 ODS 层的非结构化存储域。
      * 该值是 {@code dwm_center_layer_source_t.layer_code} 的业务编码，
@@ -59,10 +65,9 @@ public class PipelineController {
     private final DataAssetRuntimeAdapter dataAssetRuntimeAdapter;
     private final JdbcTemplate jdbcTemplate;
     private final DataSourceConnectionPropertyResolver connectionProperties;
-    private final ApiPullConfigurationMagicModule apiPullConfig;
+    private final TransactionTemplate apiPullBindingTransaction;
     private final PipelineTaskLifecycleSynchronizer taskLifecycle;
     private final PipelineGroupOrganizer groups;
-    private final AccessTaskFieldMappingBinder accessTaskFieldMappingBinder;
     private List<PipelineTemplateProvider> templateProviders = List.of();
 
     @Autowired(required = false)
@@ -75,68 +80,38 @@ public class PipelineController {
     public PipelineController(PipelineRepository repo, NifiClient nifi, MagicAPIService magicApiService,
                               DataAssetRuntimeAdapter dataAssetRuntimeAdapter, JdbcTemplate jdbcTemplate,
                               DataSourceConnectionPropertyResolver connectionProperties,
-                              ApiPullConfigurationMagicModule apiPullConfig,
+                              PlatformTransactionManager transactionManager,
                               PipelineTaskLifecycleSynchronizer taskLifecycle, PipelineGroupOrganizer groups) {
-        this(repo, nifi, magicApiService, dataAssetRuntimeAdapter, jdbcTemplate, connectionProperties,
-                apiPullConfig, taskLifecycle, groups, null);
-    }
-
-    @Autowired
-    public PipelineController(PipelineRepository repo, NifiClient nifi, MagicAPIService magicApiService,
-                              DataAssetRuntimeAdapter dataAssetRuntimeAdapter, JdbcTemplate jdbcTemplate,
-                              DataSourceConnectionPropertyResolver connectionProperties,
-                              ApiPullConfigurationMagicModule apiPullConfig,
-                              PipelineTaskLifecycleSynchronizer taskLifecycle, PipelineGroupOrganizer groups,
-                              AccessTaskFieldMappingBinder accessTaskFieldMappingBinder) {
         this.repo = repo;
         this.nifi = nifi;
         this.magicApiService = magicApiService;
         this.dataAssetRuntimeAdapter = dataAssetRuntimeAdapter;
         this.jdbcTemplate = jdbcTemplate;
         this.connectionProperties = connectionProperties;
-        this.apiPullConfig = apiPullConfig;
+        this.apiPullBindingTransaction = new TransactionTemplate(transactionManager);
+        this.apiPullBindingTransaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
         this.taskLifecycle = taskLifecycle;
         this.groups = groups;
-        this.accessTaskFieldMappingBinder = accessTaskFieldMappingBinder;
     }
 
-    /** Count and order the complete tenant flow set before pagination; no DSL or NiFi call per row. */
-    private final Map<String,Boolean> flowDialects=new java.util.concurrent.ConcurrentHashMap<>();
-    private String flowSql(String sql) {
-        String tenant=TenantContext.requireTenantId();
-        boolean dm=flowDialects.computeIfAbsent(tenant,key->Boolean.TRUE.equals(jdbcTemplate.execute((org.springframework.jdbc.core.ConnectionCallback<Boolean>)c->c.getMetaData().getURL().toLowerCase(Locale.ROOT).contains(":dm:"))));
-        return dm?sql.replaceAll("\\b(nifi_pipeline_t|tenant_id|is_del|id|name|description|status|dsl_json|nifi_process_group_id|last_deployed_at|last_stopped_at|created_at|updated_at)\\b", "\"$1\""):sql;
-    }
-
-    public Map<String,Object> listPage(int page,int size,String sortField,String sortDir) {
-        return listPage(page,size,sortField,sortDir,null);
-    }
-
+    /** Keep MVC parameter binding and the established raw response for the Magic flow page. */
     @GetMapping("/page")
-    public Map<String,Object> listPage(@RequestParam(defaultValue="1") int page,
-            @RequestParam(defaultValue="20") int size,
-            @RequestParam(required=false) String sortField,@RequestParam(required=false) String sortDir,
-            @RequestParam(required=false) String q) {
-        String tenant=TenantContext.requireTenantId();
-        if(TenantContext.usesControlDatabase()||TenantContext.isIgnored())throw new IllegalStateException("流程查询必须绑定行业租户");
-        String order=com.linewell.dataelement.platform.persistence.ServerTableOrder.sql(sortField,sortDir,
-            Map.of("name","p.name","nodeCount","coalesce(nodes.node_count,0)","createdAt","p.created_at","updatedAt","p.updated_at"),"updatedAt","desc","p.id");
-        page=Math.max(1,page);size=Math.min(100,Math.max(1,size));
-        String keyword=q==null?"":q.trim().toLowerCase(Locale.ROOT);
-        if(keyword.length()>200)throw new IllegalArgumentException("搜索内容最多 200 个字符");
-        String filter=" AND (?='' OR LOCATE(?,LOWER(CONCAT_WS(' ',name,description)))>0)";
-        Long total=jdbcTemplate.queryForObject(flowSql("SELECT COUNT(*) FROM nifi_pipeline_t WHERE tenant_id=? AND is_del=0"+filter),Long.class,tenant,keyword,keyword);
-        String from="""
-            FROM nifi_pipeline_t p LEFT JOIN (
-              SELECT flow.id,COUNT(node.ordinal) node_count FROM nifi_pipeline_t flow
-              LEFT JOIN JSON_TABLE(CASE WHEN JSON_VALID(flow.dsl_json)=1 THEN flow.dsl_json ELSE '{}' END,'$.nodes[*]'
-                COLUMNS(ordinal FOR ORDINALITY)) node ON 1=1 WHERE flow.tenant_id=? AND flow.is_del=0 GROUP BY flow.id
-            ) nodes ON nodes.id=p.id WHERE p.tenant_id=? AND p.is_del=0
-            """;
-        List<Map<String,Object>> raw=jdbcTemplate.queryForList(flowSql("SELECT p.id,p.name,p.description,p.nifi_process_group_id,p.created_at,p.updated_at,coalesce(nodes.node_count,0) node_count "+from+filter+" ORDER BY "+order+" LIMIT ? OFFSET ?"),tenant,tenant,keyword,keyword,size,(long)(page-1)*size);
-        List<Map<String,Object>> rows=new ArrayList<>();
-        for(var r:raw){Map<String,Object> row=new LinkedHashMap<>();row.put("id",r.get("id"));row.put("name",r.get("name"));row.put("description",r.get("description"));row.put("nifiProcessGroupId",r.get("nifi_process_group_id"));row.put("createdAt",r.get("created_at"));row.put("updatedAt",r.get("updated_at"));row.put("nodeCount",r.get("node_count"));rows.add(row);}
-        return Map.of("list",rows,"total",total==null?0:total,"page",page,"size",size);
+    public Map<String, Object> listPage(@RequestParam(defaultValue = "1") int page,
+                                        @RequestParam(defaultValue = "20") int size,
+                                        @RequestParam(required = false) String sortField,
+                                        @RequestParam(required = false) String sortDir,
+                                        @RequestParam(required = false) String q) {
+        TenantContext.requireTenantId();
+        if (TenantContext.usesControlDatabase() || TenantContext.isIgnored()) {
+            throw new IllegalStateException("流程查询必须绑定行业租户");
+        }
+        Map<String, Object> parameters = new HashMap<>();
+        parameters.put("page", page);
+        parameters.put("size", size);
+        if (sortField != null) parameters.put("sortField", sortField);
+        if (sortDir != null) parameters.put("sortDir", sortDir);
+        if (q != null) parameters.put("q", q);
+        return invokeMagicRead("/common/nifiPipelinePage", parameters);
     }
 
     @GetMapping
@@ -198,22 +173,25 @@ public class PipelineController {
         }
     }
 
-    public Map<String,Object> runtimeOverview() {return runtimeOverview(null,null);}
-
-    /** Lifecycle counts and the selected five flows are read in two tenant-scoped SQL statements. */
+    /** Keep the established HTTP path and raw response while the overview runs in Magic. */
     @GetMapping("/runtime-overview")
     @Operation(summary="查询流程总览(runtimeOverview)")
-    public Map<String,Object> runtimeOverview(@RequestParam(required=false) String sortField,
-                                             @RequestParam(required=false) String sortDir) {
-        String tenant=TenantContext.requireTenantId();
-        if(TenantContext.usesControlDatabase()||TenantContext.isIgnored())throw new IllegalStateException("流程查询必须绑定行业租户");
-        String order=com.linewell.dataelement.platform.persistence.ServerTableOrder.sql(sortField,sortDir,
-          Map.of("taskName","name","latestRunTime","last_deployed_at","updatedAt","updated_at"),"updatedAt","desc","id");
-        Map<String,Object> counts=jdbcTemplate.queryForMap(flowSql("SELECT COUNT(*) total,SUM(CASE WHEN status='RUNNING' THEN 1 ELSE 0 END) running,SUM(CASE WHEN status IN ('RUN_ERROR','DEPLOY_FAILED') THEN 1 ELSE 0 END) failed FROM nifi_pipeline_t WHERE tenant_id=? AND is_del=0"),tenant);
-        List<Map<String,Object>> selected=jdbcTemplate.queryForList(flowSql("SELECT id,name,status,nifi_process_group_id,last_deployed_at,last_stopped_at FROM nifi_pipeline_t WHERE tenant_id=? AND is_del=0 ORDER BY "+order+" LIMIT 5"),tenant);
-        List<Map<String,Object>> rows=new ArrayList<>();
-        for(var source:selected) {Map<String,Object> row=new LinkedHashMap<>();row.put("id",source.get("id"));row.put("taskName",source.get("name"));row.put("currentStatus",source.get("status"));row.put("processGroupId",source.get("nifi_process_group_id"));row.put("latestRunTime",source.get("last_deployed_at"));row.put("endTime",source.get("last_stopped_at"));rows.add(row);}
-        Map<String,Object> result=new LinkedHashMap<>();result.put("total",counts.get("total"));result.put("running",counts.get("running")==null?0:counts.get("running"));result.put("failed",counts.get("failed")==null?0:counts.get("failed"));result.put("flows",rows);return result;
+    public Map<String, Object> runtimeOverview(@RequestParam(required = false) String sortField,
+                                               @RequestParam(required = false) String sortDir) {
+        Map<String, Object> parameters = new HashMap<>();
+        if (sortField != null) parameters.put("sortField", sortField);
+        if (sortDir != null) parameters.put("sortDir", sortDir);
+        return invokeMagicRead("/common/nifiRuntimeOverview", parameters);
+    }
+
+    private Map<String, Object> invokeMagicRead(String function, Map<String, Object> parameters) {
+        try {
+            return magicApiService.invoke(function, parameters);
+        } catch (MagicScriptException failure) {
+            // Preserve the MVC error contract for the underlying query or argument exception.
+            if (failure.getCause() instanceof RuntimeException original) throw original;
+            throw failure;
+        }
     }
 
     private Map<String, Object> runtimeRow(Pipeline p, int seq) {
@@ -271,26 +249,6 @@ public class PipelineController {
                         .forCanvas(stored).withStoredDesignVersion(stored))
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
-    }
-
-    private Pipeline bindAccessTaskMappings(Pipeline pipeline) {
-        if (pipeline == null || accessTaskFieldMappingBinder == null) return pipeline;
-        try {
-            Pipeline bound = accessTaskFieldMappingBinder.bind(pipeline);
-            if (bound == pipeline) return pipeline;
-            return repo.update(pipeline.id(), current -> new Pipeline(current.id(), current.name(), current.description(),
-                    current.createdAt(), current.updatedAt(), bound.dsl(), current.nifiProcessGroupId(), current.status(),
-                    current.lastDeployedHash(), current.lastDeployedAt(), current.lastStoppedAt(), current.nodeMapping(),
-                    current.lastBulletinId()));
-        } catch (IllegalStateException configurationError) {
-            // Field-rule completion is required to deploy, but it must never
-            // make an already saved design unreadable.  Keep the stored DSL
-            // visible in the editor so users can inspect and correct it; the
-            // deployment compiler still performs the same strict validation.
-            log.warn("Pipeline {} has incomplete registration mappings; returning saved canvas for editing: {}",
-                    pipeline.id(), configurationError.getMessage());
-            return pipeline;
-        }
     }
 
     /**
@@ -534,189 +492,6 @@ public class PipelineController {
         return null;
     }
 
-    private Pipeline repairLegacySource(Pipeline pipeline) {
-        try {
-            Pipeline.Node currentSource = firstNode(pipeline, "source");
-            if (currentSource == null) return pipeline;
-            String catalogId = "";
-            try {
-                String resolvedCatalogId = jdbcTemplate.queryForObject("""
-                        select data_catalog_id from data_access_agg_task_t
-                         where tenant_id=? and pipeline_id=? and is_del=0
-                         order by created_time desc limit 1
-                        """, String.class, TenantContext.requireTenantId(), pipeline.id());
-                catalogId = resolvedCatalogId == null ? "" : resolvedCatalogId.trim();
-            } catch (Exception ignored) {
-                // Older flows can predate the catalog-task relation. Their
-                // source node still owns the registered source-table identity.
-            }
-            Map<String, Object> catalog = isBlank(catalogId) ? Map.of() : loadAssetByTid(catalogId);
-            String sourceTableId = firstNonBlank(catalog, "sourceTableId", "source_table_id");
-            if (isBlank(sourceTableId)) {
-                sourceTableId = firstNonBlank(currentSource.config(), "sourceTableId", "source_table_id");
-            }
-            if (isBlank(sourceTableId)) return pipeline;
-            Map<String, Object> sourceTable = isBlank(sourceTableId) ? null : loadAssetByTid(sourceTableId);
-            if (sourceTable == null || sourceTable.isEmpty()) return pipeline;
-            Map<String, Object> sourceDs = loadDbAssetByTable(sourceTable);
-            if (sourceDs == null || sourceDs.isEmpty()) return pipeline;
-            sourceDs = loadDatasourceDetail(firstNonBlank(sourceDs, "tid", "id", "dbId", "datasourceId", "dataSourceId"), sourceDs);
-            String sourceTableName = firstNonBlank(sourceTable, "tableName", "table", "name", "tableCode", "tableNameCn");
-            Map<String, Object> physicalSourceDs = resolvePushFileStorage(sourceDs, sourceTableName);
-            String nodeType = normalizeSourceNodeType(firstNonBlank(physicalSourceDs,
-                    "dbType", "db_type", "databaseType", "database_type"), physicalSourceDs);
-            boolean pushFileSource = isPushReceiveDatasource(sourceDs);
-            boolean generatedMysqlFallback = !pushFileSource
-                    && "source.mysql".equals(currentSource.manifestKey()) && !nodeType.equals(currentSource.manifestKey())
-                    && currentSource.id().equals("source-" + sourceTableId)
-                    && Objects.equals(firstNonBlank(currentSource.config(), "sourceDbId", "registeredDatasourceId"),
-                            firstNonBlank(sourceDs, "tid", "id", "datasourceId", "dataSourceId"));
-            boolean incompleteFileSource = !pushFileSource
-                    && ("source.ftp".equals(nodeType) || "source.sftp".equals(nodeType))
-                    && (isBlank(firstNonBlank(currentSource.config(), "hostname", "host"))
-                    || isBlank(firstNonBlank(currentSource.config(), "remotePath"))
-                    || isBlank(firstNonBlank(currentSource.config(), "username")));
-            if (!pushFileSource && !generatedMysqlFallback && (!"source.api".equals(nodeType)
-                    || !isBlank(firstNonBlank(currentSource.config(), "url"))) && !incompleteFileSource) {
-                return refreshRegisteredSourceMetadata(pipeline, currentSource, sourceTable, sourceTableId);
-            }
-            Map<String, Object> config = buildSourceConfig(physicalSourceDs, sourceTable, loadColumnsByTableId(sourceTableId));
-            if (generatedMysqlFallback) {
-                config = repairMistypedSourceConfig(config, currentSource.config());
-            }
-            if (incompleteFileSource) {
-                config = repairFileSourceConfig(config, currentSource.config());
-            }
-            if (pushFileSource) {
-                String expectedPath = firstNonBlank(config, "remotePath");
-                boolean sameSourceEndpoint = nodeType.equals(currentSource.manifestKey())
-                        && expectedPath.equals(firstNonBlank(currentSource.config(), "remotePath"));
-                String expectedSheetName = firstNonBlank(config, "excelSheetName");
-                String expectedHeaderMode = firstNonBlank(config, "fileHeaderMode");
-                if (sameSourceEndpoint) {
-                    boolean registrationMetadataCurrent = Objects.equals(expectedSheetName,
-                            firstNonBlank(currentSource.config(), "excelSheetName"))
-                            && Objects.equals(expectedHeaderMode,
-                            firstNonBlank(currentSource.config(), "fileHeaderMode"));
-                    if (registrationMetadataCurrent) {
-                        return pipeline;
-                    }
-                    // This repair only adds registration-derived file metadata.
-                    // Do not replace a live FTP/SFTP node's credentials or other
-                    // manually saved transport settings while doing so.
-                    config = new LinkedHashMap<>(currentSource.config());
-                    config.put("excelSheetName", expectedSheetName);
-                    config.put("fileHeaderMode", expectedHeaderMode);
-                    config.put("sourceColumns", loadColumnsByTableId(sourceTableId));
-                    config.put("sourceTableId", firstNonBlank(sourceTable, "tid", "id", "tableId"));
-                    config.put("logicalSourceDatasourceId", firstNonBlank(physicalSourceDs,
-                            "logicalSourceDatasourceId", "logical_source_datasource_id"));
-                    config.put("pushStorageDomain", firstNonBlank(physicalSourceDs,
-                            "pushStorageDomain", "push_storage_domain"));
-                }
-            } else if (!generatedMysqlFallback && isBlank(firstNonBlank(config, "url"))) {
-                return pipeline;
-            }
-            List<Pipeline.Node> nodes = new ArrayList<>();
-            for (Pipeline.Node node : pipeline.dsl().nodes()) {
-                if (node.id().equals(currentSource.id())) {
-                    String label = node.label();
-                    if ("来源表".equals(label) || "源表".equals(label) || "FTP 文件来源".equals(label)
-                            || "API 接口来源".equals(label)) {
-                        String tableLabel = firstNonBlank(sourceTable, "tableNameCn", "table_name_cn");
-                        if (isBlank(tableLabel)) tableLabel = firstNonBlank(sourceTable, "tableName", "table_name");
-                        if (!isBlank(tableLabel)) label = tableLabel;
-                    }
-                    nodes.add(new Pipeline.Node(node.id(), nodeType, label, node.category(), node.x(), node.y(), config));
-                } else {
-                    nodes.add(node);
-                }
-            }
-            Pipeline.Dsl dsl = new Pipeline.Dsl(pipeline.dsl().version(), nodes, pipeline.dsl().edges());
-            Pipeline repaired = repo.update(pipeline.id(), current -> new Pipeline(
-                    current.id(), current.name(), current.description(), current.createdAt(), current.updatedAt(), dsl,
-                    current.nifiProcessGroupId(), current.status(), current.lastDeployedHash(), current.lastDeployedAt(),
-                    current.lastStoppedAt(), current.nodeMapping(), current.lastBulletinId()));
-            bindApiPullRule(catalogId, repaired.id());
-            return repaired;
-        } catch (Exception ignored) {
-            // A task must remain readable even when an old catalog was deleted
-            // or its source metadata is temporarily unavailable.
-            return pipeline;
-        }
-    }
-
-    static Map<String, Object> repairFileSourceConfig(Map<String, Object> registered,
-                                                     Map<String, Object> saved) {
-        Map<String, Object> repaired = new LinkedHashMap<>(registered);
-        saved.forEach((key, value) -> {
-            if (value != null && !value.toString().isBlank()) repaired.put(key, value);
-        });
-        for (String key : List.of("jdbcUrl", "jdbcURL", "database", "sid", "serviceName",
-                "connectionType", "schema", "defaultSchema", "host")) repaired.remove(key);
-        if (isBlank(firstNonBlank(saved, "fileFilterRegex"))) {
-            String table = firstNonBlank(repaired, "sourceTableName", "table");
-            if (!isBlank(table)) repaired.put("fileFilterRegex", "(?i)^" + java.util.regex.Pattern.quote(table)
-                    + "\\.(csv|json|xlsx|xls)$");
-        }
-        return repaired;
-    }
-
-    /** Repair the generated connector identity while retaining manually edited query/schedule/mapping options. */
-    static Map<String, Object> repairMistypedSourceConfig(Map<String, Object> registered, Map<String, Object> saved) {
-        Map<String, Object> repaired = new LinkedHashMap<>(registered);
-        repaired.putAll(saved);
-        for (String key : List.of("dbType", "jdbcUrl", "jdbcURL", "host", "port", "database", "sid",
-                "serviceName", "connectionType", "defaultSchema", "schema", "compatibleMode")) {
-            if (registered.containsKey(key)) repaired.put(key, registered.get(key));
-            else repaired.remove(key);
-        }
-        return repaired;
-    }
-
-    /**
-     * Adds only registration-owned source metadata to an otherwise valid
-     * existing JDBC/API node. This brings legacy canvases into the same
-     * timestamp-default contract without replacing connection credentials or
-     * other settings that users may have adjusted in the canvas.
-     */
-    private Pipeline refreshRegisteredSourceMetadata(Pipeline pipeline, Pipeline.Node sourceNode,
-                                                     Map<String, Object> sourceTable, String requestedTableId) {
-        Map<String, Object> config = new LinkedHashMap<>(sourceNode.config());
-        String sourceTableId = firstNonBlank(sourceTable, "tid", "id", "tableId");
-        if (isBlank(sourceTableId)) sourceTableId = requestedTableId;
-        boolean changed = false;
-        if (!isBlank(sourceTableId) && !sourceTableId.equals(firstNonBlank(config, "sourceTableId"))) {
-            config.put("sourceTableId", sourceTableId);
-            changed = true;
-        }
-
-        String registeredTimestamp = registeredTimestampColumnForTable(sourceTable,
-                loadColumnsByTableId(sourceTableId));
-        // A present registration selection is authoritative. When registration
-        // has no extraction timestamp, do not erase a potentially deliberate
-        // manual choice on an old canvas; newly generated templates are blank.
-        if (!isBlank(registeredTimestamp)
-                && !registeredTimestamp.equalsIgnoreCase(firstNonBlank(config, "incrementalColumn"))) {
-            config.put("incrementalColumn", registeredTimestamp);
-            changed = true;
-        }
-        if (!changed) return pipeline;
-
-        List<Pipeline.Node> nodes = new ArrayList<>();
-        for (Pipeline.Node node : pipeline.dsl().nodes()) {
-            nodes.add(node.id().equals(sourceNode.id())
-                    ? new Pipeline.Node(node.id(), node.manifestKey(), node.label(), node.category(),
-                    node.x(), node.y(), config)
-                    : node);
-        }
-        Pipeline.Dsl dsl = new Pipeline.Dsl(pipeline.dsl().version(), nodes, pipeline.dsl().edges());
-        return repo.update(pipeline.id(), current -> new Pipeline(
-                current.id(), current.name(), current.description(), current.createdAt(), current.updatedAt(), dsl,
-                current.nifiProcessGroupId(), current.status(), current.lastDeployedHash(), current.lastDeployedAt(),
-                current.lastStoppedAt(), current.nodeMapping(), current.lastBulletinId()));
-    }
-
     private void bindApiPullRule(String catalogId, String pipelineId) {
         if (isBlank(catalogId) || isBlank(pipelineId)) return;
         try {
@@ -726,11 +501,15 @@ public class PipelineController {
             Map<String, Object> datasource = table == null ? null : loadDbAssetByTable(table);
             String datasourceId = firstNonBlank(datasource, "tid", "id", "dbId", "datasourceId", "dataSourceId");
             if (!isBlank(datasourceId) && !isBlank(sourceTableId)) {
-                apiPullConfig.bindTask(datasourceId, sourceTableId, pipelineId);
+                // The original binding committed on a separate tenant connection.
+                apiPullBindingTransaction.executeWithoutResult(transaction ->
+                        magicApiService.invoke("/common/bindCanvasApiPullRules", Map.of(
+                                "datasourceId", datasourceId, "sourceTableId", sourceTableId, "pipelineId", pipelineId)));
             }
-        } catch (Exception ignored) {
-            // API source compilation is independent of the optional run-ledger
-            // binding.  A later explicit save/reopen will retry this association.
+        } catch (Exception failure) {
+            // Optional binding failures must leave the canvas creation transaction usable.
+            log.warn("Optional API pull rule binding failed for pipeline {} ({})",
+                    pipelineId, failure.getClass().getSimpleName());
         }
     }
 
@@ -952,9 +731,8 @@ public class PipelineController {
     }
 
     private Map<String, Object> loadAssetByTid(String tid) {
-        // Collected technical tables are authoritative db_table_t records, not
-        // necessarily compiled da_asset_t/Elasticsearch documents. A new or
-        // restored table must be usable before business cataloguing/index sync.
+        // A new or restored technical table must be usable from its registration
+        // before cataloguing or index synchronization.
         String tenantId = TenantContext.requireTenantId();
         try {
             List<Map<String, Object>> rows = jdbcTemplate.queryForList(
@@ -970,9 +748,7 @@ public class PipelineController {
             log.debug("Technical table projection unavailable; use existing asset adapter");
         }
         try {
-            DataAssetQueryByIdRequest request = new DataAssetQueryByIdRequest();
-            request.setTid(tid);
-            return dataAssetRuntimeAdapter.queryById(request);
+            return dataAssetRuntimeAdapter.queryById(tid);
         } catch (Exception ignored) {
             return null;
         }
@@ -1239,41 +1015,17 @@ public class PipelineController {
             return sourceConfig;
         }
         if ("source.api".equals(sourceNodeType)) {
-            Map<String, Object> api = resolveApiPullItem(sourceDs, tableAsset);
-            String url = apiRequestUrl(api);
-            String resolvedUrl = isBlank(url) ? firstNonBlank(sourceDs, "apiUrl", "api_url", "url") : url;
-            String resolvedMethod = firstNonBlank(api, "method", "endpointMethod", "endpoint_method", "apiMethod", "api_method")
-                    == null ? firstNonBlank(sourceDs, "apiMethod", "api_method", "method") : firstNonBlank(api, "method", "endpointMethod", "endpoint_method", "apiMethod", "api_method");
-            sourceConfig.put("url", resolvedUrl);
-            sourceConfig.put("apiUrl", resolvedUrl);
-            sourceConfig.put("method", resolvedMethod);
-            sourceConfig.put("apiMethod", resolvedMethod);
-            String headers = apiHeadersJson(api);
-            String contentType = apiContentType(headers, firstNonBlank(api, "contentType", "content_type", "requestContentType", "request_content_type"));
-            sourceConfig.put("contentType", contentType == null ? firstNonBlank(sourceDs, "contentType", "content_type") : contentType);
-            // Keep the deployed NiFi field and the generic field-probe field in
-            // sync.  This lets the canvas re-run registration's API discovery
-            // without asking users to re-enter headers or request bodies.
-            sourceConfig.put("commonHeadersJson", headers);
-            sourceConfig.put("apiHeaders", headers);
-            sourceConfig.put("headers", headers);
-            String requestBody = firstNonBlank(api, "requestTemplateJson", "request_template_json", "requestBody", "request_body", "apiBody", "api_body")
-                    == null ? firstNonBlank(sourceDs, "apiBody", "api_body", "requestBody", "request_body") : firstNonBlank(api, "requestTemplateJson", "request_template_json", "requestBody", "request_body", "apiBody", "api_body");
-            sourceConfig.put("requestBody", requestBody);
-            sourceConfig.put("apiBody", requestBody);
-            sourceConfig.put("authType", firstNonBlank(api, "authType", "auth_type"));
-            sourceConfig.put("credentialRef", firstNonBlank(api, "credentialRef", "credential_ref"));
-            sourceConfig.put("connectTimeout", apiDuration(api, sourceDs, "connectTimeout", "connect_timeout", "connectionTimeout"));
-            sourceConfig.put("readTimeout", apiDuration(api, sourceDs, "readTimeout", "read_timeout"));
-            applyApiSchedule(sourceConfig, api);
+            String tableName = firstNonBlank(tableAsset, "tableName", "table", "name", "tableCode", "tableNameCn");
+            var datasource = new LinkedHashMap<String, Object>();
+            for (String field : API_TEMPLATE_SOURCE_FIELDS) {
+                if (sourceDs.containsKey(field)) datasource.put(field, sourceDs.get(field));
+            }
+            var parameters = new HashMap<String, Object>();
+            parameters.put("datasource", datasource);
+            parameters.put("tableName", tableName);
+            sourceConfig.putAll(invokeMagicRead("/common/nifiApiTemplateConfig", parameters));
             sourceConfig.put("sourceColumns", sourceColumns == null ? List.of() : sourceColumns);
-            sourceConfig.put("table", firstNonBlank(tableAsset, "tableName", "table", "name", "tableCode", "tableNameCn"));
-            sourceConfig.put("registeredDatasourceId", firstNonBlank(sourceDs, "tid", "id", "datasourceId", "dataSourceId", "dbId"));
-            sourceConfig.put("sourceTableId", firstNonBlank(tableAsset, "tid", "id", "tableId"));
-            sourceConfig.put("responseExtractPath", firstNonBlank(api, "responseExtractPath", "response_extract_path"));
-            sourceConfig.put("responseConfigJson", firstNonBlank(api, "responseConfigJson", "response_config_json"));
-            sourceConfig.put("paginationConfigJson", firstNonBlank(api, "paginationConfigJson", "pagination_config_json"));
-            sourceConfig.put("incrementalConfigJson", firstNonBlank(api, "incrementalConfigJson", "incremental_config_json"));
+            sourceConfig.put("table", tableName);
             return sourceConfig;
         }
         // Non-JDBC connectors need their own registered endpoint/security options too.
@@ -1377,54 +1129,6 @@ public class PipelineController {
         return sourceConfig;
     }
 
-    /**
-     * The first registration step stores one API definition per logical table in
-     * db_datasource_t.pool_cfg.  A task must use the definition for its source
-     * table, rather than the obsolete single apiUrl/apiBody columns.
-     */
-    private Map<String, Object> resolveApiPullItem(Map<String, Object> source, Map<String, Object> table) {
-        String tableName = firstNonBlank(table, "tableName", "table", "name", "tableCode", "tableNameCn");
-        List<Map<String, Object>> items = apiPullItems(source);
-        for (Map<String, Object> item : items) {
-            String candidate = firstNonBlank(item, "tableName", "table_name", "sourceTableName", "source_table_name");
-            if (!isBlank(tableName) && tableName.equalsIgnoreCase(candidate)) return item;
-        }
-        // A legacy single-interface source has no table name.  It is still safe
-        // to use it only when it is the sole registered interface.
-        return items.size() == 1 ? items.get(0) : Map.of();
-    }
-
-    @SuppressWarnings("unchecked")
-    private List<Map<String, Object>> apiPullItems(Map<String, Object> source) {
-        if (source == null || source.isEmpty()) return List.of();
-        Object raw = source.get("apiPullItems");
-        if (raw == null) raw = source.get("api_pull_items");
-        if (raw == null) {
-            Object poolCfg = source.get("poolCfg");
-            if (poolCfg == null) poolCfg = source.get("pool_cfg");
-            Map<String, Object> pool = jsonObject(poolCfg);
-            raw = pool.get("apiPullItems");
-            if (raw == null) raw = pool.get("api_pull_items");
-        }
-        if (raw instanceof String text) {
-            try {
-                raw = JSON.readValue(text, new TypeReference<List<Map<String, Object>>>() { });
-            } catch (Exception ignored) {
-                return List.of();
-            }
-        }
-        if (!(raw instanceof List<?> list)) return List.of();
-        List<Map<String, Object>> result = new ArrayList<>();
-        for (Object entry : list) {
-            if (entry instanceof Map<?, ?> map) {
-                Map<String, Object> item = new LinkedHashMap<>();
-                map.forEach((key, value) -> item.put(String.valueOf(key), value));
-                result.add(item);
-            }
-        }
-        return result;
-    }
-
     private Map<String, Object> jsonObject(Object value) {
         if (value instanceof Map<?, ?> map) {
             Map<String, Object> result = new LinkedHashMap<>();
@@ -1433,156 +1137,11 @@ public class PipelineController {
         }
         if (!(value instanceof String text) || text.isBlank()) return Map.of();
         try {
-            return JSON.readValue(text, new TypeReference<Map<String, Object>>() { });
+            Map<String, Object> parsed = JSON.readValue(text, new TypeReference<Map<String, Object>>() { });
+            return parsed == null ? Map.of() : parsed;
         } catch (Exception ignored) {
             return Map.of();
         }
-    }
-
-    private String apiRequestUrl(Map<String, Object> api) {
-        String direct = firstNonBlank(api, "url", "requestUrl", "request_url", "apiUrl", "api_url", "endpointUrl", "endpoint_url");
-        if (!isBlank(direct)) return direct;
-        String base = firstNonBlank(api, "baseUrl", "base_url");
-        String path = firstNonBlank(api, "endpointPath", "endpoint_path", "path");
-        if (isBlank(base)) return path;
-        if (isBlank(path)) return base;
-        return base.replaceAll("/+$", "") + (path.startsWith("/") ? path : "/" + path);
-    }
-
-    private String apiHeadersJson(Map<String, Object> api) {
-        Object raw = api.get("requestHeadersJson");
-        if (raw == null) raw = api.get("commonHeadersJson");
-        if (raw == null) raw = api.get("requestHeaders");
-        if (raw == null) return "";
-        Map<String, String> headers = new LinkedHashMap<>();
-        if (raw instanceof String text) {
-            try {
-                JsonNode parsed = JSON.readTree(text);
-                if (parsed != null && parsed.isObject()) {
-                    parsed.fields().forEachRemaining(entry -> addApiHeader(headers, entry.getKey(), entry.getValue().asText("")));
-                } else if (parsed != null && parsed.isArray()) {
-                    parsed.forEach(entry -> addApiHeader(headers,
-                            firstJsonText(entry, "key", "name", "headerName"), firstJsonText(entry, "value", "headerValue")));
-                }
-            } catch (Exception ignored) {
-                return "";
-            }
-        } else if (raw instanceof Map<?, ?> map) {
-            map.forEach((key, value) -> addApiHeader(headers, String.valueOf(key), value == null ? "" : String.valueOf(value)));
-        } else if (raw instanceof List<?> rows) {
-            for (Object row : rows) {
-                if (!(row instanceof Map<?, ?> map)) continue;
-                addApiHeader(headers, firstMapText(map, "key", "name", "headerName"), firstMapText(map, "value", "headerValue"));
-            }
-        }
-        try {
-            return headers.isEmpty() ? "" : JSON.writeValueAsString(headers);
-        } catch (Exception ignored) {
-            return "";
-        }
-    }
-
-    private static void addApiHeader(Map<String, String> headers, String name, String value) {
-        if (isBlank(name) || isSensitiveHeader(name)) return;
-        headers.put(name.trim(), value == null ? "" : value);
-    }
-
-    private static boolean isSensitiveHeader(String name) {
-        String key = name == null ? "" : name.trim().toLowerCase(Locale.ROOT);
-        return key.equals("authorization") || key.contains("token") || key.contains("secret")
-                || key.contains("password") || key.contains("api-key") || key.contains("apikey");
-    }
-
-    private static String firstJsonText(JsonNode node, String... keys) {
-        if (node == null) return null;
-        for (String key : keys) {
-            JsonNode value = node.get(key);
-            if (value != null && !value.asText("").isBlank()) return value.asText();
-        }
-        return null;
-    }
-
-    private static String firstMapText(Map<?, ?> map, String... keys) {
-        for (String key : keys) {
-            Object value = map.get(key);
-            if (value != null && !String.valueOf(value).isBlank()) return String.valueOf(value);
-        }
-        return null;
-    }
-
-    private String apiContentType(String headers, String fallback) {
-        try {
-            JsonNode parsed = JSON.readTree(headers == null ? "{}" : headers);
-            if (parsed != null && parsed.isObject()) {
-                java.util.Iterator<Map.Entry<String, JsonNode>> entries = parsed.fields();
-                while (entries.hasNext()) {
-                    Map.Entry<String, JsonNode> entry = entries.next();
-                    if ("content-type".equalsIgnoreCase(entry.getKey())) return entry.getValue().asText();
-                }
-            }
-        } catch (Exception ignored) { }
-        return isBlank(fallback) ? "application/json" : fallback;
-    }
-
-    private String apiDuration(Map<String, Object> api, Map<String, Object> source, String... keys) {
-        String value = firstNonBlank(api, keys);
-        if (isBlank(value)) value = firstNonBlank(source, keys);
-        if (!isBlank(value)) return value;
-        String seconds = firstNonBlank(source, "apiTimeoutSeconds", "api_timeout_seconds");
-        return isBlank(seconds) ? null : seconds + " sec";
-    }
-
-    private void applyApiSchedule(Map<String, Object> config, Map<String, Object> api) {
-        Map<String, Object> schedule = jsonObject(api.get("captureSchedule"));
-        if (schedule.isEmpty()) schedule = jsonObject(api.get("capture_schedule"));
-        String mode = firstNonBlank(schedule, "mode");
-        if (isBlank(mode)) mode = firstNonBlank(api, "scheduleMode", "schedule_mode", "triggerMode", "trigger_mode");
-        String cron = firstNonBlank(schedule, "cronExpression", "cron_expression");
-        if (isBlank(cron)) cron = firstNonBlank(api, "cronExpression", "cron_expression");
-        if (isBlank(mode) && isBlank(cron)) {
-            config.putAll(com.linewell.dataelement.integration.nifi.canvas.pipeline.BatchSchedulePolicy.markDefault(config));
-            return;
-        }
-        mode = isBlank(mode) ? "cron" : mode.trim().toLowerCase(Locale.ROOT);
-        config.put("batchSchedulePolicy", "CUSTOM");
-        if (!isBlank(cron) || "cron".equals(mode) || "specified".equals(mode)) {
-            config.put("schedulingStrategy", "CRON_DRIVEN");
-            config.put("schedulingPeriod", isBlank(cron) ? "0 0 9 * * ?" : cron);
-            config.put("scheduleMode", "cron");
-            return;
-        }
-        if ("interval".equals(mode)) {
-            String minutes = firstNonBlank(schedule, "intervalMinutes", "interval_minutes");
-            if (isBlank(minutes)) minutes = firstNonBlank(api, "scheduleIntervalMinutes", "schedule_interval_minutes");
-            config.put("schedulingStrategy", "TIMER_DRIVEN");
-            config.put("schedulingPeriod", (isBlank(minutes) ? "60" : minutes) + " min");
-            config.put("scheduleMode", "interval");
-            return;
-        }
-        if ("time".equals(mode)) {
-            String time = firstNonBlank(schedule, "timeOfDay", "time_of_day");
-            if (isBlank(time)) time = firstNonBlank(api, "scheduleTimeOfDay", "schedule_time_of_day");
-            String[] parts = (isBlank(time) ? "09:00" : time).split(":", 2);
-            String hour = parts.length > 0 && parts[0].matches("\\d{1,2}") ? parts[0] : "9";
-            String minute = parts.length > 1 && parts[1].matches("\\d{1,2}") ? parts[1] : "0";
-            String period = firstNonBlank(schedule, "timePeriod", "time_period");
-            if (isBlank(period)) period = firstNonBlank(api, "scheduleTimePeriod", "schedule_time_period");
-            String expression = "0 " + minute + " " + hour + " * * ?";
-            if ("workday".equalsIgnoreCase(period)) expression = "0 " + minute + " " + hour + " ? * MON-FRI";
-            if ("weekly".equalsIgnoreCase(period)) {
-                String weekday = firstNonBlank(schedule, "weekday");
-                if (isBlank(weekday)) weekday = firstNonBlank(api, "scheduleWeekday", "schedule_weekday");
-                expression = "0 " + minute + " " + hour + " ? * " + (isBlank(weekday) ? "MON" : weekday.toUpperCase(Locale.ROOT));
-            }
-            config.put("schedulingStrategy", "CRON_DRIVEN");
-            config.put("schedulingPeriod", expression);
-            config.put("scheduleMode", "time");
-            return;
-        }
-        // The bound source trigger is executed through NiFi RUN_ONCE.
-        config.put("schedulingStrategy", "TIMER_DRIVEN");
-        config.put("schedulingPeriod", "0 sec");
-        config.put("scheduleMode", "once");
     }
 
     private Map<String, Object> buildSinkConfig(Map<String, Object> targetDs, Map<String, Object> tableAsset, List<?> targetColumns) {

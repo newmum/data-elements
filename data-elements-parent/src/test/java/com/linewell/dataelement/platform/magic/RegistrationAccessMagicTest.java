@@ -34,7 +34,7 @@ class RegistrationAccessMagicTest {
         }
         Object execute(String resource, Map<String,Object> body, TaskRuntimeMagicFixture runtime) throws Exception {
             bindings.put("taskRuntime",runtime.module);bindings.put("body",body);
-            String summary = source("function/01.通用函数/19.登记表接入状态汇总.ms");
+            String summary = source("function/01.通用函数/16.登记表接入状态汇总.ms");
             String api = resource.equals("summary") ? "return registrationAccessSummary(body)" : source("api/03.数据接入/"+resource+".ms");
             return MagicScript.create("var registrationAccessSummary = payload => {\n"+summary+"\n};\n"+api,null).execute(new MagicScriptContext(bindings));
         }

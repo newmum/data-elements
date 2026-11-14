@@ -24,6 +24,7 @@ import org.springframework.web.client.RestClient;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -1409,6 +1410,29 @@ public class NifiClient {
         StringBuilder qs = new StringBuilder("/flow/bulletin-board?groupId=").append(pgId);
         if (afterId > 0) qs.append("&after=").append(afterId);
         return get(qs.toString(), JsonNode.class);
+    }
+
+    /** Clear bulletins through the cutoff for components in this group and its children. */
+    public int clearGroupBulletins(String pgId, Instant cutoff) {
+        // A Leafy node can be ahead of this server. Include every bulletin already visible in this snapshot.
+        JsonNode snapshot = getBulletinBoard(pgId, 0L).path("bulletinBoard").path("bulletins");
+        for (JsonNode item : snapshot) {
+            String timestamp = item.path("bulletin").path("timestampIso").asText("");
+            if (timestamp.isBlank()) continue;
+            try {
+                Instant afterBulletin = Instant.parse(timestamp).plusMillis(1);
+                if (afterBulletin.isAfter(cutoff)) cutoff = afterBulletin;
+            } catch (DateTimeParseException ignored) {
+                // Older responses can lack a parseable ISO timestamp; use the local cutoff for those rows.
+            }
+        }
+        JsonNode result = post("/flow/process-groups/" + pgId + "/bulletins/clear-requests",
+                Map.of("id", pgId, "fromTimestamp", cutoff.toString()), JsonNode.class);
+        JsonNode count = result == null ? null : result.get("bulletinsCleared");
+        if (count == null || !count.isIntegralNumber() || count.asInt() < 0) {
+            throw new NifiException("NiFi 未返回告警清理结果", 502, null);
+        }
+        return count.asInt();
     }
 
     // ---------------------------------------------------------------------

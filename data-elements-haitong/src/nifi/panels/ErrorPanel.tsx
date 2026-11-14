@@ -5,9 +5,13 @@ import { useErrorPanelStore } from '@/stores/errorPanelStore';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { getNifiOverlayContainer } from './overlayContainer';
 import { mergeFlowErrors } from '../utils/flowActionFailure';
+import { groupActiveFlowErrors } from '../runtime/activeFlowErrors';
+import { visibleFlowErrors, visibleFlowBulletins } from '../runtime/dismissedFlowErrors';
 import {
   useFlowErrors,
   useClearFlowErrors,
+  useFlowStatus,
+  useLiveFlowBulletins,
   type FlowError,
   type ErrorPhase,
 } from '@/api/pipelines';
@@ -43,8 +47,9 @@ export default function ErrorPanel() {
   const close = useErrorPanelStore((s) => s.close);
   const failures = useErrorPanelStore((s) => s.failures);
   const failureSequence = useErrorPanelStore((s) => s.failureSequence);
-  const clearFailures = useErrorPanelStore((s) => s.clearFailures);
   const pipelineId = useCanvasStore((s) => s.currentPipelineId);
+  const dismissed = useErrorPanelStore(s => pipelineId ? s.dismissed[pipelineId] : undefined);
+  const nodes = useCanvasStore((s) => s.nodes);
   const focusNode = useCanvasStore((s) => s.focusNode);
   const openDrawer = useCanvasStore((s) => s.openDrawer);
   const { message } = AntdApp.useApp();
@@ -52,10 +57,23 @@ export default function ErrorPanel() {
   const [height, setHeight] = useState(420);
 
   const errorsQuery = useFlowErrors(pipelineId);
+  const status = useFlowStatus(pipelineId);
+  const bulletins = useLiveFlowBulletins(pipelineId, status.data?.deployed === true, false);
   const clearMut = useClearFlowErrors();
 
-  const list = useMemo(() => mergeFlowErrors(errorsQuery.data ?? [],
-    failures.filter(row => row.pipelineId === pipelineId).map(row => row.error)), [errorsQuery.data, failures, pipelineId]);
+  const history = useMemo(() => visibleFlowErrors(mergeFlowErrors(errorsQuery.data ?? [],
+    failures.filter(row => row.pipelineId === pipelineId).map(row => row.error)), dismissed), [errorsQuery.data, failures, pipelineId, dismissed]);
+  const live = useMemo(() => {
+    const alerts = visibleFlowBulletins(bulletins.data ?? [], dismissed);
+    const mapped = Object.values(groupActiveFlowErrors(status.data, alerts, new Set(Object.keys(nodes)))).flat();
+    const byId = new Map(mapped.map(error => [error.id, error]));
+    return alerts.map((alert): FlowError => byId.get(`live-${alert.id}`) ?? ({
+      id: `live-${alert.id}`, phase: 'RUNTIME', level: alert.level,
+      nodeLabel: alert.sourceName, message: alert.message, occurredAt: alert.timestamp,
+    }));
+  }, [bulletins.data, status.data, nodes, dismissed]);
+  const list = useMemo(() => [...live, ...history.filter(row => !live.some(alert =>
+    row.phase === 'RUNTIME' && row.nodeLabel === alert.nodeLabel && alert.message.startsWith(row.message)))], [live, history]);
   useEffect(() => { if (visible) setFilter('ALL'); }, [visible, failureSequence, pipelineId]);
   const counts = useMemo(() => {
     const c: Record<FilterValue, number> = { ALL: list.length, VALIDATION: 0, DEPLOYMENT: 0, RUNTIME: 0 };
@@ -113,12 +131,13 @@ export default function ErrorPanel() {
   };
 
   const handleClear = async () => {
+    if (!pipelineId) return;
     try {
-      if (pipelineId) await clearMut.mutateAsync(pipelineId);
-      clearFailures(pipelineId);
-      message.success('已清空错误记录');
-    } catch (err: any) {
-      message.error(`清空失败: ${err?.message ?? err}`);
+      const result = await clearMut.mutateAsync(pipelineId);
+      message.success(result.nativeCleared ? '已清空错误记录和告警' : '已清空当前画布的错误记录与提示');
+    } catch (err) {
+      const failure = err as { response?: { data?: { message?: string } }; message?: string };
+      message.error(failure?.response?.data?.message ?? failure?.message ?? '清空错误与告警失败');
     }
   };
 
@@ -129,7 +148,7 @@ export default function ErrorPanel() {
       className="error-panel-drawer"
       title={
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <Tooltip title="保留已发生的错误与告警，当前运行情况以顶部任务状态为准">
+          <Tooltip title="同时显示 NiFi 当前公告与平台历史记录。">
             <span>错误与告警记录</span>
           </Tooltip>
           <Tag color="default">{counts.ALL}</Tag>
@@ -144,11 +163,17 @@ export default function ErrorPanel() {
       extra={(
         <div className="error-panel-actions">
           <Tooltip title="刷新">
-            <Button size="small" aria-label="刷新错误记录" icon={<ReloadOutlined />} onClick={() => errorsQuery.refetch()} />
+            <Button size="small" aria-label="刷新错误记录" icon={<ReloadOutlined />} onClick={() => {
+              void errorsQuery.refetch();
+              if (status.data?.deployed) void bulletins.refetch();
+            }} />
           </Tooltip>
-          <Button size="small" icon={<ClearOutlined />} danger onClick={handleClear} disabled={clearMut.isPending || counts.ALL === 0}>
-            清空
-          </Button>
+          <Tooltip title="清空当前流程的错误记录、告警和节点提示，后续新错误仍会显示">
+            <Button size="small" icon={<ClearOutlined />} danger onClick={handleClear} loading={clearMut.isPending}
+              disabled={clearMut.isPending || !pipelineId || (history.length === 0 && live.length === 0)}>
+              清空记录
+            </Button>
+          </Tooltip>
           <Tooltip title="关闭">
             <Button className="error-panel-close" size="small" type="text" aria-label="关闭错误与告警面板" icon={<CloseOutlined />} onClick={close} />
           </Tooltip>
@@ -209,7 +234,7 @@ export default function ErrorPanel() {
                     <Tag color={e.level === 'ERROR' ? 'red' : 'orange'} style={{ margin: 0 }}>
                       {e.level === 'ERROR' ? '错误' : '警告'}
                     </Tag>
-                    <Tag style={{ margin: 0 }}>{phaseLabel(e.phase)}</Tag>
+                    <Tag style={{ margin: 0 }}>{e.id.startsWith('live-') ? 'NiFi 告警' : phaseLabel(e.phase)}</Tag>
                     {e.nodeLabel && (
                       <Tag color="blue" style={{ margin: 0 }}>{e.nodeLabel}</Tag>
                     )}

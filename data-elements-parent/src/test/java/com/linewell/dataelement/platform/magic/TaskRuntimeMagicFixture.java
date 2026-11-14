@@ -53,7 +53,7 @@ final class TaskRuntimeMagicFixture implements AutoCloseable {
     }
 
     static void bindTableFamily(Map<String, Object> inputs) throws IOException {
-        String source = CanonicalMagicSources.byPath("function/01.通用函数/24.接入任务关联表批量读取.ms",
+        String source = CanonicalMagicSources.byPath("function/01.通用函数/21.接入任务关联表批量读取.ms",
                 "35e3408567e34c46abc946414c3405da").replaceAll("(?m)^import [^\\r\\n]+\\R", "");
         var script = MagicScript.create(source, null);
         inputs.put("accessTableFamily", (Function<Object[], Object>) arguments -> script.execute(

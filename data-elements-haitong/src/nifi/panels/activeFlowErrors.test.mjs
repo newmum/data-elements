@@ -15,6 +15,59 @@ function load(file, resolve) {
   return exports;
 }
 const { groupActiveFlowErrors } = load('../runtime/activeFlowErrors.ts', () => ({}));
+const { bulletinKey, visibleFlowErrors, visibleFlowBulletins } = load('../runtime/dismissedFlowErrors.ts', () => ({}));
+
+test('canvas fallback clears history and badges across polling, but later identical errors stay visible', async () => {
+  for (const response of ['old-backend', 'native-cleared', 'native-unsupported', 'unreachable']) {
+    const history = { id: 'old-history', phase: 'VALIDATION', nodeId: 'source', level: 'ERROR', message: 'failed' };
+    const bulletin = { id: 'old', sourceId: 'processor', sourceName: 'source', message: 'failed', level: 'ERROR', timestamp: '2026-11-13T10:00:00Z' };
+    const snapshot = { errors: [history], nodeMapping: { processorIdToCanvasNode: { processor: 'source' } } };
+    const state = { failures: [], dismissed: {}, dismiss(id, errors, bulletins) {
+      this.dismissed[id] = { historyIds: new Set(errors.map(row => row.id)), bulletinKeys: new Set(bulletins.map(bulletinKey)) };
+    } };
+    const requests = [];
+    const hooks = load('../api/pipelines.ts', id => {
+      if (id === '@tanstack/react-query') return { useMutation: options => options, useQueryClient: () => ({
+        getQueryData: key => key[0] === 'pipeline-status' ? snapshot : key[0] === 'pipeline-errors' ? [history] : [bulletin],
+        invalidateQueries: async () => {},
+      }) };
+      if (id === './bridgeSession') return { getSessionRevision: () => 1 };
+      if (id === '../stores/errorPanelStore') return { useErrorPanelStore: { getState: () => state } };
+      if (id === './client') return { apiClient: { post: async path => {
+        requests.push(path);
+        if (response === 'unreachable') throw { response: { status: 502 } };
+        return { data: response === 'old-backend' ? undefined : { historyCleared: true, bulletinsCleared: 1, nativeCleared: response === 'native-cleared' } };
+      } } };
+      return {};
+    });
+    const result = await hooks.useClearFlowErrors().mutationFn('p');
+    assert.equal(result.nativeCleared, response === 'native-cleared');
+    assert.deepEqual(requests, ['/pipelines/delete/p/errors']);
+    const cleared = state.dismissed.p;
+    assert.equal(visibleFlowErrors([history], cleared).length, 0);
+    assert.equal(visibleFlowBulletins([bulletin], cleared).length, 0);
+    assert.equal(Object.keys(groupActiveFlowErrors({ ...snapshot, errors: visibleFlowErrors([history], cleared) },
+      visibleFlowBulletins([bulletin], cleared), new Set(['source']))).length, 0);
+    const later = { ...bulletin, id: 'new' };
+    assert.equal(visibleFlowBulletins([bulletin, later], cleared).length, 1);
+    assert.equal(visibleFlowErrors([history, { ...history, id: 'new-history' }], cleared).length, 1);
+    assert.equal(visibleFlowBulletins([bulletin], state.dismissed.other).length, 1);
+    assert.equal(groupActiveFlowErrors(snapshot, [later], new Set(['source'])).source.length, 2);
+  }
+});
+
+test('clear response from a previous login cannot dismiss the new session diagnostics', async () => {
+  let revision = 1, dismissed = false;
+  const hooks = load('../api/pipelines.ts', id => {
+    if (id === '@tanstack/react-query') return { useMutation: options => options, useQueryClient: () => ({ getQueryData: () => undefined }) };
+    if (id === './bridgeSession') return { getSessionRevision: () => revision };
+    if (id === '../stores/errorPanelStore') return { useErrorPanelStore: { getState: () => ({ failures: [], dismiss: () => { dismissed = true; } }) } };
+    if (id === './client') return { apiClient: { post: async () => { revision++; return { data: {} }; } } };
+    return {};
+  });
+  await assert.rejects(hooks.useClearFlowErrors().mutationFn('p'), /登录状态已变化/);
+  assert.equal(dismissed, false);
+});
 
 test('persisted runtime records do not color a recovered node red; live bulletin still does', () => {
   const history = { id: 'record', phase: 'RUNTIME', nodeId: 'source', nodeLabel: '来源/清单', level: 'ERROR', message: 'previous authentication failure', occurredAt: '2026-10-24T00:00:00Z' };

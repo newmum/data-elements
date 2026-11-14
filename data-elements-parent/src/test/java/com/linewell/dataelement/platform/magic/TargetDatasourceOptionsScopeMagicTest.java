@@ -183,7 +183,7 @@ class TargetDatasourceOptionsScopeMagicTest {
         }
 
         Object run(Map<String, Object> body) throws Exception {
-            String classifier = CanonicalMagicSources.byPath("function/01.通用函数/23.ODS来源库分类.ms",
+            String classifier = CanonicalMagicSources.byPath("function/01.通用函数/20.ODS来源库分类.ms",
                     "d2138de2de28456aa57d9ade2305eed7").replaceAll("(?m)^import [^\\r\\n]+\\R", "");
             String options = CanonicalMagicSources.byId("ods_target_datasource_options_01")
                     .replaceAll("(?m)^import [^\\r\\n]+\\R", "");

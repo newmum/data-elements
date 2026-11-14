@@ -350,7 +350,7 @@ class MarketShoppingCartListMagicTest {
             elasticsearch = new ElasticSearchModule(client);
             script = MagicScript.create("var me = () => authUser(body)\n" + withoutImports(CanonicalMagicSources.byId(RESOURCE_ID)), null);
             eligibility = MagicScript.create(withoutImports(CanonicalMagicSources.byPath(
-                    "function/01.通用函数/27.超市目录发布资格.ms", "09ecb205502244aba26408368d56aad3")), null);
+                    "function/01.通用函数/24.超市目录发布资格.ms", "09ecb205502244aba26408368d56aad3")), null);
         }
 
         void publish(String id, String tenant) {

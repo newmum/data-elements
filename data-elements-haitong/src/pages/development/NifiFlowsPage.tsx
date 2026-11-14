@@ -84,7 +84,9 @@ export default function NifiFlowsPage() {
     rowKey="id"
     dataSource={list.data?.list??[]} serverSort={order} pagination={{current:page,pageSize:size,total:list.data?.total||0,onChange:(p,n)=>{setPage(n===size?p:1);setSize(n);}}}
     columns={[
-     {title:'流程名称',dataIndex:'name',key:'name',render:(name:string,item:PipelineSummary)=><Button type="link" onClick={()=>open(item.id)}>{name}</Button>},
+     {title:'流程名称',dataIndex:'name',key:'name',width:220,ellipsis:{showTitle:false},render:(name:string,item:PipelineSummary)=><Button type="link" title={name} style={{maxWidth:188,minWidth:0}} onClick={()=>open(item.id)}>
+      <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{name}</span>
+     </Button>},
      {title:'流程 ID',dataIndex:'id',key:'id',ellipsis:true},
      {title:'组件数',dataIndex:'nodeCount',key:'nodeCount',width:100,render:(value:number|undefined)=>value??'—'},
      {title:'NiFi Process Group',dataIndex:'nifiProcessGroupId',key:'nifiProcessGroupId',ellipsis:true,render:(value:string|null|undefined)=>value||'未部署'},

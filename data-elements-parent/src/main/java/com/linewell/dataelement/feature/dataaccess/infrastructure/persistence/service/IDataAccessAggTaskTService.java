@@ -14,16 +14,7 @@ import com.baomidou.mybatisplus.extension.service.IService;
  */
 public interface IDataAccessAggTaskTService extends IService<DataAccessAggTaskT> {
 
-    /**
-     * Ensure there is an access task for the given catalog. If it does not exist, create one.
-     *
-     * @return access task id
-     */
-    String ensureTaskForCatalog(String catalogId, String pipelineId, String pipelineName, Object dsl);
-
     DataAccessAggTaskT findByPipelineId(String pipelineId);
-
-    boolean updateTaskProcessGroup(String pipelineId, String processGroupId);
 
     boolean updateLatestMonitorState(String pipelineId, LatencyMonitorSnapshot snapshot);
 }

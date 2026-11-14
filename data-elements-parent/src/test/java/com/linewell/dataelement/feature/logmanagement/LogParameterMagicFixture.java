@@ -17,7 +17,7 @@ import static org.mockito.Mockito.*;
 /** Runs the actual new local function before registration; deliberately does not require a manifest edit. */
 final class LogParameterMagicFixture {
     static final String ID = "log_parameter_condition_v1";
-    static final String RELATIVE = "function/01.通用函数/34.日志参数关键词条件.ms";
+    static final String RELATIVE = "function/01.通用函数/31.日志参数关键词条件.ms";
     private static final String RESOURCE = load();
     private static final int SPLIT = RESOURCE.indexOf("================================");
 

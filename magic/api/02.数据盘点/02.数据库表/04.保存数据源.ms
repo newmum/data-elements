@@ -24,7 +24,7 @@
 ================================
 import '@post:/dst/maintenance/refresh' as refreshAssetIndex
 import com.linewell.dataelement.elasticsearch.EsCommonService as esCommonService
-import apiPullConfig
+import '@/common/apiPullDefinitionError' as apiPullDefinitionError
 import tenantRuntime
 import dataScope
 import metadataAsset
@@ -467,9 +467,17 @@ if (blank(dbType) && old != null) {
 }
 if (accessMode == 'proxy') { dbType=null }
 var isApiCapture = accessMode == 'capture' && !blank(dbType) && text(dbType).toLowerCase() == 'api'
+// 仅校验本次提交的 API 拉取定义。登记保存仍使用统一提示，避免在错误中返回连接配置。
 if (isApiCapture && props instanceof Map && props.containsKey('apiPullItems')) {
-    try { apiPullConfig.validateDefinitions(props.apiPullItems) }
-    catch (e) { exit 400, 'API 抓取登记定义无效，请核对地址、表名及凭据引用' }
+    var definitionError
+    try {
+        definitionError = apiPullDefinitionError(props.apiPullItems)
+    } catch (e) {
+        exit 400, 'API 抓取登记定义无效，请核对地址、表名及凭据引用'
+    }
+    if (definitionError != null) {
+        exit 400, 'API 抓取登记定义无效，请核对地址、表名及凭据引用'
+    }
 }
 // 华为 MRS Hive 的元数据仅由服务端 hwhive 模块访问。登记时只持久化模式标记，
 // 供登记后续步骤和 NiFi 重新加载当前租户的数据源，不信任浏览器提交的 JDBC/Kerberos 参数。
