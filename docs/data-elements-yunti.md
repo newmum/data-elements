@@ -44,6 +44,8 @@ pnpm install
 pnpm dev
 ```
 
+前端回归可在 Node.js 24 下运行 `node --no-experimental-webstorage node_modules/vitest/vitest.mjs run`，由测试的 jsdom 环境提供页面存储。
+
 开发服务默认监听 `http://localhost:3030`；端口占用时 Vite 会顺延。
 主平台“数据服务 → 编排”会验证画布应用标识并识别 3030–3034（兼容旧 6174–6178）端口。
 嵌入画布先与主平台通过明确来源的 `postMessage` 初始化登录会话，再读取流程；登录令牌不放入 URL，也不在云梯端持久化。
@@ -61,11 +63,7 @@ pnpm dev
 Vite 会将 `/dws`、`/api` 和 `/magic` 代理到 `http://127.0.0.1:8088`。
 嵌入画布通过主平台初始化的 `token` 请求头访问后端；主平台未勾选“记住密码”时也支持会话登录。
 
-打开画布所需的 `GET /dws/flowserve/flows/{id}` 和 `GET /dws/flowserve/runtime-nodes`
-由后端 `FlowServeCanvasReadController` 提供。流程详情在当前租户库中一次查询，
-并通过关联服务记录执行与服务列表相同的人员、部门数据范围校验。
-运行节点一次读取最多 100 项，不返回部署密钥，也不逐节点发起健康检查。
-这两个接口负责初始化读取。服务关联的 HTTP 编排通过下述 Magic 接口保存、试运行、发布、查看版本和下线。
+Magic API 直接提供画布初始化的 `GET /dws/flowserve/flows/{id}` 和 `GET /dws/flowserve/runtime-nodes`，并保留对应 `HEAD`。详情按当前租户查询已保存流程，通过关联服务的 `flow_id` 或历史 `tid` 应用服务列表相同的全部、部门或本人数据范围。运行节点按默认状态、名称和标识排序，一条 SQL 读取有界窗口，超过 100 项时返回现有错误。节点响应仅提供部署令牌是否已设置。两个入口保留既有业务信封，编排草稿保存、试运行、发布、版本和下线仍由下述 Magic 接口处理。
 
 <a id="http-service-orchestration"></a>
 

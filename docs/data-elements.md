@@ -262,6 +262,8 @@ mysql --host=127.0.0.1 --port=3306 --user=DBA_USER --password --default-characte
 
 86 的 `da_asset_t` 兼容视图已在公安、海渔和广电退役，澄天金仓原无此对象。三库各保留 219 张表和 4 个业务视图，`da_catalog_t` 的列与全量数据指纹一致。五库重新导出后，完整定义只移除这三个视图。结构比较的澄天 53 项既有差异仍记录在案。已有库分别按 [MySQL 增量](../db/increments/000009_retire_legacy_asset_view.mysql.sql) 和 [达梦增量](../db/increments/000009_retire_legacy_asset_view.dameng.sql) 的前置核对和恢复要求升级，具体部署目标以实际绑定为准。
 
+14 演示环境的四个 `baseline_demo_*` 库均已无 `da_asset_t`，目录数据继续使用 `da_catalog_t`。14 控制库仍有三项旧 Magic 资源包含可执行的旧表引用。演示环境资源的核对和发布按 [后端接手顺序](data-elements-parent.md#backend-simplification-handoff) 进行。
+
 此前“四行业统一为 176 张、表列主键索引外键一致”是历史核验口径，不能覆盖上述当前实测。原基线包含 3 张湖仓分层表、12 张服务网关表及登记第五步的接入申请三字段；海渔旧 `nifi_task_status_t` 的退役记录仍保留。14 公网演示连接及结构单独维护，不随本批升级；8088 的实际绑定以运行进程为准。
 
 现用公共结构增量为 `000002_lakehouse_gateway_tables`（MySQL、达梦、金仓），仅用于缺少所列全部15表的行业旧基线；已有表必须先核对，不能重复建表。`000003_market_catalog_view_count` 为四行业目录主表增加有符号 `BIGINT NOT NULL DEFAULT 0` 浏览量列，不改变目录修订号或更新时间。`000004_retire_unused_nifi_task_status.mysql.sql` 仅适用于经独立引用核查的海渔旧空表。实际执行前核对部署绑定、方言、当前结构与恢复材料；这些结构增量不回填索引历史或切换计数写入者。
@@ -739,12 +741,13 @@ Use the released `my-db` page at `/register/register-sjkb/list` as the default v
 - 以可直接在 Magic 编辑器维护的前端业务 HTTP 接口为目标。优先整组迁移 Controller 的现用方法，复用 Magic 公共函数。同批删除被替代的 Controller、Service、接口和专用 DTO、Mapper 等无其他用途的文件。仅调用脚本的 Java 转发层也纳入迁移；临时桥接要写清剩余调用、迁移条件和撤除验收。保留框架入口和负责协议、流式传输、鉴权、并发或 SDK 的必要技术组件，按实际调用说明保留原因。
 - 切换现用路由前核对前端、低代码源码及编译内容、Magic、外部调用、鉴权拦截器和运行映射。可保留已公开的 HTTP 路径，包括既有 NiFi `/nifi/api/**`，并同步核对 Spring 与 Magic 的注册优先级。保留 HTTP 状态、原始数据或响应信封、缺参和错误格式、会话权限、事务以及异常处理。切换后用真实登录、匿名、越权和代表性浏览器场景验证每个现用入口只由预定实现处理。
 - 统计每批直接迁入 Magic 的业务路由、删除的生产 Java 文件与类、实际 Java 增删行、删除或合并的测试文件及其覆盖去向。先清理整组已经替代或明确无调用的实现，再处理仍有多个职责的类。保留必要功能的 Java 文件需说明实际技术用途。
+- 将完整业务入口及其专用依赖退役作为里程碑。跨批迁移的类在接手清单中列明剩余方法、直接调用者和整类删除条件。保留类数和文件数作为独立验收指标，同批新增技术能力优先复用现有组件。
 - 退役旧数据库对象要同时核对运行对象类型、依赖、使用者及各数据库方言。`da_asset_t` 按各租户实际对象处理，并将剩余读写迁到各业务的现行主表与投影。源码、在线资源、SQL 对象和已知外部消费者全部解除依赖后，准备对应方言增量和完整初始化定义，核对实际迁移、回退及冷启动。按现用对象确认保留的数据及依赖，避免以历史名称推断对象类型。
-- 清理测试先用 Surefire 报告区分编译、执行和环境等待。失去调用的旧实现测试可以删除，仍有效的契约改由 Magic 真实执行和 HTTP 回归覆盖。重复场景优先参数化，共用夹具。保留权限、事务、回滚、失败补偿、方言、历史契约和性能边界的独有验证。耗时或依赖重环境的测试可以进入单独集成阶段，明确其执行命令和 CI 或每批验收入口。每次调整都比较前后覆盖、测试数量、默认构建时间和完整回归结果。
+- 清理测试先用当前构建的 Surefire 报告区分编译、执行和环境等待。失去调用的旧实现测试可以删除，仍有效的契约改由 Magic 真实执行和 HTTP 回归覆盖。重复用例按覆盖目标合并，夹具按场景只准备断言需要的数据。保留权限、事务、回滚、失败补偿、方言、历史契约和性能边界的独有验证。耗时或依赖重环境的测试可以进入单独集成阶段，明确其执行命令和 CI 或每批验收入口。每次调整都比较测试文件数、有效覆盖和完整回归结果。提速以同一 JDK、依赖缓存和编译起始状态下的多次构建计时为准。单独执行的维护脚本或测试计入文件清理，Maven 耗时按实际执行的构建范围统计。
 
 <a id="lowcode-magic--magic-api-organization"></a>
 
-### Magic API Organization
+### Magic API 目录组织
 
 - Public route roots are fixed by domain:
   - `/dst`: data inventory. Its direct children are `/application`, `/database`, and `/catalog`.
@@ -755,9 +758,10 @@ Use the released `my-db` page at `/register/register-sjkb/list` as the default v
   - `/idaas`: unified identity management and its explicitly configured tenant-receiver interfaces; platform and tenant-local accounts remain separate.
   - `/sym` and `/portal`: the existing tenant system-management and portal routes. Preserve their deployed paths when improving Magic editor names or documentation.
   - `/nifi/api`: existing NiFi business HTTP paths. Preserve the client paths for routes transferred to Magic, with one path segment per editor group.
-- A Magic group metadata `path` must contain one URL segment only. Compose deeper URLs through nested groups; never put `dst/database` or another multi-segment value in one group.
-- 同级 API 分组、接口、函数和任务从 `01.` 开始连续编号。移动或退役资源后，整理所涉分组的同级编号。现用资源使用准确的业务名称，物理名称与编辑器显示名称一致，避免占位名、测试名或复制名。
-- Physical `file_path` numbering is for readable ordering. Runtime imports and routes come from group/API metadata `path`; do not rewrite imports merely because a display/file name gained a numeric prefix.
+- 业务目录从 `api/`、`function/` 或 `task/` 下面起算，最多三层。例如 `02.数据盘点/02.数据库表/01.元数据管理` 为三层。每套独立 Magic 部署先选定统一的 API 叶分组深度，两层能表达业务分类时用两层，需要第三层时所有 API 落在第三层。同一部署的 API 都放在该深度的叶分组。父分组只放子分组，叶分组只放接口和自己的 `group.json`。共享平台与独立海通分别制定目标树和迁移计划。
+- 同级分组、接口、函数和任务各自从 `01.` 连续编号，同一序列无缺号、重号或未编号资源。移动、退役或新增后核对所涉同级序列。文件和分组名称与在线编辑器的显示名称一致。
+- 每个实际分组的 `group.json.path` 必须是非空的单个有效 URL 段。上级与本级叠加形成路由前缀，剩余业务段由 API 自己的 `path` 定义。禁止空路径、单独的 `/`、多段分组路径及仅为补齐深度创建的空壳分组。
+- 编号和文件名只控制显示顺序。先计算旧、新的完整 HTTP 方法、路由和函数导入标识，优先用目标叶分组的有效前缀保持公共地址及资源 ID。确需改址时，在同批更新实际请求方、Magic 导入、Java 调用、低代码源码及编译产物、配置、任务、Mock 契约及已知外部回调，演练恢复并验证新旧入口的切换。现行 Magic 2.2.2 的空 API 路径及尾斜杠不能用来消除路由段，短路由须通过真实 HTTP 对照确认迁移契约。
 - Direct database moves must preserve the complete resource tree:
   - Every group has one `group.json`.
   - Every physical folder has one active directory row ending in `/` with `file_content='this is directory'`.
@@ -779,6 +783,7 @@ Use the released `my-db` page at `/register/register-sjkb/list` as the default v
 - 所有 `import` 集中放在脚本最前面。最后一个 `import` 之后，第一段写中文资源说明，再开始可执行代码。接口写明请求方法、完整路由、用途、主要参数和返回结果。函数或任务写明实际导入路径或执行入口、输入及用途。有权限、事务、外部调用或写入时，说明边界和副作用。没有导入的脚本从该说明开始。
 - 在关键代码上方就近写中文行注释，解释为何采用该做法。租户与角色范围、分页前后顺序、去重优先级、批量读取、状态流转、事务、异常和外部副作用都应按实际逻辑说明。普通赋值、方法名已经能表达的操作无需复述。业务变化后同步改资源说明和行注释。
 - 使用同一脚本内一致的缩进、空格和大括号风格，按导入、说明、参数与权限、数据访问和结果组装组织。分支与循环的主体分行缩进，长对象和链式调用按含义换行。复杂条件先用业务名称拆解，再组合；只为确实复用的逻辑或必要技术边界提取函数。保持 MagicScript 语法和原有接口契约，整理后执行实际脚本回归。
+- 主业务接口直接呈现专属的校验、权限、条件和流程编排。GET/HEAD、兼容别名或多个已确认调用方可复用同一份 Magic 实现。短入口在导入后的中文说明及编辑器描述中标注实现函数、复用对象和实际副作用，使用能说明用途的导入别名及操作参数。核查一层包一层的转发、难以解释的布尔分派和仅转调 Java 业务的接口，将专属编排移回 Magic 主实现。探活等契约本身只返回固定状态的入口按实际用途说明并验收。
 - 整理待迁移的旧脚本时，保留既有 SQL 的参数绑定、标识符和别名大小写以及查询语义。改造数据访问时遵循 [Magic API 优先与数据库访问抽象](#magic-first-data-access)。
 - 批量整理前按 [本地资源版本管理](#resource-versioning) 核对所选资源，备份对应的活动记录。元数据 `id` 重复或旧记录缺少表行 `tid` 时，使用准确的 `file_path` 和内容区分，并报告编辑器不可见的孤立资源。发布后回读运行脚本，逐业务域验证实际入口。
 
@@ -937,8 +942,8 @@ Use the released `my-db` page at `/register/register-sjkb/list` as the default v
 - 按业务模块保存；同一模块不再同时建立“数据盘点”和“租户端”两个同路由前缀的根分组。现用数据库相关接口归数据盘点的数据库表分组。
 - 停用应用没有当前调用时清理其接口和空分组，不为保存旧代码建立空的新中心。
 - 兼容接口逐条核查。当前服务构建仍调用 `/dataassets/manage/assets/page`，这条接口保留；仅名称含“兼容”不能作为删除理由。其他旧地址没有当前调用时可清理。
-- 不因整理编辑器目录改变有效 HTTP 方法、公共路由、资源 ID 或函数导入名称。移入不同路由前缀的父分组前，先确认路由保持方法，不能只移动文件夹。
-- API 文件、分组元数据、数据库物理路径和本地清单保持一致；清理后重新从持久化存储加载并核对运行资源。
+- 按 [Magic API 目录组织](#lowcode-magic--magic-api-organization) 核对统一叶深度、连续编号以及完整入口的前后映射。批次计划标明只调整显示顺序、保持地址的移动、实际改址及其调用方。
+- 选定目录移动须同步资源和分组元数据、数据库物理路径、目录行与本地清单。先核对当前工具的真实能力，普通内容发布与新增登记各有独立用途。移动采用已验证的编辑器移动接口或带精确旧状态检查及回退的事务操作。发布后核对重复、断链、非空路径、运行路由和编辑器树，冷启动重新从持久化存储核验。
 
 
 <a id="resource-layout--lowcode-建议结构"></a>

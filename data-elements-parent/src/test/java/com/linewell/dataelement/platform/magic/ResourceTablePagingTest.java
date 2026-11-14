@@ -129,6 +129,10 @@ class ResourceTablePagingTest {
     @EnumSource(DatabaseMode.class)
     void catalogSortsEntireAuthorizedResultBeforePagingWithThreeReads(DatabaseMode mode) throws Exception {
         var f = new Fixture(mode);
+        for (int index = 0; index < 120; index++) {
+            f.seedCatalogParents(index);
+            f.seedCatalogItems(index, index + 1);
+        }
         // Repeated active bindings may establish eligibility, but may never duplicate catalog rows.
         f.database.update("INSERT INTO dwm_center_layer_source_t VALUES('validation-second-binding','tenant-a','permitted','layer',0)");
         for(String field:List.of("name","updatedAt","createdAt","itemCount","fields")) {
@@ -160,6 +164,7 @@ class ResourceTablePagingTest {
     @EnumSource(DatabaseMode.class)
     void catalogAccessFollowsActiveSourcesAndBindingsWithinTheCurrentTenant(DatabaseMode mode) throws Exception {
         var f = new Fixture(mode);
+        f.seedCatalogParents(1);
         f.database.update("UPDATE da_catalog_t SET created_by='another-user',org_id='org-unrelated' WHERE tid LIKE 'cat-%'");
         f.datasource("validation-owner-other-org", "tenant-a", "owner", "org-b", 0);
         f.binding("validation-owner-other-org", "tenant-a", "domain", 0);
@@ -190,16 +195,11 @@ class ResourceTablePagingTest {
         var organization = new Scope("ORG", List.of("org-a"));
         var all = new Scope("ALL", List.of());
         var input = Map.<String, Object>of("tenantId", "tenant-b", "orgId", "org-b", "scope", "ALL");
-        var ownerPage = f.catalog(1, 100, input, owner);
-        assertEquals(121, ((Number) ownerPage.get("total")).intValue());
-        assertTrue(StructuredValues.objectRows(ownerPage.get("list")).stream().map(row -> row.get("id").toString())
-                .allMatch(id -> id.startsWith("cat-") || id.equals("validation-owner-other-org")));
-        var organizationPage = f.catalog(1, 100, input, organization);
-        assertEquals(240, ((Number) organizationPage.get("total")).intValue());
-        assertTrue(StructuredValues.objectRows(organizationPage.get("list")).stream().map(row -> row.get("id").toString())
-                .allMatch(id -> id.startsWith("cat-") || id.startsWith("hidden-")));
-        assertEquals(242, ((Number) f.catalog(1, 100, input, all).get("total")).intValue());
-        assertEquals(0, ((Number) f.catalog(1, 100, input, new Scope("ORG", List.of())).get("total")).intValue());
+        assertCatalogPageIds(f, input, owner, Set.of("cat-001", "validation-owner-other-org"));
+        assertCatalogPageIds(f, input, organization, Set.of("cat-001", "hidden-001"));
+        assertCatalogPageIds(f, input, all,
+                Set.of("cat-001", "hidden-001", "validation-owner-other-org", "validation-outside"));
+        assertCatalogPageIds(f, input, new Scope("ORG", List.of()), Set.of());
 
         assertSingleCatalog(f, "cat-001", owner);
         assertSingleCatalog(f, "validation-owner-other-org", owner);
@@ -220,6 +220,13 @@ class ResourceTablePagingTest {
     @EnumSource(DatabaseMode.class)
     void catalogFiltersAndDraftProjectionPreserveThePublicContract(DatabaseMode mode) throws Exception {
         var f = new Fixture(mode);
+        for (int index = 0; index < 119; index++) {
+            f.seedCatalogParents(index);
+            f.seedCatalogItems(index, 1);
+        }
+        // The draft projection asserts all 120 fields. The other catalogs only exercise cataloged filtering.
+        f.seedCatalogParents(119);
+        f.seedCatalogItems(119, 120);
         f.database.update("""
                 UPDATE da_catalog_t SET catalog_name='validation name',catalog_name_en='validation_code',
                     source_table_name='validation technical table',db_id='validation-declared-source',
@@ -286,6 +293,15 @@ class ResourceTablePagingTest {
         assertEquals(0, f.counter.count);
     }
 
+    private static void assertCatalogPageIds(Fixture fixture, Map<String, Object> query, Scope scope,
+            Set<String> expectedIds) throws Exception {
+        var page = fixture.catalog(1, 100, query, scope);
+        var ids = StructuredValues.objectRows(page.get("list")).stream().map(row -> row.get("id").toString()).toList();
+        assertEquals(expectedIds.size(), ((Number) page.get("total")).intValue());
+        assertEquals(expectedIds.size(), ids.size());
+        assertEquals(expectedIds, Set.copyOf(ids));
+    }
+
     private static void assertSingleCatalog(Fixture fixture, String id, Scope scope) throws Exception {
         fixture.counter.reset();
         var row = StructuredValues.objectMap(fixture.catalogRead(Map.of("mode", "one", "id", id), scope));
@@ -306,7 +322,7 @@ class ResourceTablePagingTest {
     @ParameterizedTest
     @EnumSource(DatabaseMode.class)
     void resourceStateRetainsCompatibilityShapeAndBulkReadBudget(DatabaseMode mode) throws Exception {
-        var fixture = new Fixture(mode, 0);
+        var fixture = new Fixture(mode);
         fixture.createCompatibilityTables();
         fixture.catalogRow("validation-hidden-catalog", "tenant-a", "forbidden", 0);
         fixture.catalogRow("validation-foreign-catalog", "tenant-b", "permitted", 0);
@@ -384,7 +400,7 @@ class ResourceTablePagingTest {
     @ParameterizedTest
     @EnumSource(DatabaseMode.class)
     void catalogStructureChecksTenantAndOrdersActiveColumns(DatabaseMode mode) throws Exception {
-        var fixture = new Fixture(mode, 0);
+        var fixture = new Fixture(mode);
         fixture.createCompatibilityTables();
         fixture.database.update("UPDATE db_table_t SET table_name='validation_table',table_name_cn='验证表',table_comment='测试' WHERE tid='forbidden'");
         fixture.table("validation-foreign-table", "tenant-b", "permitted", 0);
@@ -440,7 +456,7 @@ class ResourceTablePagingTest {
 
     @Test
     void publicationReadHonorsLegacyVisibilityAndReturnsRevisionMetadata() throws Exception {
-        var fixture = new Fixture(DatabaseMode.MYSQL, 0);
+        var fixture = new Fixture(DatabaseMode.MYSQL);
         fixture.createCompatibilityTables();
         var visible = Map.<String, Object>of("visibility", "DEPARTMENTS", "provider", "org-b", "visibleDepartments", List.of("org-a"));
         var privateSnapshot = Map.<String, Object>of("visibility", "DEPARTMENTS", "provider", "org-b", "visibleDepartments", List.of("org-c"));
@@ -484,7 +500,7 @@ class ResourceTablePagingTest {
     @ParameterizedTest
     @EnumSource(DatabaseMode.class)
     void formAndExportReadsUseApplicantOrProviderAndRetainLegacyStates(DatabaseMode mode) throws Exception {
-        var fixture = new Fixture(mode, 0);
+        var fixture = new Fixture(mode);
         fixture.createCompatibilityTables();
         String past = "2000-01-01T00:00:00Z", future = "2999-01-01T00:00:00Z";
         fixture.publication("validation-private", "tenant-a", "catalog-v", "PUBLISHED", 1, 0,
@@ -560,7 +576,16 @@ class ResourceTablePagingTest {
     @ParameterizedTest
     @EnumSource(DatabaseMode.class)
     void modelLogsUseFullSqlPaginationAndNeverReturnOtherTenantActorsOrModels(DatabaseMode mode) throws Exception {
-        var f=new Fixture(mode);
+        var f = new Fixture(mode);
+        for (int index = 0; index < 120; index++) {
+            String model = f.addModel(index);
+            String suffix = String.format("%03d", index);
+            f.database.update("""
+                    INSERT INTO res_resource_operation_log VALUES
+                        (?,'tenant-a','owner','创建逻辑模型',?,'Model','Created',?),
+                        (?,'tenant-b','owner','创建逻辑模型','model-outside','Wrong tenant','Outside',?)
+                    """, "log-" + suffix, model, VALIDATION_TIME.plusSeconds(index), "outside-" + suffix, VALIDATION_TIME);
+        }
         f.counter.count=0;var small=f.command(Map.of("table","modelLogs","page",1,"size",20,"sortField","modelName","sortDir","asc"));assertEquals(3,f.counter.count);
         f.counter.count=0;var large=f.command(Map.of("table","modelLogs","page",1,"size",100,"sortField","modelName","sortDir","asc"));assertEquals(3,f.counter.count);
         var rows=StructuredValues.objectRows(large.get("list"));assertEquals(120,((Number)large.get("total")).intValue());
@@ -576,7 +601,7 @@ class ResourceTablePagingTest {
     @ParameterizedTest
     @EnumSource(DatabaseMode.class)
     void modelLogReferencesAndFiltersPreserveHistoricalVisibility(DatabaseMode mode) throws Exception {
-        var fixture = new Fixture(mode, 0);
+        var fixture = new Fixture(mode);
         for (int index = 0; index < 3; index++) {
             fixture.addModel(index);
         }
@@ -653,7 +678,11 @@ class ResourceTablePagingTest {
         assertEquals(0, fixture.counter.writes);
     }
     @Test void boundedModelConfigurationValidatesEveryRequestedIdBeforeOrdering() throws Exception {
-        var f=new Fixture();f.counter.count=0;var models=f.models();assertEquals(5,f.counter.count);
+        var f = new Fixture(DatabaseMode.MYSQL);
+        for (int index = 0; index < 120; index++) {
+            f.addModel(index);
+        }
+        f.counter.count=0;var models=f.models();assertEquals(5,f.counter.count);
         var ids=(StructuredValues.objectRows(models.get("models"))).stream().map(row->row.get("id")).toList();
         f.counter.count=0;var small=f.commandWithModels(Map.of("table","models","ids",ids,"sortField","entityCount","sortDir","desc","size",20),models);
         var large=f.commandWithModels(Map.of("table","models","ids",ids,"sortField","entityCount","sortDir","desc","size",100),models);
@@ -666,7 +695,7 @@ class ResourceTablePagingTest {
     @ParameterizedTest
     @EnumSource(DatabaseMode.class)
     void modelProjectionReadsEachConfigurationInBulk(DatabaseMode mode) throws Exception {
-        var fixture = new Fixture(mode, 0);
+        var fixture = new Fixture(mode);
         int previousSize = 0;
         for (int size : List.of(20, 100)) {
             for (int index = previousSize; index < size; index++) {
@@ -694,7 +723,9 @@ class ResourceTablePagingTest {
     @ParameterizedTest
     @EnumSource(DatabaseMode.class)
     void childItemsSortBeforePagingAndRejectUnauthorizedParents(DatabaseMode mode) throws Exception {
-        var f=new Fixture(mode);
+        var f = new Fixture(mode);
+        f.seedCatalogParents(119);
+        f.seedCatalogItems(119, 120);
         String originalSource=CanonicalMagicSources.byId(CATALOG_ITEMS);
         final String source=originalSource.replaceAll("(?m)^import (tenantRuntime|dataScope|tableRead|tableSort)[^\\r\\n]*\\r?\\n","");
         var database=f.database;
@@ -874,7 +905,7 @@ class ResourceTablePagingTest {
     @ParameterizedTest
     @EnumSource(DatabaseMode.class)
     void registeredTablePageKeepsIdentityFallbackAndTenantScope(DatabaseMode mode) throws Exception {
-        var fixture = new Fixture(mode, 0);
+        var fixture = new Fixture(mode);
         fixture.prepareWarehouseTableSearch();
         fixture.database.update("UPDATE db_datasource_t SET db_name='登记库', app_id='app-a' WHERE tid='permitted'");
         fixture.database.update("UPDATE db_datasource_t SET org_id='org-b' WHERE tid='forbidden'");
@@ -970,7 +1001,7 @@ class ResourceTablePagingTest {
     }
 
     @Test void dictionarySiblingOrderUsesSqlAndTwoReadsAtTwentyAndOneHundredItems() throws Exception {
-        var f=new Fixture();
+        var f = new Fixture(DatabaseMode.MYSQL);
         f.database.execute("CREATE TABLE sym_dict_t(tid VARCHAR,tenant_id VARCHAR,dict_code VARCHAR,dict_name VARCHAR,tree_path VARCHAR,parent_id VARCHAR,sort_no INT,level_no INT,is_del INT,created_time TIMESTAMP,updated_time TIMESTAMP)");
         f.database.update("INSERT INTO sym_dict_t VALUES('root','tenant-a','type','类型','root','0',0,2,0,NULL,NULL),('foreign-root','tenant-b','type','秘密','foreign','0',0,2,0,NULL,NULL)");
         String source = CanonicalMagicSources.byId("f7622ea4ac5547af954ae35a3ab56826")
@@ -988,13 +1019,7 @@ class ResourceTablePagingTest {
     private static class Fixture {
         final Counter counter=new Counter();final SQLModule sql;final JdbcTemplate database;
         final StructuredTableReadMagicModule tableRead;
-        Fixture() {
-            this(DatabaseMode.MYSQL);
-        }
         Fixture(DatabaseMode mode) {
-            this(mode, 120);
-        }
-        Fixture(DatabaseMode mode, int catalogSize) {
             var ds=new CountedSource(mode, counter);
             var sources=new MagicDynamicDataSource();sources.setDefault(ds);sql=new SQLModule(sources);sql.setDataSourceNode(sources.getDataSource());
             sql.setDialectAdapter(new DialectAdapter());sql.setResultProvider(new DefaultResultProvider("resource-table-test"));
@@ -1020,16 +1045,23 @@ class ResourceTablePagingTest {
                 db.update("INSERT INTO db_table_t VALUES(?,'tenant-a',?,0)",source,source);
                 db.update("INSERT INTO dwm_center_layer_source_t VALUES(?,'tenant-a',?,'domain',0)",source,source);
             }
-            for(int i=0;i<catalogSize;i++) {
-                String id=String.format("%03d",i),name="Name "+String.format("%03d",119-i);
-                db.update("INSERT INTO da_catalog_t VALUES(?,'tenant-a',?,'CODE','','org-a','permitted','Table','permitted',2,2,1,'owner','owner',CURRENT_TIMESTAMP,DATEADD('SECOND',?,CURRENT_TIMESTAMP),0)","cat-"+id,name,i);
-                db.update("INSERT INTO da_catalog_t VALUES(?,'tenant-a','Outside scope','CODE','','org-a','forbidden','Table','forbidden',2,2,1,'owner','owner',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,0)","hidden-"+id);
-                for(int n=0;n<=i;n++)db.update("INSERT INTO da_catalog_item_t VALUES(?,'tenant-a',?,?,'Field',?,0)",id+"-"+n,"cat-"+id,"f"+n,n);
-                addModel(i);
-                db.update("INSERT INTO res_resource_operation_log VALUES(?,'tenant-a','owner','创建逻辑模型',?,'Model','Created',DATEADD('SECOND',?,CURRENT_TIMESTAMP))","log-"+id,"model-"+id,i);
-                db.update("INSERT INTO res_resource_operation_log VALUES(?,'tenant-b','owner','创建逻辑模型','model-outside','Wrong tenant','Outside',CURRENT_TIMESTAMP)","outside-"+id);
-            }
             db.update("INSERT INTO res_logical_model VALUES('model-outside','tenant-b','Outside','MODEL','ACTIVE','{}',1,'MANUAL','','','','',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,0)");
+        }
+        void seedCatalogParents(int index) {
+            String suffix = String.format("%03d", index);
+            String name = String.format("Name %03d", 119 - index);
+            database.update("""
+                    INSERT INTO da_catalog_t VALUES
+                        (?,'tenant-a',?,'CODE','','org-a','permitted','Table','permitted',2,2,1,'owner','owner',CURRENT_TIMESTAMP,DATEADD('SECOND',?,CURRENT_TIMESTAMP),0),
+                        (?,'tenant-a','Outside scope','CODE','','org-a','forbidden','Table','forbidden',2,2,1,'owner','owner',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,0)
+                    """, "cat-" + suffix, name, index, "hidden-" + suffix);
+        }
+        void seedCatalogItems(int catalogIndex, int count) {
+            String suffix = String.format("%03d", catalogIndex);
+            for (int index = 0; index < count; index++) {
+                database.update("INSERT INTO da_catalog_item_t VALUES(?,'tenant-a',?,?,'Field',?,0)",
+                        suffix + "-" + index, "cat-" + suffix, "f" + index, index);
+            }
         }
         String addModel(int index) {
             String id = String.format("model-%03d", index);

@@ -2600,6 +2600,46 @@
       "baseSha256": "8cac6ff3cf4889ba399dfbab613f498594264fb71e3bb82f7883c61cb86f988f"
     },
     {
+      "path": "api/06.数据服务/01.服务编排/01.流程管理/06.查询画布流程详情.ms",
+      "databasePath": "/magic-api/api/06.数据服务/01.服务编排/01.流程管理/06.查询画布流程详情.ms",
+      "rowIds": [
+        "04bb5f0daa6340729403e76665977943"
+      ],
+      "kind": "api",
+      "metadataId": "flowserve_canvas_flow_get_v1",
+      "baseSha256": "5906ae4d90c4b88c31fb83dc10d228f52aeaafd253cf95afb4a8724f08315203"
+    },
+    {
+      "path": "api/06.数据服务/01.服务编排/01.流程管理/07.核验画布流程详情.ms",
+      "databasePath": "/magic-api/api/06.数据服务/01.服务编排/01.流程管理/07.核验画布流程详情.ms",
+      "rowIds": [
+        "c50ebc6f12044d3fa5ea74a4c59dbb46"
+      ],
+      "kind": "api",
+      "metadataId": "flowserve_canvas_flow_head_v1",
+      "baseSha256": "33b324f058e66a7c20baa5e04a33c50034a496cd396b74f19373ccd391bc30b2"
+    },
+    {
+      "path": "api/06.数据服务/01.服务编排/01.流程管理/08.查询画布运行节点.ms",
+      "databasePath": "/magic-api/api/06.数据服务/01.服务编排/01.流程管理/08.查询画布运行节点.ms",
+      "rowIds": [
+        "d1711f8bdba64ece974eab71b377fc3a"
+      ],
+      "kind": "api",
+      "metadataId": "flowserve_canvas_nodes_get_v1",
+      "baseSha256": "6b5baaf4d1b37c55fd1c5db249ee2f25d5ea05eef0e9cb50bf95300273a2c167"
+    },
+    {
+      "path": "api/06.数据服务/01.服务编排/01.流程管理/09.核验画布运行节点.ms",
+      "databasePath": "/magic-api/api/06.数据服务/01.服务编排/01.流程管理/09.核验画布运行节点.ms",
+      "rowIds": [
+        "27d9c1eefbcf45138fdc79752d8d87b4"
+      ],
+      "kind": "api",
+      "metadataId": "flowserve_canvas_nodes_head_v1",
+      "baseSha256": "9cc5eda8adb619f48a13024f17d59ad40f3bbcc18f9a33be3c5f63d4fddf6318"
+    },
+    {
       "path": "api/06.数据服务/01.服务编排/01.流程管理/group.json",
       "databasePath": "/magic-api/api/06.数据服务/01.服务编排/01.流程管理/group.json",
       "rowIds": [
@@ -5906,6 +5946,126 @@
       "baseSha256": "12962e73b1f70487704f04eece932531ea96617965e7b4ad6ed2caee566e2ccf"
     },
     {
+      "path": "api/14.NiFi流程接口/01.接口/01.流程管理/07.查询节点血缘.ms",
+      "databasePath": "/magic-api/api/14.NiFi流程接口/01.接口/01.流程管理/07.查询节点血缘.ms",
+      "rowIds": [
+        "63dd6562fca144e28f5c21ed4f1092c4"
+      ],
+      "kind": "api",
+      "metadataId": "0a119f2475974554a8b3547dd70febf0",
+      "baseSha256": "b994490c2efbed69cc82dbe8d43ad421fe60bd296808d1f3ce7bee3eda590a56"
+    },
+    {
+      "path": "api/14.NiFi流程接口/01.接口/01.流程管理/08.查询流程分页.ms",
+      "databasePath": "/magic-api/api/14.NiFi流程接口/01.接口/01.流程管理/08.查询流程分页.ms",
+      "rowIds": [
+        "b5d2e0b7419645b2aeff4281d8963b8c"
+      ],
+      "kind": "api",
+      "metadataId": "nifi_pipeline_page_get_v1",
+      "baseSha256": "3d74d4f4a73043b2a6a064a5914556816613ef8292c4546c26e3446990e5583b"
+    },
+    {
+      "path": "api/14.NiFi流程接口/01.接口/01.流程管理/09.核验流程分页.ms",
+      "databasePath": "/magic-api/api/14.NiFi流程接口/01.接口/01.流程管理/09.核验流程分页.ms",
+      "rowIds": [
+        "a1f3714979da455abded3b33ee575c78"
+      ],
+      "kind": "api",
+      "metadataId": "nifi_pipeline_page_head_v1",
+      "baseSha256": "b3856e7cea00dc9c607417034bccd9d0d38ddec5584c242180528ad4e44fce0e"
+    },
+    {
+      "path": "api/14.NiFi流程接口/01.接口/01.流程管理/10.查询流程运行总览.ms",
+      "databasePath": "/magic-api/api/14.NiFi流程接口/01.接口/01.流程管理/10.查询流程运行总览.ms",
+      "rowIds": [
+        "3578ca9006fd45b1b760f6f596e6f040"
+      ],
+      "kind": "api",
+      "metadataId": "nifi_runtime_overview_get_v1",
+      "baseSha256": "74f917b34d474c5e7530d827fe13e5506b6ba53e283cb3aaee9fb8969ff89e43"
+    },
+    {
+      "path": "api/14.NiFi流程接口/01.接口/01.流程管理/11.核验流程运行总览.ms",
+      "databasePath": "/magic-api/api/14.NiFi流程接口/01.接口/01.流程管理/11.核验流程运行总览.ms",
+      "rowIds": [
+        "2fea2d5302bd4780a5e3a3ab5539a402"
+      ],
+      "kind": "api",
+      "metadataId": "nifi_runtime_overview_head_v1",
+      "baseSha256": "27fd238a5f7071368c820b73b2f86b139779f45b5469d2bc1c3f79f64a1dcfd3"
+    },
+    {
+      "path": "api/14.NiFi流程接口/01.接口/01.流程管理/12.查询流程错误历史.ms",
+      "databasePath": "/magic-api/api/14.NiFi流程接口/01.接口/01.流程管理/12.查询流程错误历史.ms",
+      "rowIds": [
+        "9c64f83155da4b5ea826b929c425fa23"
+      ],
+      "kind": "api",
+      "metadataId": "nifi_pipe_error_history_get_v1",
+      "baseSha256": "5de222a521e4871cc00aed672a7264a691f5d033773cd44fa29a4f17a6b7197d"
+    },
+    {
+      "path": "api/14.NiFi流程接口/01.接口/01.流程管理/13.核验流程错误历史.ms",
+      "databasePath": "/magic-api/api/14.NiFi流程接口/01.接口/01.流程管理/13.核验流程错误历史.ms",
+      "rowIds": [
+        "a51345bba3d1475eabc32ab12229a201"
+      ],
+      "kind": "api",
+      "metadataId": "nifi_pipe_error_history_head_v1",
+      "baseSha256": "f413b78b2b87b1c0b71fbc7eece4d6980bd312ba723b8176f96edeb630ae043e"
+    },
+    {
+      "path": "api/14.NiFi流程接口/01.接口/01.流程管理/14.查询流程实时公告.ms",
+      "databasePath": "/magic-api/api/14.NiFi流程接口/01.接口/01.流程管理/14.查询流程实时公告.ms",
+      "rowIds": [
+        "83590e9cf58a4f289bf74d1b7f762e3f"
+      ],
+      "kind": "api",
+      "metadataId": "nifi_pipe_error_bulletin_get_v1",
+      "baseSha256": "aa62803643e4b30cee06a2be539f4fb61c46030f790b753d13f6d8b534180990"
+    },
+    {
+      "path": "api/14.NiFi流程接口/01.接口/01.流程管理/15.核验流程实时公告.ms",
+      "databasePath": "/magic-api/api/14.NiFi流程接口/01.接口/01.流程管理/15.核验流程实时公告.ms",
+      "rowIds": [
+        "ff8694b0448a4d1c9d401eb1e340263d"
+      ],
+      "kind": "api",
+      "metadataId": "nifi_pipe_error_bulletin_head_v1",
+      "baseSha256": "7d150a23debb8fd69c0898ad6affee04b1cabd038558b8a9bf82817e4d1ef3ed"
+    },
+    {
+      "path": "api/14.NiFi流程接口/01.接口/01.流程管理/16.清理流程错误.ms",
+      "databasePath": "/magic-api/api/14.NiFi流程接口/01.接口/01.流程管理/16.清理流程错误.ms",
+      "rowIds": [
+        "5618e59142e44a01a3efc39a83a743e1"
+      ],
+      "kind": "api",
+      "metadataId": "nifi_pipe_error_clear_post_v1",
+      "baseSha256": "0d393ececa7433562086b5bd710ebdf089d47e29dd15a911309416dec70aa650"
+    },
+    {
+      "path": "api/14.NiFi流程接口/01.接口/01.流程管理/17.查询流程详情.ms",
+      "databasePath": "/magic-api/api/14.NiFi流程接口/01.接口/01.流程管理/17.查询流程详情.ms",
+      "rowIds": [
+        "36c90154729a4a6d81221a78d3402975"
+      ],
+      "kind": "api",
+      "metadataId": "nifi_pipe_detail_get_v1",
+      "baseSha256": "6b2f94ba629b625a251289cc1712669f8273910707808a558f64ef62ba65aafd"
+    },
+    {
+      "path": "api/14.NiFi流程接口/01.接口/01.流程管理/18.核验流程详情.ms",
+      "databasePath": "/magic-api/api/14.NiFi流程接口/01.接口/01.流程管理/18.核验流程详情.ms",
+      "rowIds": [
+        "dd8625ed76ce43a6bc75a407ec591b19"
+      ],
+      "kind": "api",
+      "metadataId": "nifi_pipe_detail_head_v1",
+      "baseSha256": "437f74f0a4077bb981c34a758773de2485f876e11d77d751815e092f76fac56b"
+    },
+    {
       "path": "api/14.NiFi流程接口/01.接口/01.流程管理/group.json",
       "databasePath": "/magic-api/api/14.NiFi流程接口/01.接口/01.流程管理/group.json",
       "rowIds": [
@@ -5914,6 +6074,135 @@
       "kind": "group",
       "metadataId": "40ba1da5548648fdad7c449eb97fc033",
       "baseSha256": "82de47c13d30423d1c13375728abaa2523bc90118a82872f9f396e15ded0fa45"
+    },
+    {
+      "path": "api/14.NiFi流程接口/01.接口/02.查询组件清单.ms",
+      "databasePath": "/magic-api/api/14.NiFi流程接口/01.接口/02.查询组件清单.ms",
+      "rowIds": [
+        "cb6df2b8a5244f17884c87af4d9500fc"
+      ],
+      "kind": "api",
+      "metadataId": "7de6ec08dc2c43fdad58182334f49b38",
+      "baseSha256": "aaf97af480f4a60c605bdfa32dee7c9c494fe7f797edfd05af4f2803da2f3239"
+    },
+    {
+      "path": "api/14.NiFi流程接口/01.接口/03.核验组件清单.ms",
+      "databasePath": "/magic-api/api/14.NiFi流程接口/01.接口/03.核验组件清单.ms",
+      "rowIds": [
+        "91b81c65bb2748c8b717a26f6b73aa1b"
+      ],
+      "kind": "api",
+      "metadataId": "96dd5aefa9014a1b9b4a2218f17df25f",
+      "baseSha256": "eda925e432ba817de711c566f05752971ed0d318631429e932561a9a77dfd090"
+    },
+    {
+      "path": "api/14.NiFi流程接口/01.接口/04.查询组件清单详情.ms",
+      "databasePath": "/magic-api/api/14.NiFi流程接口/01.接口/04.查询组件清单详情.ms",
+      "rowIds": [
+        "b91c73bdfab2452c95883e9731bf728c"
+      ],
+      "kind": "api",
+      "metadataId": "371116c2d3de4fefa447494c7bf96d6b",
+      "baseSha256": "b51e1973b5846c41cc1420d09b9f64b67d94257306c7aada61f2fc030c8fcae9"
+    },
+    {
+      "path": "api/14.NiFi流程接口/01.接口/05.核验组件清单详情.ms",
+      "databasePath": "/magic-api/api/14.NiFi流程接口/01.接口/05.核验组件清单详情.ms",
+      "rowIds": [
+        "9a38cc59eec74876a2f1ea022fea6a4f"
+      ],
+      "kind": "api",
+      "metadataId": "65a9bf8cb3854fd483d7dc4cfc43169d",
+      "baseSha256": "146776396d4a9cf18ffb9e7f5ab4ed25de81debbfc058bd2f6c3277525959956"
+    },
+    {
+      "path": "api/14.NiFi流程接口/01.接口/06.查询画布接口健康.ms",
+      "databasePath": "/magic-api/api/14.NiFi流程接口/01.接口/06.查询画布接口健康.ms",
+      "rowIds": [
+        "8cedcc54594f41bd9e4f5f6f803a7260"
+      ],
+      "kind": "api",
+      "metadataId": "nifi_canvas_ping_get_v1",
+      "baseSha256": "696999051ba82a06f71529b70d3b12098a0874ba5d4b07962b485ffc5f62e477"
+    },
+    {
+      "path": "api/14.NiFi流程接口/01.接口/07.核验画布接口健康.ms",
+      "databasePath": "/magic-api/api/14.NiFi流程接口/01.接口/07.核验画布接口健康.ms",
+      "rowIds": [
+        "2e3772e5082f40cda986961382cc5938"
+      ],
+      "kind": "api",
+      "metadataId": "nifi_canvas_ping_head_v1",
+      "baseSha256": "ddc69803fecbff8f5011b075087deacaef6155d0727bdd52198dd32812c1fc8c"
+    },
+    {
+      "path": "api/14.NiFi流程接口/01.接口/08.流程错误",
+      "databasePath": "/magic-api/api/14.NiFi流程接口/01.接口/08.流程错误/",
+      "rowIds": [
+        "69db0d8a55054c53bac4e58e4e476af2"
+      ],
+      "kind": "directory",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
+    },
+    {
+      "path": "api/14.NiFi流程接口/01.接口/08.流程错误/01.查询流程错误历史.ms",
+      "databasePath": "/magic-api/api/14.NiFi流程接口/01.接口/08.流程错误/01.查询流程错误历史.ms",
+      "rowIds": [
+        "d89cbe9408f5448e9883af13352c1430"
+      ],
+      "kind": "api",
+      "metadataId": "nifi_flow_error_history_get_v1",
+      "baseSha256": "1e3629bd2df3f1169a26333d90816375a6e8515f9b61b4e003cd34e023feb8ed"
+    },
+    {
+      "path": "api/14.NiFi流程接口/01.接口/08.流程错误/02.核验流程错误历史.ms",
+      "databasePath": "/magic-api/api/14.NiFi流程接口/01.接口/08.流程错误/02.核验流程错误历史.ms",
+      "rowIds": [
+        "bf42e78bf8b84c01842a73c532ce7ab5"
+      ],
+      "kind": "api",
+      "metadataId": "nifi_flow_error_history_head_v1",
+      "baseSha256": "102af322fb5bd56b84e8890d55be38d025fc51d0d83b01643e84ef7008bb8784"
+    },
+    {
+      "path": "api/14.NiFi流程接口/01.接口/08.流程错误/03.查询流程实时公告.ms",
+      "databasePath": "/magic-api/api/14.NiFi流程接口/01.接口/08.流程错误/03.查询流程实时公告.ms",
+      "rowIds": [
+        "ab984d23eea14178a7b69dbabb6186d0"
+      ],
+      "kind": "api",
+      "metadataId": "nifi_flow_error_bulletin_get_v1",
+      "baseSha256": "8af8a00394a26ea8ffc76cf2948e8a8f30a05442d59d7ecd2301a6f7fcdb5b2f"
+    },
+    {
+      "path": "api/14.NiFi流程接口/01.接口/08.流程错误/04.核验流程实时公告.ms",
+      "databasePath": "/magic-api/api/14.NiFi流程接口/01.接口/08.流程错误/04.核验流程实时公告.ms",
+      "rowIds": [
+        "a925673c436043018750d4e2f72c7d6c"
+      ],
+      "kind": "api",
+      "metadataId": "nifi_flow_error_bulletin_head_v1",
+      "baseSha256": "eb0bc55f30f72fb297ff3af2240dc0b4da93faf4ddad7c92c2f3c28ae6d3081e"
+    },
+    {
+      "path": "api/14.NiFi流程接口/01.接口/08.流程错误/05.清理流程错误.ms",
+      "databasePath": "/magic-api/api/14.NiFi流程接口/01.接口/08.流程错误/05.清理流程错误.ms",
+      "rowIds": [
+        "6403f00f7cc44ad2aec018cd97ded698"
+      ],
+      "kind": "api",
+      "metadataId": "nifi_flow_error_clear_post_v1",
+      "baseSha256": "e79c24c96226b7fa8d810884f811f0855e36b466528f7c0ab3fb421044a13b12"
+    },
+    {
+      "path": "api/14.NiFi流程接口/01.接口/08.流程错误/group.json",
+      "databasePath": "/magic-api/api/14.NiFi流程接口/01.接口/08.流程错误/group.json",
+      "rowIds": [
+        "df65e7cb087841c3b30425cd42a5cbd8"
+      ],
+      "kind": "group",
+      "metadataId": "nifi_flow_error_group_v1",
+      "baseSha256": "4d196b22bb3df12fb91fadaddfbd3ca23630882a3965f93160d7c8c1593ee937"
     },
     {
       "path": "api/14.NiFi流程接口/01.接口/group.json",
@@ -6463,6 +6752,46 @@
       "kind": "function",
       "metadataId": "729cd64e9cfa4b52b6f6739437e72749",
       "baseSha256": "e113c9736bf7d0124c88c2c3eb852fc8aef14a7851ae720b13a4a06c5c563d25"
+    },
+    {
+      "path": "function/01.通用函数/43.NiFi流程只读接口响应.ms",
+      "databasePath": "/magic-api/function/01.通用函数/43.NiFi流程只读接口响应.ms",
+      "rowIds": [
+        "3fd2443dbeea4738be39626436a083d6"
+      ],
+      "kind": "function",
+      "metadataId": "nifi_pipeline_read_http_v1",
+      "baseSha256": "293abf50d1fd4393c06c7ef903d9bb1485fdb953b1660f8126512d3f30e31411"
+    },
+    {
+      "path": "function/01.通用函数/44.云梯画布只读接口响应.ms",
+      "databasePath": "/magic-api/function/01.通用函数/44.云梯画布只读接口响应.ms",
+      "rowIds": [
+        "703de7e90231460bbc4f1ca6c9dc60db"
+      ],
+      "kind": "function",
+      "metadataId": "flowserve_canvas_read_http_v1",
+      "baseSha256": "bc43dac35fadbf519350cc82bb0fa68f27bae9f71cf82a2228e6e9c678d0fb44"
+    },
+    {
+      "path": "function/01.通用函数/45.NiFi流程错误接口响应.ms",
+      "databasePath": "/magic-api/function/01.通用函数/45.NiFi流程错误接口响应.ms",
+      "rowIds": [
+        "f98dc49ecad747c1b182d6d5c9a46991"
+      ],
+      "kind": "function",
+      "metadataId": "nifi_flow_error_http_v1",
+      "baseSha256": "ce2a23ade6fcbaa5910a18cbbc2f5a3ab022b32b3be306ceff0cfe4ad78b468b"
+    },
+    {
+      "path": "function/01.通用函数/46.NiFi流程详情接口响应.ms",
+      "databasePath": "/magic-api/function/01.通用函数/46.NiFi流程详情接口响应.ms",
+      "rowIds": [
+        "82c1fb0489bc40a0bf97f69a100ca331"
+      ],
+      "kind": "function",
+      "metadataId": "nifi_pipe_detail_http_v1",
+      "baseSha256": "a38942d1137ac4c8168dc3833230890e8f02dec627fcd8541879861d86ebb347"
     },
     {
       "path": "function/01.通用函数/group.json",

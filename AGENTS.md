@@ -4,9 +4,9 @@
 
 新增或修改后端业务必须遵守 [Magic API 优先与数据库访问抽象](docs/data-elements.md#magic-first-data-access)。优先在 MagicScript 完成可由现有能力支持的接口、业务规则和数据操作，使日常业务修改可在 Magic 编辑器保存后生效。确有能力缺口才补充最小 Java 接口。常规数据访问使用结构化接口，数据库方言集中在适配层。Java 业务迁移与 Magic 查询改造并行推进，优先精简 NiFi 业务；已验证的替代实现与 Java 旧实现清理同批交付。每批改造须完成该批功能、共同依赖和现有测试套件的回归后再推进下一批。
 
-前端业务 HTTP 接口优先在 Magic API 直接注册。迁移时以移除可替代的 Java Controller、Service 和专用文件为交付目标，并按 [Java 文件、旧对象与测试清理](docs/data-elements.md#backend-simplification) 核对入口、依赖、退役顺序和回归证据。测试按有效覆盖和构建耗时整理，等价验证就绪后再删除重复或退役用例。
+前端业务 HTTP 接口优先在 Magic API 直接注册。迁移以整类移除可替代的 Java Controller、Service 和专用文件为交付目标，并按 [Java 文件、旧对象与测试清理](docs/data-elements.md#backend-simplification) 核对入口、依赖、退役顺序和回归证据。每批独立统计生产 Java 文件与类、Controller 和测试文件。测试按有效覆盖和构建耗时整理，等价验证就绪后再删除重复或退役用例。
 
-新增或修改 Magic 脚本必须遵守 [Magic 脚本可读性与注释规范](docs/data-elements.md#lowcode-magic--magic-api-readability-and-documentation)。所有 `import` 放在脚本最前面，紧接中文接口、函数或任务说明。关键业务和权限边界使用行注释，变更区按统一格式整理并验证实际脚本。
+新增、修改或归类 Magic 资源必须遵守 [Magic API 目录组织](docs/data-elements.md#lowcode-magic--magic-api-organization) 和 [Magic 脚本可读性与注释规范](docs/data-elements.md#lowcode-magic--magic-api-readability-and-documentation)。同级资源连续编号，API 使用同一深度的叶分组，业务目录最多三层，每个分组有有效路径。涉及实际路由或导入变化时，同批迁移并验证调用方。所有 `import` 放在脚本最前面，紧接中文说明。接口应直接展示本入口的业务编排，确有共享实现的短入口必须说明复用关系和业务实现位置。
 
 核心禁令：不允许按列表行或集合元素逐个发起读接口请求；后端不允许在集合遍历及其调用的辅助方法中逐项查询数据库。并发 `Promise.all(rows.map(fetch))`、缓存掩盖的 N+1、循环内 `selectOne/count` 同样不合规。必须改为服务端分页、一次批量查询/聚合/关联，或在确实跨租户数据库时按不同租户分组并严格限制批量规模。
 

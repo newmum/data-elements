@@ -6,6 +6,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.util.Locale;
 import javax.sql.DataSource;
+import org.apache.commons.lang3.function.FailableSupplier;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
@@ -33,6 +34,11 @@ public class NifiMutationAspect {
 
     @Around("@annotation(com.linewell.dataelement.integration.nifi.canvas.lifecycle.SerializedNifiMutation)")
     public Object serialize(ProceedingJoinPoint invocation) throws Throwable {
+        return withMutationLock(invocation::proceed);
+    }
+
+    /** Applies the shared NiFi mutation lock to both annotated methods and Magic callbacks. */
+    public Object withMutationLock(FailableSupplier<Object, Throwable> action) throws Throwable {
         TenantContext.requireTenantId();
         try (Connection connection = controlDataSource.getConnection()) {
             boolean dameng = connection.getMetaData().getURL().toLowerCase(Locale.ROOT).startsWith("jdbc:dm:");
@@ -40,7 +46,7 @@ public class NifiMutationAspect {
                 throw new ResponseStatusException(HttpStatus.CONFLICT, "正在保存或部署流程，请等待完成后重试");
             }
             try {
-                return invocation.proceed();
+                return action.get();
             } finally {
                 try {
                     if (runtimeStatus != null) runtimeStatus.invalidateTenant();

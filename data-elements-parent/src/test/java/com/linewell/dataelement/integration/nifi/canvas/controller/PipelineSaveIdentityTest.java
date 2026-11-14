@@ -54,6 +54,30 @@ class PipelineSaveIdentityTest {
     }
 
     @Test
+    void saveWithOrWithoutLegacyRevisionKeepsHiveProjectionAndAvoidsExternalReads() {
+        var source = new Pipeline.Node("s", "source.mysql", "前段", "source", 0, 0, Map.of());
+        var mapping = new Pipeline.Node("m", "transform.field-enrichment", "字段映射", "transform", 300, 0, Map.of());
+        var hive = HiveDownstreamFixtures.rawTarget(
+                new Pipeline.Node("h", "sink.hive", "Hive", "sink", 600, 0, Map.of()));
+        var saved = new Pipeline("validation-hive", "已保存", null, 10L, 20L,
+                new Pipeline.Dsl(1, List.of(source, hive), List.of()), null, null, null, null, null, null, null);
+        var edited = new Pipeline(saved.id(), "已编辑", null, null, null,
+                new Pipeline.Dsl(1, List.of(source, mapping, hive), List.of(
+                        new Pipeline.Edge("sm", "s", "m", "default"),
+                        new Pipeline.Edge("mh", "m", "h", "default"))),
+                null, null, null, null, null, null, null);
+        when(repo.findById(saved.id())).thenReturn(Optional.of(saved));
+        when(repo.update(eq(saved.id()), any())).thenAnswer(call -> call.<UnaryOperator<Pipeline>>getArgument(1).apply(saved));
+
+        for (Long legacyRevision : java.util.Arrays.asList(null, 20L)) {
+            var result = controller.update(saved.id(), edited, legacyRevision).getBody();
+            assertThat(result.dsl().nodes()).containsExactly(source, hive);
+            assertThat(result.dsl().edges()).containsExactly(new Pipeline.Edge("mh-hive-raw-0", "s", "h", "default"));
+        }
+        verifyNoInteractions(nifi, jdbc, groups);
+    }
+
+    @Test
     void deletionCleansNativeGroupBeforeDeletingTaskAndPipelineRecords() {
         try (var scope = TenantContext.use("tenant")) {
             when(repo.findById("p1")).thenReturn(Optional.of(pipeline("p1", "original-group", PipelineStatus.STOPPED)));

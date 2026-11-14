@@ -20,6 +20,10 @@ public final class CanonicalMagicSources {
     }
 
     public static String byId(String metadataId) throws IOException {
+        return scriptById(metadataId).source();
+    }
+
+    static Script scriptById(String metadataId) throws IOException {
         var entries = entries();
         var matches = entries.stream().filter(entry -> metadataId.equals(entry.metadataId)).toList();
         if (matches.size() != 1) {
@@ -27,7 +31,7 @@ public final class CanonicalMagicSources {
                     + ", found " + matches.size() + ": "
                     + matches.stream().map(entry -> entry.relativePath).toList());
         }
-        return read(matches.getFirst()).source();
+        return read(matches.getFirst());
     }
 
     static String byPath(String relativePath, String metadataId) throws IOException {
@@ -93,7 +97,7 @@ public final class CanonicalMagicSources {
         return new Script(entry.metadataId, entry.relativePath, source.strip());
     }
 
-    private static Path magicRoot() throws IOException {
+    static Path magicRoot() throws IOException {
         String configured = System.getProperty("magic.sourceRoot");
         if (configured != null && !configured.isBlank()) {
             Path root = Path.of(configured).toAbsolutePath().normalize();

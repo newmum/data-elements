@@ -80,17 +80,14 @@ class CatalogIndexRebuildMagicTest {
         fixture.catalog("validation-own", TENANT, 0, "本租户目录");
         fixture.catalog("validation-foreign", "validation-other-tenant", 0, "其他租户目录");
         fixture.catalog("validation-deleted", TENANT, 1, "已删除目录");
-        fixture.asset("validation-foreign-asset", "validation-other-tenant", 0, "catalog");
-        fixture.asset("validation-deleted-asset", TENANT, 1, "catalog");
-        fixture.asset("validation-wrong-type", TENANT, 0, "table");
+        fixture.property("validation-orphan", TENANT, "catalogName", "无主记录属性", 0);
         fixture.property("validation-own", "validation-other-tenant", "catalogName", "越权属性", 0);
         fixture.property("validation-own", TENANT, "assetDesc", "已删除属性", 1);
 
         var result = assertInstanceOf(Map.class, fixture.run(List.of("validation-own", "validation-foreign",
-                "validation-deleted", "validation-foreign-asset", "validation-deleted-asset",
-                "validation-wrong-type", "validation-missing")));
+                "validation-deleted", "validation-orphan", "validation-missing")));
 
-        assertThat(result).containsEntry("refreshed", 1).containsEntry("requested", 7);
+        assertThat(result).containsEntry("refreshed", 1).containsEntry("requested", 5);
         assertThat(fixture.reads).hasSize(2);
         assertThat(fixture.index.ids).containsExactly("validation-own");
         assertThat(fixture.index.documents).singleElement().satisfies(doc -> assertThat(doc)
@@ -100,7 +97,7 @@ class CatalogIndexRebuildMagicTest {
     }
 
     @Test
-    void mainTableFillsAttributesAndRejectsLegacyIndexOnlyCatalogs() throws IOException {
+    void mainTableFillsAttributesAndRejectsOrphanedCatalogProperties() throws IOException {
         var fixture = new Fixture();
         fixture.catalog("validation-main", TENANT, 0, "主表目录");
         fixture.jdbc.update("UPDATE da_catalog_t SET catalog_name_en='validation_main', asset_desc='主表说明', app_id='validation-app' WHERE tid='validation-main'");
@@ -110,7 +107,6 @@ class CatalogIndexRebuildMagicTest {
         fixture.property("validation-main", TENANT, "fieldGovernanceConfig", "不应索引的治理配置", 0);
         fixture.property("validation-main", TENANT, "tenantId", "validation-forged-tenant", 0);
         fixture.property("validation-main", TENANT, "tid", "validation-forged-id", 0);
-        fixture.asset("validation-legacy", TENANT, 0, "catalog");
         fixture.property("validation-legacy", TENANT, "catalogName", "历史属性目录", 0);
 
         assertInstanceOf(Map.class, fixture.run(List.of("validation-main", "validation-legacy")));
@@ -180,7 +176,6 @@ class CatalogIndexRebuildMagicTest {
     @ValueSource(ints = {20, 100})
     void fullCatalogRebuildUsesActualMainTableWithoutCompatibilityView(int count) throws IOException {
         var fixture = new Fixture();
-        fixture.jdbc.execute("DROP TABLE da_asset_t");
         for (int i = 0; i < count; i++) {
             fixture.catalog("validation-full-" + i, TENANT, 0, "主表目录" + i);
         }
@@ -256,10 +251,6 @@ class CatalogIndexRebuildMagicTest {
                       app_id VARCHAR(64), asset_status INT, flow_status INT, market_view_count BIGINT DEFAULT 0)
                     """);
             jdbc.execute("""
-                    CREATE TABLE da_asset_t (tid VARCHAR(64), tenant_id VARCHAR(64), is_del INT,
-                      asset_type VARCHAR(64), asset_status INT, flow_status INT)
-                    """);
-            jdbc.execute("""
                     CREATE TABLE da_prop_t (parent_id VARCHAR(64), tenant_id VARCHAR(64), data_type VARCHAR(64),
                       prop_name VARCHAR(64), prop_value VARCHAR(255), is_del INT)
                     """);
@@ -297,10 +288,6 @@ class CatalogIndexRebuildMagicTest {
 
         void catalog(String id, String tenant, int deleted, String name) {
             jdbc.update("INSERT INTO da_catalog_t(tid,tenant_id,is_del,catalog_name,catalog_name_en,asset_desc,app_id,asset_status,flow_status) VALUES (?,?,?,?,NULL,NULL,NULL,2,2)", id, tenant, deleted, name);
-        }
-
-        void asset(String id, String tenant, int deleted, String type) {
-            jdbc.update("INSERT INTO da_asset_t VALUES (?,?,?,?,1,0)", id, tenant, deleted, type);
         }
 
         void property(String owner, String tenant, String name, String value, int deleted) {

@@ -6,7 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.linewell.dataelement.feature.dataaccess.infrastructure.persistence.entity.DataAccessAggTaskT;
 import com.linewell.dataelement.feature.dataaccess.infrastructure.persistence.entity.DataAccessTaskMonitorSnapT;
 import com.linewell.dataelement.feature.dataaccess.infrastructure.persistence.service.IDataAccessAggTaskTService;
-import com.linewell.dataelement.feature.dataaccess.infrastructure.persistence.service.IDataAccessTaskMonitorSnapTService;
+import com.linewell.dataelement.feature.dataaccess.infrastructure.persistence.mapper.DataAccessTaskMonitorSnapTMapper;
 import com.linewell.dataelement.integration.nifi.canvas.config.NifiProperties;
 import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient;
 import com.linewell.dataelement.integration.nifi.canvas.pipeline.NifiNodeMapping;
@@ -50,7 +50,7 @@ public class ProvenanceExecutionSyncJob {
     private final PipelineRepository pipelineRepository;
     private final NifiClient nifiClient;
     private final IDataAccessAggTaskTService taskService;
-    private final IDataAccessTaskMonitorSnapTService snapService;
+    private final DataAccessTaskMonitorSnapTMapper snapshotMapper;
     private final NifiProperties nifiProperties;
     private final ObjectMapper objectMapper;
     private final TenantExecutionCatalog tenantCatalog;
@@ -58,14 +58,14 @@ public class ProvenanceExecutionSyncJob {
     public ProvenanceExecutionSyncJob(PipelineRepository pipelineRepository,
                                       NifiClient nifiClient,
                                       IDataAccessAggTaskTService taskService,
-                                      IDataAccessTaskMonitorSnapTService snapService,
+                                      DataAccessTaskMonitorSnapTMapper snapshotMapper,
                                       NifiProperties nifiProperties,
                                       ObjectMapper objectMapper,
                                       TenantExecutionCatalog tenantCatalog) {
         this.pipelineRepository = pipelineRepository;
         this.nifiClient = nifiClient;
         this.taskService = taskService;
-        this.snapService = snapService;
+        this.snapshotMapper = snapshotMapper;
         this.nifiProperties = nifiProperties;
         this.objectMapper = objectMapper;
         this.tenantCatalog = tenantCatalog;
@@ -174,7 +174,7 @@ public class ProvenanceExecutionSyncJob {
                 .setMonitorMsg(monitorMsg)
                 .setCreatedTime(now)
                 .setIsDel(0);
-        snapService.save(snap);
+        snapshotMapper.insert(snap);
 
         // 5）清理 NiFi 侧临时 provenance 查询资源（尽力而为）。
         nifiClient.deleteProvenance(provenanceId);

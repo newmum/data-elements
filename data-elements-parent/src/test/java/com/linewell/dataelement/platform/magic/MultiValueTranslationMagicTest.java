@@ -1,19 +1,14 @@
 package com.linewell.dataelement.platform.magic;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.ssssssss.script.MagicScript;
 import org.ssssssss.script.MagicScriptContext;
 
-class MultiValueTranslationMagicSyntaxTest {
-    @Test
-    void materializationAndTaskGenerationCompile() {
-        for (String id : new String[] {"e3320ec899a24426adf5f77e2dab36f9", "ods_data_agg_task_ensure_01"}) {
-            assertDoesNotThrow(() -> MagicScript.create(CanonicalMagicSources.byId(id), null).compile(), id);
-        }
-    }
-
+class MultiValueTranslationMagicTest {
     @Test
     void multiDictionaryQueryHasBoundedCodeMarkerAndRetainsConditions() throws Exception {
         String source = CanonicalMagicSources.byId("ods_data_agg_task_ensure_01");

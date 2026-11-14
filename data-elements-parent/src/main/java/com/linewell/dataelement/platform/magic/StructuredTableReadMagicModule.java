@@ -3,6 +3,7 @@ package com.linewell.dataelement.platform.magic;
 import com.linewell.dataelement.platform.persistence.jdbc.JdbcValueNormalizer;
 import com.linewell.dataelement.platform.tenant.domain.TenantContext;
 import java.sql.Connection;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.ArrayList;
@@ -13,11 +14,15 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import org.springframework.jdbc.core.ArgumentPreparedStatementSetter;
+import org.springframework.jdbc.core.ColumnMapRowMapper;
 import org.springframework.jdbc.core.ConnectionCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowCallbackHandler;
 import org.springframework.jdbc.datasource.SingleConnectionDataSource;
 import org.springframework.stereotype.Component;
 import org.ssssssss.magicapi.core.annotation.MagicModule;
@@ -871,6 +876,49 @@ public class StructuredTableReadMagicModule {
                 Render context = new Render(connection);
                 String sql = orderedRowsSql(context, projection, sorts, directions, nativeNullOrder);
                 return JdbcValueNormalizer.maps(reader.queryForList(context.statement(sql), context.boundParameters().toArray()));
+            });
+        }
+
+        @Comment("按排序逐行交付结构化结果，回调应只处理当前行，适用于必须保留完整结果的兼容接口")
+        public void forEachOrderedRow(Map<String, Expression> projection, List<Expression> sorts,
+                List<String> directions, boolean nativeNullOrder, Consumer<Map<String, Object>> consumer) {
+            if (!validSortOrder(sorts, directions)) {
+                throw new IllegalArgumentException("结构化查询排序无效");
+            }
+            execute((connection, reader) -> {
+                Render context = new Render(connection);
+                String sql = context.statement(orderedRowsSql(context, projection, sorts, directions, nativeNullOrder));
+                String url = connection.getMetaData().getURL().toLowerCase(Locale.ROOT);
+                int fetchSize = url.startsWith("jdbc:mysql:") ? Integer.MIN_VALUE : 128;
+                // PostgreSQL-family drivers use a server cursor only in a transaction.
+                boolean startTransaction = context.postgres && connection.getAutoCommit();
+                if (startTransaction) connection.setAutoCommit(false);
+                try {
+                    var arguments = new ArgumentPreparedStatementSetter(context.boundParameters().toArray());
+                    var mapper = new ColumnMapRowMapper();
+                    reader.query(current -> {
+                        var statement = current.prepareStatement(sql, ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY);
+                        try {
+                            statement.setFetchSize(fetchSize);
+                            arguments.setValues(statement);
+                            return statement;
+                        } catch (SQLException error) {
+                            try {
+                                statement.close();
+                            } catch (SQLException closeError) {
+                                error.addSuppressed(closeError);
+                            }
+                            throw error;
+                        }
+                    }, (RowCallbackHandler) result ->
+                            consumer.accept(JdbcValueNormalizer.map(mapper.mapRow(result, 0))));
+                } finally {
+                    if (startTransaction) {
+                        connection.rollback();
+                        connection.setAutoCommit(true);
+                    }
+                }
+                return null;
             });
         }
 

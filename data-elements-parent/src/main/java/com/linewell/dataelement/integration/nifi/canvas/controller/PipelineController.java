@@ -20,7 +20,6 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 import com.linewell.dataelement.platform.tenant.domain.TenantContext;
 import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.swagger.annotations.Api;
 import io.swagger.v3.oas.annotations.Operation;
@@ -94,96 +93,6 @@ public class PipelineController {
         this.groups = groups;
     }
 
-    /** Keep MVC parameter binding and the established raw response for the Magic flow page. */
-    @GetMapping("/page")
-    public Map<String, Object> listPage(@RequestParam(defaultValue = "1") int page,
-                                        @RequestParam(defaultValue = "20") int size,
-                                        @RequestParam(required = false) String sortField,
-                                        @RequestParam(required = false) String sortDir,
-                                        @RequestParam(required = false) String q) {
-        TenantContext.requireTenantId();
-        if (TenantContext.usesControlDatabase() || TenantContext.isIgnored()) {
-            throw new IllegalStateException("流程查询必须绑定行业租户");
-        }
-        Map<String, Object> parameters = new HashMap<>();
-        parameters.put("page", page);
-        parameters.put("size", size);
-        if (sortField != null) parameters.put("sortField", sortField);
-        if (sortDir != null) parameters.put("sortDir", sortDir);
-        if (q != null) parameters.put("q", q);
-        return invokeMagicRead("/common/nifiPipelinePage", parameters);
-    }
-
-    @GetMapping
-    @Operation(summary = "查询流程列表(list)")
-    public List<PipelineSummary> list() {
-        return repo.findAll().stream().map(PipelineSummary::of).toList();
-    }
-
-    @GetMapping("/runtime-list")
-    @Operation(summary = "查询流程运行列表(runtimeList)")
-    public List<Map<String, Object>> runtimeList() {
-        List<Pipeline> pipelines = repo.findAll();
-        Map<String, JsonNode> statusByGroupId = Map.of();
-        String statusError = null;
-        if (pipelines.stream().anyMatch(p -> !isBlank(p.nifiProcessGroupId()))) {
-            try {
-                JsonNode root = nifi.getProcessGroupStatus(nifi.getRootProcessGroupId())
-                        .path("processGroupStatus").path("aggregateSnapshot");
-                if (root.isMissingNode() || root.isNull() || !root.isObject()) {
-                    throw new IllegalStateException("NiFi 根流程组状态响应缺少 aggregateSnapshot");
-                }
-                statusByGroupId = processGroupSnapshots(root);
-            } catch (Exception e) {
-                statusError = e.getMessage() == null ? "NiFi 根流程组状态获取失败" : e.getMessage();
-            }
-        }
-        List<Map<String, Object>> rows = new ArrayList<>();
-        for (int i = 0; i < pipelines.size(); i++) {
-            Pipeline pipeline = pipelines.get(i);
-            Map<String, Object> row = runtimeRow(pipeline, i + 1);
-            if (!isBlank(pipeline.nifiProcessGroupId())) {
-                JsonNode snapshot = statusByGroupId.get(pipeline.nifiProcessGroupId());
-                if (statusError != null) {
-                    row.put("nifiStatusError", statusError);
-                } else if (snapshot == null || !snapshot.has("queuedCount") || !snapshot.has("activeThreadCount")) {
-                    row.put("nifiStatusError", "NiFi 流程组不存在或状态指标不完整");
-                } else {
-                    addRuntimeMetrics(row, pipeline, snapshot);
-                }
-            }
-            rows.add(row);
-        }
-        return rows;
-    }
-
-    /** Root recursive status contains nested process groups; never fetch a missing group per row. */
-    private static Map<String, JsonNode> processGroupSnapshots(JsonNode root) {
-        Map<String, JsonNode> snapshots = new HashMap<>();
-        collectProcessGroupSnapshots(root, snapshots);
-        return snapshots;
-    }
-
-    private static void collectProcessGroupSnapshots(JsonNode snapshot, Map<String, JsonNode> snapshots) {
-        String id = snapshot.path("id").asText(null);
-        if (id != null && !id.isBlank()) snapshots.put(id, snapshot);
-        for (JsonNode child : snapshot.path("processGroupStatusSnapshots")) {
-            JsonNode childSnapshot = child.path("processGroupStatusSnapshot");
-            if (childSnapshot.isObject()) collectProcessGroupSnapshots(childSnapshot, snapshots);
-        }
-    }
-
-    /** Keep the established HTTP path and raw response while the overview runs in Magic. */
-    @GetMapping("/runtime-overview")
-    @Operation(summary="查询流程总览(runtimeOverview)")
-    public Map<String, Object> runtimeOverview(@RequestParam(required = false) String sortField,
-                                               @RequestParam(required = false) String sortDir) {
-        Map<String, Object> parameters = new HashMap<>();
-        if (sortField != null) parameters.put("sortField", sortField);
-        if (sortDir != null) parameters.put("sortDir", sortDir);
-        return invokeMagicRead("/common/nifiRuntimeOverview", parameters);
-    }
-
     private Map<String, Object> invokeMagicRead(String function, Map<String, Object> parameters) {
         try {
             return magicApiService.invoke(function, parameters);
@@ -192,63 +101,6 @@ public class PipelineController {
             if (failure.getCause() instanceof RuntimeException original) throw original;
             throw failure;
         }
-    }
-
-    private Map<String, Object> runtimeRow(Pipeline p, int seq) {
-            Map<String, Object> row = new LinkedHashMap<>();
-            row.put("seq", seq);
-            row.put("id", p.id());
-            row.put("taskName", p.name());
-            row.put("currentStatus", p.status());
-            row.put("processGroupId", p.nifiProcessGroupId());
-            row.put("latestRunTime", p.lastDeployedAt());
-            row.put("endTime", p.lastStoppedAt());
-            row.put("executionTimeMs", p.lastDeployedAt() != null && p.lastStoppedAt() != null
-                    ? Math.max(0L, p.lastStoppedAt() - p.lastDeployedAt())
-                    : null);
-
-            Pipeline.Node source = firstNode(p, "source");
-            Pipeline.Node sink = firstNode(p, "sink");
-            Map<String, Object> sourceConfig = source == null ? Map.of() : source.config();
-            Map<String, Object> sinkConfig = sink == null ? Map.of() : sink.config();
-            row.put("scheduleFrequency", firstNonBlank(sourceConfig, "schedulingPeriod", "schedule", "cron"));
-            row.put("syncMode", firstNonBlank(sourceConfig, "syncMode"));
-            row.put("sourceDatabase", sourceDatabaseText(sourceConfig));
-            row.put("sourceTables", sourceTablesText(sourceConfig));
-            row.put("targetDatabase", targetDatabaseText(sinkConfig));
-            row.put("targetTable", firstNonBlank(sinkConfig, "table", "targetTable", "tableName"));
-            row.put("sourceNodeName", source == null ? null : source.label());
-            row.put("targetNodeName", sink == null ? null : sink.label());
-
-            return row;
-    }
-
-    private void addRuntimeMetrics(Map<String, Object> row, Pipeline pipeline, JsonNode snapshot) {
-        long activeThreads = parseLong(snapshot.path("activeThreadCount"));
-        long queuedCount = parseLong(snapshot.path("queuedCount"));
-        row.put("activeThreads", activeThreads);
-        row.put("queuedCount", queuedCount);
-        row.put("queued", snapshot.path("queued").asText(null));
-        row.put("inputCount", maxMetric(snapshot, "flowFilesIn", "flowFilesReceived"));
-        row.put("outputCount", maxMetric(snapshot, "flowFilesOut", "flowFilesSent", "flowFilesTransferred"));
-        row.put("bytesRead", snapshot.path("bytesRead").asText(null));
-        row.put("bytesWritten", snapshot.path("bytesWritten").asText(null));
-        row.put("bytesSent", snapshot.path("bytesSent").asText(null));
-        row.put("running", activeThreads > 0 || pipeline.status() == PipelineStatus.RUNNING);
-    }
-
-    @GetMapping("/{id}")
-    @Operation(summary = "查询流程详情(get)")
-    public ResponseEntity<Pipeline> get(@PathVariable String id) {
-        return repo.findById(id)
-                // A detail read must preserve the saved design and version. In a
-                // chained task the catalog identifies the root business source,
-                // while this pipeline's source is the previous materialized hop.
-                // Registration-rule binding remains an explicit deploy/start action.
-                .map(stored -> com.linewell.dataelement.integration.nifi.canvas.pipeline.HiveSinkPublicationPolicy
-                        .forCanvas(stored).withStoredDesignVersion(stored))
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
     }
 
     /**
@@ -590,20 +442,6 @@ public class PipelineController {
         }
     }
 
-    /**
-     * Lightweight projection for the list page.
-     */
-    public record PipelineSummary(
-            String id, String name, String description,
-            Long createdAt, Long updatedAt, Integer nodeCount, String nifiProcessGroupId
-    ) {
-        static PipelineSummary of(Pipeline p) {
-            int nodes = p.dsl() != null && p.dsl().nodes() != null ? p.dsl().nodes().size() : 0;
-            return new PipelineSummary(p.id(), p.name(), p.description(),
-                    p.createdAt(), p.updatedAt(), nodes, p.nifiProcessGroupId());
-        }
-    }
-
     public record PipelineTemplateRequest(
             String tid,
             String templateType
@@ -664,70 +502,6 @@ public class PipelineController {
             if (v != null && !(v instanceof String) && !String.valueOf(v).isBlank()) return String.valueOf(v);
         }
         return null;
-    }
-
-    private static Pipeline.Node firstNode(Pipeline p, String category) {
-        if (p == null || p.dsl() == null || p.dsl().nodes() == null) return null;
-        return p.dsl().nodes().stream()
-                .filter(n -> category.equalsIgnoreCase(n.category()))
-                .findFirst()
-                .orElse(null);
-    }
-
-    private static String sourceDatabaseText(Map<String, Object> cfg) {
-        String jdbc = firstNonBlank(cfg, "jdbcUrl");
-        if (!isBlank(jdbc)) return jdbc;
-        String host = firstNonBlank(cfg, "host");
-        String port = firstNonBlank(cfg, "port");
-        String database = firstNonBlank(cfg, "database", "dbName", "schema");
-        return joinNonBlank(":", host, port) + (isBlank(database) ? "" : "/" + database);
-    }
-
-    private static String targetDatabaseText(Map<String, Object> cfg) {
-        String jdbc = firstNonBlank(cfg, "jdbcUrl");
-        if (!isBlank(jdbc)) return jdbc;
-        return sourceDatabaseText(cfg);
-    }
-
-    private static String sourceTablesText(Map<String, Object> cfg) {
-        String tables = firstNonBlank(cfg, "tables", "tableList");
-        if (!isBlank(tables)) return tables;
-        return firstNonBlank(cfg, "table", "tableName", "sourceTable");
-    }
-
-    private static String joinNonBlank(String delimiter, String... values) {
-        List<String> parts = new ArrayList<>();
-        for (String value : values) {
-            if (!isBlank(value)) parts.add(value);
-        }
-        return String.join(delimiter, parts);
-    }
-
-    private static long maxMetric(JsonNode node, String... keys) {
-        long max = 0L;
-        for (String key : keys) {
-            max = Math.max(max, parseLong(node.path(key)));
-        }
-        return max;
-    }
-
-    private static long parseLong(JsonNode node) {
-        if (node == null || node.isMissingNode() || node.isNull()) return 0L;
-        if (node.isNumber()) return node.asLong(0L);
-        String text = node.asText("");
-        if (text == null || text.isBlank()) return 0L;
-        StringBuilder digits = new StringBuilder();
-        for (int i = 0; i < text.length(); i++) {
-            char ch = text.charAt(i);
-            if (Character.isDigit(ch)) digits.append(ch);
-            else if (digits.length() > 0) break;
-        }
-        if (digits.length() == 0) return 0L;
-        try {
-            return Long.parseLong(digits.toString());
-        } catch (NumberFormatException e) {
-            return 0L;
-        }
     }
 
     private Map<String, Object> loadAssetByTid(String tid) {

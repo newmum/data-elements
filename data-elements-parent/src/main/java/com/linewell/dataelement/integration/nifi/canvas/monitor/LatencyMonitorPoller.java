@@ -5,7 +5,7 @@ import com.linewell.dataelement.feature.dataaccess.infrastructure.persistence.en
 import com.linewell.dataelement.feature.dataaccess.infrastructure.persistence.entity.DataAccessTaskMonitorSnapT;
 import com.linewell.dataelement.integration.nifi.canvas.config.NifiProperties;
 import com.linewell.dataelement.feature.dataaccess.infrastructure.persistence.service.IDataAccessAggTaskTService;
-import com.linewell.dataelement.feature.dataaccess.infrastructure.persistence.service.IDataAccessTaskMonitorSnapTService;
+import com.linewell.dataelement.feature.dataaccess.infrastructure.persistence.mapper.DataAccessTaskMonitorSnapTMapper;
 import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient;
 import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiException;
 import com.linewell.dataelement.integration.nifi.canvas.pipeline.Pipeline;
@@ -29,21 +29,21 @@ public class LatencyMonitorPoller {
     private final PipelineRepository repo;
     private final NifiClient nifi;
     private final IDataAccessAggTaskTService taskService;
-    private final IDataAccessTaskMonitorSnapTService snapService;
+    private final DataAccessTaskMonitorSnapTMapper snapshotMapper;
     private final LatencyMonitorSupport support;
     private final NifiProperties props;
     private final TenantExecutionCatalog tenantCatalog;
 
     public LatencyMonitorPoller(PipelineRepository repo, NifiClient nifi,
                                 IDataAccessAggTaskTService taskService,
-                                IDataAccessTaskMonitorSnapTService snapService,
+                                DataAccessTaskMonitorSnapTMapper snapshotMapper,
                                 LatencyMonitorSupport support,
                                 NifiProperties props,
                                 TenantExecutionCatalog tenantCatalog) {
         this.repo = repo;
         this.nifi = nifi;
         this.taskService = taskService;
-        this.snapService = snapService;
+        this.snapshotMapper = snapshotMapper;
         this.support = support;
         this.props = props;
         this.tenantCatalog = tenantCatalog;
@@ -104,7 +104,7 @@ public class LatencyMonitorPoller {
         }
 
         taskService.updateLatestMonitorState(pipeline.id(), snapshot);
-        snapService.save(toSnap(task, pipeline, snapshot));
+        snapshotMapper.insert(toSnap(task, pipeline, snapshot));
     }
 
     private DataAccessTaskMonitorSnapT toSnap(DataAccessAggTaskT task, Pipeline pipeline, LatencyMonitorSnapshot snapshot) {
