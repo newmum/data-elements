@@ -118,38 +118,38 @@ export function qualityBody(input:QualityDraft):QualityDraft {
  });
  return out;
 }
-const call=<T=unknown>(path:string,body:unknown={},signal?:AbortSignal,timeoutMs=20000)=>platformApi<T>('/dwm/quality/'+path,body,{signal,timeoutMs});
+const call=<T=unknown>(path:string,body:unknown={},signal?:AbortSignal,timeoutMs=20000)=>platformApi<T>('/dwm/'+path,body,{signal,timeoutMs});
 async function records(path:string,body:unknown={},signal?:AbortSignal){const value=await call(path,body,signal);if(!Array.isArray(value))throw new Error('质量选项返回格式不正确');return value.map(qualityRecord);}
 async function mutate<T>(path:string,body:unknown):Promise<T>{const result=await call<T>(path,body);if(result===false||result==null)throw new Error('后端未确认操作成功');changed();return result;}
 const id=(value:unknown)=>bounded(value,64,'业务标识',true);
 export const qualityApi={
- summary:async(signal?:AbortSignal)=>qualityRecord(await call('summary',{},signal)),
- taskPage:async(query:Partial<QualityQuery>={},signal?:AbortSignal)=>qualityPage(await call('task/page',{page:query.page||1,size:query.size||15,keyword:query.keyword||'',status:query.status||'',sortField:query.sortField,sortDir:query.sortDir,...(query.kind?{kind:query.kind}:{})},signal)),
- taskDetail:async(taskId:string,signal?:AbortSignal)=>qualityRecord(await call('task/detail',{taskId:id(taskId)},signal)),
- saveTask:async(draft:QualityDraft)=>qualityRecord(await mutate('task/save',qualityBody(draft))),
- precheck:async(taskId:string)=>{const result=await call<Row>('task/precheck',{taskId:id(taskId)},undefined,120000);if(typeof result?.success!=='boolean')throw new Error('预检接口未返回有效结果');changed();return result;},
- enable:(taskId:string,enabled:boolean)=>mutate('task/enable',{taskId:id(taskId),enabled}),
- deleteTask:(taskId:string)=>mutate('task/delete',{taskId:id(taskId)}),
- manualRun:async(taskId:string,requestId=crypto.randomUUID())=>qualityRecord(await mutate('run/manual',{taskId:id(taskId),requestId})),
- runPage:async(query:Partial<QualityQuery>={},signal?:AbortSignal)=>qualityPage(await call('run/page',{page:query.page||1,size:query.size||15,keyword:query.keyword||'',status:query.status||'',sortField:query.sortField,sortDir:query.sortDir,...(query.kind?{kind:query.kind}:{})},signal)),
- runDetail:async(runId:string,signal?:AbortSignal,order:Record<string,unknown>={})=>qualityRecord(await call('run/detail',{runId:id(runId),...order},signal)),
- runIssues:async(runId:string,page=1,size=20,severity='',status='',signal?:AbortSignal,order:Record<string,unknown>={})=>qualityPage(await call('run/issues',{runId:id(runId),page,size,severity,status,...order},signal)),
- cancelRun:(runId:string)=>mutate('run/cancel',{runId:id(runId)}),
- datasources:(signal?:AbortSignal)=>records('options/datasources',{},signal),tables:(datasourceId:string,signal?:AbortSignal)=>records('options/tables',{datasourceId:id(datasourceId)},signal),columns:(tableId:string,signal?:AbortSignal)=>records('options/columns',{tableId:id(tableId)},signal),templates:(signal?:AbortSignal)=>records('options/templates',{},signal),organizations:(signal?:AbortSignal)=>records('options/organizations',{},signal),
+ summary:async(signal?:AbortSignal)=>qualityRecord(await call('quality/summary',{},signal)),
+ taskPage:async(query:Partial<QualityQuery>={},signal?:AbortSignal)=>qualityPage(await call('qtask/page',{page:query.page||1,size:query.size||15,keyword:query.keyword||'',status:query.status||'',sortField:query.sortField,sortDir:query.sortDir,...(query.kind?{kind:query.kind}:{})},signal)),
+ taskDetail:async(taskId:string,signal?:AbortSignal)=>qualityRecord(await call('qtask/detail',{taskId:id(taskId)},signal)),
+ saveTask:async(draft:QualityDraft)=>qualityRecord(await mutate('qtask/save',qualityBody(draft))),
+ precheck:async(taskId:string)=>{const result=await call<Row>('qtask/check',{taskId:id(taskId)},undefined,120000);if(typeof result?.success!=='boolean')throw new Error('预检接口未返回有效结果');changed();return result;},
+ enable:(taskId:string,enabled:boolean)=>mutate('qtask/enable',{taskId:id(taskId),enabled}),
+ deleteTask:(taskId:string)=>mutate('qtask/delete',{taskId:id(taskId)}),
+ manualRun:async(taskId:string,requestId=crypto.randomUUID())=>qualityRecord(await mutate('qrun/start',{taskId:id(taskId),requestId})),
+ runPage:async(query:Partial<QualityQuery>={},signal?:AbortSignal)=>qualityPage(await call('qrun/page',{page:query.page||1,size:query.size||15,keyword:query.keyword||'',status:query.status||'',sortField:query.sortField,sortDir:query.sortDir,...(query.kind?{kind:query.kind}:{})},signal)),
+ runDetail:async(runId:string,signal?:AbortSignal,order:Record<string,unknown>={})=>qualityRecord(await call('qrun/detail',{runId:id(runId),...order},signal)),
+ runIssues:async(runId:string,page=1,size=20,severity='',status='',signal?:AbortSignal,order:Record<string,unknown>={})=>qualityPage(await call('qrun/issues',{runId:id(runId),page,size,severity,status,...order},signal)),
+ cancelRun:(runId:string)=>mutate('qrun/cancel',{runId:id(runId)}),
+ datasources:(signal?:AbortSignal)=>records('qoption/sources',{},signal),tables:(datasourceId:string,signal?:AbortSignal)=>records('qoption/tables',{datasourceId:id(datasourceId)},signal),columns:(tableId:string,signal?:AbortSignal)=>records('qoption/columns',{tableId:id(tableId)},signal),templates:(signal?:AbortSignal)=>records('qoption/templates',{},signal),organizations:(signal?:AbortSignal)=>records('qoption/orgs',{},signal),
  columnsBatch:async(tableIds:string[],signal?:AbortSignal):Promise<Record<string,Row[]>>=>{
   const ids=[...new Set(tableIds.map(id))];if(ids.length>100)throw new Error('一次最多读取100张表的字段');
   const result:Record<string,Row[]>={};
-  for(let offset=0;offset<ids.length;offset+=50){const batch=ids.slice(offset,offset+50),rows=await call<Record<string,unknown>>('options/columns',{tableIds:batch},signal);
+  for(let offset=0;offset<ids.length;offset+=50){const batch=ids.slice(offset,offset+50),rows=await call<Record<string,unknown>>('qoption/columns',{tableIds:batch},signal);
    for(const tableId of batch){if(!Array.isArray(rows?.[tableId]))throw new Error('批量字段返回缺少已请求数据表');result[tableId]=(rows[tableId] as unknown[]).map(qualityRecord);}
   }
   return result;
  },
- sqlTemplatePage:async(query:Partial<QualityQuery>&{dimension?:string}={},signal?:AbortSignal)=>qualityPage(await call('templates/page',{page:query.page||1,size:query.size||20,keyword:query.keyword||'',dimension:query.dimension||'',sortField:query.sortField,sortDir:query.sortDir},signal)),
- saveSqlTemplate:(draft:Row)=>mutate<Row>('templates/save',{tid:draft.id||undefined,ruleName:bounded(draft.ruleName,255,'模板名称',true),ruleCode:bounded(draft.ruleCode,255,'模板编码',true),dimension:draft.dimension,sqlTemplate:bounded(draft.sqlTemplate,4000,'SQL异常条件',true),values:draft.values||{},description:bounded(draft.description,1000,'说明')}),
- deleteSqlTemplate:(templateId:string)=>mutate('templates/delete',{tid:id(templateId)}),
- workOrderPage:async(query:Partial<QualityQuery>={},signal?:AbortSignal):Promise<QualityPage>=>{const [result,orgs]=await Promise.all([call('workorders/page',{page:query.page||1,size:query.size||15,status:query.status||'',sortField:query.sortField,sortDir:query.sortDir},signal),records('options/organizations',{},signal)]);const page=qualityPage(result);return {...page,list:page.list.map(r=>({...r,assigneeOrgName:orgs.find(o=>o.id===String(r.assigneeOrgId))?.name||''}))};},
- createWorkOrder:async(issueId:string,assigneeOrgId?:string,remark?:string)=>qualityRecord(await mutate('workorders/create',{issueId:id(issueId),...(assigneeOrgId?{assigneeOrgId:id(assigneeOrgId)}:{}),...(remark?{remark:bounded(remark,1000,'工单说明')}:{})})),
- transitionWorkOrder:(orderId:string,action:string,opinion='',assigneeOrgId?:string)=>{if(!['START','SUBMIT_RECHECK','CLOSE'].includes(action))throw new Error('工单动作不合法');if(action==='START'&&!assigneeOrgId)throw new Error('请选择责任组织');if(action!=='START'&&!opinion.trim())throw new Error('请填写整改或复检说明');return mutate('workorders/transition',{orderId:id(orderId),action,opinion:bounded(opinion,1000,'整改说明'),...(assigneeOrgId?{assigneeOrgId:id(assigneeOrgId)}:{})});},
+ sqlTemplatePage:async(query:Partial<QualityQuery>&{dimension?:string}={},signal?:AbortSignal)=>qualityPage(await call('qsql/page',{page:query.page||1,size:query.size||20,keyword:query.keyword||'',dimension:query.dimension||'',sortField:query.sortField,sortDir:query.sortDir},signal)),
+ saveSqlTemplate:(draft:Row)=>mutate<Row>('qsql/save',{tid:draft.id||undefined,ruleName:bounded(draft.ruleName,255,'模板名称',true),ruleCode:bounded(draft.ruleCode,255,'模板编码',true),dimension:draft.dimension,sqlTemplate:bounded(draft.sqlTemplate,4000,'SQL异常条件',true),values:draft.values||{},description:bounded(draft.description,1000,'说明')}),
+ deleteSqlTemplate:(templateId:string)=>mutate('qsql/delete',{tid:id(templateId)}),
+ workOrderPage:async(query:Partial<QualityQuery>={},signal?:AbortSignal):Promise<QualityPage>=>{const [result,orgs]=await Promise.all([call('qorder/page',{page:query.page||1,size:query.size||15,status:query.status||'',sortField:query.sortField,sortDir:query.sortDir},signal),records('qoption/orgs',{},signal)]);const page=qualityPage(result);return {...page,list:page.list.map(r=>({...r,assigneeOrgName:orgs.find(o=>o.id===String(r.assigneeOrgId))?.name||''}))};},
+ createWorkOrder:async(issueId:string,assigneeOrgId?:string,remark?:string)=>qualityRecord(await mutate('qorder/create',{issueId:id(issueId),...(assigneeOrgId?{assigneeOrgId:id(assigneeOrgId)}:{}),...(remark?{remark:bounded(remark,1000,'工单说明')}:{})})),
+ transitionWorkOrder:(orderId:string,action:string,opinion='',assigneeOrgId?:string)=>{if(!['START','SUBMIT_RECHECK','CLOSE'].includes(action))throw new Error('工单动作不合法');if(action==='START'&&!assigneeOrgId)throw new Error('请选择责任组织');if(action!=='START'&&!opinion.trim())throw new Error('请填写整改或复检说明');return mutate('qorder/transition',{orderId:id(orderId),action,opinion:bounded(opinion,1000,'整改说明'),...(assigneeOrgId?{assigneeOrgId:id(assigneeOrgId)}:{})});},
 };
 
 export function qualitySqlDefinition(row:Row):{sqlTemplate:string;values:Row} {

@@ -41,7 +41,7 @@ function fixture(count,{autoWatch=false,watchCards=false,reply=()=>full(),replyC
     return reply(body);
   };
   const context=vm.createContext({state,computed,watch,nextTick,setTimeout,clearTimeout,console:{error:()=>{}},SOURCE_PAGE_SIZES:[24,48,100],
-    treeData:{value:[{value:''}]},sourceListTop:{value:null},normalizeItem:x=>x,$common:{post,postSilently:post}});
+    treeData:{value:[{value:''}]},sourceListTop:{value:null},normalizeItem:x=>x,applyDefaultTreeState:()=>{},$common:{post,postSilently:post}});
   vm.runInContext(executable,context);
   if(autoWatch)vm.runInContext('globalThis.stopStatisticsWatch='+script.slice(statisticsWatch.start,statisticsWatch.end),context);
   if(watchCards)vm.runInContext('globalThis.stopCardsWatch='+script.slice(cardsWatch.start,cardsWatch.end),context);

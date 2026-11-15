@@ -9,7 +9,7 @@
   "lock": null,
   "createBy": null,
   "updateBy": null,
-  "path": "/element/metaSaveOrUpdate",
+  "path": "/save",
   "method": "POST",
   "parameters": [],
   "options": [],
@@ -22,11 +22,11 @@
   "responseBodyDefinition": null
 }
 ================================
-// 接口：03.数据元保存修改
-// 路由：POST /dwm/standard/element/metaSaveOrUpdate
-// 业务说明：校验请求资料后执行数据元保存修改，返回保存或配置结果；使用请求参数 tid、metaName、metaCode、standardEncode、bizDef、dataTypeId、fieldType、fieldLength；涉及 da_metadata_t 等业务表。
 import cn.hutool.core.util.IdUtil
 import log
+
+// POST /dwm/standard/save 数据元保存修改
+// 校验请求资料后执行数据元保存修改，返回保存或配置结果；使用请求参数 tid、metaName、metaCode、standardEncode、bizDef、dataTypeId、fieldType、fieldLength；涉及 da_metadata_t 等业务表。
 
 /**
  * 保存或更新数据元管理

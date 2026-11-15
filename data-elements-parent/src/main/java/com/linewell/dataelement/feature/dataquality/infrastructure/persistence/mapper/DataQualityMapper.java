@@ -30,7 +30,6 @@ public interface DataQualityMapper {
     List<Map<String, Object>> selectRunShards(@Param("tenantId") String tenantId, @Param("runId") String runId);
     List<Map<String, Object>> selectDatasourceOptions(@Param("tenantId") String tenantId);
     List<Map<String, Object>> selectTableOptions(@Param("tenantId") String tenantId, @Param("datasourceId") String datasourceId);
-    List<Map<String, Object>> selectColumnOptions(@Param("tenantId") String tenantId, @Param("tableId") String tableId);
     List<Map<String, Object>> selectColumnOptionsBatch(@Param("tenantId") String tenantId, @Param("tableIds") List<String> tableIds);
     List<String> selectValidTableIds(@Param("tenantId") String tenantId, @Param("datasourceId") String datasourceId,
             @Param("tableIds") List<String> tableIds);

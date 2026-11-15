@@ -119,7 +119,7 @@ const loadServiceData = async () => {
   loading.value = true;
   loadError.value = "";
   try {
-    const response = await $common.post("/dws/flowserve/gateway/api/detail", {
+    const response = await $common.post("/dws/flowserve/service", {
       apiId: id,
     });
     if (version !== loadVersion) return;

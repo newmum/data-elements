@@ -42,7 +42,7 @@
       "type": "1",
       "sortOrder": 2,
       "path": "01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource).vue",
-      "baseSha256": "8cf38ed17ae0377f83bfc6356113034aaf18c39c0357c7eae68df8ffa9b3c033"
+      "baseSha256": "9de5de43eaf2df6f035a0053c42c067b7529a3dcd9f8e1f3dcfcdc5e4fc4b55d"
     },
     {
       "id": "2016435561264910336",
@@ -72,7 +72,7 @@
       "type": "1",
       "sortOrder": 3,
       "path": "01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource)/03.登记数据表(register-dbTable-catalog).vue",
-      "baseSha256": "bf881e09458ebc8edf10712803430c327794dcb1f69cb8e54592b05dacf236da"
+      "baseSha256": "6f30b9f5076692c308aec47c095182c74ca1836a86eac4bd151c51daafebeac7"
     },
     {
       "id": "2075055310869430272",
@@ -82,7 +82,7 @@
       "type": "1",
       "sortOrder": 4,
       "path": "01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource)/04.登记内容审查(register-confirm).vue",
-      "baseSha256": "41662f8c8ed60165a6a10e29d44feee5e1c44e22ebe03cc11a3b934e3017bff7"
+      "baseSha256": "38beab99c1e6dcf28fadc93c43877b19d52a8145accaab3ba9f6e5330241981f"
     },
     {
       "id": "2008087014782078976",
@@ -112,7 +112,7 @@
       "type": "1",
       "sortOrder": 2,
       "path": "01.系统门户/02.协作任务/审批弹窗(approval-modal).vue",
-      "baseSha256": "0b2b7b06a856a2c5760442c7afee889e48fa54d9102e82f6c3003180adf19122"
+      "baseSha256": "148f5cbe72596646caa1605cdfd327730f1d0ecd0169ed10894d45c117c87edb"
     },
     {
       "id": "2018969070206529536",
@@ -122,7 +122,7 @@
       "type": "1",
       "sortOrder": 4,
       "path": "01.系统门户/02.协作任务/资源申请(my-apply).vue",
-      "baseSha256": "7f43d3bb6b3489b7a3dd58d66e01bd9280a6c0e7b8964b09c21a527785bacaa2"
+      "baseSha256": "d795ab569e9b2ab31df850b2c60f3e2eddd32f26f29e42fce3b5482da52a2691"
     },
     {
       "id": "08204573bcdb4283b7a88e57aefdd0ea",
@@ -152,7 +152,7 @@
       "type": "1",
       "sortOrder": 1,
       "path": "02.数据盘点/01.数据登记/2.2.1 业务系统(my-app).vue",
-      "baseSha256": "76c27e75c818f98b982d65e8000096ee4361c9eb226b9e4db7d9e26c2a1c67a5"
+      "baseSha256": "485eea6b91d326c442b393132898a6558162741e2a6e22c80eca2feb6728781c"
     },
     {
       "id": "2004515730382983168",
@@ -162,7 +162,7 @@
       "type": "1",
       "sortOrder": 2,
       "path": "02.数据盘点/01.数据登记/2.2.2 数据探查(my-db).vue",
-      "baseSha256": "7e2310b48ddbf5fadc9a6a58ad04b07f5e3dc6041b35d89b8d7e560e4ec6424f"
+      "baseSha256": "d603862deaf1aed98d68aca37bb96aea0133398ba7a00dfe7c35ad2de2a87bb4"
     },
     {
       "id": "2004515843704688640",
@@ -172,7 +172,7 @@
       "type": "1",
       "sortOrder": 3,
       "path": "02.数据盘点/01.数据登记/2.2.3 数据目录(my-catalog).vue",
-      "baseSha256": "d4c637f4a1d92efdc19c8201da7039e27dc55e2a562aa36ea4170ed95ddd8dcb"
+      "baseSha256": "ca6fad24b7c6ed62151be58593fead826b6cb645433ee46adcc8258df1439e6c"
     },
     {
       "id": "2004515963359793152",
@@ -462,7 +462,7 @@
       "type": "1",
       "sortOrder": 14,
       "path": "02.数据盘点/02.登记流程组件/详情页面(detail-page)/资源目录2-挂接资源(catalog-rela).vue",
-      "baseSha256": "7a4e72b16b27e07c6419c0f110ca6d10d7df3ade3eca1215689be1e6cba1d2a7"
+      "baseSha256": "06816e4362a2f2ad942f2c81b8ded35ec9be245692035ce58865453ff9ea927c"
     },
     {
       "id": "2008469508677242880",
@@ -472,7 +472,7 @@
       "type": "1",
       "sortOrder": 15,
       "path": "02.数据盘点/02.登记流程组件/详情页面(detail-page)/资源目录3-关联表资源(catalog-rela-table).vue",
-      "baseSha256": "0e39d26b194fecceed484699b602f9e04e0692380a58ae1f61c2a1e9ee7f5430"
+      "baseSha256": "c309cec4ff47838dda0076a4ade46a1856ec288184775a6ede4d11d54eeee68c"
     },
     {
       "id": "2008470019165982720",
@@ -502,7 +502,7 @@
       "type": "1",
       "sortOrder": 18,
       "path": "02.数据盘点/02.登记流程组件/详情页面(detail-page)/资源目录6-超市-资源信息(catalog-market-res).vue",
-      "baseSha256": "500b209faa69ff2b1465bbf1325dbde3535bd8918b0d2f9eaf0cdb4b2723b6d1"
+      "baseSha256": "6bf8a66fca6d2bb8561f2a20aeac1bd45a7d62f2c1383e36f281bd7800cd1b26"
     },
     {
       "id": "2020738614931570688",
@@ -552,7 +552,7 @@
       "type": "1",
       "sortOrder": 1,
       "path": "02.数据盘点/03.资产中心/3.1 资产中心(asset-center).vue",
-      "baseSha256": "de518fbc9dad862a70c22a9d1fd31ca94dbde9ff4cba548efe203dd17001c993"
+      "baseSha256": "df178212db61af074d8299493acc5edda9466832436f4e714f472633743d81dd"
     },
     {
       "id": "2006253181124284416",
@@ -602,7 +602,7 @@
       "type": "1",
       "sortOrder": 3,
       "path": "03.数据接入/2.3.1 数据汇聚(data-convergence).vue",
-      "baseSha256": "252293f874b2bdcb57e6614561e129635581c64c7296851563a5ecd43e26f8e7"
+      "baseSha256": "32abc35a65d9756b106e79b7306ef37dd34d64f675999958812497b03b8e9072"
     },
     {
       "id": "2066782132212649984",
@@ -752,7 +752,7 @@
       "type": "1",
       "sortOrder": 1,
       "path": "05.数据治理/2.5.1 数据中心(data-warehouse).vue",
-      "baseSha256": "deb2711dafd021d3b1c22e79888feb0c44f4221c16d7313d74c66eb4d207c5df"
+      "baseSha256": "f9111a0c72a26b316ea836367081d3595a9c565a118bac412327666f25c5ebb7"
     },
     {
       "id": "2018975669541220352",
@@ -762,7 +762,7 @@
       "type": "1",
       "sortOrder": 1,
       "path": "05.数据治理/2.5.1 数据中心(data-warehouse)/基础层详情(dwd-detail).vue",
-      "baseSha256": "58ecfdb0d376d11dae1cd7923a987001573e187dbde3c37a4b6056626bf53d17"
+      "baseSha256": "2f503e19bedf2c869d24c4cc8e1cf012925f9276c0d60744f6eba64ac14a7791"
     },
     {
       "id": "2014274065852338176",
@@ -772,7 +772,7 @@
       "type": "1",
       "sortOrder": 2,
       "path": "05.数据治理/2.5.1 数据中心(data-warehouse)/数源层详情(dst-detail).vue",
-      "baseSha256": "22a840e4941b3df21f4e842d39d227afa3fef7ffb65419cf7460837960cf7342"
+      "baseSha256": "4b9c845ba9be6379012db44dcc906a8a681ba359e4498b72386af3f98054fd38"
     },
     {
       "id": "2015613030412914688",
@@ -932,7 +932,7 @@
       "type": "1",
       "sortOrder": 4,
       "path": "05.数据治理/2.5.4 数据质量(data-quality).vue",
-      "baseSha256": "0bde78af2156291279a8e181537bb28c8dcc2c0640a9bb953f71cdf83e680766"
+      "baseSha256": "0a353371cc0f1b22460f5ab4f06aadabef6c1c4b174d01c6fd5037f1a1a69ef6"
     },
     {
       "id": "2020410655368622080",
@@ -952,7 +952,7 @@
       "type": "1",
       "sortOrder": 5,
       "path": "05.数据治理/2.5.4 数据质量(data-quality)/质检规则库(rule-library).vue",
-      "baseSha256": "32ee58909be188c9e2e7e2f6fcc9ae3c8ef359019eb6fed2706c78e92853cadd"
+      "baseSha256": "e678764ba7a47fcf321586bbbe8a9c02b8714d6848e7af23023ebd1293d80ed5"
     },
     {
       "id": "2013151015996035072",
@@ -962,7 +962,7 @@
       "type": "1",
       "sortOrder": 5,
       "path": "05.数据治理/2.5.5 数据标准(data-standard).vue",
-      "baseSha256": "d467bbdf8483c17dc4b02e02211a5ee495d88f951fe0308c6a29f72103c7b003"
+      "baseSha256": "e0c128d88380bc529ee3bb578b8de7be962ff5673086dc1cd17dafb28eeb16f4"
     },
     {
       "id": "2059526706911858688",
@@ -982,7 +982,7 @@
       "type": "1",
       "sortOrder": 2,
       "path": "05.数据治理/2.5.5 数据标准(data-standard)/数据元抽屉(meta-detail-drawer).vue",
-      "baseSha256": "5068cc0bb8cb2042a6012934c140400a65343c7327f21152c082d1d5766b231a"
+      "baseSha256": "f6c20f0ac5e1f85e89a566303c30712084babcecc13ee49663038a6f64b63fe6"
     },
     {
       "id": "2029026832923807744",
@@ -992,7 +992,7 @@
       "type": "1",
       "sortOrder": 3,
       "path": "05.数据治理/2.5.5 数据标准(data-standard)/标准代码(standard-code).vue",
-      "baseSha256": "eb1d5884d629553ca010e2846b21185749241fa8bdf30073b96ad057903940c3"
+      "baseSha256": "1e50db9ae005adfe55b94914e02bffd0f6c602c1fb68c8b98ca200ec8da3ffe1"
     },
     {
       "id": "2059526902550974464",
@@ -1122,7 +1122,7 @@
       "type": "1",
       "sortOrder": 1,
       "path": "06.数据服务/06.定时器/定时器管理(timer-manage).vue",
-      "baseSha256": "5eebc3dba033bdc4fc3b6ceb74571a634024c4ad85ef7d1813ade945b266195d"
+      "baseSha256": "46c5d964b2676fce6b07bdbda49bd8fa814a6ee95ac418a2d28ab09e10a46d1f"
     },
     {
       "id": "2014615745029804032",
@@ -1132,7 +1132,7 @@
       "type": "1",
       "sortOrder": 2,
       "path": "06.数据服务/数据服务(data-serve).vue",
-      "baseSha256": "347239519384a6e2e257835107078e46f39885540b87b41da233a2a1d2d6903b"
+      "baseSha256": "93f60737e8b513606a7eca3455ff3c14cfacb7ed6774988ae42c3a7c44c52d1c"
     },
     {
       "id": "2017170871384870912",
@@ -1152,7 +1152,7 @@
       "type": "1",
       "sortOrder": 3,
       "path": "06.数据服务/数据服务(data-serve)/api详情(api-detail).vue",
-      "baseSha256": "8876360a07a8538b854a12e0a4bb7c935a3c100e404831b3c721cdf7dab2bab3"
+      "baseSha256": "8f2119f21dd92f7686bea11add19c4161e0401ad1c1f2f7725e605b108c4233b"
     },
     {
       "id": "2063874204568698880",
@@ -1182,7 +1182,7 @@
       "type": "1",
       "sortOrder": 2,
       "path": "06.数据服务/数据服务(data-serve)/服务组件/api注册(api-register-content).vue",
-      "baseSha256": "005145f0c75f98e4be4b2cf820e43383c6aa12d190eefa67eacc4ecd1aa06474"
+      "baseSha256": "54b54a9d590b65e5ae6ff4944ebc1e406f10514c8cd16914785a8c18c4090540"
     },
     {
       "id": "2063874447825747968",
@@ -1222,7 +1222,7 @@
       "type": "1",
       "sortOrder": 6,
       "path": "06.数据服务/数据服务(data-serve)/服务组件/服务注册弹窗(api-register-modal).vue",
-      "baseSha256": "cfb4f1b89fd8df7ca552c6e9207d5eb1e855f8e133a152a53f7238c6c9f65d6c"
+      "baseSha256": "7374e06667896eef05ad7bbda3b783532ba6873c74c34b34000d62d43d39d70a"
     },
     {
       "id": "2026114126046601216",
@@ -1342,7 +1342,7 @@
       "type": "1",
       "sortOrder": 2,
       "path": "09.系统管理/02.用户与权限/在线用户(online-user-manage).vue",
-      "baseSha256": "bfeb7529ed2415a4a58d3005cb02ff9c26849c46b38354c24385740a7367b638"
+      "baseSha256": "1f6e301f8b6b1bec7bc539f2c2d55d30bed79c21d26165f6d3dcbcb8d53b339c"
     },
     {
       "id": "2033843666244182016",
@@ -1352,7 +1352,7 @@
       "type": "1",
       "sortOrder": 3,
       "path": "09.系统管理/02.用户与权限/权限管理(auth-manage).vue",
-      "baseSha256": "15f998d5d29f335643a37d655de78d0e00ce90b1fa4b6b0fd6bc65e540cf55e4"
+      "baseSha256": "4efb2612957daa6b75b3a9e024d53f10a39073613436677010a6f92047b5d323"
     },
     {
       "id": "2034515146976083968",
@@ -1362,7 +1362,7 @@
       "type": "1",
       "sortOrder": 1,
       "path": "09.系统管理/02.用户与权限/权限管理(auth-manage)/右侧权限树(auth-perm-tree).vue",
-      "baseSha256": "66ca33b3ae4ebe1dd05587240351f34988e3e685af0ab73c13cd996366abc25b"
+      "baseSha256": "49a069ed9d789ea1ebfa83bf183ef55c9b2a41fd3291819bf71efffdde977955"
     },
     {
       "id": "2034515052092538880",
@@ -1372,7 +1372,7 @@
       "type": "1",
       "sortOrder": 2,
       "path": "09.系统管理/02.用户与权限/权限管理(auth-manage)/左侧面板(auth-left-panel).vue",
-      "baseSha256": "ca6fac58c08c05c75ebc19a896456930da5367b56a8466d94f9fb475f8954dad"
+      "baseSha256": "336049fd928cf00d040048a9af3b388fb8689013a4001dd31a3b60c1ce2fb75e"
     },
     {
       "id": "2033843576989392896",
@@ -1382,7 +1382,7 @@
       "type": "1",
       "sortOrder": 4,
       "path": "09.系统管理/02.用户与权限/用户管理(user-manage).vue",
-      "baseSha256": "fc832796c85276744a22117a782fc0db5e760002443600e83576e0bc733c3ffc"
+      "baseSha256": "fd8c3252193d826d87d98782fccf478b788ce93f3512b5912aef39b21aaafef8"
     },
     {
       "id": "178716197779600002",
@@ -1392,7 +1392,7 @@
       "type": "1",
       "sortOrder": 5,
       "path": "09.系统管理/02.用户与权限/租户管理(tenant-manage).vue",
-      "baseSha256": "22567b851d20c5763b0e9558a1a29854098fd8bf277c7f9e2ffb2507ce14009a"
+      "baseSha256": "add2cdd08c3d0ae1671bbd2f3c93133ab277ba1bf8f08a3eb25346c58ff9e195"
     },
     {
       "id": "2033838744941469696",
@@ -1402,7 +1402,7 @@
       "type": "1",
       "sortOrder": 6,
       "path": "09.系统管理/02.用户与权限/组织机构(org-manage).vue",
-      "baseSha256": "3d4fc4a1c9cdbbed73168ee033d37bb626e7b94c6a4430c7f2482b6344794453"
+      "baseSha256": "2196b870cad28a160b79002c5f390abc8b6b231543bb8c44de587ed55f5ec823"
     },
     {
       "id": "2033843620580794368",
@@ -1412,7 +1412,7 @@
       "type": "1",
       "sortOrder": 7,
       "path": "09.系统管理/02.用户与权限/角色管理(role-manage).vue",
-      "baseSha256": "3a5ac45e9b2c4fdac7aca7bbf3e4dea45d4189ad4a12c0ecea94f1cd1c8f8565"
+      "baseSha256": "d14c25b1be28e89f029b0b2ce3a81cdd73e80a082ef9cd7b761a07680585bf05"
     },
     {
       "id": "ui_group_approval_20260802",
@@ -1432,7 +1432,7 @@
       "type": "1",
       "sortOrder": 1,
       "path": "09.系统管理/08.审批中心/审批中心(approval-center).vue",
-      "baseSha256": "4cdb9db46799cc7142e3cee429cf8905884b0bbd4d892d6a92b2914ed3dbaeaa"
+      "baseSha256": "887d2d8c180b8b42bc8037a70055e9ea7f6fc248e4d6d6a17a98665d1539762d"
     },
     {
       "id": "2048677106957221888",
@@ -1442,7 +1442,7 @@
       "type": "1",
       "sortOrder": 2,
       "path": "09.系统管理/08.审批中心/流程管理(flow-config).vue",
-      "baseSha256": "3a259f6f64d52f39c94c72a507ce39e0fc8feb1ad66366af4af9032ce063f01e"
+      "baseSha256": "6da01a8029b96652ec56c76ec2001a1209d136568017a70ecf5f7549fd7fd59d"
     },
     {
       "id": "2048677252751228928",

@@ -713,7 +713,7 @@ const handleAction = (type, row) => {
       }
       state.leftLoading = true;
       Promise.all([
-        $common.post("/sym/org/getOrgTree", { parentId: $user.orgRootId }),
+        $common.post("/sym/org/tree", { parentId: $user.orgRootId }),
         $common.post("/dst/db/stats", statisticsPayload()),
       ])
         .then(([data, countRes]) => {

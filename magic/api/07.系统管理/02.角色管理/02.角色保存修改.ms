@@ -11,7 +11,7 @@
   "lock": null,
   "createBy": null,
   "updateBy": null,
-  "path": "/saveOrUpdate",
+  "path": "/save",
   "method": "POST",
   "parameters": [],
   "options": [],
@@ -24,20 +24,19 @@
   "responseBodyDefinition": null
 }
 ================================
-// 接口：02.角色保存修改
-// 路由：POST /sym/role/saveOrUpdate
-// 业务说明：角色新增/编辑 + 关联用户保存；使用请求参数 roleName、codeNum、description、status、sortNum、id、userIds、appId；涉及 rm_role_t、rm_user_role_rela_t 等业务表。
 import tenantAccounts
 import tenantRuntime
 import '@/tenant-account/role-admin' as localRoleAdmin
 import cn.dev33.satoken.stp.StpUtil;
 import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.date.DateUtil;
+
+// 保存角色与用户关系。本地账号分支和角色删除共用 /tenant-account/role-admin。
 if(tenantAccounts.isLocal(tenantRuntime.id())) {return localRoleAdmin('save',body||{});}
 
 
 // 角色新增/编辑 + 关联用户保存
-// 路径: /sym/role/saveOrUpdate
+// 路径: /sym/role/save
 // 方法: POST
 // 参数:
 //   id          - 角色ID（有则编辑，无则新增）

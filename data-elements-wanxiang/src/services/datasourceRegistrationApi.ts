@@ -102,7 +102,7 @@ export const datasourceRegistrationApi = {
       platformApi<Record<string, { options?: unknown }>>('/sym/dict/query'),
       // Same tenant-scoped registered application/ES list as the platform business-system page.
       platformApi<unknown>('/dst/application/list', {}),
-      platformApi<unknown>('/sym/org/pageOrg'),
+      platformApi<unknown>('/sym/org/page'),
     ]);
     return { types: leafOptions(sourceOptions(dict.dbType?.options)), networks: leafOptions(sourceOptions(dict.storageDomain?.options)), organizations: organizationOptions(organizations), applications: sourceOptions(applications), nodes: leafOptions(sourceOptions(dict.nodeType?.options)) };
   },

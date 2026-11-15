@@ -30,11 +30,16 @@ public class TenantAccountsMagicModule {
     public Map<String,Object> page(String tenantId,long page,long size,Object ids,String account,String name) {
         return queries.page(tenantId,page,size,ids == null ? null : ids(ids),account,name);
     }
-    public List<Map<String,Object>> list(String tenantId,String name) { return queries.list(tenantId,name); }
     public Map<String,Object> find(String tenantId,String id) { return queries.find(tenantId,id); }
     public boolean hasMembership(String tenantId,String id) { return queries.hasMembership(tenantId,id); }
     public Map<String,String> names(Object ids) { return queries.names(ids(ids)); }
     public List<String> tokens() { return TenantSessions.tokens(StpUtil.getStpLogic()); }
+    public List<String> onlineUserIds(String tenantId) {
+        if (TenantContext.usesControlDatabase() || !TenantContext.requireTenantId().equals(tenantId)) {
+            throw new TenantAccessException("TENANT-FORBIDDEN", "在线会话必须使用当前租户上下文");
+        }
+        return List.copyOf(TenantSessions.onlineLocalUserIds(StpUtil.getStpLogic(), tenantId));
+    }
     public String loginLocal(String tenantId,String id,String appId,String account) {
         access.requireActiveTenant(tenantId);
         if (!queries.isLocal(tenantId)) throw new TenantAccessException("TENANT-FORBIDDEN","当前租户未启用本地账号");

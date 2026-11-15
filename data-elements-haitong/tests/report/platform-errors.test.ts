@@ -70,7 +70,7 @@ test('all failed original uploads produce individual errors and no parse/save re
   assert.equal(result.uploaded.length,0);assert.equal(result.failures.length,2);assert.deepEqual(progress,[1,2]);
   assert.deepEqual(result.failures.map(item=>item.fileName),files.map(file=>file.name));
   assert.ok(result.failures.every(item=>item.cause instanceof PlatformApiError&&item.cause.info.traceId==='validation-upload-trace'));
-  assert.equal(calls.length,2);assert.ok(calls.every(path=>path.endsWith('/dst/file/manage?action=upload')));
+  assert.equal(calls.length,2);assert.ok(calls.every(path=>path.endsWith('/dst/file/manage?action=upload-report')));
 });
 
 test('mixed uploads retain only successful originals, local validation makes no request, auth expiry stops subsequent uploads',async t=>{

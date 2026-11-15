@@ -170,7 +170,7 @@ async function fetchServices({ pageNo, pageSize, sortField, sortDir }: PageQuery
   listError.value = "";
   try {
     const result = await requestPolicy.quiet<ServicePage | Error>({
-      url: "/dws/flowserve/gateway/api/list",
+      url: "/dws/flowserve/services",
       method: "post",
       data: {
         datasourceId: id,

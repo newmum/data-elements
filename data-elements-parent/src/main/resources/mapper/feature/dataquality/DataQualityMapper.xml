@@ -128,14 +128,6 @@
         ORDER BY COALESCE(t.table_name_cn, t.table_comment, t.table_name), t.table_name
     </select>
 
-    <select id="selectColumnOptions" resultType="java.util.LinkedHashMap">
-        SELECT c.tid, c.column_name, c.column_comment, c.data_type, c.column_type,
-               c.nullable, c.primary_key, c.is_unique, c.indexed, c.ordinal_position
-        FROM db_table_column_t c
-        WHERE c.tenant_id = #{tenantId} AND c.table_id = #{tableId} AND c.is_del = 0
-        ORDER BY c.ordinal_position, c.column_name
-    </select>
-
     <select id="selectSummary" resultType="java.util.LinkedHashMap">
         SELECT
           (SELECT COUNT(*) FROM dq_quality_task_t q WHERE q.tenant_id=#{tenantId} AND q.is_del=0) AS task_total,

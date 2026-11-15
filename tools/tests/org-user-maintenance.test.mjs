@@ -16,22 +16,33 @@ async function functions(file, names) {
   });
   return babel.Babel.transform(chunks.join('\n'), { filename: 'maintenance.ts', presets: ['typescript'] }).code;
 }
-const userFunctions = await functions('lowcode/09.系统管理/02.用户与权限/用户管理(user-manage).vue', ['buildUserParams', 'requestUserPage', 'isUserOnline', 'fetchUserData']);
+const userFunctions = await functions('lowcode/09.系统管理/02.用户与权限/用户管理(user-manage).vue', ['buildUserParams', 'requestUserPage', 'fetchUserData']);
 const orgFunctions = await functions('lowcode/09.系统管理/02.用户与权限/组织机构(org-manage).vue', ['loadOrgUsers']);
+const tenantFunctions = await functions('lowcode/09.系统管理/02.用户与权限/租户管理(tenant-manage).vue', ['fetchUsers']);
 const organizationOptionsFunctions = await functions('lowcode/09.系统管理/02.用户与权限/用户管理(user-manage).vue', ['fetchOrgTree', 'handleDetail', 'handleAdd', 'syncOrganizationOptions']);
 for (const size of [20, 100]) {
-  const rows = Array.from({ length: size }, (_, i) => ({ id: `validation-user-${i}`, userName: `validation-${i}` }));
+  const rows = Array.from({ length: size }, (_, i) => ({ id: `validation-user-${i}`, userName: `validation-${i}`, online: true }));
   const calls = [];
   const post = async (route, payload) => { calls.push({ route, payload }); return { list: rows, total: size }; };
-  const user = vm.createContext({ currentNode: { value: { id: 'validation-org' } }, searchKeyword: { value: '' }, filterOnline: { value: '' },
-    fetchOnlineUsers: async () => ({ ids: new Set(['validation-user-0']), userNames: new Set() }), $common: { post }, console });
+  const filterOnline = { value: '' };
+  const user = vm.createContext({ currentNode: { value: { id: 'validation-org' } }, searchKeyword: { value: '' }, filterOnline,
+    $common: { post }, console });
   vm.runInContext(`${userFunctions}\nglobalThis.fetchPage = fetchUserData;`, user);
-  const result = await user.fetchPage({ pageNo: 1, pageSize: size });
-  assert.equal(calls.length, 1, 'one user page request, no per-row detail fetches');
-  assert.equal(calls[0].payload.orgId, 'validation-org');
-  assert.equal(result.list.length, size);
-  assert.equal(result.list[0].online, true);
-  calls.length = 0;
+  for (const state of ['', true, false]) {
+    filterOnline.value = state;
+    const result = await user.fetchPage({ pageNo: 2, pageSize: size, sortField: 'userName', sortDir: 'asc' });
+    assert.equal(calls.length, 1, 'one user page request for each online filter');
+    assert.equal(calls[0].route, '/sym/user/page');
+    assert.equal(calls[0].payload.orgId, 'validation-org');
+    assert.equal(calls[0].payload.pageNum, 2);
+    assert.equal(calls[0].payload.pageSize, size);
+    assert.equal(calls[0].payload.sortField, 'userName');
+    assert.equal(calls[0].payload.includeOnline, true);
+    assert.equal(calls[0].payload.online, state === '' ? undefined : state);
+    assert.equal(result.list.length, size);
+    assert.equal(result.list[0].online, true);
+    calls.length = 0;
+  }
   const org = vm.createContext({ formData: { value: { id: 'validation-org' } }, orgUserRequest: 0, orgUsers: { value: [] }, orgUsersLoading: { value: false },
     orgUserPage: { value: 1 }, orgUserSize: { value: size }, orgUserSort: { value: {} }, orgUserTotal: { value: 0 }, API: { USER_PAGE: '/sym/user/page' }, $common: { post }, console });
   vm.runInContext(`${orgFunctions}\nglobalThis.fetchPage = loadOrgUsers;`, org);
@@ -39,8 +50,19 @@ for (const size of [20, 100]) {
   assert.equal(calls.length, 1, 'one organization-users page request for either page size');
   assert.equal(calls[0].payload.pageSize, size);
   assert.equal(org.orgUsers.value.length, size);
+  calls.length = 0;
+  const tenant = vm.createContext({ selectedTenant: { value: { tid: 'validation-tenant' } },
+    userKeyword: { value: 'validation' }, $common: { post } });
+  vm.runInContext(`${tenantFunctions}\nglobalThis.fetchPage = fetchUsers;`, tenant);
+  const users = await tenant.fetchPage({ pageNo: 2, pageSize: size });
+  assert.equal(calls.length, 1, 'one tenant-user page request');
+  assert.equal(calls[0].route, '/sym/tenant/page');
+  assert.equal(calls[0].payload.targetTenantId, 'validation-tenant');
+  assert.equal(calls[0].payload.pageNum, 2);
+  assert.equal(calls[0].payload.pageSize, size);
+  assert.equal(users.list.length, size);
   assert.equal(org.orgUserTotal.value, size);
-  console.log(`PASS: ${size} users: one user-page request after online snapshot, one organization-users request; no per-row reads`);
+  console.log(`PASS: ${size} users: one request for each online filter and one for organization members`);
   const options = Array.from({ length: size }, (_, i) => ({ id: `validation-org-${i}`, value: `validation-org-${i}`, label: `最新机构${i}` }));
   const updates = [];
   const organizationRule = { props: { props: { checkStrictly: true, emitPath: false } } };

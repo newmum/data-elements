@@ -10,21 +10,24 @@ vm.runInNewContext(await fs.readFile(new URL('data-elements-chengtian/public/bab
 const ast=babel.Babel.transform(script,{ast:true,code:false,configFile:false,babelrc:false,
   parserOpts:{sourceType:'module',plugins:['typescript']}}).ast;
 const names=['normalizeNumber','loadSourcePage','loadOrganizationTree','loadData','getTreeNodeCount',
-  'filterZeroNodes','appendApplicationNodes','applyDefaultTreeState','rebuildTree','isSystemAdministratorScope',
+  'filterZeroNodes','appendApplicationNodes','applyDefaultTreeState','rebuildTree','manuallyToggledTreeNodes',
+  'rememberTreeExpansion','selectTreeNode',
   'collectTreeNodeOrgIds','findSelectedTreeNode','sourceScopePayload','sourcePageFilters','sourcePageFilterKey','sourcePagePayload'];
 const executable='let loadGeneration=0;let sourcePageGeneration=0;\n'+names.map(name=>{
   const node=ast.program.body.find(n=>n.type==='VariableDeclaration'&&n.declarations.some(d=>d.id?.name===name));
   assert.ok(node,name);return script.slice(node.start,node.end);
-}).join('\n')+'\nglobalThis.actual={loadData};';
+}).join('\n')+'\nglobalThis.actual={loadData,rememberTreeExpansion,selectTreeNode};';
 function deferred(){let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b;});return {promise,resolve,reject};}
 const readsPerRefresh = 3;
-function fixture(size){
-  const calls=[],nodes=new Map();
+function fixture(size,reduceMotion=false){
+  const calls=[],scrolls=[],nodes=new Map();
   const departments=Array.from({length:size},(_,i)=>({value:`department-${i}`,label:`部门${i}`,children:[]}));
   const scope={dataScope:'',tableLoads:{},list:[],keyword:'',filter:'all',sourcePage:1,sourcePageSize:24,sourceTotal:0};
   const treeData={value:[{value:'',type:'org',label:'全部部门',children:[]}]};
   const tree={getNode:id=>{if(!nodes.has(id))nodes.set(id,{expanded:false});return nodes.get(id);},setCurrentNode:node=>{tree.current=node;}};
   const context=vm.createContext({state:scope,treeData,treeRef:{value:{getTree:()=>tree}},
+    sourceListTop:{value:{scrollIntoView:options=>scrolls.push(options)}},
+    window:{matchMedia:()=>({matches:reduceMotion})},
     orgTreeSource:{value:[]},treeStatistics:{value:{}},countMap:{value:{}},sourceCursors:new Map(),
     computed:fn=>({get value(){return fn();}}),nextTick:callback=>Promise.resolve().then(callback),
     normalizeItem:row=>row,$user:{orgRootId:'root'},console:{error:()=>{}},
@@ -43,18 +46,22 @@ function fixture(size){
   const statistics={total:size,orgCounts:Object.fromEntries(departments.map(d=>[d.value,1])),
     orgApps:Object.fromEntries(departments.map((d,i)=>[d.value,[{value:`system-${i}`,label:`系统${i}`,count:1}]]))};
   const respondTree=offset=>{
-    group(offset).find(call=>call.route==='/sym/org/getOrgTree')
+    group(offset).find(call=>call.route==='/sym/org/tree')
       .resolve([{value:'authority',label:'机构',children:departments}]);
     request(offset,'facets').resolve(statistics);
   };
-  return {scope,treeData,tree,nodes,calls,request,respondPage,respondTree,load:context.actual.loadData};
+  return {scope,treeData,tree,nodes,calls,scrolls,request,respondPage,respondTree,...context.actual,load:context.actual.loadData};
 }
 for(const size of [20,100])for(const policy of ['ALL','ORG','OWNER'])for(const order of ['scope-first','tree-first']){
   const f=fixture(size),loading=f.load();
   assert.equal(f.calls.length,readsPerRefresh);
   if(order==='scope-first'){f.respondPage(0,policy);await Promise.resolve();f.respondTree(0);}
   else{f.respondTree(0);await new Promise(resolve=>setImmediate(resolve));
-    assert.ok([...f.nodes.values()].every(node=>!node.expanded),'Do not expand systems before the scope is known');
+    assert.equal(f.nodes.get('').expanded,true,'Root opens before cards resolve');
+    assert.equal(f.nodes.get('authority').expanded,true,'Organizations open before cards resolve');
+    assert.equal(f.nodes.get('department-0').expanded,false,'Wait for the scope before opening applications');
+    assert.equal(f.scope.loading,true);
+    assert.equal(f.tree.current,f.treeData.value[0]);
     f.respondPage(0,policy);}
   await loading;
   assert.equal(f.scope.dataScope,policy);
@@ -92,4 +99,20 @@ for(const size of [20,100])for(const policy of ['ALL','ORG','OWNER'])for(const o
   assert.equal(f.tree.current,f.scope.leftSelectNode);
   assert.equal(f.calls.length,readsPerRefresh*2,'Refreshing a surviving selection makes only the three normal requests');
 }
-console.log('Refresh preserves valid selection; stale or failed scope responses cannot expand unrelated systems.');
+for(const reduceMotion of [false,true]){
+  const f=fixture(20,reduceMotion),loading=f.load();f.respondTree(0);
+  await new Promise(resolve=>setImmediate(resolve));
+  f.rememberTreeExpansion({value:'department-0'});
+  f.nodes.get('authority').expanded=false;
+  f.respondPage(0,'ORG');await loading;
+  assert.equal(f.nodes.get('authority').expanded,false,'Late scope leaves organization branches untouched');
+  assert.equal(f.nodes.get('department-0').expanded,false,'Late scope respects explicitly toggled branches');
+  assert.equal(f.nodes.get('department-1').expanded,true);
+  const department=f.treeData.value[0].children[0].children[0];
+  f.selectTreeNode(department);
+  assert.equal(f.scope.leftSelectNode,department);
+  assert.equal(f.scrolls[0].block,'start');
+  assert.equal(f.scrolls[0].behavior,reduceMotion?'instant':'smooth');
+  assert.equal(f.calls.length,readsPerRefresh);
+}
+console.log('Early expansion, manual state, scoped refresh and selection scrolling verified.');

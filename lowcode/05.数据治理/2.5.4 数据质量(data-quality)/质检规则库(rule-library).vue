@@ -335,7 +335,7 @@ const handleSaveRule = async () => {
     if (currentEditRule.value) {
       formData.tid = currentEditRule.value.tid;
     }
-    const data = await $common.post("/dwm/quality/saveOrUpdate", formData);
+    const data = await $common.post("/dwm/quality/save", formData);
     console.log("handleSaveRule", data);
     if (data) {
       ElMessage.success(currentEditRule.value ? "更新成功" : "保存成功");
@@ -444,7 +444,7 @@ const getRuleData = async () => {
 
 const getDimensionsData = async () => {
   const data: any =
-    (await $common.get("/dwm/quality/getQualityDimension")) || [];
+    (await $common.get("/dwm/quality/dimension")) || [];
   dimensions.value = data || [];
   // 初始化默认值
   if (dimensions.value.length > 0) {
@@ -484,7 +484,7 @@ const handleEditRule = async (rule: Rule) => {
 
 const handleDeleteRule = async (rule: Rule) => {
   $common.handle({
-    url: "/dwm/quality/deleteById",
+    url: "/dwm/quality/delete",
     info: `确定要删除规则【${rule.ruleName}】吗？`,
     data: { tid: rule.tid },
     done: async () => {

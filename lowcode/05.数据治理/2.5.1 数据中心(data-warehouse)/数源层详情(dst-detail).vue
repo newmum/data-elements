@@ -241,8 +241,8 @@ const filterZeroNodes = (nodes: any[]): any[] => {
 
 const fetchTreeData = async () => {
   await Promise.all([
-    $common.post("/sym/org/getOrgAppDbTree", { parentId: $user.orgRootId }),
-    $common.post("/dwm/center/dstTable"),
+    $common.post("/sym/org/assets", { parentId: $user.orgRootId }),
+    $common.post("/dwm/center/stats"),
   ])
     .then(([data, countRes]) => {
       countMap.value = {

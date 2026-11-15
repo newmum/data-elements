@@ -433,7 +433,7 @@ const loadDictionaryDomain = async (meta: any) => {
   dictionaryDrawer.values = [];
   if (!meta?.valueDomainId) return;
 
-  const response = await $common.post("/dwm/standard/code/queryById", { tid: meta.valueDomainId });
+  const response = await $common.post("/dwm/code/detail", { tid: meta.valueDomainId });
   const domain = getApiData(response);
   if (domain?.tid) {
     dictionaryDrawer.domain = domain;
@@ -492,7 +492,7 @@ const persistDictionaryValues = async (values: any[]) => {
   let domain = dictionaryDrawer.domain;
 
   if (domain?.tid) {
-    const response = await $common.post("/dwm/standard/code/saveOrUpdate", {
+    const response = await $common.post("/dwm/code/save", {
       ...domain,
       dictItemValue,
       codeSet: domain.codeSet || domain.dictCode,
@@ -502,7 +502,7 @@ const persistDictionaryValues = async (values: any[]) => {
     domain = getApiData(response);
   } else {
     const codeSet = meta.standardCodeSet || meta.standardEncode || meta.metaCode;
-    const response = await $common.post("/dwm/standard/code/saveOrUpdate", {
+    const response = await $common.post("/dwm/code/save", {
       dictName: `${meta.metaName}数据字典`,
       dictCode: codeSet,
       codeSet,
@@ -515,7 +515,7 @@ const persistDictionaryValues = async (values: any[]) => {
       dictItemValue,
     });
     domain = getApiData(response);
-    const savedMeta = await $common.post("/dwm/standard/element/metaSaveOrUpdate", {
+    const savedMeta = await $common.post("/dwm/standard/save", {
       ...meta,
       valueDomainId: domain.tid,
       standardCodeSet: codeSet,
@@ -579,7 +579,7 @@ const fetchTableData = async ({
   pageSize: number;
   sortField?: string; sortDir?: "asc" | "desc";
 }) => {
-  const response = await $common.post("/dwm/standard/element/page", {
+  const response = await $common.post("/dwm/standard/page", {
     metaName: state.keyword || null,
     publishStatus: state.activeStatus || null,
     categoryPath: getSelectedCategoryPath(),
@@ -758,7 +758,7 @@ const parseImportFiles = async (files: any[]) => {
       values.push({ code, name, description: cellText(raw["说明"]) });
       dictionaries.set(metaCode, values);
     });
-    const page = getApiData(await $common.post("/dwm/standard/element/page", { pageNum: 1, pageSize: 1000 }));
+    const page = getApiData(await $common.post("/dwm/standard/page", { pageNum: 1, pageSize: 1000 }));
     const existingCodes = new Set((page.list || []).map((item: any) => String(item.metaCode || "").toLowerCase()));
     normalizedMetas.forEach((item) => {
       if (existingCodes.has(item.metaCode)) errors.push(`数据元英文名已存在：${item.metaCode}`);
@@ -769,7 +769,7 @@ const parseImportFiles = async (files: any[]) => {
       const values = dictionaries.get(meta.metaCode) || [];
       let valueDomainId: string | null = null;
       if (values.length) {
-        const domain = getApiData(await $common.post("/dwm/standard/code/saveOrUpdate", {
+        const domain = getApiData(await $common.post("/dwm/code/save", {
           dictName: `${meta.metaName}数据字典`, dictCode: meta.standardEncode, codeSet: meta.standardEncode,
           codeValue: "__HEADER__", codeName: `${meta.metaName}数据字典`, dataCategoryId: meta.dataCategoryId,
           dataCategoryName: meta.dataCategoryName, dataCategoryPath: meta.dataCategoryPath,
@@ -777,7 +777,7 @@ const parseImportFiles = async (files: any[]) => {
         }));
         valueDomainId = domain?.tid || null;
       }
-      await $common.post("/dwm/standard/element/metaSaveOrUpdate", {
+      await $common.post("/dwm/standard/save", {
         ...meta, dataTypeId: meta.fieldType, valueDomainId, standardCodeSet: meta.standardEncode, publishStatus: 1,
       });
     }
@@ -793,7 +793,7 @@ const parseImportFiles = async (files: any[]) => {
 // 获取树形数据
 const fetchTreeData = async () => {
   try {
-    const response = await $common.post("/dwm/standard/standard-class-list");
+    const response = await $common.post("/dwm/standard/tree");
 
     // 确保 treeData 是数组格式
     if (Array.isArray(response)) {
@@ -851,7 +851,7 @@ const handleAction = (type: string, row?: any) => {
 // 更新发布状态
 const updatePublishStatus = async (row: any) => {
   $common.handle({
-    url: "/dwm/standard/element/updatePublishStatus",
+    url: "/dwm/standard/publish",
     action: row.publishStatus === 0 ? "发布" : "下线",
     info: `是否${row.publishStatus === 0 ? "发布" : "下线"}该数据元【${row.metaName}】`,
     data: { tid: row.tid, publishStatus: row.publishStatus === 0 ? 1 : 0 },

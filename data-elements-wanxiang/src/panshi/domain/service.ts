@@ -38,8 +38,8 @@ export function normalizeResourceData(value: unknown): ResourceData {
 }
 export async function readResourceData(options: ResourceRequestOptions = {}): Promise<ResourceData> {
   const [raw, organizations] = await Promise.all([
-    resourceGet('/dwm/center/state', {}, { timeoutMs: 60000, ...options }),
-    resourcePost('/sym/org/getOrgTree', { parentId: 'ROOT' }, options),
+    resourceGet('/dwm/ops/state', {}, { timeoutMs: 60000, ...options }),
+    resourcePost('/sym/org/tree', { parentId: 'ROOT' }, options),
   ]);
   const data = normalizeResourceData(raw);
   const flatten = (items: SourceOption[]): SourceOption[] => items.flatMap(({ children, ...item }) => [item, ...flatten(children || [])]);
@@ -60,7 +60,7 @@ export async function resourceCommand<T = Row>(path: string, options: ResourceCo
     const body = resourceObject(options.body, '融合装载确认');
     if (body.confirmExecution !== true) throw new ResourceValidationError(422, 'EXECUTION_CONFIRMATION_REQUIRED', '请核对目标表与冻结映射后确认装载');
   }
-  return resourcePost<T>('/dwm/center/command', {
+  return resourcePost<T>('/dwm/ops/command', {
     kind, id, action, method, body: options.body ?? {}, version: options.version,
   }, { signal: options.signal, timeoutMs: options.timeoutMs ?? (kind === 'materializations' ? action === 'load' ? 660000 : 120000 : 60000) });
 }

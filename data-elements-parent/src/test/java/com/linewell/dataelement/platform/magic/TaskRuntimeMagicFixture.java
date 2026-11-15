@@ -62,6 +62,10 @@ final class TaskRuntimeMagicFixture implements AutoCloseable {
     }
 
     static StructuredTableReadMagicModule structuredReads(JdbcTemplate jdbc, Consumer<String> count) {
+        return structuredReads(jdbc, count, "jdbc:mysql://access-task-validation");
+    }
+
+    static StructuredTableReadMagicModule structuredReads(JdbcTemplate jdbc, Consumer<String> count, String dialectUrl) {
         return new StructuredTableReadMagicModule(new JdbcTemplate(jdbc.getDataSource()) {
             @Override public <T> T execute(ConnectionCallback<T> callback) {
                 return super.execute((ConnectionCallback<T>) connection -> callback.doInConnection(
@@ -74,11 +78,11 @@ final class TaskRuntimeMagicFixture implements AutoCloseable {
                                             return H2RecursiveCteParameters.prepareStructured(connection, sql);
                                         }
                                     }
-                                    if (method.getName().equals("getMetaData")) {
+                                    if (dialectUrl != null && method.getName().equals("getMetaData")) {
                                         var metadata = connection.getMetaData();
                                         return Proxy.newProxyInstance(getClass().getClassLoader(), new Class<?>[]{DatabaseMetaData.class},
                                                 (unused, metaMethod, metaArgs) -> metaMethod.getName().equals("getURL")
-                                                        ? "jdbc:mysql://access-task-validation"
+                                                        ? dialectUrl
                                                         : invoke(metadata, metaMethod, metaArgs));
                                     }
                                     return invoke(connection, method, args);

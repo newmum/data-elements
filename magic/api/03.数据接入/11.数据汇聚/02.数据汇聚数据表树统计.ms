@@ -82,7 +82,6 @@ if (blank(tenantId)) {
     exit 401, '登录状态已失效，请重新登录'
 }
 
-var distributionView = false
 // 接入和分发共享真实 ODS 字典与绑定口径。
 var odsSources = odsSourceClassifier()
 var warehouseBindings = odsSources.query.grouped(odsSources.projection, odsSources.groups)
@@ -93,7 +92,9 @@ for (binding in warehouseBindings) {
         warehouseDatasourceIds.add(bindingDatasourceId)
     }
 }
-var matchesTaskCategory = (datasource) => distributionView == warehouseDatasourceIds.contains(text(first(datasource, ['tid', 'id'])))
+// 与接入分页同口径，保留同时承担 ODS 落地角色的直接抽取文件源。
+var matchesTaskCategory = (datasource) =>
+    !warehouseDatasourceIds.contains(text(first(datasource, ['tid', 'id']))) || odsSources.isDirectFileSource(datasource)
 
 var keyword = text(body?.keyword).trim()
 var orgIds = body?.orgIds

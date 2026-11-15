@@ -369,7 +369,7 @@ const sendDebug = async () => {
       } catch { return; }
     }
     if (attempt !== debugAttempt || !debugVisible.value) return;
-    const result = await $common.post("/dws/flowserve/gateway/api/debug", {
+    const result = await $common.post("/dws/flowserve/inspect", {
       apiId: text(snapshot.form.id), datasourceId: props.data.datasourceId,
       address: input.address.trim(), method: input.method, query, headers, payload,
       credentialHeader: input.authHeader.trim(), credential: input.authValue,
@@ -615,7 +615,7 @@ const handleSave = async (): Promise<boolean> => {
     const form = await formValues(),
       rows = normalizeParams(form.publishParams);
     const payload = buildPayload(form, rows),
-      saved = payloadOf(await $common.post("/dws/flowserve/gateway/save", payload));
+      saved = payloadOf(await $common.post("/dws/gateway/save", payload));
     const id = text(saved.id || saved.tid);
     if (!id) throw new Error("保存请求未返回服务标识，请刷新列表确认结果后再操作");
     snapshot = {

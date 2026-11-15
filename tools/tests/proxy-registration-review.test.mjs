@@ -95,7 +95,7 @@ function useActualProxySummary({ scope, summaryRequests }) {
 }
 
 const sourceDetail = "/dst/db/srcdetail";
-const serviceList = "/dws/flowserve/gateway/api/list";
+const serviceList = "/dws/flowserve/services";
 const completionUrl = "/dst/db/srcsave";
 const unfilteredQuery = { datasourceId: "source-a", pageNum: 1, pageSize: 1, keyword: "" };
 

@@ -12,9 +12,9 @@ function classCount(v){if(Array.isArray(v))return v.reduce((n,r)=>n+classCount(r
 const summary=[];
 for(const side of [3000,3010]){
  const tenant=await call(side,'/portal/sso/session');
- const elements=pageOf(await call(side,'/dwm/standard/element/page',{pageNum:1,pageSize:1000}));
- const codes=await call(side,'/dwm/standard/code/list',{}),classes=await call(side,'/dwm/standard/standard-class-list',{});
- const landing=await call(side,'/dwm/standard/landing/list',{}),bindings=await call(side,'/dwm/metadata-governance/bindings/list',{});
+ const elements=pageOf(await call(side,'/dwm/standard/page',{pageNum:1,pageSize:1000}));
+ const codes=await call(side,'/dwm/code/list',{}),classes=await call(side,'/dwm/standard/tree',{});
+ const landing=await call(side,'/dwm/binding/page',{}),bindings=await call(side,'/dwm/align/page',{});
  assert(Array.isArray(elements.list)&&Array.isArray(codes)&&classes&&typeof classes==='object');
  assert(Array.isArray(landing.items)&&Array.isArray(bindings.items)&&Array.isArray(bindings.rules));
  summary.push({tenant:String(tenant.tid),elements:elements.total,codes:codes.length,classes:classCount(classes),standardFields:landing.items.length,extraBindings:bindings.items.length,configuredTaskRules:bindings.rules.length});

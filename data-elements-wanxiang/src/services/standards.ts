@@ -20,20 +20,20 @@ export function elementRow(raw:Row):Row {
  return row;
 }
 export async function elementPage(query:Row,signal?:AbortSignal):Promise<{list:Row[];total:number}> {
- const page=pageOf(await platformApi('/dwm/standard/element/page',query,{signal}));
+ const page=pageOf(await platformApi('/dwm/standard/page',query,{signal}));
  return {...page,list:page.list.map(elementRow)};
 }
 export async function listElements(signal?:AbortSignal):Promise<Row[]> {
  const rows=new Map<string,Row>();
  for(let pageNum=1;pageNum<=100;pageNum++) {
-  const page=pageOf(await platformApi('/dwm/standard/element/page',{pageNum,pageSize:1000},{signal}));
+  const page=pageOf(await platformApi('/dwm/standard/page',{pageNum,pageSize:1000},{signal}));
   const before=rows.size;for(const raw of page.list){const row=elementRow(raw);if(!row.id)throw new Error('数据元缺少真实标识');rows.set(row.id,row);}
   if(rows.size>=page.total||!page.list.length)return [...rows.values()];
   if(before===rows.size)throw new Error('标准分页没有推进，请重新读取');
  }
  throw new Error('数据标准数量超出读取范围');
 }
-export async function readElement(id:string) {const raw=await platformApi<Row>('/dwm/standard/element/queryById',{tid:id});const row=elementRow(raw);if(row.id!==id)throw new Error('数据元不存在或无权访问');return row;}
+export async function readElement(id:string) {const raw=await platformApi<Row>('/dwm/standard/detail',{tid:id});const row=elementRow(raw);if(row.id!==id)throw new Error('数据元不存在或无权访问');return row;}
 export function classesOf(value:unknown):Row[] {
  if(Array.isArray(value))return value.flatMap(classesOf);
  if(!value||typeof value!=='object')return [];
@@ -42,7 +42,7 @@ export function classesOf(value:unknown):Row[] {
 }
 export async function standardChoices(signal?:AbortSignal) {
  const [classes,codes,types,rules]=await Promise.all([
-  platformApi('/dwm/standard/standard-class-list',{}, {signal}),listCodes(signal),
+  platformApi('/dwm/standard/tree',{}, {signal}),listCodes(signal),
   platformApi<Row[]>('/sym/dict/query?code=colType',undefined,{signal}),platformApi<Row[]>('/dwm/quality/list',{}, {signal}),
  ]);
  if(!Array.isArray(types)||!Array.isArray(rules))throw new Error('标准表单选项返回格式不正确');
@@ -69,15 +69,15 @@ export const canMaintainStandards=()=>getSession()?.authenticated===true;
 export async function saveElement(values:Row,classes:Row[],existing?:Row|null) {
  if(existing&&(await readElement(existing.id)).status==='PUBLISHED')throw new Error('数据元已经发布，请先下线再修改');
  const body=elementBody(values,classes,existing);
- const result=elementRow(await platformApi<Row>('/dwm/standard/element/metaSaveOrUpdate',body));
+ const result=elementRow(await platformApi<Row>('/dwm/standard/save',body));
  if(!result.id)throw new Error('保存接口未返回数据元标识，请刷新列表核实结果');changed();return result;
 }
 export async function setElementPublished(row:Row,published:boolean) {
  const current=await readElement(row.id);if(current.status!==(published?'PENDING':'PUBLISHED'))throw new Error('标准状态已变化，请刷新后重试');
- const saved=elementRow(await platformApi<Row>('/dwm/standard/element/updatePublishStatus',{tid:row.id,publishStatus:published?1:0,expectedPublishStatus:current.publishStatus,updatedBy:getSession()?.principalId}));
+ const saved=elementRow(await platformApi<Row>('/dwm/standard/publish',{tid:row.id,publishStatus:published?1:0,expectedPublishStatus:current.publishStatus,updatedBy:getSession()?.principalId}));
  if(saved.status!==(published?'PUBLISHED':'PENDING'))throw new Error('发布状态未更新，请刷新核实');changed();return saved;
 }
-export async function deleteElement(row:Row) {if((await readElement(row.id)).status==='PUBLISHED')throw new Error('请先下线再删除');const references=await loadLanding(undefined,{targetId:row.id,pageSize:1});if(references.total>0)throw new Error(`该数据元仍被 ${references.total} 个字段引用，请先解除引用`);await platformApi('/dwm/standard/element/meatDeleteById',{tid:row.id});changed();}
+export async function deleteElement(row:Row) {if((await readElement(row.id)).status==='PUBLISHED')throw new Error('请先下线再删除');const references=await loadLanding(undefined,{targetId:row.id,pageSize:1});if(references.total>0)throw new Error(`该数据元仍被 ${references.total} 个字段引用，请先解除引用`);await platformApi('/dwm/standard/delete',{tid:row.id});changed();}
 
 export function parseCodeItems(value:unknown):Row[] {
  let parsed:unknown=value;if(typeof value==='string'){try{parsed=JSON.parse(value||'[]');}catch{throw new Error('代码条目格式损坏，当前内容不会被空数据覆盖');}}
@@ -85,9 +85,9 @@ export function parseCodeItems(value:unknown):Row[] {
  return parsed.map((r:Row)=>({value:string(r.code??r.value),label:string(r.name??r.label),parent:string(r.parent??r.parentCode),description:string(r.description)}));
 }
 export function codeRow(raw:Row):Row {return {id:string(raw.tid),name:string(raw.dictName??raw.dict_name),code:string(raw.dictCode??raw.dict_code),description:string(raw.description),dataCategoryId:pick(raw,'dataCategoryId','data_category_id'),dataCategoryName:pick(raw,'dataCategoryName','data_category_name'),dataCategoryPath:pick(raw,'dataCategoryPath','data_category_path'),codeSet:pick(raw,'codeSet','code_set'),parentCode:pick(raw,'parentCode','parent_code'),sortNo:pick(raw,'sortNo','sort_no')??0,items:parseCodeItems(pick(raw,'dictItemValue','dict_item_value')),status:Number(raw.status)===0?'DRAFT':'PUBLISHED',updatedAt:pick(raw,'updatedTime','updated_time')};}
-export async function codePage(query:Row,signal?:AbortSignal):Promise<{list:Row[];total:number}> {const page=pageOf(await platformApi('/dwm/standard/code/page',query,{signal}));return {...page,list:page.list.map(raw=>({...codeRow(raw),itemCount:Number(raw.itemCount??raw.item_count??0),referenceCount:Number(raw.referenceCount??raw.reference_count??0)}))};}
-export async function listCodes(signal?:AbortSignal):Promise<Row[]> {const raw=await platformApi<Row[]>('/dwm/standard/code/list',{}, {signal});if(!Array.isArray(raw))throw new Error('代码集列表返回格式不正确');return raw.map(codeRow);}
-export async function readCode(id:string) {const row=codeRow(await platformApi<Row>('/dwm/standard/code/queryById',{tid:id}));if(row.id!==id)throw new Error('代码集不存在或无权访问');return row;}
+export async function codePage(query:Row,signal?:AbortSignal):Promise<{list:Row[];total:number}> {const page=pageOf(await platformApi('/dwm/code/page',query,{signal}));return {...page,list:page.list.map(raw=>({...codeRow(raw),itemCount:Number(raw.itemCount??raw.item_count??0),referenceCount:Number(raw.referenceCount??raw.reference_count??0)}))};}
+export async function listCodes(signal?:AbortSignal):Promise<Row[]> {const raw=await platformApi<Row[]>('/dwm/code/list',{}, {signal});if(!Array.isArray(raw))throw new Error('代码集列表返回格式不正确');return raw.map(codeRow);}
+export async function readCode(id:string) {const row=codeRow(await platformApi<Row>('/dwm/code/detail',{tid:id}));if(row.id!==id)throw new Error('代码集不存在或无权访问');return row;}
 export function codeBody(values:Row,existing?:Row|null,classes:Row[]=[]):Row {
  const row={...existing,...values},category=classes.find(c=>c.id===row.dataCategoryId);
  if(row.dataCategoryId&&!category)throw new Error('请选择有效的标准分类');
@@ -97,13 +97,13 @@ export function codeBody(values:Row,existing?:Row|null,classes:Row[]=[]):Row {
  const dictItemValue=JSON.stringify(items.map(i=>({code:i.value,name:i.label,description:string(i.description),...(i.parent?{parent:string(i.parent)}:{})})));
  return {tid:existing?.id||undefined,dictName:bounded(row.name,255,'代码集名称',true),dictCode:bounded(row.code,100,'代码集代码',true),codeSet:bounded(row.codeSet||row.code,100,'标准代码集编码',true),codeValue:'__HEADER__',codeName:bounded(row.name,255,'代码集名称',true),description:bounded(row.description,1000,'说明'),dataCategoryId:category?.id||null,dataCategoryName:category?.name||null,dataCategoryPath:category?.path||null,dictItemValue,parentCode:row.parentCode||null,sortNo:row.sortNo||0,status:row.status==='PUBLISHED'?1:0,updatedBy:getSession()?.principalId,...(!existing?{createdBy:getSession()?.principalId}:{})};
 }
-export async function saveCode(values:Row,classes:Row[],existing?:Row|null) {if(existing&&(await readCode(existing.id)).status==='PUBLISHED')throw new Error('代码集已发布，请先下线再编辑');const row=codeRow(await platformApi<Row>('/dwm/standard/code/saveOrUpdate',codeBody({...values,status:'DRAFT'},existing,classes)));if(!row.id)throw new Error('保存接口未返回代码集标识');changed();return row;}
-export async function setCodePublished(row:Row,published:boolean,classes:Row[]) {const current=await readCode(row.id);if(current.status!==(published?'DRAFT':'PUBLISHED'))throw new Error('代码集状态已变化，请刷新');const result=codeRow(await platformApi<Row>('/dwm/standard/code/saveOrUpdate',codeBody({...current,status:published?'PUBLISHED':'DRAFT'},current,classes)));changed();return result;}
-export async function deleteCode(row:Row) {if((await readCode(row.id)).status==='PUBLISHED')throw new Error('请先下线再删除代码集');const references=(await listElements()).filter(e=>e.valueDomainId===row.id);if(references.length)throw new Error(`该代码集仍被 ${references.length} 个数据元引用，请先解除引用`);await platformApi('/dwm/standard/code/deleteById',{tid:row.id});changed();}
+export async function saveCode(values:Row,classes:Row[],existing?:Row|null) {if(existing&&(await readCode(existing.id)).status==='PUBLISHED')throw new Error('代码集已发布，请先下线再编辑');const row=codeRow(await platformApi<Row>('/dwm/code/save',codeBody({...values,status:'DRAFT'},existing,classes)));if(!row.id)throw new Error('保存接口未返回代码集标识');changed();return row;}
+export async function setCodePublished(row:Row,published:boolean,classes:Row[]) {const current=await readCode(row.id);if(current.status!==(published?'DRAFT':'PUBLISHED'))throw new Error('代码集状态已变化，请刷新');const result=codeRow(await platformApi<Row>('/dwm/code/save',codeBody({...current,status:published?'PUBLISHED':'DRAFT'},current,classes)));changed();return result;}
+export async function deleteCode(row:Row) {if((await readCode(row.id)).status==='PUBLISHED')throw new Error('请先下线再删除代码集');const references=(await listElements()).filter(e=>e.valueDomainId===row.id);if(references.length)throw new Error(`该代码集仍被 ${references.length} 个数据元引用，请先解除引用`);await platformApi('/dwm/code/delete',{tid:row.id});changed();}
 
-export const loadLanding=(signal?:AbortSignal,query:Row={})=>platformApi<{items:Row[];entities:Row[];elements:Row[];coverage:Row;total:number}>('/dwm/standard/landing/list',query, {signal});
-export const loadMetadataBindings=(signal?:AbortSignal)=>platformApi<{items:Row[];rules:Row[]}>('/dwm/metadata-governance/bindings/list',{}, {signal});
-export async function saveBinding(values:Row) {const mode=values.mode||'STANDARD';if(!['STANDARD','QUALITY','REFERENCE'].includes(mode))throw new Error('无效的对标类型');const result=await platformApi(mode==='STANDARD'?'/dwm/standard/landing/save':'/dwm/metadata-governance/bindings/save',mode==='STANDARD'?{tableId:values.entityId,columnId:values.fieldId,standardId:values.targetId||null,expectedStandardId:values.expectedStandardId??null}:{tableId:values.entityId,columnId:values.fieldId,mode,targetId:values.targetId||null,expectedTargetId:values.expectedTargetId??null});changed();return result;}
+export const loadLanding=(signal?:AbortSignal,query:Row={})=>platformApi<{items:Row[];entities:Row[];elements:Row[];coverage:Row;total:number}>('/dwm/binding/page',query, {signal});
+export const loadMetadataBindings=(signal?:AbortSignal)=>platformApi<{items:Row[];rules:Row[]}>('/dwm/align/page',{}, {signal});
+export async function saveBinding(values:Row) {const mode=values.mode||'STANDARD';if(!['STANDARD','QUALITY','REFERENCE'].includes(mode))throw new Error('无效的对标类型');const result=await platformApi(mode==='STANDARD'?'/dwm/binding/save':'/dwm/align/save',mode==='STANDARD'?{tableId:values.entityId,columnId:values.fieldId,standardId:values.targetId||null,expectedStandardId:values.expectedStandardId??null}:{tableId:values.entityId,columnId:values.fieldId,mode,targetId:values.targetId||null,expectedTargetId:values.expectedTargetId??null});changed();return result;}
 
 export type EncodingSegment={type:'LITERAL'|'DIGITS'|'LETTERS'|'ALPHANUMERIC';value?:string;length?:number};
 export function compileSegments(segments:EncodingSegment[]):{pattern:string;length:number} {

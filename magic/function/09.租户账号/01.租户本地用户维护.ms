@@ -18,24 +18,14 @@
       "type": null,
       "required": false,
       "value": null,
-      "description": "该动作所需的账号、角色或资源资料"
+      "description": "保存或删除所需的本地用户资料"
     }
   ],
   "script": null,
-  "description": "复用租户本地用户的查询、保存及状态规则，读写本地账号资料而不修改控制库统一认证账号。"
+  "description": "用户保存和删除共同使用的本地账号校验、锁定及关联维护。"
 }
 ================================
-
-import tableSort
-var sortColumn = tableSort.field(payload, {'userName': 'u.user_name', 'realName': 'u.real_name', 'createTime': 'u.create_time', 'updateTime': 'u.update_time'}, 'createTime')
-var sortDirection = tableSort.direction(payload)
-
-// 共享函数：02.租户本地用户维护
-// 函数路径：/tenant-account/users
-// 业务说明：复用租户本地用户的查询、保存及状态规则，读写本地账号资料而不修改控制库统一认证账号。
-// 函数输入：operation：要执行的本地账号业务动作；payload：该动作所需的账号、角色或资源资料。
 import db;
-import tableSort;
 import '@/common/audit-operation' as auditOperation;
 import tenantRuntime;
 import tenantAccounts;
@@ -45,34 +35,10 @@ import cn.hutool.crypto.SmUtil;
 import identityRuntime;
 import cn.hutool.json.JSONUtil;
 import com.linewell.dataelement.utils.PwdRuleUtil;
-// 租户本地用户：查询不返回密码摘要；账号及机构关系在同一业务库事务中维护。
+// 用户保存与删除共用本地账号校验、锁定及关联维护，分页逻辑由用户分页 API 执行。
 var tenantId=tenantRuntime.id();var actor=StpUtil.getLoginId()+'';var p=payload||{};var sql=db.normal();
 if(!tenantAccounts.isLocal(tenantId)) {exit 403,'当前租户未启用本地账号';}
 var text=value=>value==null?'':(value+'').trim();
-if(operation=='page' || operation=='list') {
- var page=Math.max(1,p.pageNum||1);var size=Math.min(200,Math.max(1,p.pageSize||200));var offset=(page-1)*size;
- var ids=p.ids;var account='%'+text(p.userName)+'%';var name='%'+text(p.realName)+'%';
- if(ids!=null && ids.size()>200){exit 400,'一次最多查询200个用户';}
- if(ids!=null && ids.size()==0) {return operation=='list'?[]:{list:[],total:0};}
- var where=`from rm_user_t u where u.tenant_id=#{tenantId} and u.deleted=0 and u.user_name like #{account} and u.real_name like #{name}`;
- if(ids!=null) {where=where+` and u.id in (#{ids})`;}
- var orgId=text(p.orgId);
- if(orgId!='') {where=where+"""
-     and exists (select 1 from rm_user_org_rela_t r
-         join rm_org_t o on o.id=r.org_id and o.tenant_id=#{tenantId} and o.deleted=0
-         where r.tenant_id=#{tenantId} and r.user_id=u.id and r.org_id=#{orgId})
- """;}
- var sortColumn=tableSort.field(p,{userName:'u.user_name',realName:'u.real_name',createTime:'u.create_time',updateTime:'u.update_time'},'createTime');var sortDirection=tableSort.direction(p);
- var total=sql.selectOne('select count(*) as total '+where).total;
- var rows=sql.select("""
-select u.id,u.real_name as "realName",u.user_name as "userName",u.phone,u.gender,u.status,
-       '******' as "password", u.app_file_id as "appFileId",u.create_id as "createId",u.create_time as "createTime",
-       u.update_time as "updateTime", u.id_card as "idCard",u.date_birth as "dateBirth",u.nation,
-       u.office_address as "officeAddress",u.job_number as "jobNumber", u.authorized_strength as "authorizedStrength",
-       u.origin_position as "originPosition",u.origin_rank as "originRank"
-"""+where+` order by ${sortColumn} ${sortDirection},u.id asc limit #{size} offset #{offset}`);
- return operation=='list'?rows:{list:rows,total:total,pageNum:page,pageSize:size};
-}
 var id=text(p.id);var creating=id=='';if(creating) {id=IdUtil.getSnowflakeNextIdStr();}
 var password=text(p.password);var passwordChanged=password!='' && password!='******';
 var result=sql.transaction(()=>{

@@ -208,7 +208,7 @@ const treeData = ref<any[]>([
 /** 获取组织机构树 */
 const fetchOrgTree = async () => {
   try {
-    const res = await $common.post("/sym/org/getOrgTree", {
+    const res = await $common.post("/sym/org/tree", {
       parentId: $user.orgRootId,
     });
     treeData.value[0].children = res?.data ?? res ?? [];
@@ -226,8 +226,9 @@ onMounted(() => {
 });
 
 const handleNodeClick = (node: any) => {
+  const previousOrg = currentNode.value?.id || "";
   currentNode.value = node;
-  refreshTableData();
+  if ((node?.id || "") !== previousOrg) refreshTableData();
 };
 
 // ===================== 右侧表格 =====================
@@ -236,52 +237,11 @@ const searchKeyword = ref("");
 const filterOnline = ref<boolean | "">("");
 const currentUserId = ref("");
 
-type OnlineUsers = {
-  ids: Set<string>;
-  userNames: Set<string>;
-};
-
-let onlineUsersCache: OnlineUsers | null = null;
-let onlineUsersCacheTime = 0;
-const onlineUsersCacheTtl = 15 * 1000;
-
-/** 查询当前租户全部有效在线会话，并汇总为用户状态。 */
-const fetchOnlineUsers = async (): Promise<OnlineUsers> => {
-  if (onlineUsersCache && Date.now() - onlineUsersCacheTime < onlineUsersCacheTtl) {
-    return onlineUsersCache;
-  }
-
-  const ids = new Set<string>();
-  const userNames = new Set<string>();
-  const pageSize = 200;
-  let pageNum = 1;
-  let total = 0;
-
-  do {
-    const response = await $common.post("/sym/user/online/page", { pageNum, pageSize });
-    const data = response?.data || response || {};
-    const rows = data.list || [];
-    total = Number(data.total || 0);
-    rows.forEach((session: any) => {
-      if (session.loginId != null) ids.add(`${session.loginId}`);
-      if (session.userName) userNames.add(`${session.userName}`);
-    });
-    if (!rows.length) break;
-    pageNum += 1;
-  } while ((pageNum - 1) * pageSize < total);
-
-  onlineUsersCache = { ids, userNames };
-  onlineUsersCacheTime = Date.now();
-  return onlineUsersCache;
-};
-
-const isUserOnline = (user: any, onlineUsers: OnlineUsers) =>
-  onlineUsers.ids.has(`${user.id}`) || onlineUsers.userNames.has(`${user.userName || ""}`);
-
 const buildUserParams = (pageNum: number, pageSize: number): Record<string, any> => {
-  const params: Record<string, any> = { pageNum, pageSize };
+  const params: Record<string, any> = { pageNum, pageSize, includeOnline: true };
   if (currentNode.value?.id) params.orgId = currentNode.value.id;
   if (searchKeyword.value) params.realName = searchKeyword.value;
+  if (typeof filterOnline.value === "boolean") params.online = filterOnline.value;
   return params;
 };
 
@@ -300,32 +260,9 @@ const fetchUserData = async ({
   sortField?: string; sortDir?: "asc" | "desc";
 }) => {
   try {
-    const onlineUsers = await fetchOnlineUsers();
-
-    if (filterOnline.value !== "") {
-      const allUsers: any[] = [];
-      const queryPageSize = 200;
-      let queryPageNum = 1;
-      let total = 0;
-      do {
-        const data = await requestUserPage(queryPageNum, queryPageSize, { sortField, sortDir });
-        const rows = data.list || [];
-        total = Number(data.total || 0);
-        allUsers.push(...rows);
-        if (!rows.length) break;
-        queryPageNum += 1;
-      } while ((queryPageNum - 1) * queryPageSize < total);
-
-      const rows = allUsers
-        .map((user) => ({ ...user, online: isUserOnline(user, onlineUsers) }))
-        .filter((user) => user.online === filterOnline.value);
-      const start = (pageNum - 1) * pageSize;
-      return { list: rows.slice(start, start + pageSize), total: rows.length };
-    }
-
     const data = await requestUserPage(pageNum, pageSize, { sortField, sortDir });
     return {
-      list: (data.list || []).map((user: any) => ({ ...user, online: isUserOnline(user, onlineUsers) })),
+      list: data.list || [],
       total: data.total || 0,
     };
   } catch (e) {
@@ -389,7 +326,7 @@ const handleStatusClick = async (row: any) => {
   const targetStatus = row.status == 0 ? 1 : 0;
   row._statusLoading = true;
   try {
-    await $common.post("/sym/user/saveOrUpdate", {
+    await $common.post("/sym/user/save", {
       id: row.id,
       status: targetStatus,
     });
@@ -440,7 +377,7 @@ const loadUserRoles = async () => {
   try {
     roleLoading.value = true;
     const [optionsResponse, selectedResponse] = await Promise.all([
-      $common.post("/sym/user/role-options", {}),
+      $common.post("/sym/user/options", {}),
       $common.post("/sym/user/roles", { userId: currentUserId.value }),
     ]);
     const optionsData = optionsResponse?.data || optionsResponse || {};
@@ -465,7 +402,7 @@ const handleSaveRoles = async () => {
   if (!currentUserId.value) return;
   try {
     roleSaving.value = true;
-    await $common.post("/sym/user/saveRoles", {
+    await $common.post("/sym/user/assign", {
       userId: currentUserId.value,
       roleIds: selectedRoleIds.value,
     });
@@ -564,7 +501,7 @@ const handleSave = async () => {
       payload.id = currentUserId.value;
     }
 
-    await $common.post("/sym/user/saveOrUpdate", payload);
+    await $common.post("/sym/user/save", payload);
     ElMessage.success(drawerType.value === "add" ? "创建成功" : "保存成功");
     drawerVisible.value = false;
     refreshTableData();

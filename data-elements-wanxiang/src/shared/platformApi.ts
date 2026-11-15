@@ -24,7 +24,7 @@ function unwrap(result: unknown, path: string): unknown {
   if (value && typeof value === 'object' && !Array.isArray(value)) {
     const nested = value as Record<string, unknown>;
     // Connection tests return a domain result (connected:false), not a failed HTTP envelope.
-    const qualityPrecheck = path === '/dwm/quality/task/precheck' && typeof nested.success === 'boolean';
+    const qualityPrecheck = path === '/dwm/qtask/check' && typeof nested.success === 'boolean';
     if ((nested.success === false && typeof nested.connected !== 'boolean' && !qualityPrecheck) || (typeof nested.code === 'number' && nested.code !== 0 && nested.code !== 200)) return unwrap(nested, path);
   }
   return value;

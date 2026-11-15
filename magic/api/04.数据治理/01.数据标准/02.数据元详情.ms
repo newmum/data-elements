@@ -9,7 +9,7 @@
   "lock": null,
   "createBy": null,
   "updateBy": null,
-  "path": "/element/queryById",
+  "path": "/detail",
   "method": "POST",
   "parameters": [],
   "options": [],
@@ -22,10 +22,10 @@
   "responseBodyDefinition": null
 }
 ================================
-// 接口：02.数据元详情
-// 路由：POST /dwm/standard/element/queryById
-// 业务说明：按数据元主键读取未删除的定义和治理资料，返回编辑与查看页面使用的详情。
 import log
+
+// POST /dwm/standard/detail 数据元详情
+// 按数据元主键读取未删除的定义和治理资料，返回编辑与查看页面使用的详情。
 
 /**
  * 根据tid查询

@@ -75,13 +75,12 @@ export async function loadReportTablesPage(dbId:string,manifest:UploadManifest,q
   for(const row of result.list){const table=tables.get(row.key);if(!table||seen.has(row.key)||!(isReportReady(table,manifest.tables)||hasReportSuccess(table,manifest.receipts)))throw new Error('上报清单包含未规范或无归属的数据表');seen.add(row.key);}
   return result;
 }
-// The server reads each owned object within its own 20s deadline. A batch must
-// also allow for parsing, while keeping the same single ownership-checked API.
+// Allow time to parse each file within one ownership-checked batch request.
 export const parseUploadedFiles=(fileIds:string[])=>platformApi<{files:Array<{fileId:string;fileName:string;tables:UploadTable[]}>}>(endpoint,{method:'POST',body:{action:'parse',fileIds},timeoutMs:30_000*Math.min(20,Math.max(1,fileIds.length))});
 export const loadReportReceipts=(dbId:string,pageNo=1,pageSize=10,sortField='reportedAt',sortDir='desc')=>platformApi<{list:ReportReceipt[];total:number}>(endpoint,{method:'POST',body:{action:'receipts',dbId,pageNo,pageSize,sortField,sortDir}});
 export async function uploadOriginal(file:File):Promise<string>{
   const form=new FormData();form.append('file',file);
-  const result=await platformApi<{tid:string}>('/dst/file/manage?action=upload',{method:'POST',body:form});
+  const result=await platformApi<{tid:string}>('/dst/file/manage?action=upload-report',{method:'POST',body:form});
   if(!result.tid)throw new Error('上传未返回文件编号');return result.tid;
 }
 export interface OriginalUploadFailure {fileName:string;cause:unknown}

@@ -58,7 +58,7 @@ for (const size of [20, 100]) {
   const request = f.actual.loadLayers();
   assert.equal(f.actual.layersLoading.value, true);
   await f.actual.loadLayers();
-  assert.deepEqual(f.requests, ['/dwm/center/layer-list'], 'Concurrent loads must reuse the in-flight work');
+  assert.deepEqual(f.requests, ['/dwm/center/overview'], 'Concurrent loads must reuse the in-flight work');
   const domains = Array.from({ length: size }, (_, index) => ({ id: `domain-${index}`, tableCount: 1 }));
   f.resolve([{ name: 'DWD', domains: [{ name: '标准库', items: domains }] }]);
   await request;
@@ -115,7 +115,7 @@ for (const size of [20, 100]) {
   assert.equal(f.actual.configSaving.value, true);
   await f.actual.saveNodeConfig();
   assert.deepEqual(f.saves, [{
-    path: '/dwm/center/node/save',
+    path: '/dwm/layer/save',
     body: {
       layerId: 'layer-id',
       name: '基础层',
@@ -132,7 +132,7 @@ for (const size of [20, 100]) {
   assert.deepEqual(f.requests, [], 'Refresh waits for a successful save');
   f.resolveSave({ success: true });
   await f.refreshStarted;
-  assert.deepEqual(f.requests, ['/dwm/center/layer-list']);
+  assert.deepEqual(f.requests, ['/dwm/center/overview']);
   f.resolve([]);
   await save;
   assert.equal(form.visible, false);
@@ -159,7 +159,7 @@ assert.deepEqual(reorderedForm.domains.map(({ targetId, sortNo, index }) => [tar
   [['domain-1', 0, 0], ['domain-0', 23, 1]]);
 const saveReordered = reordered.actual.saveNodeConfig();
 assert.equal(reordered.saves.length, 3);
-assert.equal(reordered.saves[2].path, '/dwm/center/node/save');
+assert.equal(reordered.saves[2].path, '/dwm/layer/save');
 assert.deepEqual(reordered.saves[2].body.domains.map(({ targetId, sortNo }) => [targetId, sortNo]),
   [['domain-1', 0], ['domain-0', 23]]);
 reordered.resolveSave({ success: true });
@@ -192,7 +192,7 @@ single.actual.configDialog.value = {
 };
 saving = single.actual.saveNodeConfig();
 assert.deepEqual(single.saves, [{
-  path: '/dwm/center/node/save',
+  path: '/dwm/layer/save',
   body: { targetType: 'domain', targetId: 'domain-id', layerCode: 'domain_code', name: '基础层', datasourceId: 'datasource-id' },
 }]);
 single.resolveSave({ success: true });

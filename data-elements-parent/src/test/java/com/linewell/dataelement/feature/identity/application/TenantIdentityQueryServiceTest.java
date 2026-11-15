@@ -24,6 +24,15 @@ class TenantIdentityQueryServiceTest {
         assertEquals(0,service.page("legacy",1,10,null,null,null).get("total"));
         verifyNoInteractions(jdbc);
     }
+    @Test void namesRequireCurrentActiveMembershipInControlModel() {
+        TenantContext.bind("legacy");
+        var ids = List.of("member", "outside");
+        when(control.namesForTenant("legacy", ids)).thenReturn(Map.of("member", "租户成员"));
+        assertEquals(Map.of("member", "租户成员"), service.names(ids));
+        verify(control).namesForTenant("legacy", ids);
+        verifyNoMoreInteractions(control);
+        verifyNoInteractions(jdbc);
+    }
     @Test void localMissingUserDoesNotFallBackToSameControlId() {
         TenantContext.bind("ga");when(policy.isLocal("ga")).thenReturn(true);
         when(jdbc.queryForObject(anyString(),eq(Long.class),any(Object[].class))).thenReturn(0L);

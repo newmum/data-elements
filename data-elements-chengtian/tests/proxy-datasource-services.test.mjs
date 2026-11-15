@@ -195,7 +195,7 @@ test("step one keeps the registration slot and avoids querying a draft source", 
 test("review uses one scoped request per 20- or 100-row page and keeps pagination sorting", async () => {
   const fixture = mount({ sourceId: "source-a", mode: "review" });
   const first = fixture.requests[0];
-  assert.equal(first.url, "/dws/flowserve/gateway/api/list");
+  assert.equal(first.url, "/dws/flowserve/services");
   assert.equal(first.method, "post");
   assert.deepEqual(first.body, {
     datasourceId: "source-a",

@@ -9,7 +9,7 @@
   "lock": null,
   "createBy": null,
   "updateBy": null,
-  "path": "/toggleStatus",
+  "path": "/state",
   "method": "POST",
   "parameters": [],
   "options": [],
@@ -22,75 +22,58 @@
   "responseBodyDefinition": null
 }
 ================================
-// 接口：02.菜单状态修改
-// 路由：POST /sym/menu/toggleStatus
-// 业务说明：菜单资源启用/禁用接口（级联）；使用请求参数 id、status、deep；涉及 rm_menu_t 等业务表；执行数据库写入并返回处理结果。
-// 菜单资源启用/禁用接口（级联）
-// 路径: /sym/menu/toggleStatus
-// 方法: POST
-// 数据源: sso (192.168.175.86:3306)
-// 参数: id (必填,菜单ID), status (必填,0启用/1禁用)
-// 说明: 级联更新该节点的status (或及所有子孙菜单)
+import cn.dev33.satoken.stp.StpUtil
+import db
+import tableWrite
+import tenantRuntime
 
-import "@post:/sym/user/me" as me
+// 按菜单的现有应用范围一次锁定层级，校验并批量启停当前节点及选定后代。
+var id = (body?.id || '') + ''
+var status = body?.status || 0
+if (id == '') { exit 400, '菜单ID不能为空' }
+if (status != 0 && status != 1) { exit 400, 'status值无效，0=启用 1=禁用' }
+var tenant = tenantRuntime.id()
+if (!tenant) { exit 401, '当前租户无效' }
+var actor = StpUtil.getLoginId() + ''
+var now = new Date()
 
-var now = new Date();
-
-// 获取入参
-var id     = body?.id || '';
-var status = body?.status ? body.status : 0;
-var deep   = body?.deep // 是否操作其下所有子孙菜单
-
-// 参数校验
-if (!id) {
-    // 参数或业务状态不满足要求时立即终止请求。
-    exit 400, '菜单ID不能为空';
-}
-
-if (status != 0 && status != 1) {
-    // 参数或业务状态不满足要求时立即终止请求。
-    exit 400, 'status值无效，0=启用 1=禁用';
-}
-
-try {
-    var updateId = me().createId;
-
-    // 校验菜单是否存在
-    var exist = db.table("rm_menu_t")
-        .where().eq("id", id).eq("deleted", 0).selectOne();
-
-    if (exist == null) {
-        // 参数或业务状态不满足要求时立即终止请求。
-        exit 404, '菜单不存在: ' + id;
-    }
-
-    // BFS 收集所有后代ID（自身+子孙）
-    var allIds = [id];
-    var queue = [id];
-
-    if (deep){
-        while (queue.size() > 0) {
-            var currentId = queue.remove(0);
-            // 从 MySQL 业务表读取当前有效数据。
-            var children = db.table("rm_menu_t")
-                .where().eq("parent_id", currentId).eq("deleted", 0)
-                .select();
-
-            for (child in children) {
-                allIds.add(child.id);
-                queue.add(child.id);
-            }
+return db.transaction(() => {
+    var previous = db.table('rm_menu_t').columns('app_id').where()
+        .eq('tenant_id', tenant).eq('id', id).eq('deleted', 0).selectOne()
+    if (previous == null || !previous.appId) { exit 404, '菜单不存在: ' + id }
+    var appId = previous.appId
+    var ids = [id]
+    if (body?.deep) {
+        var scope = {app_id: appId, deleted: 0}
+        var projection = ['id', 'parent_id']
+        tableWrite.lockByFilter('rm_menu_t', tenant, 'id', projection, scope, 1000)
+        var rows = tableWrite.lockByFilter('rm_menu_t', tenant, 'id', projection, scope, 1000)
+        var children = {}
+        var found = false
+        for (row in rows) {
+            if (row.id == id) { found = true }
+            var parentId = row.parent_id || 'ROOT'
+            if (children[parentId] == null) { children[parentId] = [] }
+            children[parentId].add(row.id)
         }
+        if (!found) { exit 404, '菜单不存在: ' + id }
+        var seen = {}
+        seen[id] = true
+        var index = 0
+        while (index < ids.size()) {
+            for (childId in (children[ids[index]] || [])) {
+                if (seen[childId]) { exit 400, '现有菜单层级存在循环' }
+                seen[childId] = true
+                ids.add(childId)
+            }
+            index = index + 1
+        }
+    } else if (tableWrite.lockRow('rm_menu_t', tenant, 'id', id,
+        ['id'], {app_id: appId, deleted: 0}) == null) {
+        exit 404, '菜单不存在: ' + id
     }
-
-    // 批量更新自身及所有子孙status
-    db.table("rm_menu_t")
-        .where().in("id", allIds)
-        .update({ status: status, updateId: updateId, updateTime: now });
-
-    // 返回当前业务分支的标准结果。
-    return { id: id, status: status, affectedCount: allIds.size() };
-} catch(e) {
-    // 参数或业务状态不满足要求时立即终止请求。
-    exit 500, '操作失败: ' + e.message;
-}
+    db.table('rm_menu_t').where().eq('tenant_id', tenant).eq('app_id', appId)
+        .eq('deleted', 0).in('id', ids)
+        .update({status: status, updateId: actor, updateTime: now})
+    return {id: id, status: status, affectedCount: ids.size()}
+})

@@ -22,17 +22,10 @@
   "responseBodyDefinition": null
 }
 ================================
-// 接口：05.菜单路由查询
-// 路由：GET /sym/menu/routes
-// 业务说明：当前用户菜单入口（GET /sym/menu）；读取或计算后返回业务结果。
-/*
- * 当前用户菜单入口（GET /sym/menu）。
- *
- * 数据来源：复用 /sym/auth/userMenu 返回的权限菜单树。
- * 门户整理：仅移除已下线的个人工作台；其余入口由租户权限菜单配置决定，
- * 保持顶部导航与权限管理页一致。
- */
-import "@post:/sym/auth/userMenu" as userMenu;
+import "@post:/sym/auth/tree" as userMenu;
+
+// 复用用户菜单树，并整理门户个人中心导航。
+
 
 // 个人中心保留资源申请，并把默认入口定位到资源申请。
 var stripUnusedPersonalWorkbench = (nodes) => {

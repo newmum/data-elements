@@ -9,7 +9,7 @@
   "lock": null,
   "createBy": null,
   "updateBy": null,
-  "path": "/element/page",
+  "path": "/page",
   "method": "POST",
   "parameters": [],
   "options": [],
@@ -87,5 +87,82 @@
   }
 }
 ================================
-import dataStandardPages;
-return dataStandardPages.elements(body);
+import tenantRuntime
+import tableRead
+import tableSort
+import java.lang.Integer
+import java.util.Locale
+import java.lang.IllegalArgumentException
+import java.lang.Boolean
+import java.math.BigDecimal
+import java.lang.Math
+import cn.hutool.core.util.StrUtil
+import '@/common/standardCodeResolution' as resolveCodes
+
+// 在当前租户内筛选、排序和分页。代码集匹配沿用 ID、字典编码、代码集编码的顺序。
+var tenantId = tenantRuntime.id()
+var request = body == null ? {} : body
+var pageNum = request.pageNum == null ? 1 : Math.max(1, Integer.parseInt('' + request.pageNum))
+var pageSize = request.pageSize == null ? 20 : Math.min(100, Math.max(1, Integer.parseInt('' + request.pageSize)))
+var sortField = tableSort.field(request, {
+    metaName: 'meta_name', name: 'meta_name', metaCode: 'meta_code', code: 'meta_code',
+    standardEncode: 'standard_encode', dictionaryCount: 'dictionary_count',
+    fieldLength: 'field_length', length: 'field_length', createdTime: 'created_time',
+    updatedTime: 'updated_time', updatedAt: 'updated_time'
+}, 'createdTime')
+var direction = tableSort.direction(request)
+var query = tableRead.from('da_metadata_t', 'element', tenantId)
+query.where(tableRead.equal(tableRead.column('element', 'is_del', 'NUMBER'), 0))
+
+for (key, column in {metaName: 'meta_name', metaCode: 'meta_code', standardEncode: 'standard_encode',
+        categoryPath: 'data_category_path', dataLevel: 'data_level', dataCategoryId: 'data_category_id',
+        publishStatus: 'publish_status', valueDomainId: 'value_domain_id'}) {
+    var value = request[key] == null ? '' : ('' + request[key]).trim()
+    if (value == '') { continue }
+    if (value.length() > 500) { throw new IllegalArgumentException('标准筛选内容过长') }
+    var field = tableRead.column('element', column, key == 'publishStatus' ? 'NUMBER' : 'TEXT')
+    if (key == 'categoryPath') {
+        query.where(tableRead.startsWithLiteral(field, value))
+    } else if (['metaName', 'metaCode', 'standardEncode'].contains(key)) {
+        query.where(tableRead.containsLiteral(field, value))
+    } else {
+        query.where(tableRead.equal(field, key == 'publishStatus' ? new BigDecimal(value) : value))
+    }
+}
+if (request.encodingOnly == true && request.encodingOnly instanceof Boolean) {
+    var pattern = tableRead.trim(tableRead.column('element', 'format_pattern', 'TEXT'))
+    query.where(tableRead.greaterThan(tableRead.textLength(pattern), 0))
+}
+
+// 分页总数只使用数据元筛选。代码集和项数在数据库排序前计算，保留未绑定的数据元。
+var matched = resolveCodes(tenantId)
+var counts = tableRead.from('da_metadata_code_t', 'code_items', tenantId)
+var codeId = tableRead.column('code_items', 'tid', 'TEXT')
+var itemCount = tableRead.jsonArrayLength(tableRead.column('code_items', 'dict_item_value', 'LOB'))
+counts.where(tableRead.equal(tableRead.column('code_items', 'is_del', 'NUMBER'), 0))
+matched.leftJoinGroupedProjection(counts, 'item_counts', 'code_id', 'code_id',
+    {code_id: codeId, item_count: tableRead.max(itemCount)}, [codeId])
+var elementId = tableRead.column('resolved', 'element_id', 'TEXT')
+query.leftJoinGroupedProjection(matched, 'code_lookup', 'element_id', 'tid', {
+    element_id: elementId,
+    code_id: tableRead.max(tableRead.column('resolved', 'code_id', 'TEXT')),
+    dictionary_count: tableRead.max(tableRead.column('item_counts', 'item_count', 'NUMBER'))
+}, [elementId])
+var dictionaryCount = tableRead.coalesce([tableRead.column('code_lookup', 'dictionary_count', 'NUMBER'), 0])
+var sort = sortField == 'dictionary_count' ? dictionaryCount :
+    tableRead.column('element', sortField, sortField == 'field_length' ? 'NUMBER' : 'TEXT')
+var page = query.pageRootRows({
+    _code_id: tableRead.column('code_lookup', 'code_id', 'TEXT'),
+    dictionary_count: dictionaryCount
+}, sort, direction, 'tid', pageNum, pageSize)
+
+var rows = []
+for (row in page.rows) {
+    var result = {CodeRank: 1}
+    for (key, value in row) {
+        var column = ('' + key).toLowerCase(Locale.ROOT)
+        result[column == '_code_id' ? 'CodeId' : StrUtil.toCamelCase(column)] = value
+    }
+    rows.add(result)
+}
+return {list: rows, total: page.total, pageNum: pageNum, pageSize: pageSize}

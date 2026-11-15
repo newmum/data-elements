@@ -11,7 +11,7 @@
   "lock": null,
   "createBy": null,
   "updateBy": null,
-  "path": "/saveOrUpdate",
+  "path": "/save",
   "method": "POST",
   "parameters": [],
   "options": [],
@@ -24,8 +24,7 @@
   "responseBodyDefinition": null
 }
 ================================
-// 接口：06.用户保存修改
-// 路由：POST /sym/user/saveOrUpdate
-// 业务说明：应用独立本地账号接口；业务规则由租户账号 Magic 函数执行。共享控制库账号及成员关系分支已退役。
 import '@/tenant-account/users' as localUsers
+
+// 按当前租户保存本地账号。与用户删除共享的实现位于 /tenant-account/users。
 return localUsers('save',body||{});

@@ -29,6 +29,27 @@ class TaskCategoryWarehouseScopeMagicTest {
     private static final String CLASSIFIER_ID = "d2138de2de28456aa57d9ade2305eed7";
 
     @ParameterizedTest @ValueSource(ints = {20, 100})
+    void directlyRegisteredFtpInOdsAlsoAppearsInIngestionPageAndTree(int count) throws Exception {
+        var f = fixture(count);
+        f.jdbc.execute("alter table db_datasource_t add pool_cfg varchar(400)");
+        f.jdbc.update("update db_datasource_t set db_type='ftp',pool_cfg=? where tid in ('files','foreign')",
+                "{\"accessMode\":\"explore\"}");
+        f.jdbc.update("update db_datasource_t set db_type='ftp',pool_cfg=? where tid='raw'",
+                "{\"accessMode\":\"receive\"}");
+        var counter = f.countQueries();
+        var page = run(f, INGEST_PAGE, Map.of("viewLevel", "table", "pageSize", count,
+                "datasourceIds", List.of("files", "raw", "warehouse", "foreign")));
+        assertThat(page.get("total")).isEqualTo((long) count);
+        assertThat((List<?>) page.get("list")).hasSize(count)
+                .allSatisfy(row -> assertThat(((Map<?, ?>) row).get("datasourceId")).isEqualTo("files"));
+        assertThat(counter.reads).isEqualTo(7);
+        var tree = run(f, INGEST_TREE, Map.of());
+        assertThat(((Number) tree.get("total")).intValue()).isEqualTo(count * 2 + 6);
+        assertThat(((Number) run(f, DISTRIBUTE_PAGE, Map.of("datasourceIds", List.of("files")))
+                .get("total")).intValue()).isEqualTo(count);
+    }
+
+    @ParameterizedTest @ValueSource(ints = {20, 100})
     void ingestionSortsTheWholeAuthorizedResultBeforePagingAndPreservesExplicitSort(int pageSize) throws Exception {
         int count = 2 * pageSize + 5;
         var f = fixture(count);
@@ -690,7 +711,7 @@ class TaskCategoryWarehouseScopeMagicTest {
         inputs.put("tableRead", f.tableRead);
         TaskRuntimeMagicFixture.bindTableFamily(inputs);
         String classifier = CanonicalMagicSources.byPath(CLASSIFIER_PATH, CLASSIFIER_ID)
-                .replaceAll("(?m)^import [^\\r\\n]+\\R", "");
+                .replaceAll("(?m)^import (?!cn\\.hutool\\.)[^\\r\\n]+\\R", "");
         var classifierScript = MagicScript.create(classifier, null);
         inputs.put("odsSourceClassifier", (Function<Object[], Object>) arguments -> classifierScript.execute(
                 new MagicScriptContext(Map.of("tableRead", f.tableRead, "tenantRuntime", scope))));

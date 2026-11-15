@@ -97,7 +97,7 @@ export function DatabasesPage() {
     if (!dstSelected) return;
     let active = true;
     setDstError('');
-    resourceGet<typeof dstInfo>('/dwm/center/dst-info').then(result => {
+    resourceGet<typeof dstInfo>('/dwm/center/inventory').then(result => {
       if (!result || !Array.isArray(result.dst) || !Number.isFinite(Number(result.dbCount)) || !Number.isFinite(Number(result.dstTableCount))) throw new Error('来源层资源返回格式不正确');
       if (active) setDstInfo(result);
     }).catch(error => {

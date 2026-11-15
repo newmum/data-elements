@@ -9,7 +9,7 @@
   "lock": null,
   "createBy": null,
   "updateBy": null,
-  "path": "/element/updatePublishStatus",
+  "path": "/publish",
   "method": "POST",
   "parameters": [],
   "options": [],
@@ -87,10 +87,10 @@
   }
 }
 ================================
-// 接口：04.数据元发布状态修改
-// 路由：POST /dwm/standard/element/updatePublishStatus
-// 业务说明：根据 tid 更新数据元的发布状态；涉及 da_metadata_t 等业务表。
 import log
+
+// POST /dwm/standard/publish 数据元发布状态修改
+// 根据 tid 更新数据元的发布状态；涉及 da_metadata_t 等业务表。
 
 /**
  * 修改数据元发布状态

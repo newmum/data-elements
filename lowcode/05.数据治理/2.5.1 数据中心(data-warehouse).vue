@@ -355,7 +355,7 @@ const loadLayers = async () => {
   layersLoading.value = true;
   layersError.value = "";
   try {
-    const result = await $common.get("/dwm/center/layer-list");
+    const result = await $common.get("/dwm/center/overview");
     if (!Array.isArray(result)) throw new Error("Invalid resource center response");
     layers.value = result;
   } catch {
@@ -409,18 +409,18 @@ const emptyPlanForm = () => ({ tid: "", planCode: "", modelId: "", targetDatasou
 const modelEditor = ref({ visible: false, form: emptyModelForm() });
 const planEditor = ref({ visible: false, form: emptyPlanForm() });
 const setOperationSummary = (summary: any) => { operationSummaryCards.value = [ { key: "models", label: "逻辑模型", value: summary?.logicalModelCount || 0 }, { key: "fields", label: "模型字段", value: summary?.logicalModelFieldCount || 0 }, { key: "plans", label: "物化计划", value: summary?.materializationPlanCount || 0 }, { key: "executions", label: "执行记录", value: summary?.materializationExecutionCount || 0 }, { key: "publish", label: "发布申请", value: summary?.catalogPublishRequestCount || 0 } ]; };
-const loadOperations = async () => { operationLoading.value = true; try { const [overview, records] = await Promise.all([$common.get("/dwm/center/operations/overview"), $common.get("/dwm/center/operations/records")]); setOperationSummary(overview); operationData.value = { logicalModels: records?.logicalModels || [], logicalModelFields: records?.logicalModelFields || [], materializationPlans: records?.materializationPlans || [], materializationExecutions: records?.materializationExecutions || [], catalogPublishRequests: records?.catalogPublishRequests || [] }; } finally { operationLoading.value = false; } };
+const loadOperations = async () => { operationLoading.value = true; try { const [overview, records] = await Promise.all([$common.get("/dwm/ops/overview"), $common.get("/dwm/ops/page")]); setOperationSummary(overview); operationData.value = { logicalModels: records?.logicalModels || [], logicalModelFields: records?.logicalModelFields || [], materializationPlans: records?.materializationPlans || [], materializationExecutions: records?.materializationExecutions || [], catalogPublishRequests: records?.catalogPublishRequests || [] }; } finally { operationLoading.value = false; } };
 const openOperations = () => { operationDrawer.value = true; loadOperations(); };
 const openModelEditor = (row?: any) => { modelEditor.value = { visible: true, form: row ? { tid: row.tid, modelCode: row.modelCode || "", modelName: row.modelName || "", modelType: row.modelType || "", domainName: row.domainName || "", targetDatasourceId: row.targetDatasourceId || "", modelStatus: row.modelStatus || "DRAFT", modelDescription: row.modelDescription || "" } : emptyModelForm() }; loadDataCenterSources(); };
-const saveModel = async () => { const form = modelEditor.value.form; if (!form.modelCode.trim() || !form.modelName.trim() || !form.modelType.trim()) { ElMessage.warning("请填写模型编码、名称和类型"); return; } operationSaving.value = true; try { await $common.post("/dwm/center/operations/record/save", { recordType: "logicalModel", tid: form.tid || undefined, fields: { ...form, modelCode: form.modelCode.trim(), modelName: form.modelName.trim(), modelType: form.modelType.trim() } }); ElMessage.success("逻辑模型已保存"); modelEditor.value.visible = false; await loadOperations(); } finally { operationSaving.value = false; } };
+const saveModel = async () => { const form = modelEditor.value.form; if (!form.modelCode.trim() || !form.modelName.trim() || !form.modelType.trim()) { ElMessage.warning("请填写模型编码、名称和类型"); return; } operationSaving.value = true; try { await $common.post("/dwm/ops/save", { recordType: "logicalModel", tid: form.tid || undefined, fields: { ...form, modelCode: form.modelCode.trim(), modelName: form.modelName.trim(), modelType: form.modelType.trim() } }); ElMessage.success("逻辑模型已保存"); modelEditor.value.visible = false; await loadOperations(); } finally { operationSaving.value = false; } };
 const openPlanEditor = (row?: any) => { planEditor.value = { visible: true, form: row ? { tid: row.tid, planCode: row.planCode || "", modelId: row.modelId || "", targetDatasourceId: row.targetDatasourceId || "", targetTableName: row.targetTableName || "", planStatus: row.planStatus || "DRAFT", riskLevel: row.riskLevel || "LOW", changeSummary: row.changeSummary || "" } : emptyPlanForm() }; loadDataCenterSources(); };
-const savePlan = async () => { const form = planEditor.value.form; if (!form.planCode.trim() || !form.modelId || !form.targetDatasourceId || !form.targetTableName.trim()) { ElMessage.warning("请完整填写物化计划信息"); return; } operationSaving.value = true; try { await $common.post("/dwm/center/operations/record/save", { recordType: "materializationPlan", tid: form.tid || undefined, fields: { ...form, planCode: form.planCode.trim(), targetTableName: form.targetTableName.trim() } }); ElMessage.success("物化计划已保存"); planEditor.value.visible = false; await loadOperations(); } finally { operationSaving.value = false; } };
-const deleteOperationRecord = (recordType: string, tid: string, name: string) => { ElMessageBox.confirm("确定删除“" + name + "”吗？该操作不会影响已经登记的数据表或目录。", "删除资源运营记录", { type: "warning", confirmButtonText: "删除", cancelButtonText: "取消" }).then(async () => { await $common.post("/dwm/center/operations/record/delete", { recordType, tid }); ElMessage.success("已删除"); await loadOperations(); }).catch(() => undefined); };
+const savePlan = async () => { const form = planEditor.value.form; if (!form.planCode.trim() || !form.modelId || !form.targetDatasourceId || !form.targetTableName.trim()) { ElMessage.warning("请完整填写物化计划信息"); return; } operationSaving.value = true; try { await $common.post("/dwm/ops/save", { recordType: "materializationPlan", tid: form.tid || undefined, fields: { ...form, planCode: form.planCode.trim(), targetTableName: form.targetTableName.trim() } }); ElMessage.success("物化计划已保存"); planEditor.value.visible = false; await loadOperations(); } finally { operationSaving.value = false; } };
+const deleteOperationRecord = (recordType: string, tid: string, name: string) => { ElMessageBox.confirm("确定删除“" + name + "”吗？该操作不会影响已经登记的数据表或目录。", "删除资源运营记录", { type: "warning", confirmButtonText: "删除", cancelButtonText: "取消" }).then(async () => { await $common.post("/dwm/ops/delete", { recordType, tid }); ElMessage.success("已删除"); await loadOperations(); }).catch(() => undefined); };
 
 const loadDataCenterSources = (keyword = "") => {
   sourceLoading.value = true;
   $common
-    .post("/dwm/center/datasource-options", { keyword })
+    .post("/dwm/layer/choices", { keyword })
     .then((res) => {
       dataCenterSources.value = mergeSelectedSources(res?.list || []);
     })
@@ -696,7 +696,7 @@ const saveNodeConfig = async () => {
 
   configSaving.value = true;
   try {
-    const result = await $common.post("/dwm/center/node/save", payload);
+    const result = await $common.post("/dwm/layer/save", payload);
     if (result?.success !== true) {
       ElMessage.error(result?.message || result?.msg || "保存失败，请重试");
       return;

@@ -8,6 +8,7 @@ import java.util.*;
 import org.junit.jupiter.api.Test;
 import org.ssssssss.script.*;
 import org.ssssssss.script.runtime.ExitValue;
+import org.ssssssss.script.runtime.function.MagicScriptLambdaFunction;
 import com.linewell.dataelement.platform.magic.module.JsonModule;
 import com.linewell.dataelement.platform.magic.TableSortMagicModule;
 import com.linewell.dataelement.feature.dataquality.infrastructure.jdbc.QualitySqlTemplate;
@@ -23,9 +24,10 @@ class QualityTemplateMagicTest {
             "dd4214943e5341c482a59821a64245eb", "f15e72e40a2c41f4af8620ceb68a393b");
     public static class Scope {
         boolean denied;
+        Map<String, Object> sourceScope = Map.of("scope", "ALL");
         public String id(){return "ga";}
         public boolean canReadDataSource(Map<?,?> row){return !denied;}
-        public List<Map<String,Object>> visibleDataSources(List<Map<String,Object>> rows){return denied?List.of():rows;}
+        public Map<String,Object> dataSource(){return denied ? Map.of("scope", "NONE") : sourceScope;}
     }
     public static class Ids {public String fastSimpleUUID(){return UUID.randomUUID().toString().replace("-","");}}
     public static class Actor {public String getLoginIdAsString(){return "tester";}}
@@ -57,8 +59,26 @@ class QualityTemplateMagicTest {
             bindings.put("qualitySql",new QualitySqlTemplate());bindings.put("jsons",new JsonModule());bindings.put("IdUtil",new Ids());bindings.put("StpUtil",new Actor());bindings.put("tableSort",new TableSortMagicModule());bindings.put("dataQuality",task);
             bindings.put("log",new Log());
             bindings.put("tableRead",tableRead);
+            if (FIELD_OPTIONS.equals(metadataId)) {
+                bindFieldScope(bindings);
+            }
             counter.reads=0;
             return TenantContext.call(scope.id(), () -> MagicScript.create(script,null).execute(new MagicScriptContext(bindings)));
+        }
+        private void bindFieldScope(Map<String, Object> bindings) throws Exception {
+            var streamingRead = TaskRuntimeMagicFixture.structuredReads(f.jdbc, sql -> counter.reads++, null);
+            bindings.put("tableRead", streamingRead);
+            var catalogScope = script("cc92b11b7eb845768205468cb139d247");
+            var fieldScope = script("e30966d29ca7423fa7cde295f8918b28");
+            MagicScriptLambdaFunction filter = (context, args) -> catalogScope.execute(new MagicScriptContext(
+                    Map.of("tableRead", streamingRead, "alias", args[0], "scope", args[1])));
+            bindings.put("filterScope", filter);
+            bindings.put("columns", (MagicScriptLambdaFunction) (context, args) -> fieldScope.execute(new MagicScriptContext(
+                    Map.of("tableRead", streamingRead, "catalogScope", filter, "tenantId", args[0], "scope", args[1]))));
+        }
+
+        private MagicScript script(String id) throws Exception {
+            return MagicScript.create(CanonicalMagicSources.byId(id).replaceAll("(?m)^import [^\\r\\n]*\\R", ""), null);
         }
         String save() throws Exception {return String.valueOf(((Map<?,?>)run(TEMPLATE_SAVE,new LinkedHashMap<>(Map.of("ruleName","参数模板","ruleCode","DQ_SQL","dimension","ACCURACY","sqlTemplate","${column}<#{min}","values",Map.of("min",0))))).get("tid"));}
     }
@@ -143,7 +163,28 @@ class QualityTemplateMagicTest {
             assertThat(reads).isEqualTo(count==20?2:4);
             System.out.println("quality columns items="+count+", SQL="+reads+", bounded batches="+(count==20?1:2));
         }
-        assertThat(f.run(FIELD_OPTIONS,Map.of("tableIds",List.of("table-0","foreign")))).isInstanceOf(ExitValue.class);
+        f.f.jdbc.update("insert into db_table_t(tid,tenant_id,datasource_id,asset_status,is_del) values('foreign','foreign','db',0,0)");
+        assertThat(f.run(FIELD_OPTIONS,Map.of("tableIds",List.of("table-0","foreign"),"tenantId","foreign"))).isInstanceOf(ExitValue.class);
+        assertThat(f.counter.reads).isOne();
+        f.f.jdbc.update("insert into db_datasource_t(tid,tenant_id,is_del,org_id,created_by) values('restricted','ga',0,'other','other')");
+        f.f.jdbc.update("update db_datasource_t set org_id='team',created_by='owner' where tid='db'");
+        f.f.jdbc.update("update db_table_t set datasource_id='restricted' where tid='table-1'");
+        for (var profile : List.of(Map.<String, Object>of("scope","ORG","organizationIds",List.of("team")),
+                Map.<String, Object>of("scope","OWNER","userId","owner"))) {
+            f.scope.sourceScope=profile;
+            assertThat(f.run(FIELD_OPTIONS,Map.of("tableIds",List.of("table-0","table-1")))).isInstanceOf(ExitValue.class);
+            assertThat(f.counter.reads).isOne();
+            assertThat((List<?>)f.run(FIELD_OPTIONS,Map.of("tableId","table-0"))).hasSize(1);
+            assertThat(f.counter.reads).isEqualTo(2);
+        }
+        f.scope.sourceScope=Map.of("scope","ALL");
+        f.f.jdbc.update("delete from db_table_column_t where table_id='table-1'");
+        var deduplicated=StructuredValues.objectMap(f.run(FIELD_OPTIONS,Map.of("tableIds",List.of("table-0","table-1","table-0"))));
+        assertThat(deduplicated).containsOnlyKeys("table-0","table-1").containsEntry("table-1",List.of());
+        assertThat(StructuredValues.objectRows(deduplicated.get("table-0"))).hasSize(1).allSatisfy(row ->
+                assertThat(row).containsEntry("column_name","name").doesNotContainKeys("table_id","length","primary_key"));
+        assertThat(f.run(FIELD_OPTIONS,Map.of("tableIds",Collections.nCopies(51,"table-0")))).isInstanceOf(ExitValue.class);
+        assertThat(f.counter.reads).isZero();
         f.scope.denied=true;assertThat(f.run(FIELD_OPTIONS,Map.of("tableIds",List.of("table-0")))).isInstanceOf(ExitValue.class);
     }
 }

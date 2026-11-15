@@ -679,7 +679,7 @@ const loadTableFields = async () => {
 const relatedApisTable=ref();
 const fetchRelatedApis=async ({pageNo=1,pageSize=20,sortField,sortDir}={})=>{
  if(!props.catalogId)return {list:[],total:0};
- const result=await $common.get('/dwm/metadata-governance/catalog-services/page',{catalogId:props.catalogId,pageNo,pageSize,sortField,sortDir});
+ const result=await $common.get('/dwm/catalog/services',{catalogId:props.catalogId,pageNo,pageSize,sortField,sortDir});
  state.api.data=result.list;
  return result;
 };

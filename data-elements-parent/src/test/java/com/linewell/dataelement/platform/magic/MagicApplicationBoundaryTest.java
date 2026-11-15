@@ -63,31 +63,11 @@ class MagicApplicationBoundaryTest {
         var reconcile = new ReconciliationMagicModule(new ReconciliationApplicationService(reconcileRepository, null));
         TenantContext.clear();
 
-        assertThatThrownBy(() -> quality.columnsBatch(List.of("table-a")))
+        assertThatThrownBy(() -> quality.taskPage(null, null, 1, 20, null))
                 .isInstanceOf(TenantAccessException.class);
         assertThatThrownBy(() -> reconcile.policyDetail("policy-a"))
                 .isInstanceOf(TenantAccessException.class);
         verifyNoInteractions(qualityRepository, reconcileRepository);
-    }
-
-    @Test
-    void batchColumnsRetainTenantScopeDeduplicationAndSizeLimit() {
-        var mapper = mock(DataQualityMapper.class);
-        when(mapper.selectColumnOptionsBatch("tenant-b", List.of("table-a", "table-b")))
-                .thenReturn(List.of(Map.of("table_id", "table-a", "column_name", "id")));
-        var quality = qualityModule(mapper);
-
-        TenantContext.run("tenant-b", () -> {
-            var result = quality.columnsBatch(List.of("table-a", "table-b", "table-a"));
-            assertThat(result).containsOnlyKeys("table-a", "table-b");
-            assertThat(result.get("table-a")).hasSize(1);
-            assertThat(result.get("table-b")).isEmpty();
-            assertThatThrownBy(() -> quality.columnsBatch(java.util.Collections.nCopies(100, "table-a")))
-                    .isInstanceOf(IllegalArgumentException.class);
-        });
-
-        verify(mapper).selectColumnOptionsBatch("tenant-b", List.of("table-a", "table-b"));
-        verifyNoMoreInteractions(mapper);
     }
 
     private DataQualityMagicModule qualityModule(DataQualityMapper mapper) {

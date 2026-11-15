@@ -76,24 +76,24 @@ export function centerSourceIds(state: ResourceState): string[] {
 export async function centerTablePage(sourceIds: string[], pageNo: number, keyword = '', sourceId = '', pageSize = 15,sort:ServerSort={}): Promise<CenterTablePage> {
   if (!sourceIds.length) return { rows: [], catalogs: [], total: 0, pageNo, pageSize };
   const eligibleIds = sourceId && sourceIds.includes(sourceId) ? [sourceId] : sourceIds;
-  return resourceGet('/dwm/metadata-governance/tables/page', {
+  return resourceGet('/dwm/catalog/tables', {
     sourceIds: eligibleIds.join(','), pageNo, pageSize, keyword,...sort,
   });
 }
 
 export async function centerTableById(sourceIds: string[], tableId: string): Promise<CenterTable | undefined> {
   if (!sourceIds.length || !tableId) return undefined;
-  const page = await resourceGet<CenterTablePage>('/dwm/metadata-governance/tables/page', {
+  const page = await resourceGet<CenterTablePage>('/dwm/catalog/tables', {
     sourceIds: sourceIds.join(','), tableId, pageNo: 1, pageSize: 1,
   });
   return page.rows[0];
 }
 
 export const centerTableColumns = (tableId: string) => resourceGet<CenterColumn[]>(
-  '/dwm/metadata-governance/tables/columns', { tableId }, { timeoutMs: 30000 },
+  '/dwm/column/list', { tableId }, { timeoutMs: 30000 },
 );
 
-export const directoryDetail = (tid: string) => resourcePost<DirectoryDetail>('/dwm/center/command', {
+export const directoryDetail = (tid: string) => resourcePost<DirectoryDetail>('/dwm/ops/command', {
   kind: 'catalogs', method: 'GET', action: 'directory-detail', id: tid,
 });
 export const directoryItems = (tid: string) => resourcePost<DirectoryItem[]>('/dst/catalog/items', { tid });
@@ -127,6 +127,6 @@ export function itemsFromColumns(columns: CenterColumn[]): DirectoryItem[] {
   }));
 }
 
-export const centerColumnsPage=(tableId:string,page:number,size:number,sort:ServerSort={})=>resourceGet<{list:CenterColumn[];total:number}>('/dwm/metadata-governance/tables/columns/page',{tableId,page,size,...sort});
+export const centerColumnsPage=(tableId:string,page:number,size:number,sort:ServerSort={})=>resourceGet<{list:CenterColumn[];total:number}>('/dwm/column/page',{tableId,page,size,...sort});
 
 export const directoryItemsPage=(tid:string,pageNo:number,pageSize:number,sort:ServerSort={})=>resourcePost<{list:DirectoryItem[];total:number}>('/dst/catalog/items',{tid,paged:true,pageNo,pageSize,...sort});

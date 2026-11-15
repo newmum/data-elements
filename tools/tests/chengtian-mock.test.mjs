@@ -542,7 +542,9 @@ test("退出返回原接口的登录路径并清理模拟会话", async () => {
 test("菜单及组织树保持当前数据库层级，空租户不复制公安配置", async () => {
   for (const item of configuration.tenants) {
     const {runtime}=setup("admin",item.scenario);
-    const tree=(await request(runtime,"/sym/org/getOrgTree")).body.data;
+    const tree=(await request(runtime,"/sym/org/tree")).body.data;
+    assert.deepEqual((await request(runtime,"/sym/org/getOrgTree")).body.data, tree);
+    assert.deepEqual((await request(runtime,"/sym/org/tree",{parentId:"validation-missing"})).body.data, []);
 
     const flatten=(nodes)=>nodes.flatMap(node=>[node,...flatten(node.children||[])]);
     const actual=flatten(tree),expected=item.organizations.filter(row=>row.id!=="ROOT");
@@ -550,6 +552,10 @@ test("菜单及组织树保持当前数据库层级，空租户不复制公安�
     const byId=new Map(actual.map(row=>[row.id,row]));
     for(const row of expected){assert.equal(byId.get(row.id).name,row.name);assert.equal(byId.get(row.id).parentId,row.parentId);}
     for(const node of actual)assert((node.children||[]).every(child=>child.parentId===node.id));
+    if (tree.length) {
+      const root = tree[0];
+      assert.deepEqual((await request(runtime,"/sym/org/tree",{parentId:root.id})).body.data, root.children);
+    }
     if(item.scenario==="police") {
       const sourceMenu=runtime.routes().find(row=>row.path==="/datasource-manage");
       assert(sourceMenu.children.every(row=>row.meta.hidden));

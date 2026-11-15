@@ -94,7 +94,9 @@ TXT 按带表头的分隔文本读取，自动识别制表符、逗号、分号�
 
 原件全部上传失败时立即结束该次上传，不调用解析或清单保存，不新增无文件的“待解析”项，也不提示上传成功。部分成功时只将成功原件进入一次批量解析/保存，并显示成功和失败份数；会话失效或切换立即停止剩余上传。上传错误详情仅保留在当前页面内存，避免将异常堆栈写入数据源清单；重新上传后按当次结果更新。
 
-生产排查以 `POST /dst/file/manage?action=upload` 的完整 `error.detail` 或同一 `traceId` 的服务端异常为依据。`MAGIC-SCRIPT-001` 只是脚本异常包装，不能据此判断文件格式不支持。现行脚本先通过 `configData()` 读取 `minio_url/minio_user`，再调用后端 `systemConfig.legacyMinioPassword()` 读取 `data-element.legacy-integration.minio-password`（Nacos 使用环境变量 `NACOS_DATA_ELEMENT_LEGACY_INTEGRATION_MINIO_PASSWORD`），随后写 MinIO 并保存当前租户 `file_upload_t`。应按实际异常核对运行配置是否有效、对象存储网络/认证/存储桶写入权限、文件记录写入，以及 Magic 与后端模块版本是否匹配；不能把空凭据、脱敏占位符或其他环境配置覆盖到生产。生产不可访问且缺少具体异常时，只能确认失败阶段，不能宣称生产上传故障已经解决。
+`POST /dst/file/manage?action=upload-report` 接收 10 MB 以内的 CSV、TXT、JSON、XLSX、XLS 原件。后端写入 `storage.root-dir` 下的 `report-originals/<租户ID>/`，在当前租户的 `file_upload_t` 记录随机文件标识、原名和大小。文件完整写入后返回文件标识，登记失败时按记录回读结果清理该份文件。服务重启后仍从同一目录读取。多实例部署须让承担上报请求的实例使用同一持久文件目录。
+
+`POST /dst/file/register` 的 `parse` 从文件记录选择原件存储。每批用一次 SQL 逐 ID 核对当前租户和上传人，每次最多 20 份。`GET /dst/file/download` 按当前租户有效文件记录流式返回原件，供预览与上报使用。新原件在磁盘读写，历史 MinIO 对象记录继续兼容读取。排查失败时可按响应 `traceId` 核对磁盘可写权限、剩余空间及本租户文件记录。
 
 
 `POST /dst/file/submit` 接收规范化文件及 `datasourceId`、`tableId`、`fileId`、`requestId`，校验可信租户、文件/表/源关联及服务端规范通过标记；未通过时在任何投递或回执写入之前拒绝。通过后在事务内保留请求记录，调用既有 `FtpReportUploadService`，持久化真实结果。重复请求标识不重复投递；同一表和文件正在投递或已成功时，新请求标识也不会启动第二次投递；明确失败后可重试。服务解析当前行业 ODS 数据域 `FJGHCC` 的绑定，在目标配置的根目录下按“数据源ID/英文表名/”子目录投递到既有FTP/FTPS/SFTP目标，文件名为report_时间戳_随机码.csv。成功只代表该规范化文件已传入目标存储，后续目标系统是否解析入库需要其另行回执。凭据不返回浏览器，不把行数据写入 `test1` 作为成功依据。每源最多1000次回执，达到上限时明确拒绝并要求归档，不静默丢弃历史。

@@ -22,44 +22,39 @@
   "responseBodyDefinition": null
 }
 ================================
-// 接口：03.菜单排序
-// 路由：POST /sym/menu/sort
-// 业务说明：校验同级菜单标识及当前租户范围，按请求顺序更新菜单资源排序号并返回处理结果。
-// 菜单资源排序接口
-// 路径: /sym/menu/sort
-// 方法: POST
-// 数据源: sso (192.168.175.86:3306)
-// 参数: ids (必填,同级菜单ID数组,按新顺序排列,如 ["id3","id1","id2"])
+import cn.dev33.satoken.stp.StpUtil
+import db
+import tableWrite
+import tenantRuntime
 
-import "@post:/sym/user/me" as me
-
-var now = new Date();
-
-// 获取入参
-var ids = body?.ids;
-
-// 参数校验
-if (!ids || ids.size() == 0) {
-    // 参数或业务状态不满足要求时立即终止请求。
-    exit 400, '排序菜单ID列表不能为空';
+// 一次锁定排序清单，确认全部菜单同属当前租户、同一应用和同一级，再批量更新。
+var input = body?.ids
+if (!(input instanceof List) || input.isEmpty() || input.size() > 1000) {
+    exit 400, '排序菜单ID列表须包含1到1000项'
 }
-
-try {
-    var updateId = me().createId;
-
-    // 按传入顺序依次设置sortNum（for迭代的是元素，手动维护序号）
-    var sortNum = 0;
-    for (id in ids) {
-        sortNum = sortNum + 1;
-        // 从 MySQL 业务表读取当前有效数据。
-        db.table("rm_menu_t")
-            .where().eq("id", id)
-            .update({ sortNum: sortNum, updateId: updateId, updateTime: now });
+var ids = input.map(value => value == null ? '' : (value + '').trim())
+if (ids.contains('') || ids.distinct().size() != ids.size()) { exit 400, '排序菜单ID不能为空或重复' }
+var tenant = tenantRuntime.id()
+if (!tenant) { exit 401, '当前租户无效' }
+var actor = StpUtil.getLoginId() + ''
+var now = new Date()
+return db.transaction(() => {
+    var menus = tableWrite.lockRows('rm_menu_t', tenant, 'id', ids,
+        ['id', 'app_id', 'parent_id'], {deleted: 0})
+    if (menus.size() != ids.size()) { exit 400, '所选菜单不存在或不属于当前租户' }
+    var appId = menus[0].app_id
+    var parentId = menus[0].parent_id
+    if (!appId || menus.filter(row => row.app_id != appId || row.parent_id != parentId).size() > 0) {
+        exit 400, '只能调整同一应用的同级菜单顺序'
     }
-
-    // 返回当前业务分支的标准结果。
-    return { count: ids.size() };
-} catch(e) {
-    // 参数或业务状态不满足要求时立即终止请求。
-    exit 500, '排序失败: ' + e.message;
-}
+    var number = 0
+    var updates = []
+    for (id in ids) {
+        number = number + 1
+        updates.add({id: id, sort_num: number, update_id: actor, update_time: now})
+    }
+    var changed = tableWrite.batchUpdate('rm_menu_t', tenant,
+        ['sort_num', 'update_id', 'update_time'], ['id'], {app_id: appId, deleted: 0}, updates)
+    if (changed != ids.size()) { exit 409, '菜单已变化，请刷新后重试' }
+    return {count: changed}
+})

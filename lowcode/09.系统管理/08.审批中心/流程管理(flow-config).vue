@@ -54,7 +54,7 @@
           <el-input v-model.trim="state.form.flowName" maxlength="60" show-word-limit />
         </el-form-item>
         <el-form-item label="流程编码" prop="flowCode">
-          <el-input v-model.trim="state.form.flowCode" maxlength="64" placeholder="例如 assetRegister" />
+          <el-input v-model.trim="state.form.flowCode" maxlength="40" placeholder="例如 assetRegister" />
         </el-form-item>
         <el-form-item label="流程分类" prop="category">
           <el-select v-model="state.form.category" allow-create filterable class="w-full">
@@ -98,7 +98,7 @@ const rules = {
   flowName: [{ required: true, message: "请输入流程名称", trigger: "blur" }],
   flowCode: [
     { required: true, message: "请输入流程编码", trigger: "blur" },
-    { pattern: /^[A-Za-z][A-Za-z0-9_-]{1,63}$/, message: "以字母开头，仅支持字母、数字、下划线和横线", trigger: "blur" },
+    { pattern: /^[A-Za-z][A-Za-z0-9_-]{0,39}$/, message: "以字母开头，最多 40 个字母、数字、下划线或横线", trigger: "blur" },
   ],
   category: [{ required: true, message: "请选择流程分类", trigger: "change" }],
 };
@@ -130,7 +130,7 @@ const columns = [
 ];
 
 const fetchData = async ({ pageNo: pageNum, pageSize, sortField, sortDir }) => {
-  const result = await $common.post("/sym/approval/config/list", {
+  const result = await $common.post("/sym/flow/page", {
     pageNum,
     pageSize,sortField,sortDir,
     keyword: state.keyword,
@@ -150,7 +150,7 @@ const createFlow = async () => {
   await formRef.value?.validate();
   state.saving = true;
   try {
-    const result = await $common.post("/sym/approval/config/saveOrUpdate", state.form);
+    const result = await $common.post("/sym/flow/save", state.form);
     state.dialogVisible = false;
     openDesigner({ id: result.id, flowName: state.form.flowName });
   } finally {
@@ -171,7 +171,7 @@ const execute = async (row, action) => {
   } catch {
     return;
   }
-  await $common.post("/sym/approval/config/exec", { id: row.id, action });
+  await $common.post("/sym/flow/exec", { id: row.id, action });
   $message.success(`${actionName}成功`);
   refresh();
 };

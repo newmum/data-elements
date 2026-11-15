@@ -24,7 +24,7 @@ for (const count of [20, 100]) test(`${count} displayed services need one depart
     filters: { keyword: "验证", status: "draft" }, currentGroup: { value: { id: "group-a" } },
     $common: { post: async (url, body) => {
       requests++;
-      assert.equal(url, "/dws/flowserve/gateway/api/list");
+      assert.equal(url, "/dws/flowserve/services");
       assert.equal(body.departmentOnly, true);
       assert.equal(body.pageNum, 2);
       assert.equal(body.pageSize, count);

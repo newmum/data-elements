@@ -1,5 +1,5 @@
 /** 仅投影当前库已有配置，不补造菜单层级或机构。 */
-export function organizationTree(rows) {
+export function organizationTree(rows, parentId = "ROOT") {
   const nodes = new Map(
     rows
       .filter((row) => row.id !== "ROOT")
@@ -17,8 +17,8 @@ export function organizationTree(rows) {
   );
   const roots = [];
   for (const node of nodes.values()) {
-    if (nodes.has(node.parentId)) nodes.get(node.parentId).children.push(node);
-    else roots.push(node);
+    if (node.parentId === parentId) roots.push(node);
+    else if (nodes.has(node.parentId)) nodes.get(node.parentId).children.push(node);
   }
   return roots;
 }

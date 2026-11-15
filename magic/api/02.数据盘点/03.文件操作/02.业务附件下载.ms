@@ -31,7 +31,7 @@
   "headers": [],
   "paths": [],
   "responseBody": null,
-  "description": "按当前租户和附件标识读取对象存储文件，返回原始二进制和附件响应头。",
+  "description": "按当前租户和附件标识读取磁盘上的数据上报原件或原有对象存储附件，返回原始二进制和附件响应头。",
   "requestBodyDefinition": null,
   "responseBodyDefinition": null
 }
@@ -40,27 +40,39 @@ import tenantRuntime
 import com.linewell.dataelement.utils.MinioUtils
 import cn.hutool.core.util.StrUtil
 import '@/common/configData' as configData
+import '@/common/reportoriginal' as reportOriginal
 import systemConfig
 import response;
+import cn.dev33.satoken.stp.StpUtil
+import java.nio.charset.StandardCharsets
+import org.springframework.http.ContentDisposition
 
-// GET /dst/file/download 按当前租户和附件标识读取对象存储文件，返回原始二进制和附件响应头。
+// GET /dst/file/download 校验当前租户的附件记录，通过 /common/reportoriginal 流式读取磁盘原件。
+// 其他记录沿用原存储位置，返回文件原始字节及附件响应头。
 
 var tenantId = tenantRuntime.id()
 
 // 下载单个文件
 var fileInfo = db.table("file_upload_t").where().eq("tid", fileId).eq("tenant_id", tenantId).eq("is_del", 0).selectOne()
-//return fileInfo
-if(fileInfo == null){
-    // 参数或业务状态不满足要求时立即终止请求。
-    exit 500, "fileId不正确";
-}else{
-    fileName = fileInfo.fileName
-    bucket =  StrUtil.subBefore(fileInfo.filePath, "/", false)
-    relaName = StrUtil.subAfter(fileInfo.filePath, "/", false);
-    MinioUtils.getMinioClient(configData().minio_url, configData().minio_user, systemConfig.legacyMinioPassword());
-    response.setHeader("Content-Type", "application/octet-stream");
-    response.setHeader("Content-disposition", "attachment; filename="+fileName);
-    MinioUtils.downloadFile(bucket, relaName, response.getOutputStream());
-    // 二进制响应到此结束，禁止再追加通用 JSON 成功信封。
+if (fileInfo == null) { exit 500, 'fileId不正确' }
+if (fileInfo.filePath != null && fileInfo.filePath.startsWith('report-local:')) {
+    StpUtil.checkLogin()
+    var stream = null
+    try { stream = reportOriginal('open', tenantId, fileInfo.filePath, null) }
+    catch (e) { exit 404, '上传原件不可读取' }
+    try {
+        response.setHeader('Content-Type', 'application/octet-stream')
+        response.setHeader('Content-Disposition', ContentDisposition.attachment().filename(fileInfo.fileName, StandardCharsets.UTF_8).toString())
+        stream.transferTo(response.getOutputStream())
+    } finally { stream.close() }
     return response.end();
 }
+var bucket = StrUtil.subBefore(fileInfo.filePath, '/', false)
+var objectName = StrUtil.subAfter(fileInfo.filePath, '/', false)
+var configuration = configData()
+MinioUtils.getMinioClient(configuration.minio_url, configuration.minio_user, systemConfig.legacyMinioPassword())
+response.setHeader('Content-Type', 'application/octet-stream')
+response.setHeader('Content-Disposition', 'attachment; filename=' + fileInfo.fileName)
+MinioUtils.downloadFile(bucket, objectName, response.getOutputStream())
+// 二进制响应到此结束，禁止再追加通用 JSON 成功信封。
+return response.end()

@@ -309,7 +309,7 @@ const handleAction = async (type: string, row?: any) => {
       state.leftLoading = true;
       if (isLoadTree.value) {
         Promise.all([
-          $common.post("/sym/org/getOrgTree", { parentId: $user.orgRootId }),
+          $common.post("/sym/org/tree", { parentId: $user.orgRootId }),
           $common.post("/dst/catalog/treeStatistics", { conditions: buildConditions(false) }),
         ])
           .then(([data, result]) => {

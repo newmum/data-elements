@@ -55,9 +55,9 @@ public class ApprovalFlowMagicModule {
         return service.previousNodeList(command(body, ApprovalPreviousNodeRequest.class));
     }
 
-    @Comment("处理流程节点完成回调")
-    public Object finshHandle(Map<String, Object> body) {
-        return service.finshHandle(command(body, ApprovalCallbackRequest.class));
+    @Comment("处理 Warm-Flow 发出的节点完成事件")
+    public Object finish(ApprovalCallbackRequest engineEvent) {
+        return service.finshHandle(engineEvent);
     }
 
     private <T> T command(Map<String, Object> body, Class<T> type) {

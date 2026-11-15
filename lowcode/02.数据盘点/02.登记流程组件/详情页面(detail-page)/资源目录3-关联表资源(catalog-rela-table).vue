@@ -570,7 +570,7 @@ const saveRelaType = async () => {
 
 // 列表接口
 const fetchData = async ({pageNo=1,pageSize=20,sortField,sortDir}={}) => {
-  const result=await $common.get('/dwm/metadata-governance/catalog-resources/page',{catalogId:props.catalogId,pageNo,pageSize,sortField,sortDir});
+  const result=await $common.get('/dwm/catalog/resources',{catalogId:props.catalogId,pageNo,pageSize,sortField,sortDir});
   state.data=result.list;
   return result;
 };

@@ -9,7 +9,7 @@
   "lock": null,
   "createBy": null,
   "updateBy": null,
-  "path": "/layer-list",
+  "path": "/overview",
   "method": "GET",
   "parameters": [],
   "options": [],
@@ -22,16 +22,18 @@
   "responseBodyDefinition": null
 }
 ================================
-import '@get:/dwm/center/dst-info' as dstInfo
+import '@get:/dwm/center/inventory' as dstInfo
 import tenantRuntime
 import dataScope
 import tableRead
 import java.util.Map
 import cn.hutool.json.JSONUtil
 
-// GET /dwm/center/layer-list 无请求参数，返回当前租户的数仓分层、分域、可见绑定及数据统计。
+// GET /dwm/center/overview 资源中心总览
+// 资源中心总览：按当前租户和角色数据范围聚合五层表数及记录数，不加载表资产正文。
 // 字典使用当前租户的活动 dataSourceType 根。按角色限定数据源和资产范围，关联及统计在集合遍历前完成。
 // 配置只用于服务端解析历史分类，响应不返回连接凭据。接口只读。
+
 var textOf = value => value == null ? '' : ('' + value).trim()
 var blank = value => textOf(value) == ''
 var lower = value => textOf(value).toLowerCase()

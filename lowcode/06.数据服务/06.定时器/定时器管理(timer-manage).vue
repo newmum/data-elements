@@ -3,7 +3,7 @@
     <div class="timer-header">
       <div>
         <h2 class="timer-title">定时器管理</h2>
-        <p class="timer-subtitle">按租户维护 Cron 定时任务，多节点由分布式锁保证单次执行</p>
+        <p class="timer-subtitle">按租户维护 Cron 定时配置和查看历史日志。当前执行端尚未绑定。</p>
       </div>
       <div class="timer-header__actions">
         <el-button :loading="loading" icon="refresh" @click="loadAll">刷新</el-button>
@@ -80,8 +80,8 @@
           <div class="timer-hint">支持 6 段（秒 分 时 日 月 周）或 5 段（分 时 日 月 周）Spring Cron</div>
         </el-form-item>
         <el-form-item label="处理器" prop="handler">
-          <el-input v-model.trim="form.handler" placeholder="bean:Bean名称 或 magic:POST /dws/service/lake/zones" />
-          <div class="timer-hint">bean: 指向实现 RunnableTask 的 Spring Bean；magic: 调用已发布 Magic API</div>
+          <el-input v-model.trim="form.handler" placeholder="bean:处理器名 或 magic:METHOD /路径" />
+          <div class="timer-hint">保存处理器配置。执行端绑定后才可运行任务。</div>
         </el-form-item>
         <el-form-item label="执行参数">
           <el-input v-model="form.paramsJson" type="textarea" :rows="3" placeholder='JSON 对象，例如 {"pageSize": 1}' />
@@ -197,7 +197,7 @@ const request = async (url, body) => {
 const loadTimers = async (page = 1) => {
   loading.value = true;
   try {
-    const data = await $common.get("/dws/service/sys/timers", {
+    const data = await $common.get("/dws/timer/page", {
       pageNo: page,
       pageSize,
       keyword: keyword.value,
@@ -255,7 +255,7 @@ const saveTimer = async () => {
   if (!valid || !validateParams()) return;
   saving.value = true;
   try {
-    const data = await request("/dws/service/sys/timers", {
+    const data = await request("/dws/timer/manage", {
       action: "save",
       id: form.id,
       timerCode: form.timerCode,
@@ -278,7 +278,7 @@ const saveTimer = async () => {
 
 const toggleTimer = async (row) => {
   const target = row.status === "ENABLED" ? "DISABLED" : "ENABLED";
-  const data = await request("/dws/service/sys/timers", {
+  const data = await request("/dws/timer/manage", {
     action: "toggle",
     id: row.id,
     status: target,
@@ -294,7 +294,7 @@ const fireTimer = async (row) => {
   } catch (error) {
     return;
   }
-  const data = await request("/dws/service/sys/timers", { action: "fire", timerCode: row.timerCode });
+  const data = await request("/dws/timer/manage", { action: "fire", timerCode: row.timerCode });
   if (!data) return;
   if (data.success) {
     ElMessage.success(`执行成功，耗时 ${data.costMs || 0} ms`);
@@ -313,7 +313,7 @@ const removeTimer = async (row) => {
   } catch (error) {
     return;
   }
-  const data = await request("/dws/service/sys/timers", { action: "remove", id: row.id });
+  const data = await request("/dws/timer/manage", { action: "remove", id: row.id });
   if (!data) return;
   ElMessage.success("定时任务已删除");
   await loadTimers(pageNo.value);
@@ -329,7 +329,7 @@ const openLogs = async (row) => {
 const loadLogs = async (page = 1) => {
   logsLoading.value = true;
   try {
-    const data = await $common.get("/dws/service/sys/timers/logs", {
+    const data = await $common.get("/dws/timer/logs", {
       timerId: logTimerId.value,
       pageNo: page,
       pageSize: logPageSize,

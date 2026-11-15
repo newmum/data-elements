@@ -12,7 +12,7 @@ export function AssetOverviewPage(){
  const nav=useNavigate();const [layer,setLayer]=useState('OVERVIEW'),[department,setDepartment]=useState<string>(),[days,setDays]=useState(30);
  const stats=useAssetQuery('statistics:'+layer+':'+department+':'+days,signal=>assetsApi.get<Stats>('/statistics',{layer,departmentId:department,from:new Date(Date.now()-days*86400000).toISOString(),to:new Date().toISOString()},{signal}));
  const todos=useAssetQuery('overview:todos',signal=>assetsApi.get<WorkbenchPage>('/workbench',{tab:'TODOS',pageNo:1,pageSize:5},{signal}));
- const organizations=useAssetQuery('asset:organizations',async signal=>organizationOptions(await platformApi<unknown>('/sym/org/pageOrg',undefined,{signal})));
+ const organizations=useAssetQuery('asset:organizations',async signal=>organizationOptions(await platformApi<unknown>('/sym/org/page',undefined,{signal})));
  const metrics=stats.data?.metrics??[];const metric=(code:string)=>metrics.find(m=>m.code===code);const value=(code:string)=>metricValue(metric(code));
  const coverage=value('STANDARD_COVERAGE'),quality=value('QUALITY_PASS_RATE');
  const jump=(code:string)=>{

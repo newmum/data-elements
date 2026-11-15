@@ -169,7 +169,7 @@ const activeTab = ref("role");
 
 // ===== 接口配置 =====
 const API = {
-  ROLE_LIST: "/sym/role/pageRole",
+  ROLE_LIST: "/sym/role/page",
 };
 
 const mockUsers: UserItem[] = [

@@ -10,7 +10,7 @@ vm.runInNewContext(await fs.readFile(new URL('data-elements-chengtian/public/bab
 const ast = babel.Babel.transform(script, {ast:true,code:false,configFile:false,babelrc:false,
   parserOpts:{sourceType:'module',plugins:['typescript']}}).ast;
 const names = ['normalizeNumber','firstNumber','firstText','normalizeItem','filterOptions','statusText',
-  'isSystemAdministratorScope','currentScopeLabel'];
+  'datasourceScopeLabel','currentScopeLabel'];
 const routeFilter = ast.program.body.find(node => node.type === 'ExpressionStatement' &&
   node.expression.callee?.name === 'watch' && script.slice(node.start, node.end).includes('route.query.filter'));
 assert.ok(routeFilter);
@@ -18,7 +18,7 @@ const executable = names.map(name => {
   const node=ast.program.body.find(n=>n.type==='VariableDeclaration' && n.declarations.some(d=>d.id.name===name));
   assert.ok(node,name);return script.slice(node.start,node.end);
 }).join('\n')+'\n'+script.slice(routeFilter.start,routeFilter.end)+
-  '\nglobalThis.actual={normalizeItem,filterOptions,statusText,isSystemAdministratorScope,currentScopeLabel};';
+  '\nglobalThis.actual={normalizeItem,filterOptions,statusText,currentScopeLabel};';
 for(const policy of ['ALL','ORG','OWNER']) {
   const state={dataScope:policy};
   const route={path:'/datasource-manage/index',query:{filter:'incomplete',metric:'tableIssues'}};
@@ -34,7 +34,6 @@ for(const policy of ['ALL','ORG','OWNER']) {
   for(const key of ['businessTableNum','dictionaryTableNum','logTableNum']) assert.equal(zero[key],0,'Server zero must override fallback tables');
   const scopeLabel={ALL:'全部部门',ORG:'本部门数据',OWNER:'本人登记数据'}[policy];
   assert.equal(context.actual.currentScopeLabel.value,scopeLabel);
-  assert.equal(context.actual.isSystemAdministratorScope.value,policy==='ALL','Department count must not determine authority');
   assert.deepEqual(Array.from(context.actual.filterOptions, option=>option.label),['全部','待标注','未完成','已完成','有变更']);
   assert.deepEqual([0,1,2].map(assetStatus=>context.actual.statusText({assetStatus,connectionStatus:'failed'})),['待登记','未完成','已完成']);
   assert.equal(state.filter,'incomplete','Legacy workbench links still open the incomplete list');

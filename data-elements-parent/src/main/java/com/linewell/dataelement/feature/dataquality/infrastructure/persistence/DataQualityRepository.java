@@ -308,12 +308,6 @@ public class DataQualityRepository {
 
     public List<Map<String, Object>> datasourceOptions(String tenantId) { return JdbcValueNormalizer.maps(mapper.selectDatasourceOptions(tenantId)); }
     public List<Map<String, Object>> tableOptions(String tenantId, String datasourceId) { return JdbcValueNormalizer.maps(mapper.selectTableOptions(tenantId, datasourceId)); }
-    public List<Map<String, Object>> columnOptions(String tenantId, String tableId) { return JdbcValueNormalizer.maps(mapper.selectColumnOptions(tenantId, tableId)); }
-    public Map<String,List<Map<String,Object>>> columnOptionsBatch(String tenantId,List<String> tableIds){
-        if(tableIds==null||tableIds.isEmpty()||tableIds.size()>50)throw new IllegalArgumentException("一次最多查询 50 张表的字段选项");
-        Set<String> ids=new LinkedHashSet<>();for(String id:tableIds){if(id==null||id.isBlank())throw new IllegalArgumentException("数据表标识不能为空");ids.add(id.trim());}
-        return columnsByTable(tenantId,ids);
-    }
     private Map<String,List<Map<String,Object>>> columnsByTable(String tenantId,Set<String> tableIds){
         Map<String,List<Map<String,Object>>> result=new LinkedHashMap<>();tableIds.forEach(id->result.put(id,new ArrayList<>()));
         for(var row:JdbcValueNormalizer.maps(mapper.selectColumnOptionsBatch(tenantId,List.copyOf(tableIds)))){

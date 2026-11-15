@@ -84,14 +84,6 @@ public class DataQualityApplicationService {
         return repository.tableOptions(tenantId(), datasourceId);
     }
 
-    public List<Map<String, Object>> columns(String tableId) {
-        return repository.columnOptions(tenantId(), tableId);
-    }
-
-    public Map<String,List<Map<String,Object>>> columnsBatch(List<String> tableIds) {
-        return repository.columnOptionsBatch(tenantId(),tableIds);
-    }
-
     private String tenantId() { return TenantContext.requireTenantId(); }
     private String operator() { return StpUtil.isLogin() ? String.valueOf(StpUtil.getLoginId()) : "system"; }
     private int positive(int value) { return Math.max(1, value); }

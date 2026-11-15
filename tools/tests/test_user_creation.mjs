@@ -59,7 +59,7 @@ for (const account of ['中', '中文账号', '0', '123456', 'yh', 'a@b+测试',
 console.log('PASS: unrestricted account characters, short/numeric/Chinese/special accounts, manual/edit account preservation, and one normalized request per save');
 const statusRow = { id: 'validation-member', status: 0, realName: '保留资料', appFileId: 'preserved-avatar' };
 await handleStatusClick(statusRow);
-assert.deepEqual(JSON.parse(JSON.stringify(calls.at(-1))), { route: '/sym/user/saveOrUpdate', payload: { id: 'validation-member', status: 1 } });
+assert.deepEqual(JSON.parse(JSON.stringify(calls.at(-1))), { route: '/sym/user/save', payload: { id: 'validation-member', status: 1 } });
 assert.equal(statusRow.status, 1);
 assert.equal(statusRow.appFileId, 'preserved-avatar');
 assert.equal(statusRow._statusLoading, false);

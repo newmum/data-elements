@@ -22,10 +22,10 @@
   "responseBodyDefinition": null
 }
 ================================
-// 接口：01.已采集元数据目录
-// 路由：POST /dwm/metadata-governance/catalog
-// 业务说明：只读当前租户已采集的表、字段与逻辑关系；不探查源库，不返回连接凭据；涉及 db_datasource_t、db_table_t、db_table_column_t、dwm_metadata_relation_t 等业务表。
 import tenantRuntime
+// POST /dwm/meta/catalog 已采集元数据目录
+// 只读当前租户已采集的表、字段与逻辑关系；不探查源库，不返回连接凭据；涉及 db_datasource_t、db_table_t、db_table_column_t、dwm_metadata_relation_t 等业务表。
+
 var tenantId = tenantRuntime.id()
 // Read-only shared projection. Authoritative tables: db_datasource_t,
 // db_table_t, db_table_column_t and dwm_metadata_relation_t. No source DB probes.

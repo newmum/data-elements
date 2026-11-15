@@ -253,7 +253,7 @@ class FlowServeCanvasReadMagicTest {
                 return helper.execute(new MagicScriptContext(variables));
             };
             var response = (ResponseEntity<?>) endpoint.execute(new MagicScriptContext(
-                    Map.of("readCanvas", readCanvas, "path", path)));
+                    Map.of("readCanvas", readCanvas, "param", path)));
             assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
             return (CommonResponse<?>) response.getBody();
         }

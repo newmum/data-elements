@@ -133,8 +133,8 @@ import { VueDraggable } from "vue-draggable-plus";
 
 // 接口地址
 const API = {
-  LIST: "/sym/org/pageOrg",
-  SAVE_OR_UPDATE: "/sym/org/saveOrUpdate",
+  LIST: "/sym/org/page",
+  SAVE_OR_UPDATE: "/sym/org/save",
   SORT: "/sym/org/sort",
   DETAIL: "/sym/org/detail",
   DELETE: "/sym/org/delete",

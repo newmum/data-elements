@@ -237,7 +237,7 @@ const config = {
     tableNameLabel: "基础表名称",
     sourceCatalogField: "sourceDir",
     keywordField: "catalogOrTableName",
-    listUrl: "/dwm/center/dwd-list",
+    listUrl: "/dwm/layer/dwd",
   },
   dws: {
     treeTitle: "专题库分类",
@@ -246,7 +246,7 @@ const config = {
     tableNameLabel: "服务表名称",
     sourceCatalogField: "sourceCatalogName",
     keywordField: "catalogName",
-    listUrl: "/dwm/center/dws-list",
+    listUrl: "/dwm/layer/dws",
   },
 }[layer];
 

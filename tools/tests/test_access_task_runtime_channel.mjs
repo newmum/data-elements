@@ -85,7 +85,7 @@ for (const variant of variants) {
     };
     await ctx.actual.loadTree();
     assert.deepEqual(treeRequests,[
-      ['/sym/org/getOrgTree',{parentId:'root-org'}],
+      ['/sym/org/tree',{parentId:'root-org'}],
       [variant.tree,{keyword:'',dbType:'',orgIds:['own-org']}],
     ]);
     ctx.$common.post=async(url,body)=>{rejectRequests.push([url,JSON.parse(JSON.stringify(body))]);};

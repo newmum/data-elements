@@ -52,7 +52,7 @@ state.cols = [
 
 const fetchResources=async ({pageNo=1,pageSize=20,sortField,sortDir}={})=> {
  if(!props.catalogId)return {list:[],total:0};
- return await $common.get('/dwm/metadata-governance/catalog-resources/page',{catalogId:props.catalogId,pageNo,pageSize,sortField,sortDir});
+ return await $common.get('/dwm/catalog/resources',{catalogId:props.catalogId,pageNo,pageSize,sortField,sortDir});
 };
 
 state.api = {

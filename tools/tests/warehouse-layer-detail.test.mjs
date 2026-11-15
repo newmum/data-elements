@@ -179,7 +179,7 @@ test("both published identities retain their layer-specific columns and paged qu
       assert.equal(result.total, 100);
       assert.equal(calls.length, before + 1);
       assert.deepEqual(calls.at(-1), {
-        url: "/dwm/center/" + layer + "-list",
+        url: "/dwm/layer/" + layer,
         params: {
           sortField: "catalogName",
           sortDir: "asc",

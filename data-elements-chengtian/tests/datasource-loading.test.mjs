@@ -16,7 +16,7 @@ const { scriptSetupAst } = compileScript(descriptor, { id: 'datasource-loading-t
 const bindings = [
   'SOURCE_PAGE_SIZES', 'sourceCursors', 'state', 'normalizeNumber', 'loadGeneration',
   'sourcePageGeneration', 'loadSourcePage', 'loadOrganizationTree',
-  'loadData', 'getTreeNodeCount', 'filterZeroNodes', 'appendApplicationNodes',
+  'loadData', 'getTreeNodeCount', 'filterZeroNodes', 'appendApplicationNodes', 'manuallyToggledTreeNodes',
   'rebuildTree', 'collectTreeNodeOrgIds', 'findSelectedTreeNode', 'sourceScopePayload',
   'sourcePageFilters', 'sourcePageFilterKey', 'sourcePagePayload', 'isExpanded', 'canExpand',
   'toggleExpand', 'tablePageSize', 'tablePageKey', 'tableLoadState', 'tableTotal',
@@ -70,7 +70,7 @@ const currentReply = (body) => {
 
 test('cards settle without waiting for the organization tree and never request overview metrics', async () => {
   const tree = deferred();
-  const h = harness((body, url) => url.endsWith('/getOrgTree') ? tree.promise : currentReply(body));
+  const h = harness((body, url) => url === '/sym/org/tree' ? tree.promise : currentReply(body));
   const loading = h.loadData();
   await settled();
 
@@ -79,7 +79,7 @@ test('cards settle without waiting for the organization tree and never request o
   assert.deepEqual(h.state.list, [row]);
   assert.deepEqual(h.calls.map(({ url, body }) => [url, body.mode]), [
     ['/dst/db/dept', 'cards'],
-    ['/sym/org/getOrgTree', undefined],
+    ['/sym/org/tree', undefined],
     ['/dst/db/stats', 'facets'],
   ]);
 
@@ -89,7 +89,7 @@ test('cards settle without waiting for the organization tree and never request o
 
 test('tree failure does not clear successful cards', async () => {
   const h = harness((body, url) => {
-    if (url.endsWith('/getOrgTree')) throw new Error('tree down');
+    if (url === '/sym/org/tree') throw new Error('tree down');
     return currentReply(body);
   });
   await h.loadData();

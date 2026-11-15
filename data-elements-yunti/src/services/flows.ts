@@ -18,7 +18,7 @@ export function useFlows() {
 export function useFlow(id: string | undefined) {
   return useQuery({
     queryKey: flowKeys.detail(id ?? ''),
-    queryFn: () => request<FlowDetail>('GET', `/flows/${id}`),
+    queryFn: () => request<FlowDetail>('GET', `/detail?id=${encodeURIComponent(id ?? '')}`),
     enabled: !!id,
     retry: (attempt, error) => attempt < 1 && (!(error instanceof ApiClientError) || error.code === 0 || error.code === 408 || error.code === 429 || error.code >= 500),
   });
@@ -36,7 +36,7 @@ export function useSaveFlow() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (vars: { id: string; flow: Flow; lockVersion: number }) =>
-      request<{ lockVersion: number }>('PUT', `/flows/${vars.id}`, {
+      request<{ lockVersion: number }>('PUT', `/draft?id=${encodeURIComponent(vars.id)}`, {
         flow: vars.flow,
         lockVersion: vars.lockVersion,
       }),
@@ -83,7 +83,7 @@ export function useDebug() {
       if (!result.ok) {
         throw new Error(result.problems.map((item) => item.message).join('\n') || '流程编译失败');
       }
-      return request<DebugResult>('POST', `/flows/${flow.flowId}/debug`, {
+      return request<DebugResult>('POST', `/debug?id=${encodeURIComponent(flow.flowId)}`, {
         flow,
         input,
       });
@@ -95,7 +95,7 @@ export function usePublish() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (vars: { id: string; lockVersion: number; remark: string; targetNodeId?: string }) => {
-      return request<PublishResult>('POST', `/flows/${vars.id}/publish`, {
+      return request<PublishResult>('POST', `/publish?id=${encodeURIComponent(vars.id)}`, {
         remark: vars.remark,
         targetNodeId: vars.targetNodeId,
         lockVersion: vars.lockVersion,
@@ -115,7 +115,7 @@ export function useRegisteredServices(enabled: boolean, keyword: string) {
     enabled,
     queryFn: async () => {
       const data = await request<{ list: Array<{ id: string; serviceName: string; method: string; uri: string; upstreamAddress?: string }> }>(
-        'POST', '/gateway/api/list', { pageNum: 1, pageSize: 30, keyword },
+        'POST', '/services', { pageNum: 1, pageSize: 30, keyword },
       );
       return data.list.filter((row) => row.upstreamAddress || row.uri);
     },
@@ -125,7 +125,7 @@ export function useRegisteredServices(enabled: boolean, keyword: string) {
 export function useVersions(id: string | undefined) {
   return useQuery({
     queryKey: flowKeys.versions(id ?? ''),
-    queryFn: () => request<FlowVersion[]>('GET', `/flows/${id}/versions`),
+    queryFn: () => request<FlowVersion[]>('GET', `/versions?id=${encodeURIComponent(id ?? '')}`),
     enabled: !!id,
   });
 }
@@ -144,7 +144,7 @@ export function useRollback() {
 export function useOffline() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => request<{ status: string }>('POST', `/flows/${id}/offline`),
+    mutationFn: (id: string) => request<{ status: string }>('POST', `/offline?id=${encodeURIComponent(id)}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: flowKeys.all }),
   });
 }

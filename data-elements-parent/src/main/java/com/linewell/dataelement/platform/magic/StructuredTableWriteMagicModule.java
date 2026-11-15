@@ -87,6 +87,19 @@ public class StructuredTableWriteMagicModule {
         return lockMatchingRows(target, tenantId, projection, filters, key, keys.size());
     }
 
+    @Comment("在当前租户事务中按明确条件有界锁定记录，按唯一键排序")
+    public List<Map<String, Object>> lockByFilter(String table, String tenantId, String orderColumn,
+            List<String> projection, Map<String, ?> conditions, int maximumRows) {
+        requireTenant(tenantId);
+        if (conditions.isEmpty() || maximumRows < 1 || maximumRows > MAX_IN_VALUES) {
+            throw new IllegalArgumentException("批量行锁必须指定筛选条件和有效上限");
+        }
+        var filters = tenantFilters(tenantId, conditions, Set.of());
+        validateJdbcFilters(filters);
+        return lockMatchingRows(identifier(table), tenantId, columns(projection), filters,
+                identifier(orderColumn), maximumRows);
+    }
+
     private List<Map<String, Object>> lockMatchingRows(String target, String tenantId, List<String> projection,
             Map<String, Object> filters, String orderColumn, int maximumRows) {
         return inTransaction(tenantId, (connection, quote) -> {
@@ -96,6 +109,7 @@ public class StructuredTableWriteMagicModule {
             String sql = "SELECT " + fields + " FROM " + quoted(quote, target) + " WHERE "
                     + where(quote, filters, arguments) + order + " FOR UPDATE";
             try (var statement = connection.prepareStatement(sql)) {
+                statement.setMaxRows(maximumRows + 1);
                 prepare(statement, arguments);
                 try (var rows = statement.executeQuery()) {
                     var result = new ArrayList<Map<String, Object>>();

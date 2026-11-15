@@ -4,6 +4,7 @@ import "@/utils/platformSessionChannel";
 
 const allowed = new Set([
   "GET /portal/sso/session",
+  "POST /sym/org/tree",
   "POST /sym/org/getOrgTree",
   "POST /dst/db/stats",
   "POST /dst/db/srcdetail",

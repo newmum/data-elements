@@ -14,7 +14,7 @@
 <script setup>
 import { ref } from "vue";
 import { ElMessage } from "element-plus";
-const API = { SAVE_ROLE_RESOURCE: "/sym/auth/saveRoleResource", GET_ROLE_RESOURCE: "/sym/auth/getRoleResource" };
+const API = { SAVE_ROLE_RESOURCE: "/sym/auth/save", GET_ROLE_RESOURCE: "/sym/auth/detail" };
 const selectedSubject = ref(null), permTreeRef = ref(), saveLoading = ref(false), resourceLoading = ref(false);
 let resourceRequestId = 0;
 const handleSubjectSelect = (subject) => { selectedSubject.value = subject; permTreeRef.value?.setCheckedPermissions?.([]); loadRoleResources(); };

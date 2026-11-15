@@ -9,7 +9,7 @@
   "lock": null,
   "createBy": null,
   "updateBy": null,
-  "path": "/standard-class-list",
+  "path": "/tree",
   "method": "POST",
   "parameters": [],
   "options": [],
@@ -22,12 +22,12 @@
   "responseBodyDefinition": null
 }
 ================================
-// 接口：01.标准目录树
-// 路由：POST /dwm/standard/standard-class-list
-// 业务说明：标准目录树：为数据元和标准代码页面提供统一分类树；使用请求参数 tid；涉及 sym_dict_t 等业务表。
+// POST /dwm/standard/tree 标准目录树
+// 标准目录树：为数据元和标准代码页面提供统一分类树；使用请求参数 tid；涉及 sym_dict_t 等业务表。
 // 标准目录树：为数据元和标准代码页面提供统一分类树。
 // 只读 sym_dict_t 中 biz_type=standard_class、is_del=0 的记录，不修改业务数据。
 // 返回以 tid=0 为根节点的树；空目录安全返回空数组。
+
 var tid = body?.tid ? body?.tid : query?.tid
 var isDel = 0
 

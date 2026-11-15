@@ -5,7 +5,7 @@ import { listModelViews } from './metadataViews';
 import { qualityApi } from './quality';
 /** Dashboard projections use the same authoritative services as their destination menus. */
 export async function overviewSummary(signal?:AbortSignal):Promise<Row>{
- const [summary,quality]=await Promise.all([platformApi<Row>('/dwm/metadata-governance/summary',{}, {signal}),qualityApi.summary(signal)]);
+ const [summary,quality]=await Promise.all([platformApi<Row>('/dwm/meta/summary',{}, {signal}),qualityApi.summary(signal)]);
  return {...summary,models:listModelViews().length,issues:quality.violation_total};
 }
 export async function overviewDetails(signal?:AbortSignal):Promise<Row[][]>{

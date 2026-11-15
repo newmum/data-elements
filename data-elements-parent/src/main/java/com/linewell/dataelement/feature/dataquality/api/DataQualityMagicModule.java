@@ -107,13 +107,4 @@ public class DataQualityMagicModule {
         return service.tables(datasourceId);
     }
 
-    @Comment("读取登记表字段")
-    public List<Map<String, Object>> columns(String tableId) {
-        return service.columns(tableId);
-    }
-
-    @Comment("批量读取当前租户至多 50 张有效数据表的字段，按 tableId 分组")
-    public Map<String,List<Map<String,Object>>> columnsBatch(List<String> tableIds) {
-        return service.columnsBatch(tableIds);
-    }
 }

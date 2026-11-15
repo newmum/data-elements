@@ -96,9 +96,9 @@ import { VueDraggable } from "vue-draggable-plus";
 // 接口地址
 const API = {
   MENU_LIST: "/sym/menu/all",
-  SAVE_OR_UPDATE: "/sym/menu/saveOrUpdate",
+  SAVE_OR_UPDATE: "/sym/menu/save",
   DELETE: "/sym/menu/delete",
-  TOGGLE_STATUS: "/sym/menu/toggleStatus",
+  TOGGLE_STATUS: "/sym/menu/state",
   SORT: "/sym/menu/sort",
   GET_ROLE_SCOPE: "/sym/scope/role",
   SAVE_ROLE_SCOPE: "/sym/scope/save",

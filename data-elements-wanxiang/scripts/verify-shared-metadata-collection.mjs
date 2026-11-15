@@ -14,7 +14,7 @@ const response=await fetch(base+'/portal/sso/login',{method:'POST',headers:{'Con
 assert.equal(response.code,0);assert(response.data?.token);
 const headers={'Content-Type':'application/json',token:response.data.token};
 async function call(route,body){const http=await fetch(base+route,{method:body===undefined?'GET':'POST',headers,...(body===undefined?{}:{body:JSON.stringify(body)}),signal:AbortSignal.timeout(60000)});assert(http.ok,'HTTP '+http.status+' '+route);const envelope=await http.json();assert([0,200].includes(envelope.code??0),route+': '+String(envelope.message||envelope.msg||envelope.error||''));return 'data'in envelope?envelope.data:envelope;}
-const before=await call('/dwm/metadata-governance/catalog',{}),count=r=>['sources','tables','columns','relations'].map(k=>r[k].length);
+const before=await call('/dwm/meta/catalog',{}),count=r=>['sources','tables','columns','relations'].map(k=>r[k].length);
 const user=await call('/sym/user/me',{}),tenant=await call('/portal/sso/session');
 const folder=join(tmpdir(),'wx-metadata-physical-'+key);await mkdir(folder);
 const record=value=>writeFile(join(folder,'verification.json'),JSON.stringify(value,null,2));
@@ -25,10 +25,10 @@ try{
  sourceId=(await call('/dst/db/srcsave',{assetType:'db',deferIndexRefresh:true,propList:props})).tid;assert(sourceId);await record({sourceId,tenant:tenant.tid,before:count(before)});
  assert.equal((await call('/dst/db/srctest',{tid:sourceId})).connected,true);
  const initial=await collect('INITIAL');assert(Number(initial.persistedCount)>0);
- let catalog=await call('/dwm/metadata-governance/catalog',{});const tables=catalog.tables.filter(t=>String(t.datasource_id??t.datasourceId)===sourceId);assert(tables.length>0);tableCount=tables.length;
+ let catalog=await call('/dwm/meta/catalog',{});const tables=catalog.tables.filter(t=>String(t.datasource_id??t.datasourceId)===sourceId);assert(tables.length>0);tableCount=tables.length;
  await call('/dst/db/collect',{tableId:tables[0].tid});
- catalog=await call('/dwm/metadata-governance/catalog',{});const tableIds=new Set(tables.map(t=>String(t.tid)));columnCount=catalog.columns.filter(c=>tableIds.has(String(c.table_id??c.tableId))).length;assert(columnCount>0,'Collected fields must be visible in the shared snapshot');
- await collect('REFRESH');catalog=await call('/dwm/metadata-governance/catalog',{});assert.equal(catalog.tables.filter(t=>String(t.datasource_id??t.datasourceId)===sourceId).length,tableCount,'Recollection must not duplicate source tables');
+ catalog=await call('/dwm/meta/catalog',{});const tableIds=new Set(tables.map(t=>String(t.tid)));columnCount=catalog.columns.filter(c=>tableIds.has(String(c.table_id??c.tableId))).length;assert(columnCount>0,'Collected fields must be visible in the shared snapshot');
+ await collect('REFRESH');catalog=await call('/dwm/meta/catalog',{});assert.equal(catalog.tables.filter(t=>String(t.datasource_id??t.datasourceId)===sourceId).length,tableCount,'Recollection must not duplicate source tables');
  console.log(JSON.stringify({tenant:tenant.name,connection:true,initialCollection:true,fieldCollection:true,recollection:true,tableCount,columnCount,verification:folder}));
 }catch(error){failure=String(error.message);throw error;}
 finally{
@@ -38,5 +38,5 @@ finally{
   const detail=await call('/dst/db/srcdetail',{tid:sourceId});assert(!detail.password&&!detail.jdbcURL&&!detail.host,'Temporary connection must be removed before soft deletion');
   await call('/dst/db/srcdel',{tid:sourceId,dryRun:true});await call('/dst/db/srcdel',{tid:sourceId});
  }
- const after=await call('/dwm/metadata-governance/catalog',{});assert.deepEqual(count(after),count(before));await record({sourceId,tenant:tenant.tid,before:count(before),after:count(after),tableCount,columnCount,failure,cleaned:true});console.log('Physical collection fixtures and credentials cleared; pre-existing metadata preserved.');
+ const after=await call('/dwm/meta/catalog',{});assert.deepEqual(count(after),count(before));await record({sourceId,tenant:tenant.tid,before:count(before),after:count(after),tableCount,columnCount,failure,cleaned:true});console.log('Physical collection fixtures and credentials cleared; pre-existing metadata preserved.');
 }

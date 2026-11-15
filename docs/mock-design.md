@@ -105,7 +105,7 @@ python tools/export-mock-config.py --with-structure --check
 | 能力 | 原有方法和路由 | 关键参数／结果 |
 | --- | --- | --- |
 | 当前租户 | `GET /portal/sso/session` | 当前模拟会话租户 |
-| 组织树 | `POST /sym/org/getOrgTree` | 实际机构层级 |
+| 组织树 | `POST /sym/org/tree` | 当前模拟租户实际机构层级，按选定父节点返回子树 |
 | 组织下的数据源 | `POST /dst/db/stats` | `mode=tree`，复用 `orgApps/datasources`，风驰展示时省去应用层 |
 | 数据源详情 | `POST /dst/db/srcdetail` | `tid`，复用数据源名称和数据库名 |
 | 表／视图目录 | `GET /dst/db/tables` | `dbId`，保留同一表 ID 和对象类型 |

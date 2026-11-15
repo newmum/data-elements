@@ -20,13 +20,13 @@ test('directory editor loads governed detail and existing item contract in its s
   const items = [{ colName: '标识', colEn: 'id', colType: 'VARCHAR' }];
   context.mock.method(globalThis, 'fetch', async (path, options) => {
     requests.push({ path, method: options.method, body: JSON.parse(options.body) });
-    return Response.json({ code: 200, data: path === '/dev-api/dwm/center/command' ? detail : items });
+    return Response.json({ code: 200, data: path === '/dev-api/dwm/ops/command' ? detail : items });
   });
 
   assert.deepEqual(await loadDirectory('validation-catalog'), { detail, items });
   assert.deepEqual(requests, [
     {
-      path: '/dev-api/dwm/center/command', method: 'POST',
+      path: '/dev-api/dwm/ops/command', method: 'POST',
       body: { kind: 'catalogs', method: 'GET', action: 'directory-detail', id: 'validation-catalog' },
     },
     {

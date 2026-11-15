@@ -320,7 +320,7 @@ const statusTagType = (status) => {
 const loadGroups = async () => {
   groupLoading.value = true;
   try {
-    const res = await $common.post("/dws/flowserve/gateway/group/list", {departmentOnly:true});
+    const res = await $common.post("/dws/gategroup/list", {departmentOnly:true});
     const data = extractPayload(res);
     const children = data.children || data.list || [];
     const rootCount = Number(data.total || children.reduce((sum, item) => sum + Number(item.count || 0), 0));
@@ -335,7 +335,7 @@ const loadGroups = async () => {
 };
 
 const fetchServices = async ({ pageNo = 1, pageSize = 20, sortField = undefined, sortDir = undefined } = {}) => {
-  const res = await $common.post("/dws/flowserve/gateway/api/list", {
+  const res = await $common.post("/dws/flowserve/services", {
     departmentOnly: true,
     pageNum: pageNo,
     pageSize,sortField,sortDir,
@@ -373,7 +373,7 @@ const saveFlowDraft = async () => {
   }
   flowDraftSaving.value = true;
   try {
-    const saved = extractPayload(await $common.post("/dws/flowserve/gateway/save", {
+    const saved = extractPayload(await $common.post("/dws/gateway/save", {
       id: flowDraft.id, name: flowDraft.name, serviceCode: flowDraft.code,
       serviceCreateType: "flow", groupId: flowDraft.groupId, providerConfig: {}, publishConfig: {},
     }));
@@ -397,7 +397,7 @@ const copyPublishAddress = async (address) => {
 const loadApiDetail = async (row) => {
   const apiId = row?.id || row?.tid;
   if (!apiId) return { ...(row || {}) };
-  const response = await $common.post("/dws/flowserve/gateway/api/detail", { apiId });
+  const response = await $common.post("/dws/flowserve/service", { apiId });
   return normalizeServiceRow({ ...row, ...extractPayload(response) });
 };
 const openGroupCreate = () => {
@@ -418,7 +418,7 @@ const saveGroup = async () => {
     ElMessage.warning("请填写分组名称");
     return;
   }
-  await $common.post("/dws/flowserve/gateway/group/save", { ...groupForm });
+  await $common.post("/dws/gategroup/save", { ...groupForm });
   ElMessage.success("保存成功");
   groupDialogVisible.value = false;
   await loadGroups();
@@ -429,7 +429,7 @@ const deleteGroup = async (row) => {
     confirmButtonText: "删除",
     cancelButtonText: "取消",
   });
-  await $common.post("/dws/flowserve/gateway/group/delete", { id: row.id });
+  await $common.post("/dws/gategroup/delete", { id: row.id });
   ElMessage.success("删除成功");
   if (currentGroup.value?.id === row.id) {
     currentGroup.value = { id: "", name: "全部" };
@@ -645,7 +645,7 @@ const openOrchestration = async (row) => {
   }
   // The explicit user action creates at most one authorized draft; listing rows never does.
   try {
-    const response = await $common.postSilently('/dws/flowserve/gateway/orchestration/open', {apiId}, {}, 20000);
+    const response = await $common.postSilently('/dws/gateway/open', {apiId}, {}, 20000);
     if (currentAttempt !== orchestrationAttempt || !orchestrationVisible.value) return;
     const opened = extractPayload(response);
     if (!opened.flowId) throw new Error('未能读取当前服务的编排流程，请重新加载');
@@ -691,7 +691,7 @@ const handleDelete = async (row) => {
     confirmButtonText: "删除",
     cancelButtonText: "取消",
   });
-  await $common.post("/dws/flowserve/gateway/delete", { apiId: row.id || row.tid });
+  await $common.post("/dws/gateway/delete", { apiId: row.id || row.tid });
   ElMessage.success("删除成功");
   await Promise.all([loadGroups(), tableRef.value?.refresh?.()]);
 };

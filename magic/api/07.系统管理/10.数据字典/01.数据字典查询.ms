@@ -117,7 +117,7 @@
 ================================
 import "@post:/dst/db/srclist" as databaseList;
 import "@post:/dst/catalog/list" as assetList;
-import "@post:/sym/org/getOrgTree" as ssoOrg;
+import "@post:/sym/org/tree" as ssoOrg;
 import "@post:/sym/dict/tree" as getDict;
 import "@post:/sym/user/me" as me;
 import '@/common/configData' as configData

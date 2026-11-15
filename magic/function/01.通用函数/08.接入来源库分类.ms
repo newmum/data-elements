@@ -12,10 +12,11 @@
 ================================
 import tenantRuntime
 import tableRead
+import cn.hutool.json.JSONUtil
 
 /**
  * 构造当前租户的 ODS 来源库分类查询。无需调用参数。
- * 返回 {query, projection, groups}，分组键 source_id 是绑定的数据源标识。
+ * 返回 ODS 绑定分组查询及直接抽取文件源的判断函数。
  * 调用方可直接按组读取，或将结果关联到候选数据源查询。
  * 仅构造查询，执行和后续数据范围校验由调用方负责。
  */
@@ -62,4 +63,18 @@ query.where(tableRead.all([
     tableRead.not(tableRead.isNull(sourceId)),
     tableRead.not(tableRead.isNull(rootId))
 ]))
-return { query: query, projection: { source_id: sourceId }, groups: [sourceId] }
+
+// FTP/SFTP 可同时作为 ODS 落地存储和已独立登记的直接抽取来源。
+// 仅使用调用方从当前租户主表取得的连接类型与登记方式。
+var isDirectFileSource = (row) => {
+    var type = (row.dbType || row.db_type || '').trim().toLowerCase()
+    if (!['ftp', 'ftps', 'sftp'].contains(type)) { return false }
+    try {
+        var pool = JSONUtil.parseObj(row.poolCfg || row.pool_cfg || '{}')
+        var mode = (pool.accessMode || pool.dataAccessMode || '').trim().toLowerCase()
+        return ['explore', 'extract', 'extraction'].contains(mode)
+    } catch (invalidConfig) {
+        return false
+    }
+}
+return { query: query, projection: { source_id: sourceId }, groups: [sourceId], isDirectFileSource: isDirectFileSource }

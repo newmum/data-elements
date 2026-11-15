@@ -128,7 +128,7 @@ const suggestList = ref<any[]>([]);
 // 获取常用意见列表
 const fetchSuggestList = async () => {
   try {
-      const response = await $common.get("/sym/approval/query/suggestionList");
+      const response = await $common.get("/sym/suggestion/list");
     const data = response.data || response;
     suggestList.value = data || [];
   } catch (error) {
@@ -209,7 +209,7 @@ watch(
 // 获取驳回节点列表
 const fetchRejectNodes = async () => {
   try {
-      const response = await $common.post("/sym/approval/operate/previousNodeList", {
+      const response = await $common.post("/sym/approval/previous", {
       definitionId: props.info.definitionId,
       nodeCode: props.info.nodeCode,
     });
@@ -254,7 +254,7 @@ const delSuggest = (tid: string) => {
     .then(async () => {
       try {
         // 调用删除接口
-          await $common.post("/sym/approval/query/deleteSuggestion", {
+          await $common.post("/sym/suggestion/delete", {
           tid,
         });
         const index = suggestList.value.findIndex((item) => item.tid === tid);
@@ -305,7 +305,7 @@ const handleSubmit = async () => {
     }
 
     // 发送审批请求
-      await $common.post("/sym/approval/operate/handle", requestData);
+      await $common.post("/sym/approval/handle", requestData);
     ElMessage.success("审批提交成功");
     visible.value = false;
     // 触发成功事件，通知父组件刷新数据

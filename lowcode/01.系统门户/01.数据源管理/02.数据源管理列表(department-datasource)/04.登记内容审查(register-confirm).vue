@@ -4143,7 +4143,7 @@ async function finish() {
   if (isProxyAccess.value) {
     // 完成核验独立于表格搜索和请求版本，避免筛选无结果或表格重载影响真实服务数量。
     const datasourceId = sourceTid.value;
-    const result = await $common.post("/dws/flowserve/gateway/api/list", {datasourceId,pageNum:1,pageSize:1,keyword:""});
+    const result = await $common.post("/dws/flowserve/services", {datasourceId,pageNum:1,pageSize:1,keyword:""});
     if (datasourceId !== sourceTid.value) throw new Error("数据源已切换，请重新确认登记信息");
     const payload = result?.data || result || {};
     if (!Number(payload.total || 0)) throw new Error("请返回第一步登记至少一项数据服务，再结束登记");

@@ -263,7 +263,7 @@ const loadServices = async (nextPage = 1, requestedSize = pageSize) => {
   listError.value = "";
   try {
     const payload = payloadOf(
-      await $common.post("/dws/flowserve/gateway/api/list", {
+      await $common.post("/dws/flowserve/services", {
         departmentOnly: !props.datasourceId,
         datasourceId: props.datasourceId || undefined,
         serviceCreateType: "api",
@@ -361,7 +361,7 @@ const selectService = async (service: ServiceItem) => {
     await captureCurrent();
     // 详情仅由用户主动点击读取，列表加载不逐条补查。
     const detail = payloadOf(
-      await $common.post("/dws/flowserve/gateway/api/detail", {
+      await $common.post("/dws/flowserve/service", {
         apiId: service.id,
         datasourceId: props.datasourceId || undefined,
       }),

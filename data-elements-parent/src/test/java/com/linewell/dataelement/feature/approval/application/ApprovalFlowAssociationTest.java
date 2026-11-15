@@ -14,18 +14,30 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.linewell.dataelement.dataassets.base.mapper.DataApplyFormTMapper;
 import com.linewell.dataelement.dataassets.base.service.IDataApplyFormTService;
 import com.linewell.dataelement.elasticsearch.EsCommonService;
+import com.linewell.dataelement.feature.approval.api.ApprovalFlowMagicModule;
 import com.linewell.dataelement.feature.approval.domain.ApprovalEngineModels.EngineInstance;
 import com.linewell.dataelement.feature.approval.domain.ApprovalEngineModels.StartCommand;
 import com.linewell.dataelement.feature.approval.infrastructure.persistence.service.IFlowSuggestionService;
+import com.linewell.dataelement.feature.approval.infrastructure.magic.MagicApprovalLifecycleAdapter;
+import com.linewell.dataelement.feature.approval.infrastructure.warmflow.listener.CustomGlobalListener;
 import com.linewell.dataelement.feature.assetcenter.application.AssetCenterApprovalBridge;
 import com.linewell.dataelement.feature.delivery.application.ResourceDeliveryService;
 import com.linewell.dataelement.feature.identity.application.IdentityUserLookupService;
 import com.linewell.dataelement.model.approval.ApprovalCallbackRequest;
 import com.linewell.dataelement.model.approval.ApprovalStartRequest;
+import com.linewell.dataelement.platform.magic.CanonicalMagicSources;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import org.dromara.warm.flow.core.entity.Instance;
+import org.dromara.warm.flow.core.entity.Node;
+import org.dromara.warm.flow.core.listener.ListenerVariable;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.ssssssss.magicapi.core.service.MagicAPIService;
+import org.ssssssss.script.MagicScript;
+import org.ssssssss.script.MagicScriptContext;
+import org.ssssssss.script.runtime.ExitValue;
 
 class ApprovalFlowAssociationTest {
     private final ApprovalEnginePort engine = mock(ApprovalEnginePort.class);
@@ -94,5 +106,45 @@ class ApprovalFlowAssociationTest {
         verify(search).saveOrUpdate("dataassets_apply_form", "form", "{\"flowStatus\":2}", true);
         verify(delivery).completeApprovedApplication("form");
         verifyNoInteractions(bridge);
+    }
+
+    @Test void warmFlowFinishesThroughShortRouteUsingTheEngineBusinessId() throws Exception {
+        var api = mock(MagicAPIService.class);
+        var listener = new CustomGlobalListener(new MagicApprovalLifecycleAdapter(api));
+        var instance = mock(Instance.class);
+        var node = mock(Node.class);
+        var event = mock(ListenerVariable.class);
+        when(instance.getBusinessId()).thenReturn("form");
+        when(node.getNodeCode()).thenReturn("end");
+        when(event.getInstance()).thenReturn(instance);
+        when(event.getNextNodes()).thenReturn(List.of(node));
+        when(event.getVariable()).thenReturn(Map.of("businessId", "untrusted-form",
+                "approveType", "haoyueSubscription", "handleType", "PASS"));
+        when(associations.load("form")).thenReturn(business);
+        var magic = new ApprovalFlowMagicModule(service, new ObjectMapper());
+        var script = MagicScript.create(CanonicalMagicSources.byId("c30f3718868148ce84e65217f49a7720")
+                .replaceFirst("(?m)^import approvalFlow\\R", ""), null);
+        when(api.execute(org.mockito.ArgumentMatchers.eq("POST"),
+                org.mockito.ArgumentMatchers.eq("/sym/approval/finish"), any())).thenAnswer(call -> {
+                    var input = Map.<String, Object>of("approvalFlow", magic, "engineEvent",
+                            ((Map<?, ?>) call.getArgument(2)).get("engineEvent"));
+                    assertThat(script.execute(new MagicScriptContext(input))).isEqualTo(true);
+                    return true;
+                });
+
+        var forged = script.execute(new MagicScriptContext(Map.of("approvalFlow", magic,
+                "engineEvent", Map.of("businessId", "form", "handleType", "PASS"))));
+        assertThat(forged).isInstanceOf(ExitValue.class);
+        assertThat(((ExitValue) forged).getValues()[0]).isEqualTo(403);
+        verifyNoInteractions(associations, bridge);
+
+        when(event.getVariable()).thenReturn(Map.of("approveType", "checkIn"));
+        listener.finish(event);
+        verifyNoInteractions(api, associations, bridge);
+        when(event.getVariable()).thenReturn(Map.of("businessId", "untrusted-form",
+                "approveType", "haoyueSubscription", "handleType", "PASS"));
+        listener.finish(event);
+        verify(associations).load("form");
+        verify(bridge).complete("haoyueSubscription", "form", 2);
     }
 }

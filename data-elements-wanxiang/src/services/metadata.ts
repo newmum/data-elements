@@ -34,50 +34,50 @@ export async function readMetadata(signal?:AbortSignal,force=false):Promise<Live
  const epoch=generation;
  if(!pending||pending.scope!==scope||pending.generation!==epoch){
   const request={scope,generation:epoch,promise:Promise.resolve(null as unknown as LiveMetadataCatalog)};
-  request.promise=platformApi('/dwm/metadata-governance/catalog',{}, {timeoutMs:60000}).then(raw=>{const value=normalizeMetadata(raw);if(metadataScope()!==scope)throw new Error('登录上下文已切换，请重新加载元数据');if(generation===epoch)cache={scope,at:Date.now(),value};return value;}).finally(()=>{if(pending===request)pending=undefined;});pending=request;
+  request.promise=platformApi('/dwm/meta/catalog',{}, {timeoutMs:60000}).then(raw=>{const value=normalizeMetadata(raw);if(metadataScope()!==scope)throw new Error('登录上下文已切换，请重新加载元数据');if(generation===epoch)cache={scope,at:Date.now(),value};return value;}).finally(()=>{if(pending===request)pending=undefined;});pending=request;
  }
  const promise=pending.promise;if(!signal)return promise;
  return new Promise((resolve,reject)=>{const abort=()=>reject(signal.reason||new DOMException('Aborted','AbortError'));signal.addEventListener('abort',abort,{once:true});promise.then(resolve,reject).finally(()=>signal.removeEventListener('abort',abort));});
 }
 export async function readMetadataScope(signal?:AbortSignal):Promise<{organizations:SourceOption[];applications:SourceOption[];sources:LiveMetadataSource[]}>{
- const [catalog,orgs,apps,sourceRows]=await Promise.all([readMetadata(signal),platformApi('/sym/org/getOrgTree',{parentId:'ROOT'},{signal}),platformApi('/dst/application/list',{}, {signal}),listSources(signal)]);
+ const [catalog,orgs,apps,sourceRows]=await Promise.all([readMetadata(signal),platformApi('/sym/org/tree',{parentId:'ROOT'},{signal}),platformApi('/dst/application/list',{}, {signal}),listSources(signal)]);
  const byId=new Map(sourceRows.map(r=>[r.id,r]));const sources=catalog.sources.map(s=>{const r=byId.get(s.tid);return {...s,org_id:s.org_id||r?.orgId||'',org_name:r?.orgName||s.org_name||'',app_id:s.app_id||r?.appId||'',app_name:r?.businessSystem||s.app_name||''};});
  return {sources,organizations:organizationOptions(orgs),applications:sourceOptions(apps)};
 }
 /** Lightweight catalog scope: the table browser must not load the full ER/field snapshot. */
 export async function readCatalogScope(signal?:AbortSignal):Promise<{organizations:SourceOption[];applications:SourceOption[];sources:LiveMetadataSource[]}>{
- const [orgs,apps,sourceRows]=await Promise.all([platformApi('/sym/org/getOrgTree',{parentId:'ROOT'},{signal}),platformApi('/dst/application/list',{}, {signal}),listSources(signal)]);
+ const [orgs,apps,sourceRows]=await Promise.all([platformApi('/sym/org/tree',{parentId:'ROOT'},{signal}),platformApi('/dst/application/list',{}, {signal}),listSources(signal)]);
  const applications=sourceOptions(apps),appNames=new Map(applications.map(app=>[app.value,app.label]));
  return {sources:sourceRows.map(r=>({tid:String(r.id),db_name:String(r.name||''),db_type:String(r.backendType||r.engine||''),org_id:String(r.orgId||''),org_name:String(r.orgName||''),app_id:String(r.appId||''),app_name:String(r.businessSystem||appNames.get(String(r.appId||''))||'')})),organizations:organizationOptions(orgs),applications};
 }
 export type CatalogTablesPage = {rows:LiveMetadataTable[];catalogs:{tid:string;catalogName:string;catalogNameEn:string;assetDesc:string;sourceTableId:string;dbId:string}[];total:number;page:number;size:number};
 export async function readCatalogTablesPage(sourceIds:string[]|undefined,kind:string|undefined,keyword:string,page:number,size:number,signal?:AbortSignal,tableId?:string,sort:ServerSort={}):Promise<CatalogTablesPage>{
  const query={sourceIds:sourceIds?.join(','),kind,keyword,pageNo:page,pageSize:size,tableId,...sort};
- const raw=await platformApiGet<Row>('/dwm/metadata-governance/tables/page',query,{signal});
+ const raw=await platformApiGet<Row>('/dwm/catalog/tables',query,{signal});
  signal?.throwIfAborted();
  if(!Array.isArray(raw?.rows)||!Array.isArray(raw?.catalogs)||!Number.isFinite(Number(raw.total)))throw new Error('数据表分页返回格式不正确');
  return {rows:raw.rows.map((r:Row)=>snake(r) as LiveMetadataTable),catalogs:raw.catalogs.map((r:Row)=>{const c=snake(r);return {tid:String(c.tid),catalogName:String(c.catalog_name||''),catalogNameEn:String(c.catalog_name_en||''),assetDesc:String(c.asset_desc||''),sourceTableId:String(c.source_table_id||''),dbId:String(c.db_id||'')};}),total:Number(raw.total),page:Number(raw.pageNo||page),size:Number(raw.pageSize||size)};
 }
 export async function catalogTableColumns(tableId:string,sort:ServerSort={}):Promise<Row[]>{
- const raw=await platformApiGet<unknown>('/dwm/metadata-governance/tables/columns',{tableId,...sort});
+ const raw=await platformApiGet<unknown>('/dwm/column/list',{tableId,...sort});
  if(!Array.isArray(raw))throw new Error('数据表字段返回格式不正确');
  return raw.map((r:Row)=>snake(r));
 }
 export async function catalogColumnsPage(tableId:string,page:number,size:number,sort:ServerSort={}):Promise<{list:Row[];total:number}>{
- const raw=await platformApiGet<{list:Row[];total:number}>('/dwm/metadata-governance/tables/columns/page',{tableId,page,size,...sort});
+ const raw=await platformApiGet<{list:Row[];total:number}>('/dwm/column/page',{tableId,page,size,...sort});
  if(!Array.isArray(raw.list))throw new Error('字段分页返回格式不正确');return {list:raw.list.map(r=>snake(r)),total:Number(raw.total)};
 }
 export async function catalogColumnsBatch(tableIds:string[]):Promise<Record<string,Row[]>>{
  const ids=[...new Set(tableIds)];if(!ids.length||ids.length>100)throw new Error('每批请选择 1 至 100 张表');
- const result=await platformApi<Record<string,Row[]>>('/dwm/metadata-governance/tables/columns/batch',{tableIds:ids});
+ const result=await platformApi<Record<string,Row[]>>('/dwm/column/batch',{tableIds:ids});
  if(Object.keys(result).some(id=>!ids.includes(id))||ids.some(id=>!Array.isArray(result[id])))throw new Error('字段批量结果不完整或超出请求范围');
  return Object.fromEntries(ids.map(id=>[id,result[id].map(r=>snake(r))]));
 }
 export async function storedColumns(tableId:string):Promise<Row[]>{return (await readMetadata()).columns.filter(c=>c.table_id===tableId);}
 export async function previewMetadataRecords(tableId:string):Promise<Row[]>{const result=await platformApi<Row>('/dst/db/sample',{tableId,sampleSize:10},{timeoutMs:30000});const rows=result?.data??result?.rows??result?.items;if(!Array.isArray(rows))throw new Error('数据预览未返回有效记录集合');return rows.slice(0,10);}
-export async function saveMetadataRelation(body:Row):Promise<Row>{const {tenantId:_tenant,tenant_id:_snake,...safe}=body;const r=snake(await platformApi<Row>('/dwm/metadata-governance/relations/save',safe));invalidateMetadata();return r;}
-export async function deleteMetadataRelation(tid:string){const result=await platformApi<boolean>('/dwm/metadata-governance/relations/delete',{tid});if(result!==true)throw new Error('关系不存在或无权删除');invalidateMetadata();}
-export async function discoverMetadataRelations(tableIds:string[],signal?:AbortSignal){if(tableIds.length<2||tableIds.length>300)throw new Error('请选择 2 至 300 张表进行结构关系发现');const result=await platformApi<Row>('/dwm/metadata-governance/relations/discover',{tableIds},{signal,timeoutMs:60000});if(!Array.isArray(result.items))throw new Error('关系识别返回格式不正确');return result.items.map((r:Row)=>snake(r));}
-export async function validateMetadataRelation(tid:string,sampleLimit=200){const result=await platformApi<Row>('/dwm/metadata-governance/relations/validate',{tid,sampleLimit},{timeoutMs:60000});invalidateMetadata();return result;}
-export const previewPhysicalForeignKey=(tid:string)=>platformApi<Row>('/dwm/metadata-governance/relations/foreign-key/preview',{tid},{timeoutMs:30000});
-export async function createPhysicalForeignKey(tid:string,previewHash:string){const result=await platformApi<Row>('/dwm/metadata-governance/relations/foreign-key/create',{tid,previewHash,confirmPhysicalChange:true},{timeoutMs:60000});invalidateMetadata();return result;}
+export async function saveMetadataRelation(body:Row):Promise<Row>{const {tenantId:_tenant,tenant_id:_snake,...safe}=body;const r=snake(await platformApi<Row>('/dwm/relation/save',safe));invalidateMetadata();return r;}
+export async function deleteMetadataRelation(tid:string){const result=await platformApi<boolean>('/dwm/relation/delete',{tid});if(result!==true)throw new Error('关系不存在或无权删除');invalidateMetadata();}
+export async function discoverMetadataRelations(tableIds:string[],signal?:AbortSignal){if(tableIds.length<2||tableIds.length>300)throw new Error('请选择 2 至 300 张表进行结构关系发现');const result=await platformApi<Row>('/dwm/relation/discover',{tableIds},{signal,timeoutMs:60000});if(!Array.isArray(result.items))throw new Error('关系识别返回格式不正确');return result.items.map((r:Row)=>snake(r));}
+export async function validateMetadataRelation(tid:string,sampleLimit=200){const result=await platformApi<Row>('/dwm/relation/validate',{tid,sampleLimit},{timeoutMs:60000});invalidateMetadata();return result;}
+export const previewPhysicalForeignKey=(tid:string)=>platformApi<Row>('/dwm/foreign/check',{tid},{timeoutMs:30000});
+export async function createPhysicalForeignKey(tid:string,previewHash:string){const result=await platformApi<Row>('/dwm/foreign/create',{tid,previewHash,confirmPhysicalChange:true},{timeoutMs:60000});invalidateMetadata();return result;}

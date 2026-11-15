@@ -57,7 +57,7 @@ const formatTime = (value) => {
 const load = async () => {
   loading.value = true
   try {
-    const result = await $common.post('/sym/user/online/page', { pageNum: pageNum.value, pageSize,...order.value, keyword: keyword.value })
+    const result = await $common.post('/sym/online/page', { pageNum: pageNum.value, pageSize,...order.value, keyword: keyword.value })
     const data = result?.data || result || {}
     rows.value = data.list || []
     total.value = Number(data.total || 0)
@@ -72,7 +72,7 @@ const load = async () => {
 const kickout = async (row) => {
   try {
     await ElMessageBox.confirm(`确认强制下线“${row.realName || row.userName}”的该终端会话吗？`, '强制下线', { type: 'warning' })
-    await $common.post('/sym/user/online/kickout', { sessionKey: row.sessionKey })
+    await $common.post('/sym/online/kickout', { sessionKey: row.sessionKey })
     ElMessage.success('已强制下线')
     await load()
   } catch (error) {

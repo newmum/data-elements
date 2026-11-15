@@ -3714,12 +3714,12 @@ function loadForceStandardElements() {
   forceStandardLoadPromise = (async () => {
     try {
       const [elementResult, dictionaryResult] = await Promise.all([
-        $common.post("/dwm/standard/element/page", {
+        $common.post("/dwm/standard/page", {
           pageNum: 1,
           pageSize: 2000,
           publishStatus: 1,
         }),
-        $common.post("/dwm/standard/code/list", {}),
+        $common.post("/dwm/code/list", {}),
       ]);
       const dictionaryMap = new Map();
       unwrapList(dictionaryResult).forEach((item) => {
@@ -3933,7 +3933,7 @@ async function loadForceStandardDictionary(candidate) {
   }
   if (forceStandardDictionaryPending.has(cacheKey)) return forceStandardDictionaryPending.get(cacheKey);
   const request = (async () => {
-    const result = await $common.post("/dwm/standard/code/queryById", {
+    const result = await $common.post("/dwm/code/detail", {
       tid: dictionaryId || lookup,
       codeSet,
     });
@@ -4001,7 +4001,7 @@ async function prefetchForceStandardDictionaries(rows) {
   const lookups = [...new Set([...missing.values()].map((entry) => entry.lookup))];
   for (let start = 0; start < lookups.length; start += 50) {
     const batch = lookups.slice(start, start + 50);
-    const result = await $common.post("/dwm/standard/code/queryById", { lookups: batch });
+    const result = await $common.post("/dwm/code/detail", { lookups: batch });
     const byLookup = result?.data && typeof result.data === "object" && !Array.isArray(result.data)
       && batch.every((lookup) => Object.prototype.hasOwnProperty.call(result.data, lookup))
       ? result.data
@@ -5405,7 +5405,7 @@ async function loadRelationStandardDictionary(item = relationForceStandardElemen
   dictionaryDialog.standardLoading = true;
   dictionaryDialog.standardLoadError = "";
   try {
-    const result = await $common.post("/dwm/standard/code/queryById", {
+    const result = await $common.post("/dwm/code/detail", {
       tid: item?.dictionaryId || lookup,
       codeSet: item?.codeSet || relationDraft.forceStandardCodeSet || "",
     });

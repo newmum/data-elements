@@ -21,6 +21,7 @@ import metadataAsset
 import jsons
 import systemConfig
 import '@/common/configData' as configData
+import '@/common/reportoriginal' as reportOriginal
 import '@post:/dst/db/import' as importSnapshot
 import cn.hutool.json.JSONUtil
 import cn.hutool.core.util.IdUtil
@@ -55,6 +56,7 @@ import com.fasterxml.jackson.databind.DeserializationFeature
 
 // POST /dst/file/register 按 action 解析文件、查询登记或保存数据规范。
 // 查询接收 dbId、分页及筛选参数，返回登记清单、分页记录或回执。解析按文件归属返回识别结果。
+// 解析通过 /common/reportoriginal 读取新原件，按历史记录的对象路径兼容旧原件。
 // 保存接收清单版本、文件和表定义，按当前租户与数据源菜单范围更新登记快照，并在事务内保留上报回执。
 StpUtil.checkLogin()
 var tenantId = tenantRuntime.id()
@@ -446,9 +448,18 @@ if (action == 'parse') {
     if (!(ids instanceof List) || ids.size() < 1 || ids.size() > 20) { exit 400, '每次请选择 1 至 20 份数据文件' }
     var files = db.table('file_upload_t').where().eq('tenant_id', tenantId).eq('created_by', actorId).eq('is_del', 0).in('tid', ids).select()
     if (files.size() != ids.size()) { exit 403, '存在不属于当前租户或当前上传人的文件' }
-    var configuration = configData()
-    var storageHttpClient = new OkHttpClient().newBuilder().connectTimeout(Duration.ofSeconds(5)).readTimeout(Duration.ofSeconds(15)).callTimeout(Duration.ofSeconds(20)).build()
-    var minioClient = MinioClient.builder().endpoint(configuration.minio_url).credentials(configuration.minio_user, systemConfig.legacyMinioPassword()).httpClient(storageHttpClient).build()
+    var storageKey = file => text(first(file, 'filePath', 'file_path'))
+    // 新原件批次无需对象存储；混合批次只初始化一次历史存储客户端。
+    var legacyClient = null
+    if (files.filter(file => !storageKey(file).startsWith('report-local:')).size() > 0) {
+        try {
+            var configuration = configData()
+            var storageHttpClient = new OkHttpClient().newBuilder().connectTimeout(Duration.ofSeconds(5)).readTimeout(Duration.ofSeconds(15)).callTimeout(Duration.ofSeconds(20)).build()
+            legacyClient = MinioClient.builder().endpoint(configuration.minio_url).credentials(configuration.minio_user, systemConfig.legacyMinioPassword()).httpClient(storageHttpClient).build()
+        } catch (e) {
+            // 历史存储不可用时仍可处理同批已落盘的文件。
+        }
+    }
     var output = []
     for (file in files) {
         var id = text(file.tid); var fileName = text(first(file, 'fileName', 'file_name')); var tables = []
@@ -456,10 +467,19 @@ if (action == 'parse') {
             var size = first(file, 'fileSize', 'file_size')
             if (size == null || size > 20971520 || size < 1) { throw new IllegalArgumentException('单份文件大小须在 1 字节至 20 MB 之间') }
             if (!fileName.toLowerCase().matches('.*\\.(csv|xlsx|xls|txt|json)$')) { throw new IllegalArgumentException('仅支持 CSV、TXT、JSON、XLSX 和 XLS 文件') }
-            var path = text(first(file, 'filePath', 'file_path')); var split = path.indexOf('/')
+            var path = storageKey(file)
             var bytes = null
             try {
-                var stream = minioClient.getObject(GetObjectArgs.builder().bucket(path.substring(0, split)).object(path.substring(split + 1)).build())
+                var stream = null
+                if (path.startsWith('report-local:')) {
+                    stream = reportOriginal('open', tenantId, path, null)
+                } else {
+                    var split = path.indexOf('/')
+                    if (legacyClient == null || split < 1 || split == path.length() - 1) {
+                        throw new IllegalStateException('历史原件不可读取')
+                    }
+                    stream = legacyClient.getObject(GetObjectArgs.builder().bucket(path.substring(0, split)).object(path.substring(split + 1)).build())
+                }
                 bytes = readUploadBytes(stream)
             } catch (e) {
                 var message = text(e.message)

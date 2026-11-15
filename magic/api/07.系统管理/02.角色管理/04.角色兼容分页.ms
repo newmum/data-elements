@@ -9,7 +9,7 @@
   "lock": null,
   "createBy": null,
   "updateBy": null,
-  "path": "/pageRole",
+  "path": "/page",
   "method": "GET",
   "parameters": [
     {
@@ -377,20 +377,23 @@
   }
 }
 ================================
-// 接口：04.角色兼容分页
-// 路由：GET /sym/role/pageRole
-// 业务说明：管理页默认查询当前租户全部角色；仅在调用方明确传入 appId 时按应用筛选；涉及 rm_role_t 等业务表。
+import tenantRuntime
 import tenantAccounts
 import cn.hutool.db.PageResult
 import cn.dev33.satoken.stp.StpUtil;
 import cn.hutool.core.util.NumberUtil;
 
-
+// 兼容权限面板的角色分页，按当前租户限定角色，再使用调用方传入的筛选条件。
 try{
   tenantAccounts.session();
 }catch(e) {
   // 参数或业务状态不满足要求时立即终止请求。
   exit -1, "账号未登入或登入已过期";  
+}
+
+var tenantId = tenantRuntime.id()
+if (!tenantId) {
+    exit 401, '未获取到当前租户'
 }
 
 // 查询参数
@@ -401,7 +404,7 @@ var pageNo = (page || 1).asInt()
 var offsetValue = (offset || ((pageNo - 1) * pageSizeValue)).asInt()
 
 // 构建查询条件
-var result = db.table("rm_role_t").where().eq("deleted", 0);
+var result = db.table("rm_role_t").where().eq("tenant_id", tenantId).eq("deleted", 0);
 if (requestedAppId != null && (requestedAppId + '').trim() != '') {
     result = result.eq("app_id", requestedAppId);
 }

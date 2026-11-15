@@ -9,7 +9,7 @@
   "lock": null,
   "createBy": null,
   "updateBy": null,
-  "path": "/saveOrUpdate",
+  "path": "/save",
   "method": "POST",
   "parameters": [],
   "options": [],
@@ -17,173 +17,127 @@
   "headers": [],
   "paths": [],
   "responseBody": null,
-  "description": "菜单保存修改（POST /sym/menu/saveOrUpdate）。支持新增、编辑和菜单层级移动；移动时校验循环引用并同步整棵子树的 top_id；公安LOCAL账号使用本地库与令牌会话，其他租户保留原机制；涉及 rm_menu_t 等业务表。",
+  "description": "菜单保存修改（POST /sym/menu/save）。支持新增、编辑和菜单层级移动；移动时校验循环引用并同步整棵子树的 top_id；公安LOCAL账号使用本地库与令牌会话，其他租户保留原机制；涉及 rm_menu_t 等业务表。",
   "requestBodyDefinition": null,
   "responseBodyDefinition": null
 }
 ================================
-// 接口：01.菜单保存修改
-// 路由：POST /sym/menu/saveOrUpdate
-// 业务说明：菜单保存修改（POST /sym/menu/saveOrUpdate）。支持新增、编辑和菜单层级移动；移动时校验循环引用并同步整棵子树的 top_id；公安LOCAL账号使用本地库与令牌会话，其他租户保留原机制；涉及 rm_menu_t 等业务表。
-import tenantAccounts
-import cn.hutool.core.util.IdUtil
-import "@post:/sym/user/me" as me
 import cn.dev33.satoken.stp.StpUtil
+import cn.hutool.core.util.IdUtil
+import db
+import tableWrite
+import tenantAccounts
+import tenantRuntime
 
-// 菜单资源保存/更新接口。
-// 菜单层级调整时同步当前节点及全部后代的 top_id，防止导航树与权限树失配。
+// 在当前租户的应用内新增或更新菜单。校验父链后批量更新受移动影响的后代。
+var input = body || {}
+var id = (input.id || '') + ''
+var label = input.name || ''
+if (!label) { exit 400, '菜单名称不能为空' }
+var tenant = tenantRuntime.id()
+if (!tenant) { exit 401, '当前租户无效' }
+var sessionApp = tenantAccounts.session().get('appId')
+var actor = StpUtil.getLoginId() + ''
+var now = new Date()
+var integer = (value, fallback) => value == null || (value + '').trim() == '' ? fallback : value.asInt()
+var parentId = (input.parentId || 'ROOT') + ''
+var resourceType = integer(input.resourceType, 0)
+var sortNum = integer(input.sortNum, null)
 
-
-var now = new Date();
-var id           = body?.id || '';
-var name         = body?.name || '';
-var parentId     = body?.parentId || 'ROOT';
-var integerValue = (value, defaultValue) => {
-    if (value == null || (value + '').trim() == '') {
-        return defaultValue;
+return db.transaction(() => {
+    var old = id == '' ? null : db.table('rm_menu_t').columns('app_id').where()
+        .eq('tenant_id', tenant).eq('id', id).eq('deleted', 0).selectOne()
+    if (id != '' && old == null) { exit 404, '记录不存在: ' + id }
+    var appId = old == null ? (input.appId || sessionApp) : old.appId
+    if (!appId) { exit 400, '未获取到菜单所属应用' }
+    if (old != null && input.appId && input.appId != appId) {
+        exit 400, '菜单不能移动到其他应用'
     }
-    return value.asInt();
-};
-var resourceType = integerValue(body?.resourceType, 0);
-var sno          = body?.sno || '';
-var url          = body?.url || '';
-var urlType      = integerValue(body?.urlType, 0);
-var staticIcon   = body?.staticIcon || '';
-var dynamicImg   = body?.dynamicImg || '';
-var openType     = integerValue(body?.openType, 0);
-var code         = body?.code || '';
-var appId        = body?.appId || tenantAccounts.session().get("appId");
-var sortNum      = body?.sortNum == null || (body.sortNum + '').trim() == '' ? null : body.sortNum;
-var status       = integerValue(body?.status, 0);
-var dataScopeEnabled = integerValue(body?.dataScopeEnabled, 0) == 1 ? 1 : 0;
 
-if (!name) {
-    exit 400, '菜单名称不能为空';
-}
+    var fields = ['id', 'parent_id', 'top_id', 'resource_type', 'sort_num']
+    var scope = {app_id: appId, deleted: 0}
+    // 先按统一顺序取得应用内的行锁，再读取锁范围内可能已提交的新记录。
+    tableWrite.lockByFilter('rm_menu_t', tenant, 'id', fields, scope, 1000)
+    var rows = tableWrite.lockByFilter('rm_menu_t', tenant, 'id', fields, scope, 1000)
+    var byId = {}
+    var children = {}
+    for (row in rows) {
+        byId[row.id] = row
+        var key = row.parent_id || 'ROOT'
+        if (children[key] == null) { children[key] = [] }
+        children[key].add(row)
+    }
+    var existing = byId[id]
+    if (id != '' && existing == null) { exit 404, '记录不存在: ' + id }
+    if (id != '' && parentId == id) { exit 400, '菜单不能设置自身为父级' }
 
-try {
-    var updateId = me().createId;
-    var normalizedParentId = parentId ? parentId : 'ROOT';
+    var menuId = id == '' ? IdUtil.getSnowflakeNextIdStr() : id
+    var topId = menuId
+    if (parentId != 'ROOT') {
+        var parent = byId[parentId]
+        if (parent == null) { exit 400, '目标父级菜单不存在' }
+        if (parent.resource_type == 1) { exit 400, '按钮节点不能作为父级菜单' }
+        var seenParents = {}
+        var cursor = parentId
+        while (cursor && cursor != 'ROOT') {
+            if (cursor == menuId) { exit 400, '不能将菜单移动到自己的下级菜单中' }
+            if (seenParents[cursor] || byId[cursor] == null) {
+                exit 400, '目标父级菜单层级无效'
+            }
+            seenParents[cursor] = true
+            cursor = byId[cursor].parent_id
+        }
+        topId = parent.top_id || parent.id
+    }
     var data = {
-        name: name,
-        parentId: normalizedParentId,
-        resourceType: resourceType.asInt(),
-        sno: sno,
-        url: url,
-        urlType: urlType,
-        staticIcon: staticIcon,
-        dynamicImg: dynamicImg,
-        openType: openType,
-        code: code,
-        dataScopeEnabled: resourceType == 0 ? dataScopeEnabled : 0,
-        appId: appId
-    };
-
-    if (id) {
-        var exist = db.table("rm_menu_t")
-            .where().eq("id", id).eq("deleted", 0).selectOne();
-        if (exist == null) {
-            exit 404, '记录不存在: ' + id;
-        }
-        if (normalizedParentId == id) {
-            exit 400, '菜单不能设置自身为父级';
-        }
-
-        var parentRecord = null;
-        var newTopId = id;
-        if (normalizedParentId != 'ROOT') {
-            parentRecord = db.table("rm_menu_t")
-                .where().eq("id", normalizedParentId).eq("deleted", 0).selectOne();
-            if (parentRecord == null) {
-                exit 400, '目标父级菜单不存在';
-            }
-            if (parentRecord.resourceType == 1) {
-                exit 400, '按钮节点不能作为父级菜单';
-            }
-
-            // 沿目标父级向上检查，禁止把菜单移动到自己的后代节点下。
-            var cursor = parentRecord;
-            while (cursor != null && cursor.id != null) {
-                if (cursor.id == id) {
-                    exit 400, '不能将菜单移动到自己的下级菜单中';
-                }
-                if (!cursor.parentId || cursor.parentId == 'ROOT') {
-                    cursor = null;
-                } else {
-                    cursor = db.table("rm_menu_t")
-                        .where().eq("id", cursor.parentId).eq("deleted", 0).selectOne();
-                }
-            }
-            newTopId = parentRecord.topId || parentRecord.id;
-        }
-
-        data.topId = newTopId;
-        if (sortNum != null) {
-            data.sortNum = sortNum.asInt();
-        }
-        data.updateId = updateId;
-        data.updateTime = now;
-
-        db.table("rm_menu_t").withBlank()
-            .where().eq("id", id)
-            .update(data);
-
-        // 父级变化后，所有后代必须继承新的顶级菜单 ID。
-        if (newTopId != exist.topId || normalizedParentId != exist.parentId) {
-            var queue = [id];
-            while (queue.size() > 0) {
-                var currentId = queue.remove(0);
-                var children = db.table("rm_menu_t")
-                    .where().eq("parent_id", currentId).eq("deleted", 0).select();
-                for (child in children) {
-                    db.table("rm_menu_t")
-                        .where().eq("id", child.id)
-                        .update({ topId: newTopId, updateId: updateId, updateTime: now });
-                    queue.add(child.id);
-                }
+        name: label, parentId: parentId, resourceType: resourceType, sno: input.sno || '',
+        url: input.url || '', urlType: integer(input.urlType, 0), staticIcon: input.staticIcon || '',
+        dynamicImg: input.dynamicImg || '', openType: integer(input.openType, 0), code: input.code || '',
+        dataScopeEnabled: resourceType == 0 && integer(input.dataScopeEnabled, 0) == 1 ? 1 : 0,
+        appId: appId, topId: topId, updateId: actor, updateTime: now
+    }
+    if (existing == null) {
+        if (!sortNum) {
+            sortNum = 1
+            for (sibling in (children[parentId] || [])) {
+                sortNum = Math.max(sortNum, (sibling.sort_num || 0) + 1)
             }
         }
-
-        return {
-            id: id,
-            parentId: normalizedParentId,
-            topId: newTopId,
-            moved: normalizedParentId != exist.parentId
-        };
+        data.id = menuId
+        data.tenantId = tenant
+        data.sortNum = sortNum
+        data.createId = actor
+        data.createTime = now
+        data.deleted = 0
+        data.status = integer(input.status, 0)
+        db.table('rm_menu_t').insert(data)
+        return {id: menuId, parentId: parentId, topId: topId}
     }
 
-    var newId = IdUtil.getSnowflakeNextIdStr();
-    if (!sortNum) {
-        var maxSortRow = db.table("rm_menu_t")
-            .where().eq("parent_id", normalizedParentId).eq("deleted", 0)
-            .orderBy("sort_num", "desc").selectOne();
-        sortNum = maxSortRow != null ? (maxSortRow.sortNum + 1) : 1;
-    }
-
-    var newTopId = newId;
-    if (normalizedParentId != 'ROOT') {
-        var parentRecord = db.table("rm_menu_t")
-            .where().eq("id", normalizedParentId).eq("deleted", 0).selectOne();
-        if (parentRecord == null) {
-            exit 400, '目标父级菜单不存在';
+    if (sortNum != null) { data.sortNum = sortNum }
+    var moved = parentId != existing.parent_id
+    var descendants = []
+    if (moved || topId != existing.top_id) {
+        var seen = {}
+        seen[id] = true
+        var queue = [id]
+        var index = 0
+        while (index < queue.size()) {
+            for (child in (children[queue[index]] || [])) {
+                if (seen[child.id]) { exit 400, '现有菜单层级存在循环' }
+                seen[child.id] = true
+                descendants.add(child.id)
+                queue.add(child.id)
+            }
+            index = index + 1
         }
-        if (parentRecord.resourceType == 1) {
-            exit 400, '按钮节点不能作为父级菜单';
-        }
-        newTopId = parentRecord.topId || parentRecord.id;
     }
-
-    data.id = newId;
-    data.topId = newTopId;
-    data.sortNum = sortNum;
-    data.createId = updateId;
-    data.createTime = now;
-    data.updateId = updateId;
-    data.updateTime = now;
-    data.deleted = 0;
-    data.status = status;
-    db.table("rm_menu_t").insert(data);
-    return { id: newId, parentId: normalizedParentId, topId: newTopId };
-} catch(e) {
-    exit 500, '操作失败: ' + e.message;
-}
+    db.table('rm_menu_t').withBlank().where().eq('tenant_id', tenant)
+        .eq('app_id', appId).eq('deleted', 0).eq('id', id).update(data)
+    if (!descendants.isEmpty()) {
+        db.table('rm_menu_t').where().eq('tenant_id', tenant).eq('app_id', appId)
+            .eq('deleted', 0).in('id', descendants)
+            .update({topId: topId, updateId: actor, updateTime: now})
+    }
+    return {id: id, parentId: parentId, topId: topId, moved: moved}
+})

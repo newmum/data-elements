@@ -282,7 +282,7 @@ const handleSaveCode = async () => {
 
     // 保存数据
     const response = await $common.post(
-      "/dwm/standard/code/saveOrUpdate",
+      "/dwm/code/save",
       {
         ...info,
         dictItemValue: JSON.stringify(vData),
@@ -363,7 +363,7 @@ const fetchTableData = async ({
   newCodeId?: string;
 }) => {
   try {
-    const response = await $common.post("/dwm/standard/code/page", {
+    const response = await $common.post("/dwm/code/page", {
       dictName: searchQuery.value || null,
       categoryPath: getSelectedCategoryPath(),
       pageNum,

@@ -153,6 +153,19 @@ public class ControlIdentityService {
         return result;
     }
 
+    public Map<String, String> namesForTenant(String tenantId, List<String> userIds) {
+        requireLegacyCompatibility();
+        List<String> ids = normalizeIds(userIds);
+        if (ids.isEmpty()) return Map.of();
+        var parameters = new ArrayList<Object>();
+        String scope = activeMembershipWhere(tenantId, ids, null, null, parameters);
+        Map<String, String> result = new LinkedHashMap<>();
+        jdbcTemplate.query("select u.id,u.real_name " + scope,
+                (org.springframework.jdbc.core.RowCallbackHandler) row ->
+                        result.put(row.getString("id"), row.getString("real_name")), parameters.toArray());
+        return result;
+    }
+
     private String activeMembershipWhere(
             String tenantId,
             List<String> ids,

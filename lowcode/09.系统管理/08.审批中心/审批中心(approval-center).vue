@@ -180,19 +180,13 @@ const columns = computed(() => [
         label: "审批",
         click: (row) => approve(row),
       },
-      {
-        if: () => state.view === "process",
-        type: "warning",
-        label: "催办",
-        click: (row) => remind(row),
-      },
       { type: "primary", label: "进度", click: (row) => showProgress(row) },
     ],
   },
 ]);
 
 const fetchData = async ({ pageNo: pageNum, pageSize, sortField, sortDir }) => {
-  const result = await $common.post("/sym/approval/query/page", {
+  const result = await $common.post("/sym/approval/page", {
     pageNum,
     pageSize,sortField,sortDir,
     flowSatusType: state.view,
@@ -216,10 +210,10 @@ const statusMeta = (status) => {
 };
 
 const refreshSummary = async () => {
-  state.summary = { ...state.summary, ...(await $common.get("/sym/approval/query/summary")) };
+  state.summary = { ...state.summary, ...(await $common.get("/sym/approval/summary")) };
 };
 const loadDefinitions = async () => {
-  state.definitions = (await $common.get("/sym/approval/query/definitionList")) || [];
+  state.definitions = (await $common.get("/sym/flow/options")) || [];
 };
 const refresh = () => tableRef.value?.refresh(true);
 const changeView = (view) => {
@@ -235,16 +229,9 @@ const afterOperation = () => {
   refreshSummary();
   refresh();
 };
-const remind = async (row) => {
-  await $common.post("/sym/approval/reminder/send", {
-    instanceId: row.instanceId,
-    message: `请及时处理【${row.businessName || row.flowName}】`,
-  });
-  $message.success("催办已发送");
-};
 const openDelegation = async () => {
   state.delegationVisible = true;
-  state.delegations = (await $common.get("/sym/approval/delegation/list")) || [];
+  state.delegations = (await $common.get("/sym/delegation/list")) || [];
   searchUsers("");
 };
 const searchUsers = async (keyword) => {
@@ -266,29 +253,32 @@ const saveDelegation = async () => {
   }
   state.delegationSaving = true;
   try {
-    await $common.post("/sym/approval/delegation/save", {
+    await $common.post("/sym/delegation/save", {
       delegateUserId: state.delegation.delegateUserId,
       startTime: state.delegation.range[0],
       endTime: state.delegation.range[1],
     });
     $message.success("委托设置成功");
     state.delegation = { delegateUserId: "", range: [] };
-    state.delegations = (await $common.get("/sym/approval/delegation/list")) || [];
+    state.delegations = (await $common.get("/sym/delegation/list")) || [];
   } finally {
     state.delegationSaving = false;
   }
 };
 const deleteDelegation = async (row) => {
-  await $common.post("/sym/approval/delegation/delete", { tid: row.tid });
+  await $common.post("/sym/delegation/delete", { tid: row.tid });
   $message.success("委托已取消");
-  state.delegations = (await $common.get("/sym/approval/delegation/list")) || [];
+  state.delegations = (await $common.get("/sym/delegation/list")) || [];
 };
 const showProgress = async (row) => {
   state.detailVisible = true;
   state.detailLoading = true;
   state.nodes = [];
   try {
-    const result = await $common.get("/sym/approval/info", { businessId: row.businessId });
+    const result = await $common.get("/sym/approval/info", {
+      instanceId: row.instanceId,
+      businessId: row.businessId,
+    });
     state.nodes = result?.flowNodes || [];
   } finally {
     state.detailLoading = false;

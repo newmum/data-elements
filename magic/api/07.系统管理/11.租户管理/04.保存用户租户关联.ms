@@ -11,7 +11,7 @@
   "lock": null,
   "createBy": null,
   "updateBy": null,
-  "path": "/assign-user",
+  "path": "/assign",
   "method": "POST",
   "parameters": [],
   "options": [],
@@ -24,10 +24,11 @@
   "responseBodyDefinition": null
 }
 ================================
-// 接口：04.保存用户租户关联
-// 路由：POST /sym/tenant/assign-user
-// 业务说明：应用独立本地账号接口；业务规则由租户账号 Magic 函数执行。共享控制库账号及成员关系分支已退役；使用请求参数 targetTenantId。
-import tenantRuntime;
-var current=tenantRuntime.id();var target=(body?.targetTenantId||current)+'';
+import tenantRuntime
+
+// 兼容旧成员关系调用，校验当前应用后引导使用本地用户管理。
+var current = tenantRuntime.id()
+if (!current) { exit 401, '当前租户无效' }
+var target = (body?.targetTenantId || current) + ''
 if(target!=current) {exit 403,'禁止跨应用维护账号';}
 exit 409,'账号直接归属本应用，请通过用户管理维护，无需配置共享成员关系';

@@ -1,8 +1,8 @@
 package com.linewell.dataelement.feature.approval.application;
 
-import java.util.Map;
+import com.linewell.dataelement.model.approval.ApprovalCallbackRequest;
 
 public interface ApprovalLifecyclePort {
 
-    void taskFinished(Map<String, Object> event);
+    void taskFinished(ApprovalCallbackRequest event);
 }

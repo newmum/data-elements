@@ -336,7 +336,7 @@ const loadAll = () => {
 
 const command = (action, version, extra) =>
   $common.post(
-    "/dwm/center/command",
+    "/dwm/ops/command",
     {
       kind: "catalogs",
       method: "POST",
@@ -360,7 +360,7 @@ const openDetail = async (row) => {
   detail.row = row || {};
   try {
     const data = await $common.post(
-      "/dwm/center/command",
+      "/dwm/ops/command",
       {
         kind: "catalogs",
         method: "GET",

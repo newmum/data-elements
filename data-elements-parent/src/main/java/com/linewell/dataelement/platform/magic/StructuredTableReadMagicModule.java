@@ -256,6 +256,27 @@ public class StructuredTableReadMagicModule {
         });
     }
 
+    @Comment("统计 JSON 根数组的元素数量，空值、无效文档和非数组按零处理")
+    public Expression jsonArrayLength(Expression document) {
+        if (document.kind != Kind.TEXT && document.kind != Kind.LOB) {
+            throw new IllegalArgumentException("JSON 数组计数需要文本或长文本");
+        }
+        return new Expression(context -> {
+            String valid = document.sql(context);
+            if (context.postgres) {
+                return "JSON_ARRAY_LENGTH(CAST(CASE WHEN " + valid + " IS JSON ARRAY AND SUBSTR(TRIM("
+                        + document.sql(context) + "), 1, 1) = '[' THEN "
+                        + document.sql(context) + " ELSE '[]' END AS JSON))";
+            }
+            if (context.mysql || context.dameng) {
+                return "JSON_LENGTH(CASE WHEN JSON_VALID(" + valid + ") = 1 AND SUBSTR(TRIM("
+                        + document.sql(context) + "), 1, 1) = '[' THEN " + document.sql(context)
+                        + " ELSE '[]' END)";
+            }
+            throw new IllegalStateException("当前租户数据库缺少 JSON 根数组计数方言");
+        }, Kind.NUMBER);
+    }
+
     public JsonCheck jsonNonblank(List<String> path) {
         return new JsonCheck(path, JsonTest.NONBLANK, null);
     }
@@ -492,8 +513,17 @@ public class StructuredTableReadMagicModule {
 
     @Comment("按数据库原生排序规则匹配文本片段，百分号、下划线和感叹号按字面处理")
     public Condition containsLiteral(Expression term, String text) {
+        return likeLiteral(term, text, "%");
+    }
+
+    @Comment("按数据库原生排序规则匹配字面前缀")
+    public Condition startsWithLiteral(Expression term, String text) {
+        return likeLiteral(term, text, "");
+    }
+
+    private static Condition likeLiteral(Expression term, String text, String prefix) {
         if (text == null) throw new IllegalArgumentException("结构化字面匹配文本不能为空");
-        String pattern = "%" + text.replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%";
+        String pattern = prefix + text.replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%";
         return new Condition(context -> searchableText(context, term) + " LIKE " + context.parameter(pattern)
                 + " ESCAPE '!'");
     }
@@ -656,6 +686,19 @@ public class StructuredTableReadMagicModule {
 
         public void leftJoin(String table, String joinAlias, String key, String rootKey, List<Condition> conditions) {
             joins.add(new Join(name(table), name(joinAlias), name(key), name(rootKey), alias,
+                    List.copyOf(conditions), null, false, null));
+        }
+
+        @Comment("按显式结构化条件左关联，始终补上主表与关联表的租户相等条件")
+        public void leftJoinOn(String table, String joinAlias, List<Condition> conditions) {
+            String relation = name(joinAlias);
+            if (conditions.isEmpty() || alias.equalsIgnoreCase(relation)
+                    || joins.stream().anyMatch(join -> join.alias().equalsIgnoreCase(relation))
+                    || jsonArrays.stream().anyMatch(join -> join.alias().equalsIgnoreCase(relation))
+                    || joins.size() >= MAX_CHAINED_JOINS) {
+                throw new IllegalArgumentException("结构化条件关联别名或数量无效");
+            }
+            joins.add(new Join(name(table), relation, null, null, alias,
                     List.copyOf(conditions), null, false, null));
         }
 
@@ -959,8 +1002,19 @@ public class StructuredTableReadMagicModule {
         @Comment("分页可沿用数据库原生空值顺序；默认统一将空值排在末尾")
         public Map<String, Object> page(Map<String, Expression> projection, Expression sort, String direction,
                 String tieBreaker, String tieDirection, int pageNum, int pageSize, boolean nativeNullOrder) {
+            return page(projection, sort, direction, tieBreaker, tieDirection, pageNum, pageSize,
+                    nativeNullOrder, MAX_PAGE_SIZE);
+        }
+
+        @Comment("兼容已发布的分页窗口，由脚本显式指定上限，最多 200 行")
+        public Map<String, Object> page(Map<String, Expression> projection, Expression sort, String direction,
+                String tieBreaker, String tieDirection, int pageNum, int pageSize, boolean nativeNullOrder,
+                int maximumPageSize) {
+            if (maximumPageSize < 1 || maximumPageSize > 200) {
+                throw new IllegalArgumentException("结构化查询分页窗口无效");
+            }
             return readPage(projection, sort, direction, tieBreaker, tieDirection, pageNum, pageSize,
-                    false, false, nativeNullOrder);
+                    false, false, nativeNullOrder, maximumPageSize);
         }
 
         @Comment("分页保留主表原始列，并增加显式投影的计算列")
@@ -969,19 +1023,19 @@ public class StructuredTableReadMagicModule {
             if (table == null) {
                 throw new IllegalArgumentException("原始列分页必须使用物理主表");
             }
-            return readPage(extra, sort, direction, tieBreaker, "asc", pageNum, pageSize, false, true, false);
+            return readPage(extra, sort, direction, tieBreaker, "asc", pageNum, pageSize, false, true, false, MAX_PAGE_SIZE);
         }
 
         @Comment("请求页超过最后一页时读取最后一页，返回实际页码")
         public Map<String, Object> pageClamped(Map<String, Expression> projection, Expression sort, String direction,
                 String tieBreaker, String tieDirection, int pageNum, int pageSize) {
-            return readPage(projection, sort, direction, tieBreaker, tieDirection, pageNum, pageSize, true, false, false);
+            return readPage(projection, sort, direction, tieBreaker, tieDirection, pageNum, pageSize, true, false, false, MAX_PAGE_SIZE);
         }
 
         private Map<String, Object> readPage(Map<String, Expression> projection, Expression sort, String direction,
                 String tieBreaker, String tieDirection, int pageNum, int pageSize, boolean clamp, boolean includeRoot,
-                boolean nativeNullOrder) {
-            if (pageNum < 1 || pageSize < 1 || pageSize > MAX_PAGE_SIZE || !validDirection(direction)
+                boolean nativeNullOrder, int maximumPageSize) {
+            if (pageNum < 1 || pageSize < 1 || pageSize > maximumPageSize || !validDirection(direction)
                     || !validDirection(tieDirection)) {
                 throw new IllegalArgumentException("结构化查询分页参数无效");
             }
@@ -1098,9 +1152,11 @@ public class StructuredTableReadMagicModule {
                     continue;
                 }
                 sql.append(" LEFT JOIN ").append(context.table(join.table(), join.alias())).append(" ON ")
-                        .append(context.column(join.alias(), "tenant_id")).append(" = ").append(context.column(alias, "tenant_id"))
-                        .append(" AND ").append(context.column(join.alias(), join.key())).append(" = ")
-                        .append(context.column(join.parentAlias(), join.rootKey()));
+                        .append(context.column(join.alias(), "tenant_id")).append(" = ").append(context.column(alias, "tenant_id"));
+                if (join.key() != null) {
+                    sql.append(" AND ").append(context.column(join.alias(), join.key())).append(" = ")
+                            .append(context.column(join.parentAlias(), join.rootKey()));
+                }
                 for (Condition condition : join.conditions()) sql.append(" AND ").append(condition.sql(context));
                 if (join.latest() != null) sql.append(latest(context, join));
             }

@@ -74,8 +74,8 @@ export async function analyzeLineage(body: { kind: LineageKind; id: string; mode
   return result;
 }
 export async function getLineageEvidence(edgeId: string, scope: LineageScope) {
-  return platformApi<LineageRelation & {sourceObject: LineageObject; targetObject: LineageObject; explanation: string}>(`${lineageBase}/evidence`, {edgeId, scope});
+  return platformApi<LineageRelation & {sourceObject: LineageObject; targetObject: LineageObject; explanation: string}>('/dwm/lineage/evidence', {edgeId, scope});
 }
 export async function getLineageCoverage(signal?: AbortSignal) {
-  return platformApi<LineageCoverage>(`${lineageBase}/coverage`, {}, {signal, timeoutMs: 45000});
+  return platformApi<LineageCoverage>('/dwm/lineage/coverage', {}, {signal, timeoutMs: 45000});
 }

@@ -5,8 +5,10 @@ import static org.mockito.Mockito.*;
 
 import cn.dev33.satoken.stp.StpUtil;
 import com.linewell.dataelement.platform.tenant.domain.TenantContext;
+import java.io.ByteArrayInputStream;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Proxy;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
@@ -22,6 +24,7 @@ import org.ssssssss.magicapi.datasource.model.MagicDynamicDataSource;
 import org.ssssssss.script.MagicScript;
 import org.ssssssss.script.MagicScriptContext;
 import org.ssssssss.script.runtime.ExitValue;
+import org.ssssssss.script.runtime.function.MagicScriptLambdaFunction;
 
 class ReportRegistrationMagicTest {
     static String source() throws Exception {
@@ -46,6 +49,9 @@ class ReportRegistrationMagicTest {
         final StructuredTableReadMagicModule tableRead;
         final StructuredTableWriteMagicModule tableWrite;
         Runnable beforeLock;
+        MagicScriptLambdaFunction reportOriginal = (context, arguments) -> {
+            throw new IllegalStateException("disk must not be reached");
+        };
 
         Fixture(int count) {
             base = new TableDetailFieldSaveMagicTest.Fixture(count);
@@ -77,7 +83,7 @@ class ReportRegistrationMagicTest {
             script = (captureImport?"var importSnapshot=()=>{captured.payload=body;return {rows:body.tables.map(row=>{tableName:row.tableName,tid:row.tableName=='registered_table'?'table':row.tableName.replace('_','-')})}}\n":"var importSnapshot=()=>{throw new IllegalStateException('existing tables must not be reimported')}\n")+"var configData=()=>{throw new IllegalStateException('storage must not be reached')}\n" + script;
             return execute(script, Map.of("body", body, "db", base.db, "tenantRuntime", base.scope,
                     "dataScope", base.scope, "metadataAsset", metadata, "jsons", new TableDetailFieldSaveMagicTest.Jsons(),
-                    "captured", captured));
+                    "captured", captured, "reportOriginal", reportOriginal));
         }
 
         Object execute(String script, Map<String, Object> inputs) {
@@ -91,6 +97,50 @@ class ReportRegistrationMagicTest {
                 return MagicScript.create(script, null).execute(new MagicScriptContext(bindings));
             }
         }
+    }
+
+    @Test
+    void parsesTwentyDiskOriginalsWithOneOwnershipQueryAndRejectsMixedOwnersBeforeReading() throws Exception {
+        var fixture = new Fixture(0);
+        fixture.base.jdbc.execute("alter table file_upload_t add file_name varchar(255)");
+        fixture.base.jdbc.execute("alter table file_upload_t add file_size int");
+        fixture.base.jdbc.execute("alter table file_upload_t add file_path varchar(255)");
+        var ids = new ArrayList<String>();
+        byte[] csv = "id,name\n1,validation\n".getBytes(StandardCharsets.UTF_8);
+        for (int index = 0; index < 20; index++) {
+            var id = "validation-" + index;
+            ids.add(id);
+            fixture.base.jdbc.update("insert into file_upload_t values(?,?,?,?,?,?,?)",
+                    id, fixture.base.scope.id(), "validation-user", 0, id + ".csv", csv.length, "report-local:" + id);
+        }
+        fixture.base.jdbc.update("insert into file_upload_t(tid,tenant_id,created_by,is_del) values(?,?,?,0)",
+                "other-actor", fixture.base.scope.id(), "different-user");
+        var opened = new ArrayList<String>();
+        fixture.reportOriginal = (context, arguments) -> {
+            assertEquals("open", arguments[0]);
+            assertEquals(fixture.base.scope.id(), arguments[1]);
+            opened.add((String) arguments[2]);
+            return new ByteArrayInputStream(csv);
+        };
+
+        var result = assertInstanceOf(Map.class, fixture.run(Map.of("action", "parse", "fileIds", ids)));
+        var originals = assertInstanceOf(List.class, result.get("files"));
+        assertEquals(20, originals.size());
+        assertEquals(20, opened.size());
+        assertEquals(1, fixture.base.reads);
+        assertTrue(fixture.statements.getFirst().sql().contains("tenant_id"));
+        assertTrue(fixture.statements.getFirst().sql().contains("created_by"));
+        var first = assertInstanceOf(Map.class, originals.getFirst());
+        var tables = assertInstanceOf(List.class, first.get("tables"));
+        assertEquals("success", assertInstanceOf(Map.class, tables.getFirst()).get("status"));
+
+        opened.clear();
+        assertInstanceOf(ExitValue.class, fixture.run(Map.of("action", "parse", "fileIds", List.of(ids.getFirst(), "other-actor"))));
+        assertEquals(1, fixture.base.reads);
+        assertTrue(opened.isEmpty());
+        assertInstanceOf(ExitValue.class, fixture.run(Map.of("action", "parse", "fileIds", Collections.nCopies(100, ids.getFirst()))));
+        assertEquals(0, fixture.base.reads);
+        assertTrue(opened.isEmpty());
     }
 
     record Statement(String sql, Connection connection, boolean transaction) {

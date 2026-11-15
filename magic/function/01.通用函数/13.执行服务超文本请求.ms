@@ -58,6 +58,8 @@ var platformOrigin = text(platformBase.getScheme()).toLowerCase() + '://' + text
 var builtIn = {
     '/portal/sso/login':'POST',
     '/portal/sso/session':'GET',
+    '/dws/flowserve/services':'POST',
+    // 已登记的服务仍可使用旧地址，执行时通过同一租户和权限校验。
     '/dws/flowserve/gateway/api/list':'POST',
     '/idaas/oauth2/token':'POST',
     '/idaas/api/whoami':'GET'

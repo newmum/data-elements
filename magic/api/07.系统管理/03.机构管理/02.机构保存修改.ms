@@ -9,7 +9,7 @@
   "lock": null,
   "createBy": null,
   "updateBy": null,
-  "path": "/saveOrUpdate",
+  "path": "/save",
   "method": "POST",
   "parameters": [],
   "options": [],
@@ -22,21 +22,12 @@
   "responseBodyDefinition": null
 }
 ================================
-// 接口：02.机构保存修改
-// 路由：POST /sym/org/saveOrUpdate
-// 业务说明：当前租户内新增、编辑、移动及启停机构；有界预取并校验子树，保留未提交资料。
-// 组织机构保存/更新接口
-// 路径: /api/org/saveOrUpdate
-// 方法: POST
-// 数据源: 当前会话绑定的行业租户库
-// 参数: id(可选,有则更新无则新增), name, parentId, shortName, creditCode, standard, nature,
-//       nationalCode, nationalName, regionCode, nodeType, label, leaderOrgId
-
 import '@/common/audit-operation' as auditOperation;
 import tenantRuntime;
 import cn.hutool.core.util.IdUtil
 import cn.dev33.satoken.stp.StpUtil;
 
+// 新增、编辑、移动及启停当前租户机构。有界预取子树并核对关联。
 var now = new Date();
 
 // 获取入参

@@ -9,7 +9,7 @@
   "lock": null,
   "createBy": null,
   "updateBy": null,
-  "path": "/getQualityDimension",
+  "path": "/dimension",
   "method": "GET",
   "parameters": [],
   "options": [],
@@ -22,14 +22,12 @@
   "responseBodyDefinition": null
 }
 ================================
-// 接口：01.质检维度查询
-// 路由：GET /dwm/quality/getQualityDimension
-// 业务说明：读取质检规则及字典中的维度定义，组装质量规则页面可选择的维度资料。
 import '@post:/sym/dict/tree' as getDict
 import log
-
-
+// GET /dwm/quality/dimension 质检维度查询
+// 读取质检规则及字典中的维度定义，组装质量规则页面可选择的维度资料。
 // 从 MySQL 业务表读取当前有效数据。
+
 var list = db.table('sym_dict_t').excludes("createdBy","createdTime","updatedBy","updatedTime","isDel")
     .where()
     .eq('is_del', 0)

@@ -313,7 +313,7 @@ const fetchQualityRules = async () => {
 /** 获取值域（标准代码）列表 */
 const fetchStandardCodes = async () => {
   try {
-    const response = await $common.post("/dwm/standard/code/list");
+    const response = await $common.post("/dwm/code/list");
     if (response && Array.isArray(response)) {
       standardCodes.value = response.map((item: any) => ({
         ...item,
@@ -360,7 +360,7 @@ const saveDetail = async () => {
       saveData.qualityRule = null;
     }
 
-    await $common.post("/dwm/standard/element/metaSaveOrUpdate", {
+    await $common.post("/dwm/standard/save", {
       ...saveData,
       publishStatus: metaId.value ? null : 1, // 新增时默认发布状态
       tid: metaId.value,

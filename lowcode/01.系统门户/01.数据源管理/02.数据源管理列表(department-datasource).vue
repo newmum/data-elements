@@ -59,13 +59,15 @@
           :expand-on-click-node="false"
           search-placeholder="请输入组织机构名称"
           @node-click="selectTreeNode"
+          @node-expand="rememberTreeExpansion"
+          @node-collapse="rememberTreeExpansion"
         >
           <template #node="{ node }">
             <u-tree-node
               show-icon
               style="--gap: 0; --node-count-color: #323643"
               :keyword="treeRef?.searchValue"
-              :label="node.label"
+              :label="!node.data.value && state.dataScope ? datasourceScopeLabel : node.label"
             >
               <template #count>
                 <span v-if="getTreeNodeCount(node.data) > 0">({{ getTreeNodeCount(node.data) }})</span>
@@ -331,6 +333,7 @@ const router = useRouter();
 const route = useRoute();
 const treeRef = ref();
 const sourceListTop = ref();
+const manuallyToggledTreeNodes = new Set();
 const orgTreeSource = ref([]);
 const treeData = ref([
   { name: "全部部门", label: "全部部门", value: "", type: "org", children: [] },
@@ -593,9 +596,11 @@ const loadSourcePage = async (generation = loadGeneration) => {
       return loadSourcePage(generation);
     }
 
-    state.dataScope = ["ALL", "ORG", "OWNER"].includes(result.dataScope) ? result.dataScope : "";
-    treeData.value[0].label =
-      { ALL: "全部部门", ORG: "本部门数据", OWNER: "本人登记数据" }[state.dataScope] || "可见数据";
+    const dataScope = ["ALL", "ORG", "OWNER"].includes(result.dataScope) ? result.dataScope : "";
+    if (state.dataScope !== dataScope) {
+      state.dataScope = dataScope;
+      if (!state.treeLoading && !state.treeError) void applyDefaultTreeState(generation, true);
+    }
     state.sourcePage = total === 0 ? 1 : pageNum;
     state.sourceTotal = total;
     state.list = list.map(normalizeItem);
@@ -622,13 +627,14 @@ const loadOrganizationTree = async (generation) => {
   state.treeError = "";
   try {
     const [orgTree, statistics] = await Promise.all([
-      $common.post("/sym/org/getOrgTree", { parentId: $user.orgRootId }),
+      $common.post("/sym/org/tree", { parentId: $user.orgRootId }),
       $common.post("/dst/db/stats", { mode: "facets", keyword: "", filter: "all", orgIds: [], appId: "" }),
     ]);
     if (generation !== loadGeneration) return;
     orgTreeSource.value = Array.isArray(orgTree) ? orgTree : [];
     treeStatistics.value = { total: normalizeNumber(statistics?.total), orgCounts: statistics?.orgCounts || {}, orgApps: statistics?.orgApps || {} };
     countMap.value = { org: treeStatistics.value.orgCounts };
+    manuallyToggledTreeNodes.clear();
     rebuildTree();
     state.leftSelectNode = findSelectedTreeNode(treeData.value, state.leftSelectNode) || treeData.value[0];
     if (!state.keyword && state.filter === "all" && !state.leftSelectNode?.value) {
@@ -648,6 +654,7 @@ const loadOrganizationTree = async (generation) => {
       }
     }
   }
+  if (generation === loadGeneration && !state.treeError) return applyDefaultTreeState(generation);
 };
 const loadData = () => {
   const generation = ++loadGeneration;
@@ -657,11 +664,7 @@ const loadData = () => {
     state.sourcePage = 1;
     sourceCursors.clear();
   }
-  return Promise.allSettled([loadSourcePage(generation), loadOrganizationTree(generation)])
-    .then(() => {
-      // 列表返回的权限范围和组织树都就绪后再设置默认展开和选中。
-      if (generation === loadGeneration) return applyDefaultTreeState(generation);
-    });
+  return Promise.allSettled([loadSourcePage(generation), loadOrganizationTree(generation)]);
 };
 
 const sourceTodoCount = (item) =>
@@ -702,25 +705,26 @@ const appendApplicationNodes = (nodes) =>
     return { ...node, type: "org", children: [...orgChildren, ...apps] };
   });
 
-const applyDefaultTreeState = (generation = loadGeneration) => {
+const applyDefaultTreeState = (generation, applicationBranchesOnly = false) => {
   return nextTick(() => nextTick(() => {
     if (generation !== loadGeneration) return;
     const tree = treeRef.value?.getTree?.();
     if (!tree) return;
     const expandOrganizations = (nodes) => {
-      (nodes || []).forEach((item) => {
+      nodes.forEach((item) => {
         const orgChildren = (item.children || []).filter((child) => child.type !== "app");
+        const hasChildren = (item.children || []).length > 0;
+        // 列表只提供权限范围。若组织已展开，补齐仅包含应用的末级分支即可。
+        const shouldSetExpansion = !applicationBranchesOnly || (hasChildren && orgChildren.length === 0);
         const treeNode = tree.getNode(item.value);
-        if (treeNode) {
-          treeNode.expanded = isSystemAdministratorScope.value || !state.dataScope
-            ? orgChildren.length > 0
-            : (item.children || []).length > 0;
+        if (treeNode && shouldSetExpansion && !manuallyToggledTreeNodes.has(item.value)) {
+          treeNode.expanded = orgChildren.length > 0 || (hasChildren && (state.dataScope === "ORG" || state.dataScope === "OWNER"));
         }
         expandOrganizations(orgChildren);
       });
     };
     expandOrganizations(treeData.value);
-    tree.setCurrentNode?.(state.leftSelectNode || treeData.value[0]);
+    if (!applicationBranchesOnly) tree.setCurrentNode?.(state.leftSelectNode || treeData.value[0]);
   }));
 };
 
@@ -826,17 +830,22 @@ const scheduleTypeStatistics = () => {
 
 const selectTreeNode = (node) => {
   state.leftSelectNode = node || treeData.value[0];
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  sourceListTop.value?.scrollIntoView?.({ block: "start", behavior: reduceMotion ? "instant" : "smooth" });
 };
+const rememberTreeExpansion = (node) => manuallyToggledTreeNodes.add(node.value);
 
 const treeNodeIcon = (node) => (node?.data?.type === "app" ? "app" : node?.expanded ? "folder-open" : "folder");
 const treeNodeColor = (node) => (node?.data?.type === "app" ? "#7a5af8" : "#0b8bf9");
 const treeNodeSize = (node) => (node?.data?.type === "app" ? "19" : "23");
 // 数据条数、部门数量及角色显示名称均不能推断权限，以服务端决定的范围为准。
-const isSystemAdministratorScope = computed(() => state.dataScope === "ALL");
+const datasourceScopeLabel = computed(() =>
+  ({ ALL: "全部部门", ORG: "本部门数据", OWNER: "本人登记数据" })[state.dataScope] || "可见数据"
+);
 const currentScopeLabel = computed(() => {
   const selected = state.leftSelectNode;
   if (selected?.value && selected?.label) return selected.label;
-  return { ALL: "全部部门", ORG: "本部门数据", OWNER: "本人登记数据" }[state.dataScope] || "可见数据";
+  return datasourceScopeLabel.value;
 });
 const isExpanded = (item) => state.expanded.includes(item.tid);
 function isFilePushDatasource(item) {

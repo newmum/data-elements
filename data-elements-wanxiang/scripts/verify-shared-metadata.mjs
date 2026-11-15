@@ -12,9 +12,9 @@ const results=[];
 if(process.env.METADATA_REFRESH){assert.equal((await call('/sym/node-config/magic-resource/refresh',{})).success,true);for(const id of ['catalog','discover','save_relation','delete_relation']){const resource=await call('/api/web/resource/file/dwm_metadata_governance_'+id+'_01');assert(resource?.script,'Restored runtime script must be loaded');await call('/api/web/resource/file/api/save',resource);}console.log('Restored original metadata Magic routes verified and hot-published.');}
 for(const side of [3000,3010]){
  const tenant=await call('/portal/sso/session',undefined,side);if(process.env.METADATA_INSPECT)console.log('TENANT '+JSON.stringify(Object.fromEntries(Object.entries(tenant).filter(([k])=>/name|database|dialect|context/i.test(k)))));
- const catalog=await call('/dwm/metadata-governance/catalog',{},side);
+ const catalog=await call('/dwm/meta/catalog',{},side);
  for(const key of ['sources','tables','columns','relations'])assert(Array.isArray(catalog[key]),key+' must be an array');
- const orgs=await call('/sym/org/getOrgTree',{parentId:'ROOT'},side);assert(Array.isArray(orgs));
+ const orgs=await call('/sym/org/tree',{parentId:'ROOT'},side);assert(Array.isArray(orgs));
  const apps=await call('/dst/application/list',{},side);assert(Array.isArray(apps));
  const directories=await call('/dst/catalog/page',{pageNum:1,pageSize:100,conditions:[{field:'assetType',value:'catalog',type:'match'}]},side);assert(Array.isArray(directories.list));
  const stats={tenant:String(tenant.tid??tenant.tenantId),tenantName:tenant.name,sources:catalog.sources.length,tables:catalog.tables.length,columns:catalog.columns.length,relations:catalog.relations.length,catalogs:Number(directories.total)};results.push(stats);

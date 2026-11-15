@@ -56,16 +56,6 @@ class DataQualityRepositoryTest {
  @Test void cancellationFinalizesPendingRunsAndRetainsHistory() {
   var mapper=mock(DataQualityMapper.class);when(mapper.requestCancel(any())).thenReturn(1);var repository=new DataQualityRepository(mapper,null,new DataQualityProperties(),new ObjectMapper());repository.cancel("tenant","run");verify(mapper).cancelRun(argThat(row->row.get("tenantId").equals("tenant")&&row.get("runId").equals("run")));verify(mapper).cancelPendingShards(any());
  }
- @Test void batchColumnOptionsGroupsTenantScopedRowsAndKeepsEmptyTables() {
-  var mapper=mock(DataQualityMapper.class);
-  when(mapper.selectColumnOptionsBatch("tenant",List.of("table-a","table-b"))).thenReturn(List.of(new LinkedHashMap<>(Map.of("table_id","table-a","column_name","id"))));
-  var repository=new DataQualityRepository(mapper,null,new DataQualityProperties(),new ObjectMapper());
-  assertThat(repository.columnOptionsBatch("tenant",List.of("table-a","table-b","table-a")))
-    .containsOnlyKeys("table-a","table-b").satisfies(result->{assertThat(result.get("table-a")).hasSize(1);assertThat(result.get("table-b")).isEmpty();});
-  verify(mapper).selectColumnOptionsBatch("tenant",List.of("table-a","table-b"));
-  assertThatThrownBy(()->repository.columnOptionsBatch("tenant",java.util.Collections.nCopies(51,"table-a")))
-    .isInstanceOf(IllegalArgumentException.class);
- }
  @Test void referenceRulesShareOneTargetOwnershipAndColumnLookup() {
   var mapper=mock(DataQualityMapper.class);var resolver=mock(RegisteredJdbcDataSourceResolver.class);
   when(mapper.selectValidTableIds("tenant","source",List.of("target"))).thenReturn(List.of("target"));
@@ -79,6 +69,5 @@ class DataQualityRepositoryTest {
   assertThat(repository.saveTask("tenant","operator",Map.of("taskName","质检","datasourceId","source","tableId","main","rules",List.of(rule1,rule2)))).isNotBlank();
   verify(resolver).resolve("tenant","source","main");verify(resolver,never()).resolve("tenant","source","target");
   verify(mapper).selectColumnOptionsBatch("tenant",List.of("main","target"));
-  verify(mapper,never()).selectColumnOptions(any(),any());
  }
 }

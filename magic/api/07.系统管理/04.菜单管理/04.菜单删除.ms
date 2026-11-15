@@ -22,58 +22,24 @@
   "responseBodyDefinition": null
 }
 ================================
-// 接口：04.菜单删除
-// 路由：POST /sym/menu/delete
-// 业务说明：说明: 软删除，deleted=1；存在子菜单时拒绝删除；使用请求参数 id；涉及 rm_menu_t 等业务表。
-// 菜单资源删除接口（软删除）
-// 路径: /sym/menu/delete
-// 方法: POST
-// 数据源: sso (192.168.175.86:3306)
-// 参数: id (必填,菜单ID)
-// 说明: 软删除，deleted=1；存在子菜单时拒绝删除
+import cn.dev33.satoken.stp.StpUtil
+import db
+import tableWrite
+import tenantRuntime
 
-import "@post:/sym/user/me" as me
-
-var now = new Date();
-
-// 获取入参
-var id = body?.id || '';
-
-// 参数校验
-if (!id) {
-    // 参数或业务状态不满足要求时立即终止请求。
-    exit 400, '菜单ID不能为空';
-}
-
-try {
-    // 检查记录是否存在且未删除
-    var exist = db.table("rm_menu_t")
-        .where().eq("id", id).eq("deleted", 0).selectOne();
-
-    if (exist == null) {
-        // 参数或业务状态不满足要求时立即终止请求。
-        exit 404, '菜单不存在或已删除: ' + id;
-    }
-
-    // 检查是否存在未删除的子菜单
-    var children = db.table("rm_menu_t")
-        .where().eq("parent_id", id).eq("deleted", 0).select();
-
-    if (children.size() > 0) {
-        // 参数或业务状态不满足要求时立即终止请求。
-        exit 400, '该菜单下存在' + children.size() + '个子菜单，请先删除子菜单';
-    }
-
-    // 执行软删除
-    var updateId = me().createId;
-    // 从 MySQL 业务表读取当前有效数据。
-    db.table("rm_menu_t")
-        .where().eq("id", id)
-        .update({ deleted: 1, updateId: updateId, updateTime: now });
-
-    // 返回当前业务分支的标准结果。
-    return { id: id, deleted: true };
-} catch(e) {
-    // 参数或业务状态不满足要求时立即终止请求。
-    exit 500, '删除失败: ' + e.message;
-}
+// 锁定当前租户菜单，再确认其应用内无子菜单后软删除。
+var id = (body?.id || '') + ''
+if (id == '') { exit 400, '菜单ID不能为空' }
+var tenant = tenantRuntime.id()
+if (!tenant) { exit 401, '当前租户无效' }
+var actor = StpUtil.getLoginId() + ''
+return db.transaction(() => {
+    var menu = tableWrite.lockRow('rm_menu_t', tenant, 'id', id, ['id', 'app_id'], {deleted: 0})
+    if (menu == null) { exit 404, '菜单不存在或已删除: ' + id }
+    var children = db.table('rm_menu_t').where().eq('tenant_id', tenant).eq('app_id', menu.app_id)
+        .eq('parent_id', id).eq('deleted', 0).count()
+    if (children > 0) { exit 400, '该菜单下存在' + children + '个子菜单，请先删除子菜单' }
+    db.table('rm_menu_t').where().eq('tenant_id', tenant).eq('id', id).eq('deleted', 0)
+        .update({deleted: 1, updateId: actor, updateTime: new Date()})
+    return {id: id, deleted: true}
+})

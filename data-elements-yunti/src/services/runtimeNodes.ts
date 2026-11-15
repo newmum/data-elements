@@ -21,7 +21,7 @@ export const runtimeNodeKeys = {
 export function useRuntimeNodes() {
   return useQuery({
     queryKey: runtimeNodeKeys.all,
-    queryFn: () => request<RuntimeNode[]>('GET', '/runtime-nodes'),
+    queryFn: () => request<RuntimeNode[]>('GET', '/nodes'),
   });
 }
 

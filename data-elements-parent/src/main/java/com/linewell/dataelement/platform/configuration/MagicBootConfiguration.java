@@ -71,7 +71,7 @@ public class MagicBootConfiguration {
     @Bean
     public OncePerRequestFilter magicJsonRequestCache() {
         Pattern requests = Pattern.compile("/nifi/(life/(deploy|activate)|node/attrs|api/(connection-test|columns-probe|tables-probe))"
-                + "|/(sym/table|idaas/workspace)/order|/sym/scope/(role|save|current)");
+                + "|/(sym/table|idaas/workspace)/order|/sym/scope/(role|save|current)|/dwm/column/batch");
         return new OncePerRequestFilter() {
             @Override
             protected boolean shouldNotFilter(HttpServletRequest request) {

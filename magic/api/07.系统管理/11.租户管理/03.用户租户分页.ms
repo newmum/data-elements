@@ -11,7 +11,7 @@
   "lock": null,
   "createBy": null,
   "updateBy": null,
-  "path": "/user-page",
+  "path": "/page",
   "method": "POST",
   "parameters": [],
   "options": [],
@@ -24,12 +24,28 @@
   "responseBodyDefinition": null
 }
 ================================
-// 接口：03.用户租户分页
-// 路由：POST /sym/tenant/user-page
-// 业务说明：应用独立本地账号接口；业务规则由租户账号 Magic 函数执行。共享控制库账号及成员关系分支已退役；使用请求参数 targetTenantId、keyword。
-import tenantAccounts;
-import tenantRuntime;
-var current=tenantRuntime.id();var target=(body?.targetTenantId||current)+'';
-if(target!=current) {exit 403,'本地账号只能查询所属应用';}
-var rows=tenantAccounts.list(current,body?.keyword);
-return {list:rows.map(u=>({userId:u.id,userName:u.userName,realName:u.realName,phone:u.phone,assigned:true,defaultTenant:true})),total:rows.size(),accountSource:'LOCAL'};
+import tableRead
+import tenantAccounts
+import tenantRuntime
+
+// 在当前应用内分页读取本地用户。目标租户只能作为当前会话范围的交叉核对。
+var current = tenantRuntime.id()
+if (!current) { exit 401, '当前租户无效' }
+var target = (body?.targetTenantId || current) + ''
+if (target != current) { exit 403, '本地账号只能查询所属应用' }
+if (!tenantAccounts.isLocal(current)) { exit 403, '当前租户未启用本地账号' }
+var pageNum = Math.max(1, body?.pageNum || 1)
+var pageSize = Math.min(200, Math.max(1, body?.pageSize || 200))
+var keyword = (body?.keyword || '').trim()
+var users = tableRead.from('rm_user_t', 'account', current)
+var column = (key, type) => tableRead.column('account', key, type)
+users.where(tableRead.equal(column('deleted', 'NUMBER'), 0))
+if (keyword != '') {
+    users.where(tableRead.any([tableRead.containsLiteral(column('user_name', 'TEXT'), keyword),
+        tableRead.containsLiteral(column('real_name', 'TEXT'), keyword)]))
+}
+var projection = {userId: column('id', 'TEXT'), userName: column('user_name', 'TEXT'),
+    realName: column('real_name', 'TEXT'), phone: column('phone', 'TEXT')}
+var page = users.page(projection, column('create_time', 'TIME'), 'asc', 'id', 'asc', pageNum, pageSize, true, 200)
+var list = page.rows.map(row => ({...row, assigned: true, defaultTenant: true}))
+return {list: list, total: page.total, accountSource: 'LOCAL'}

@@ -1880,7 +1880,7 @@
         "5b83c2702e9b4c9687392a291ca9162a"
       ],
       "kind": null,
-      "baseSha256": "a46c4f6e38b4bfcbf96dfb03e117cef8c4a3e29459ec08068a16d4f772c3ec8c",
+      "baseSha256": "0407af28eade4e93add8760b18de5be3e10c81642fd4ab7d27aaaab1806ae0cf",
       "metadataId": "5b83c2702e9b4c9687392a291ca9162a"
     },
     {
@@ -1890,7 +1890,7 @@
         "0b346b21034e4b0892f9ef825105f9c6"
       ],
       "kind": null,
-      "baseSha256": "3a0d920fc2f26313168b6b1a153410ccd6b4dba72ebeaa6f663e2a683516d185",
+      "baseSha256": "2db60eacefeb1c76afb8ab84aeda5e7e4460d413fbde9e6a50c31a8c8eeaa459",
       "metadataId": "0b346b21034e4b0892f9ef825105f9c6"
     },
     {
@@ -1900,7 +1900,7 @@
         "11e28c173e4245b2b333a87649679aed"
       ],
       "kind": null,
-      "baseSha256": "213a9be39bf8130fd21eb2c0788646066d2f40ab426c2fe4e1439d4c17fe6f5e",
+      "baseSha256": "7a30b2abe50a90326d96b90c8c46c9af7529a87bb824040eebb4da4b7dc30f28",
       "metadataId": "11e28c173e4245b2b333a87649679aed"
     },
     {
@@ -1910,7 +1910,7 @@
         "980b22c606a24830951e47836fc2e9ad"
       ],
       "kind": null,
-      "baseSha256": "22375d2d1375c86c8d86bf27de1c7260158626d75e7c143d90478b6c60e2dc8f",
+      "baseSha256": "58f588689c1603f03f81237040382814b7f480cfaaf69d4cf2b54072ff534d01",
       "metadataId": "980b22c606a24830951e47836fc2e9ad"
     },
     {
@@ -1920,7 +1920,7 @@
         "5aad1c7bb48843a48a985ef41c0c2218"
       ],
       "kind": null,
-      "baseSha256": "ef90ee382fa8b4694531e962eeadda3038a572c13db34b4fe76001703c50dd55",
+      "baseSha256": "b6816a06f309a6518d00cae3c28898c7de7b542c988db015ab62a2de29ddd5ba",
       "metadataId": "5aad1c7bb48843a48a985ef41c0c2218"
     },
     {
@@ -1930,78 +1930,8 @@
         "cd79504e4b1448d3ab46ee6dc1034a8d"
       ],
       "kind": null,
-      "baseSha256": "1339bdaafe0a939fe015251d355bc7aa248cc61f698d4010b0f3f380e7114b5c",
+      "baseSha256": "cb14d792b175dd9b29b0b42c52b6a0eb52b33657ea3462d704ab7d1232d86e33",
       "metadataId": "cd79504e4b1448d3ab46ee6dc1034a8d"
-    },
-    {
-      "path": "api/04.数据治理/01.数据标准/07.标准代码列表.ms",
-      "databasePath": "/magic-api/api/04.数据治理/01.数据标准/07.标准代码列表.ms",
-      "rowIds": [
-        "9229d9818ec74ecda4b17fbc66d2ed5d"
-      ],
-      "kind": null,
-      "baseSha256": "70506b6491afc86839f06de4c7661d86ffab53bc25d5518a5fcc29a4c0036b7b",
-      "metadataId": "9229d9818ec74ecda4b17fbc66d2ed5d"
-    },
-    {
-      "path": "api/04.数据治理/01.数据标准/08.标准代码分页查询.ms",
-      "databasePath": "/magic-api/api/04.数据治理/01.数据标准/08.标准代码分页查询.ms",
-      "rowIds": [
-        "cc413ac10904400d8dcff45b7df52d98"
-      ],
-      "kind": null,
-      "baseSha256": "b3a587d5723467d1a909a57725c9c063186db4d6f887dfcbe366773282c4d2c5",
-      "metadataId": "cc413ac10904400d8dcff45b7df52d98"
-    },
-    {
-      "path": "api/04.数据治理/01.数据标准/09.标准代码详情.ms",
-      "databasePath": "/magic-api/api/04.数据治理/01.数据标准/09.标准代码详情.ms",
-      "rowIds": [
-        "684305fb587f4e60904f927b36331e34"
-      ],
-      "kind": null,
-      "baseSha256": "7264b8e4e8df948d8260e58361456bbd4d1c966d127f298981784f2fe1ae5bdf",
-      "metadataId": "684305fb587f4e60904f927b36331e34"
-    },
-    {
-      "path": "api/04.数据治理/01.数据标准/10.标准代码保存修改.ms",
-      "databasePath": "/magic-api/api/04.数据治理/01.数据标准/10.标准代码保存修改.ms",
-      "rowIds": [
-        "2c14c1dc3639474f89c2818cf1a5dc25"
-      ],
-      "kind": null,
-      "baseSha256": "ee4aa5ba0cf9fad0edc4ca9e5c3fab70867a6bc1555f6d74e81d2155957416f1",
-      "metadataId": "2c14c1dc3639474f89c2818cf1a5dc25"
-    },
-    {
-      "path": "api/04.数据治理/01.数据标准/11.标准代码删除.ms",
-      "databasePath": "/magic-api/api/04.数据治理/01.数据标准/11.标准代码删除.ms",
-      "rowIds": [
-        "af0138a85b1d4b6b9b7b7252c541aaa8"
-      ],
-      "kind": null,
-      "baseSha256": "117a6419db45e49deb2dce41bbf63486f05a204cc2792ea2ed9b033b34be3f68",
-      "metadataId": "af0138a85b1d4b6b9b7b7252c541aaa8"
-    },
-    {
-      "path": "api/04.数据治理/01.数据标准/12.字段标准引用清单.ms",
-      "databasePath": "/magic-api/api/04.数据治理/01.数据标准/12.字段标准引用清单.ms",
-      "rowIds": [
-        "dwm_standard_landing_list_01"
-      ],
-      "kind": "api",
-      "baseSha256": "0b3a2516f2ce209ee24d501f1e54aba68e5a7c62e48b7429cb2de6cdd5ac0970",
-      "metadataId": "dwm_standard_landing_list_01"
-    },
-    {
-      "path": "api/04.数据治理/01.数据标准/13.保存字段标准引用.ms",
-      "databasePath": "/magic-api/api/04.数据治理/01.数据标准/13.保存字段标准引用.ms",
-      "rowIds": [
-        "dwm_standard_landing_save_01"
-      ],
-      "kind": "api",
-      "baseSha256": "90ab85599b8db90098e8b4a22313d2d8cf317280700d01ed74bc40836b4c9d47",
-      "metadataId": "dwm_standard_landing_save_01"
     },
     {
       "path": "api/04.数据治理/01.数据标准/group.json",
@@ -2029,7 +1959,7 @@
         "17326938ed5c4cd0a2e377a3ed68d239"
       ],
       "kind": null,
-      "baseSha256": "0aaf0a02d6f873120dad4fb9b9ff7220551065e94b6ca93bb7d2db6f95bd0f3d",
+      "baseSha256": "71d92679c53a050eb37caf1b27a5fc36785d8c643db84e8ba262f119fa1d0355",
       "metadataId": "17326938ed5c4cd0a2e377a3ed68d239"
     },
     {
@@ -2039,258 +1969,38 @@
         "a1000000000000000000000000000001"
       ],
       "kind": null,
-      "baseSha256": "f734fd02e2905e5e8b3041e2b50d2bafdc0ea16476114ae665c3ef2c5207a99a",
+      "baseSha256": "85f91283663eaad07f3573da2000d286dcf2e2f4101629eb6789651e54846fd2",
       "metadataId": "a1000000000000000000000000000001"
     },
     {
-      "path": "api/04.数据治理/02.质量规则/03.任务分页.ms",
-      "databasePath": "/magic-api/api/04.数据治理/02.质量规则/03.任务分页.ms",
-      "rowIds": [
-        "a1000000000000000000000000000002"
-      ],
-      "kind": null,
-      "baseSha256": "a6df126915fe866c2679f02ba05c46f3f35faf9b668b08300cfecc9a2ca76794",
-      "metadataId": "a1000000000000000000000000000002"
-    },
-    {
-      "path": "api/04.数据治理/02.质量规则/04.质量规则列表.ms",
-      "databasePath": "/magic-api/api/04.数据治理/02.质量规则/04.质量规则列表.ms",
+      "path": "api/04.数据治理/02.质量规则/03.质量规则列表.ms",
+      "databasePath": "/magic-api/api/04.数据治理/02.质量规则/03.质量规则列表.ms",
       "rowIds": [
         "7220cd17e6c24858a617d3e6f2d4ea42"
       ],
       "kind": null,
-      "baseSha256": "65176d225b650eed5b46dbf36f740998373f7e9ba4c3f18fbe48210f28fb078e",
+      "baseSha256": "e2f2e2bf3ddb442af6458da07ea58493b11b8feeeef4c933fcd6e996d21758ce",
       "metadataId": "7220cd17e6c24858a617d3e6f2d4ea42"
     },
     {
-      "path": "api/04.数据治理/02.质量规则/05.任务详情.ms",
-      "databasePath": "/magic-api/api/04.数据治理/02.质量规则/05.任务详情.ms",
-      "rowIds": [
-        "a1000000000000000000000000000003"
-      ],
-      "kind": null,
-      "baseSha256": "85e7e1a619eaf5012471f88a0640785aeadd5d976d8f2649a05b28d717290936",
-      "metadataId": "a1000000000000000000000000000003"
-    },
-    {
-      "path": "api/04.数据治理/02.质量规则/06.保存任务.ms",
-      "databasePath": "/magic-api/api/04.数据治理/02.质量规则/06.保存任务.ms",
-      "rowIds": [
-        "a1000000000000000000000000000004"
-      ],
-      "kind": null,
-      "baseSha256": "e3b4a825330017c562aef217c6f0359d98341f2b2b6928fe1c63419080d70aaf",
-      "metadataId": "a1000000000000000000000000000004"
-    },
-    {
-      "path": "api/04.数据治理/02.质量规则/07.任务预检.ms",
-      "databasePath": "/magic-api/api/04.数据治理/02.质量规则/07.任务预检.ms",
-      "rowIds": [
-        "a1000000000000000000000000000005"
-      ],
-      "kind": null,
-      "baseSha256": "04ef3937ec5babc2e8bf6deaaafbbacc3e76576e128073a44d9d800d4ad8bb11",
-      "metadataId": "a1000000000000000000000000000005"
-    },
-    {
-      "path": "api/04.数据治理/02.质量规则/08.质量规则保存修改.ms",
-      "databasePath": "/magic-api/api/04.数据治理/02.质量规则/08.质量规则保存修改.ms",
+      "path": "api/04.数据治理/02.质量规则/04.质量规则保存修改.ms",
+      "databasePath": "/magic-api/api/04.数据治理/02.质量规则/04.质量规则保存修改.ms",
       "rowIds": [
         "dd4214943e5341c482a59821a64245eb"
       ],
       "kind": null,
-      "baseSha256": "23b692174f1170a1f875158bee2bf8d5b815cacf896964c40f1b822979b20da4",
+      "baseSha256": "2f70e1911752d9275b7dd416fbbe90472e89cf5cefe08a4662fb0028540763ee",
       "metadataId": "dd4214943e5341c482a59821a64245eb"
     },
     {
-      "path": "api/04.数据治理/02.质量规则/09.质量规则删除.ms",
-      "databasePath": "/magic-api/api/04.数据治理/02.质量规则/09.质量规则删除.ms",
+      "path": "api/04.数据治理/02.质量规则/05.质量规则删除.ms",
+      "databasePath": "/magic-api/api/04.数据治理/02.质量规则/05.质量规则删除.ms",
       "rowIds": [
         "f15e72e40a2c41f4af8620ceb68a393b"
       ],
       "kind": null,
-      "baseSha256": "ca4ffae1d37ed9734df506ae65881fbf2b80b1783b255ad43b427c8d06b40475",
+      "baseSha256": "45bb3b013ca89311a6807e188e7f41199ac14e9d074404d3f2c1fc866fb77dc0",
       "metadataId": "f15e72e40a2c41f4af8620ceb68a393b"
-    },
-    {
-      "path": "api/04.数据治理/02.质量规则/10.任务启停.ms",
-      "databasePath": "/magic-api/api/04.数据治理/02.质量规则/10.任务启停.ms",
-      "rowIds": [
-        "a1000000000000000000000000000006"
-      ],
-      "kind": null,
-      "baseSha256": "d7dada47089c82273ca53248fd5a20e379aa95ac027d895c2bfa9d500d0e7c81",
-      "metadataId": "a1000000000000000000000000000006"
-    },
-    {
-      "path": "api/04.数据治理/02.质量规则/11.手动发起.ms",
-      "databasePath": "/magic-api/api/04.数据治理/02.质量规则/11.手动发起.ms",
-      "rowIds": [
-        "a1000000000000000000000000000007"
-      ],
-      "kind": null,
-      "baseSha256": "136ed92dff4a6f79ab08473a3d83b908dd47d1151660b52c9428fbc61d8eca65",
-      "metadataId": "a1000000000000000000000000000007"
-    },
-    {
-      "path": "api/04.数据治理/02.质量规则/12.实例分页.ms",
-      "databasePath": "/magic-api/api/04.数据治理/02.质量规则/12.实例分页.ms",
-      "rowIds": [
-        "a1000000000000000000000000000008"
-      ],
-      "kind": null,
-      "baseSha256": "1a9bc951df79eecfc96eb795ef3336bfdc2a603e672e289309d21191068c85bd",
-      "metadataId": "a1000000000000000000000000000008"
-    },
-    {
-      "path": "api/04.数据治理/02.质量规则/13.实例详情.ms",
-      "databasePath": "/magic-api/api/04.数据治理/02.质量规则/13.实例详情.ms",
-      "rowIds": [
-        "a1000000000000000000000000000009"
-      ],
-      "kind": null,
-      "baseSha256": "01479afbf27081686fd60c0b2781392626f8a9837c00f4d0f40e6995d5554e90",
-      "metadataId": "a1000000000000000000000000000009"
-    },
-    {
-      "path": "api/04.数据治理/02.质量规则/14.问题样例分页.ms",
-      "databasePath": "/magic-api/api/04.数据治理/02.质量规则/14.问题样例分页.ms",
-      "rowIds": [
-        "a1000000000000000000000000000010"
-      ],
-      "kind": null,
-      "baseSha256": "4af45bcc646ab51bcec849a5a7b89094ea7c60dffa470f00ca4f1041a4502b18",
-      "metadataId": "a1000000000000000000000000000010"
-    },
-    {
-      "path": "api/04.数据治理/02.质量规则/15.取消实例.ms",
-      "databasePath": "/magic-api/api/04.数据治理/02.质量规则/15.取消实例.ms",
-      "rowIds": [
-        "a1000000000000000000000000000011"
-      ],
-      "kind": null,
-      "baseSha256": "9d45f85c45f30e5a753eb045feae341ddd6aa2b8b4fdf9a4f65f173d6d8d2567",
-      "metadataId": "a1000000000000000000000000000011"
-    },
-    {
-      "path": "api/04.数据治理/02.质量规则/16.数据源选项.ms",
-      "databasePath": "/magic-api/api/04.数据治理/02.质量规则/16.数据源选项.ms",
-      "rowIds": [
-        "a1000000000000000000000000000012"
-      ],
-      "kind": null,
-      "baseSha256": "01f66e779a6990f10f79abc62e1830636364ebb66e9f14aebcf42a1c650d3409",
-      "metadataId": "a1000000000000000000000000000012"
-    },
-    {
-      "path": "api/04.数据治理/02.质量规则/17.数据表选项.ms",
-      "databasePath": "/magic-api/api/04.数据治理/02.质量规则/17.数据表选项.ms",
-      "rowIds": [
-        "a1000000000000000000000000000013"
-      ],
-      "kind": null,
-      "baseSha256": "2657fd67fb8602579eb6048322954db67e6c1abf4a0c45ee33e47b9f309b3fc0",
-      "metadataId": "a1000000000000000000000000000013"
-    },
-    {
-      "path": "api/04.数据治理/02.质量规则/18.字段选项.ms",
-      "databasePath": "/magic-api/api/04.数据治理/02.质量规则/18.字段选项.ms",
-      "rowIds": [
-        null
-      ],
-      "kind": null,
-      "baseSha256": "a54460feaacbc657e26dfb195fc7b0f787ed17fb66a12375a744c3dcda3d5b3e",
-      "metadataId": "a1000000000000000000000000000014"
-    },
-    {
-      "path": "api/04.数据治理/02.质量规则/19.规则模板.ms",
-      "databasePath": "/magic-api/api/04.数据治理/02.质量规则/19.规则模板.ms",
-      "rowIds": [
-        "a1000000000000000000000000000015"
-      ],
-      "kind": null,
-      "baseSha256": "f355dba1e5a235eaae667ace638b78e81f8fd2c6bac015de111f0db7a508cfca",
-      "metadataId": "a1000000000000000000000000000015"
-    },
-    {
-      "path": "api/04.数据治理/02.质量规则/20.删除质检任务.ms",
-      "databasePath": "/magic-api/api/04.数据治理/02.质量规则/20.删除质检任务.ms",
-      "rowIds": [
-        null
-      ],
-      "kind": null,
-      "baseSha256": "4849b5bcd1d97f2b75270d48857ee8b274c40c4be6ba52be0568d4189fbc7dcd",
-      "metadataId": "a1000000000000000000000000000016"
-    },
-    {
-      "path": "api/04.数据治理/02.质量规则/21.责任组织选项.ms",
-      "databasePath": "/magic-api/api/04.数据治理/02.质量规则/21.责任组织选项.ms",
-      "rowIds": [
-        null
-      ],
-      "kind": null,
-      "baseSha256": "d401b190e7e84c323e0d1874ab940303afa24c7c00066515796b0dc6ee0413d6",
-      "metadataId": "a1000000000000000000000000000017"
-    },
-    {
-      "path": "api/04.数据治理/02.质量规则/22.创建质量工单.ms",
-      "databasePath": "/magic-api/api/04.数据治理/02.质量规则/22.创建质量工单.ms",
-      "rowIds": [
-        null
-      ],
-      "kind": null,
-      "baseSha256": "62b7b65eda76a2328bc90625d9d9f7222c685b75a258396d133b05f61236ad73",
-      "metadataId": "wx_quality_work_create_01"
-    },
-    {
-      "path": "api/04.数据治理/02.质量规则/23.推进质量工单.ms",
-      "databasePath": "/magic-api/api/04.数据治理/02.质量规则/23.推进质量工单.ms",
-      "rowIds": [
-        null
-      ],
-      "kind": null,
-      "baseSha256": "f6c6dc44ce983995da4ccbbc9e933e86036f7c80906c0c072df874ace93e2dc5",
-      "metadataId": "wx_quality_work_transition_01"
-    },
-    {
-      "path": "api/04.数据治理/02.质量规则/24.质量工单列表.ms",
-      "databasePath": "/magic-api/api/04.数据治理/02.质量规则/24.质量工单列表.ms",
-      "rowIds": [
-        null
-      ],
-      "kind": null,
-      "baseSha256": "c922df7455a2a73bdc213e1af6a24be4009405ad48c693480be521e7865a2bb8",
-      "metadataId": "wx_quality_work_page_01"
-    },
-    {
-      "path": "api/04.数据治理/02.质量规则/25.查询语句模板分页.ms",
-      "databasePath": "/magic-api/api/04.数据治理/02.质量规则/25.查询语句模板分页.ms",
-      "rowIds": [
-        null
-      ],
-      "kind": null,
-      "baseSha256": "cf25f43cfb7b2f9005d2c711fbc1b8b3a106ca7d0918f973764fff628f524714",
-      "metadataId": "quality_sql_template_page_v1"
-    },
-    {
-      "path": "api/04.数据治理/02.质量规则/26.保存查询语句模板.ms",
-      "databasePath": "/magic-api/api/04.数据治理/02.质量规则/26.保存查询语句模板.ms",
-      "rowIds": [
-        null
-      ],
-      "kind": null,
-      "baseSha256": "b51c0df9950c1a82e71f7e0f4ff8dc56bff5d7d8cdb264ef6843e35e146859cd",
-      "metadataId": "quality_sql_template_save_v1"
-    },
-    {
-      "path": "api/04.数据治理/02.质量规则/27.删除查询语句模板.ms",
-      "databasePath": "/magic-api/api/04.数据治理/02.质量规则/27.删除查询语句模板.ms",
-      "rowIds": [
-        null
-      ],
-      "kind": null,
-      "baseSha256": "60e7ee8635999e230b79dbf6fe8b3d19940981a0dd40cf1a2d76d2522bc7a1da",
-      "metadataId": "quality_sql_template_delete_v1"
     },
     {
       "path": "api/04.数据治理/02.质量规则/group.json",
@@ -2318,148 +2028,28 @@
         "77dd13a825764993848cb05d8cb6a771"
       ],
       "kind": "api",
-      "baseSha256": "e14e500cb944a173bbc93b1a1724694c3a6640d1e35422f11bbc5c3b3ded6f22",
+      "baseSha256": "b9e3c3e5a123ae30ccee3afc72d84054f1d7f011ed2a3a4d472688b08e4dee33",
       "metadataId": "77dd13a825764993848cb05d8cb6a771"
     },
     {
-      "path": "api/04.数据治理/03.资源中心/02.基础层列表.ms",
-      "databasePath": "/magic-api/api/04.数据治理/03.资源中心/02.基础层列表.ms",
-      "rowIds": [
-        "5ab722975fb242aa9944638c3fa9c51b"
-      ],
-      "kind": null,
-      "baseSha256": "2029bd7641232b034af9a1d81baabe4911f1b98db1aed1b78f961d02fd63c192",
-      "metadataId": "5ab722975fb242aa9944638c3fa9c51b"
-    },
-    {
-      "path": "api/04.数据治理/03.资源中心/03.服务层列表.ms",
-      "databasePath": "/magic-api/api/04.数据治理/03.资源中心/03.服务层列表.ms",
-      "rowIds": [
-        "ea38fe47d5324bf0be61209dbfef3791"
-      ],
-      "kind": null,
-      "baseSha256": "8a7c27fba6fb1f6f96a6ba4cb1d8361f3aef759d474ffb59a4fabc1a4bbcbeb1",
-      "metadataId": "ea38fe47d5324bf0be61209dbfef3791"
-    },
-    {
-      "path": "api/04.数据治理/03.资源中心/04.贴源层列表.ms",
-      "databasePath": "/magic-api/api/04.数据治理/03.资源中心/04.贴源层列表.ms",
-      "rowIds": [
-        "resource_ods_list_01"
-      ],
-      "kind": null,
-      "baseSha256": "f4d71fb8f10c29f91ce05606693c7252ac6bc85001da289c8ef198281ed0fe99",
-      "metadataId": "resource_ods_list_01"
-    },
-    {
-      "path": "api/04.数据治理/03.资源中心/05.分层数据表公共分页.ms",
-      "databasePath": "/magic-api/api/04.数据治理/03.资源中心/05.分层数据表公共分页.ms",
-      "rowIds": [
-        "resource_layer_page_01"
-      ],
-      "kind": null,
-      "baseSha256": "df2f9c6dade6ef4adaa8949759740fc55e82d9862795cc9606ff48d916c5a335",
-      "metadataId": "resource_layer_page_01"
-    },
-    {
-      "path": "api/04.数据治理/03.资源中心/06.盘点层总览.ms",
-      "databasePath": "/magic-api/api/04.数据治理/03.资源中心/06.盘点层总览.ms",
+      "path": "api/04.数据治理/03.资源中心/02.盘点层总览.ms",
+      "databasePath": "/magic-api/api/04.数据治理/03.资源中心/02.盘点层总览.ms",
       "rowIds": [
         "48f4dd83b6a943fbba6b252921c730f8"
       ],
       "kind": null,
-      "baseSha256": "1c8b9670ab81ca3df9981cd365542ec5e6ae6afac04fefa58291de951ad581a4",
+      "baseSha256": "efe6731dc5b8a3758691a35fbb9682c5a044119f10792f33ac7a31d183d65622",
       "metadataId": "48f4dd83b6a943fbba6b252921c730f8"
     },
     {
-      "path": "api/04.数据治理/03.资源中心/07.盘点表统计.ms",
-      "databasePath": "/magic-api/api/04.数据治理/03.资源中心/07.盘点表统计.ms",
+      "path": "api/04.数据治理/03.资源中心/03.盘点表统计.ms",
+      "databasePath": "/magic-api/api/04.数据治理/03.资源中心/03.盘点表统计.ms",
       "rowIds": [
         "6f3c094d24d8441eb97de48fd0adcb18"
       ],
       "kind": null,
-      "baseSha256": "3e1ac483cf0b17078c988d1a95d46374f71c2935ec8f6e7ba88dfbe0ab4006c3",
+      "baseSha256": "6d37c97f82bef1eee4279111448b7dc12193f9422a505e1692c6c8e888987fe9",
       "metadataId": "6f3c094d24d8441eb97de48fd0adcb18"
-    },
-    {
-      "path": "api/04.数据治理/03.资源中心/08.资源中心关联数据源选项.ms",
-      "databasePath": "/magic-api/api/04.数据治理/03.资源中心/08.资源中心关联数据源选项.ms",
-      "rowIds": [
-        "dwm_center_datasource_options_01"
-      ],
-      "kind": "api",
-      "baseSha256": "edbaf45c0c8033b6b24f405b3d87c1c3a3cc0db89d9a0a952d46757e4ad51d44",
-      "metadataId": "dwm_center_datasource_options_01"
-    },
-    {
-      "path": "api/04.数据治理/03.资源中心/09.保存分层节点配置.ms",
-      "databasePath": "/magic-api/api/04.数据治理/03.资源中心/09.保存分层节点配置.ms",
-      "rowIds": [
-        "dwm_center_node_save_01"
-      ],
-      "kind": "api",
-      "baseSha256": "db4d8095e7e0a96f73d01070dc5504a8e7f64447657e6ecaa16a672fa593ffe2",
-      "metadataId": "dwm_center_node_save_01"
-    },
-    {
-      "path": "api/04.数据治理/03.资源中心/10.资源运营概览.ms",
-      "databasePath": "/magic-api/api/04.数据治理/03.资源中心/10.资源运营概览.ms",
-      "rowIds": [
-        null
-      ],
-      "kind": null,
-      "baseSha256": "81624f565b45690df9b050e0a4d286a80dc452ed6706d89964c2d511332a5fb3",
-      "metadataId": "rc9c090d43fa64a71bf2f2a6d10a0001"
-    },
-    {
-      "path": "api/04.数据治理/03.资源中心/11.资源运营记录列表.ms",
-      "databasePath": "/magic-api/api/04.数据治理/03.资源中心/11.资源运营记录列表.ms",
-      "rowIds": [
-        null
-      ],
-      "kind": null,
-      "baseSha256": "0cd714bb6b7760de6fbea9ec5a1c2816086805a2cddfa327bea418deda55381f",
-      "metadataId": "rc9c090d43fa64a71bf2f2a6d10a0002"
-    },
-    {
-      "path": "api/04.数据治理/03.资源中心/12.资源运营记录保存.ms",
-      "databasePath": "/magic-api/api/04.数据治理/03.资源中心/12.资源运营记录保存.ms",
-      "rowIds": [
-        null
-      ],
-      "kind": null,
-      "baseSha256": "e8f37508cd9eda2a16221da134daa7c63085b4e1ea511b66dfe70beabc17d3ac",
-      "metadataId": "rc9c090d43fa64a71bf2f2a6d10a0003"
-    },
-    {
-      "path": "api/04.数据治理/03.资源中心/13.资源运营记录删除.ms",
-      "databasePath": "/magic-api/api/04.数据治理/03.资源中心/13.资源运营记录删除.ms",
-      "rowIds": [
-        null
-      ],
-      "kind": null,
-      "baseSha256": "a24c269cac1d24764ab9a9009d08881e089b8f25161e16414a0764315a417f6e",
-      "metadataId": "rc9c090d43fa64a71bf2f2a6d10a0004"
-    },
-    {
-      "path": "api/04.数据治理/03.资源中心/14.资源操作.ms",
-      "databasePath": "/magic-api/api/04.数据治理/03.资源中心/14.资源操作.ms",
-      "rowIds": [
-        "b6aaff9e31925977b94369d347e7c32a"
-      ],
-      "kind": "api",
-      "baseSha256": "6a85749d394f21bdc41c0bede9e1a4fa493797c0bee5b27050f01be062228159",
-      "metadataId": "b6aaff9e31925977b94369d347e7c32a"
-    },
-    {
-      "path": "api/04.数据治理/03.资源中心/15.资源状态.ms",
-      "databasePath": "/magic-api/api/04.数据治理/03.资源中心/15.资源状态.ms",
-      "rowIds": [
-        "f32458ca37a55794b4cb49cfb191ca76"
-      ],
-      "kind": "api",
-      "baseSha256": "75a183cacb9220953c15c1e3c5813148591a60c354e17b2efb97bd3cafe2482d",
-      "metadataId": "f32458ca37a55794b4cb49cfb191ca76"
     },
     {
       "path": "api/04.数据治理/03.资源中心/group.json",
@@ -2487,117 +2077,17 @@
         "66cbe5cb30e2a02622788ee3c769b738"
       ],
       "kind": "api",
-      "baseSha256": "dd8aa5726181b5b46b5f4472376cfc79c89217549dc40b2d1522f7109d80ef65",
+      "baseSha256": "7f53ae3970d816206f481dca02494873e1703160980357c4fa3b8e13a6778810",
       "metadataId": "dwm_metadata_governance_catalog_01"
     },
     {
-      "path": "api/04.数据治理/04.元数据治理/02.发现结构关系.ms",
-      "databasePath": "/magic-api/api/04.数据治理/04.元数据治理/02.发现结构关系.ms",
-      "rowIds": [
-        "17622f2008b87514827ab84be6f847ec"
-      ],
-      "kind": "api",
-      "baseSha256": "98bd95a8668e76ba9bf7639fbdae24dd9fe50590674e25cdf489f247deecbc84",
-      "metadataId": "dwm_metadata_governance_discover_01"
-    },
-    {
-      "path": "api/04.数据治理/04.元数据治理/03.保存逻辑关系.ms",
-      "databasePath": "/magic-api/api/04.数据治理/04.元数据治理/03.保存逻辑关系.ms",
-      "rowIds": [
-        "f0cc6fe477a76af96e31a1e36bfe906a"
-      ],
-      "kind": "api",
-      "baseSha256": "20b7749fb725a313bfeea5fa2e23d4207c05450a304cc9b078e1c0d365267685",
-      "metadataId": "dwm_metadata_governance_save_relation_01"
-    },
-    {
-      "path": "api/04.数据治理/04.元数据治理/04.删除逻辑关系.ms",
-      "databasePath": "/magic-api/api/04.数据治理/04.元数据治理/04.删除逻辑关系.ms",
-      "rowIds": [
-        "68e82553351c53b7f23196a97f4c313a"
-      ],
-      "kind": "api",
-      "baseSha256": "a7c43d3fb870754e086f9ca775ca4fd6de210fc42dce075e8c50cff41020062c",
-      "metadataId": "dwm_metadata_governance_delete_relation_01"
-    },
-    {
-      "path": "api/04.数据治理/04.元数据治理/05.验证关系数据.ms",
-      "databasePath": "/magic-api/api/04.数据治理/04.元数据治理/05.验证关系数据.ms",
+      "path": "api/04.数据治理/04.元数据治理/02.治理总览统计.ms",
+      "databasePath": "/magic-api/api/04.数据治理/04.元数据治理/02.治理总览统计.ms",
       "rowIds": [
         null
       ],
       "kind": null,
-      "baseSha256": "0b3f6a53a7f6f681d28f98dd8b289c83c955fdf9dbb9901afad8b3e27d801d9e",
-      "metadataId": "dwm_metadata_governance_validate_01"
-    },
-    {
-      "path": "api/04.数据治理/04.元数据治理/06.查看关系依据.ms",
-      "databasePath": "/magic-api/api/04.数据治理/04.元数据治理/06.查看关系依据.ms",
-      "rowIds": [
-        "3f918ace5ddb29422479907694a867dd"
-      ],
-      "kind": "api",
-      "baseSha256": "44ab28ee5b174f7e488654b48ce48e04d9bfd3420339526294ffc51737363748",
-      "metadataId": "dwm_lineage_evidence_01"
-    },
-    {
-      "path": "api/04.数据治理/04.元数据治理/07.查看血缘覆盖.ms",
-      "databasePath": "/magic-api/api/04.数据治理/04.元数据治理/07.查看血缘覆盖.ms",
-      "rowIds": [
-        "c9af71c7e66478f6c4af4a1150fc7d4f"
-      ],
-      "kind": "api",
-      "baseSha256": "9b683fcdf006cf662023740041f5038e38dab016fa7c60f67cb667a336185b09",
-      "metadataId": "dwm_lineage_coverage_01"
-    },
-    {
-      "path": "api/04.数据治理/04.元数据治理/08.预检查物理外键.ms",
-      "databasePath": "/magic-api/api/04.数据治理/04.元数据治理/08.预检查物理外键.ms",
-      "rowIds": [
-        null
-      ],
-      "kind": null,
-      "baseSha256": "9c8b7bed967c3c7c4c015a3ef4b5c5d75b95b4103c752a811d7690b3d615ff09",
-      "metadataId": "dwm_metadata_governance_fk_preview_01"
-    },
-    {
-      "path": "api/04.数据治理/04.元数据治理/09.创建物理外键.ms",
-      "databasePath": "/magic-api/api/04.数据治理/04.元数据治理/09.创建物理外键.ms",
-      "rowIds": [
-        null
-      ],
-      "kind": null,
-      "baseSha256": "9cfb410e34aa514a54ccfb9febb234edd9b69fdf546104b23ea5fa3d66d44649",
-      "metadataId": "dwm_metadata_governance_fk_create_01"
-    },
-    {
-      "path": "api/04.数据治理/04.元数据治理/10.字段对标引用清单.ms",
-      "databasePath": "/magic-api/api/04.数据治理/04.元数据治理/10.字段对标引用清单.ms",
-      "rowIds": [
-        null
-      ],
-      "kind": null,
-      "baseSha256": "d2ed7d012ac3d8ad29715efb590a76a6c61795e51435967908be4a6cf33a5a54",
-      "metadataId": "dwm_metadata_governance_bindings_list_01"
-    },
-    {
-      "path": "api/04.数据治理/04.元数据治理/11.保存字段对标引用.ms",
-      "databasePath": "/magic-api/api/04.数据治理/04.元数据治理/11.保存字段对标引用.ms",
-      "rowIds": [
-        null
-      ],
-      "kind": null,
-      "baseSha256": "db6f4749dd8da246271b35a986736cc0c70867571c07e0dfb66ac39c55653567",
-      "metadataId": "dwm_metadata_governance_bindings_save_01"
-    },
-    {
-      "path": "api/04.数据治理/04.元数据治理/12.治理总览统计.ms",
-      "databasePath": "/magic-api/api/04.数据治理/04.元数据治理/12.治理总览统计.ms",
-      "rowIds": [
-        null
-      ],
-      "kind": null,
-      "baseSha256": "42df34a0bd8d306295054656535c4587816dc4ad1395d64fa8079b34889d22b6",
+      "baseSha256": "9aca7b1acfbfc5d8204483645ef59018f330c03ffd337ebfe744b82f13724b35",
       "metadataId": "dwm_metadata_governance_summary_01"
     },
     {
@@ -2607,8 +2097,913 @@
         "dwm_metadata_governance_group_01"
       ],
       "kind": null,
-      "baseSha256": "dc89c507ce3a98c80d5c4247ff5ead337574b3e331977207c1265871a9d2364d",
+      "baseSha256": "d6c6d3bacc0b09dd48a4fc758371b948fabdda4983d4ad56ca14d8e699d6a7c9",
       "metadataId": "dwm_metadata_governance_group_01"
+    },
+    {
+      "path": "api/04.数据治理/05.标准代码",
+      "databasePath": "/magic-api/api/04.数据治理/05.标准代码/",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
+      "rowIds": [
+        "73ba46f6f5484576bbbc3e3701eae586"
+      ],
+      "kind": "directory"
+    },
+    {
+      "path": "api/04.数据治理/05.标准代码/01.标准代码列表.ms",
+      "databasePath": "/magic-api/api/04.数据治理/05.标准代码/01.标准代码列表.ms",
+      "rowIds": [
+        "9229d9818ec74ecda4b17fbc66d2ed5d"
+      ],
+      "kind": null,
+      "baseSha256": "6d15eab026bb89b0211a3f678623b9cad0023f172b060a36c949247eeb5b2282",
+      "metadataId": "9229d9818ec74ecda4b17fbc66d2ed5d"
+    },
+    {
+      "path": "api/04.数据治理/05.标准代码/02.标准代码分页查询.ms",
+      "databasePath": "/magic-api/api/04.数据治理/05.标准代码/02.标准代码分页查询.ms",
+      "rowIds": [
+        "cc413ac10904400d8dcff45b7df52d98"
+      ],
+      "kind": null,
+      "baseSha256": "f8d803ab3d2ea8659c25c3a9f55a7e08c7ae57e9b37f216c92716d422d482942",
+      "metadataId": "cc413ac10904400d8dcff45b7df52d98"
+    },
+    {
+      "path": "api/04.数据治理/05.标准代码/03.标准代码详情.ms",
+      "databasePath": "/magic-api/api/04.数据治理/05.标准代码/03.标准代码详情.ms",
+      "rowIds": [
+        "684305fb587f4e60904f927b36331e34"
+      ],
+      "kind": null,
+      "baseSha256": "060fcd1654d63ababe7299b948d39db6527b2b4323f23535d20998b3ca5bf184",
+      "metadataId": "684305fb587f4e60904f927b36331e34"
+    },
+    {
+      "path": "api/04.数据治理/05.标准代码/04.标准代码保存修改.ms",
+      "databasePath": "/magic-api/api/04.数据治理/05.标准代码/04.标准代码保存修改.ms",
+      "rowIds": [
+        "2c14c1dc3639474f89c2818cf1a5dc25"
+      ],
+      "kind": null,
+      "baseSha256": "4fc0d93e003dde36e81177e61e40e7d01057278bfd3c9735f24cc3301274fb64",
+      "metadataId": "2c14c1dc3639474f89c2818cf1a5dc25"
+    },
+    {
+      "path": "api/04.数据治理/05.标准代码/05.标准代码删除.ms",
+      "databasePath": "/magic-api/api/04.数据治理/05.标准代码/05.标准代码删除.ms",
+      "rowIds": [
+        "af0138a85b1d4b6b9b7b7252c541aaa8"
+      ],
+      "kind": null,
+      "baseSha256": "344dfa9904b379cd886e09e4a0dee5d43831433fdfc66b08c68ae226f068c906",
+      "metadataId": "af0138a85b1d4b6b9b7b7252c541aaa8"
+    },
+    {
+      "path": "api/04.数据治理/05.标准代码/group.json",
+      "databasePath": "/magic-api/api/04.数据治理/05.标准代码/group.json",
+      "baseSha256": "e0ec7604d96ad123953c2fdc31f541ab80514d8b5da519f85e2c67b5b273a954",
+      "rowIds": [
+        "3e08bbdc371c44729be4913f73619c6c"
+      ],
+      "kind": "group",
+      "metadataId": "58248497ecfb406e96ac161fcda32c05"
+    },
+    {
+      "path": "api/04.数据治理/06.字段标准引用",
+      "databasePath": "/magic-api/api/04.数据治理/06.字段标准引用/",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
+      "rowIds": [
+        "e6d4b17a570e4df2bc5f9cf601feafcb"
+      ],
+      "kind": "directory"
+    },
+    {
+      "path": "api/04.数据治理/06.字段标准引用/01.字段标准引用清单.ms",
+      "databasePath": "/magic-api/api/04.数据治理/06.字段标准引用/01.字段标准引用清单.ms",
+      "rowIds": [
+        "dwm_standard_landing_list_01"
+      ],
+      "kind": "api",
+      "baseSha256": "ffcc63db264572dffc215918d8a85dd0e11981a830de0981abb927740e58220f",
+      "metadataId": "dwm_standard_landing_list_01"
+    },
+    {
+      "path": "api/04.数据治理/06.字段标准引用/02.保存字段标准引用.ms",
+      "databasePath": "/magic-api/api/04.数据治理/06.字段标准引用/02.保存字段标准引用.ms",
+      "rowIds": [
+        "dwm_standard_landing_save_01"
+      ],
+      "kind": "api",
+      "baseSha256": "53d51d28bbf0688dfb73c44281a90be2dca21e9f01f79e6e6933c4409d784e58",
+      "metadataId": "dwm_standard_landing_save_01"
+    },
+    {
+      "path": "api/04.数据治理/06.字段标准引用/group.json",
+      "databasePath": "/magic-api/api/04.数据治理/06.字段标准引用/group.json",
+      "baseSha256": "4edca2ec2a244fa364f87df001c0f6034b9844b28c51a876e0e950f9f7609e6e",
+      "rowIds": [
+        "1e1d776b47164e3fbe9b8f0bd448b54d"
+      ],
+      "kind": "group",
+      "metadataId": "9dec679678f54308b3ac023853602adc"
+    },
+    {
+      "path": "api/04.数据治理/07.元数据目录",
+      "databasePath": "/magic-api/api/04.数据治理/07.元数据目录/",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
+      "kind": "directory",
+      "rowIds": [
+        "05e89adb70614bf68b2a1e3380fa5bec"
+      ]
+    },
+    {
+      "path": "api/04.数据治理/07.元数据目录/01.目录关联服务分页.ms",
+      "databasePath": "/magic-api/api/04.数据治理/07.元数据目录/01.目录关联服务分页.ms",
+      "baseSha256": "74b4678dc0d123f2d8d415fe6de7a299d077ced67e96d2ea0927a1f51fdb5f31",
+      "kind": "api",
+      "rowIds": [
+        "d5949dd2037d46c4b9c13ef054f7e3d2"
+      ],
+      "metadataId": "7542b242144845b287c82950a1a4b87d"
+    },
+    {
+      "path": "api/04.数据治理/07.元数据目录/02.核验目录关联服务分页.ms",
+      "databasePath": "/magic-api/api/04.数据治理/07.元数据目录/02.核验目录关联服务分页.ms",
+      "baseSha256": "e93a8026f5926be5072b980ccbf5ee70707272b70da256058f627c79ac3bfa3b",
+      "kind": "api",
+      "rowIds": [
+        "a31ab4353647410faf5ea7a6bc1ad74c"
+      ],
+      "metadataId": "1b28c8fa05ef4e04be8766664f304608"
+    },
+    {
+      "path": "api/04.数据治理/07.元数据目录/03.目录关联表资源.ms",
+      "databasePath": "/magic-api/api/04.数据治理/07.元数据目录/03.目录关联表资源.ms",
+      "baseSha256": "111bf80423e1dde9c317dade46cd0efdf0be169383d3fecc7f97f3af1178eb94",
+      "kind": "api",
+      "rowIds": [
+        "700968160aae4c3895c7075ed6d62dc7"
+      ],
+      "metadataId": "8ac4f13df5184fe1b6195a23bbfa3cb6"
+    },
+    {
+      "path": "api/04.数据治理/07.元数据目录/04.核验目录关联表资源.ms",
+      "databasePath": "/magic-api/api/04.数据治理/07.元数据目录/04.核验目录关联表资源.ms",
+      "baseSha256": "64f71a0c40b1ab49010c8ac7d333df8fc289b10657c22c1a8cccb5c80c8c99dc",
+      "kind": "api",
+      "rowIds": [
+        "b79a3ca35d934c0e82981f7ff5f2819c"
+      ],
+      "metadataId": "6fd099f9efa348f990d386b34ac33dcf"
+    },
+    {
+      "path": "api/04.数据治理/07.元数据目录/05.采集表分页.ms",
+      "databasePath": "/magic-api/api/04.数据治理/07.元数据目录/05.采集表分页.ms",
+      "baseSha256": "c532e6a395f3493d0ec9936e6c4b90f8b02cf9f1021355c9702db8ba8f45a711",
+      "kind": "api",
+      "rowIds": [
+        "8cf670cb7b074c778f453853e4b61db3"
+      ],
+      "metadataId": "2aae3cefffb2475998ca78df66e3a8a5"
+    },
+    {
+      "path": "api/04.数据治理/07.元数据目录/06.核验采集表分页.ms",
+      "databasePath": "/magic-api/api/04.数据治理/07.元数据目录/06.核验采集表分页.ms",
+      "baseSha256": "dfa509d2bc5c71baafe5c1938e809a90a071dbda284e35a45fe8b92579fe01e4",
+      "kind": "api",
+      "rowIds": [
+        "1830186b208d4fc48e3858f80a24d028"
+      ],
+      "metadataId": "72c09465432842a898b4287719ed0eaa"
+    },
+    {
+      "path": "api/04.数据治理/07.元数据目录/group.json",
+      "databasePath": "/magic-api/api/04.数据治理/07.元数据目录/group.json",
+      "baseSha256": "ff0b0e27425b5888a87c1e2191a69305bb6ab392cb03663105debce931882ead",
+      "kind": "group",
+      "rowIds": [
+        "23b7a76bd07e44f69332b238b8981aaa"
+      ],
+      "metadataId": "cfa98a9699854c299d9d512a34aa8d99"
+    },
+    {
+      "path": "api/04.数据治理/08.采集字段",
+      "databasePath": "/magic-api/api/04.数据治理/08.采集字段/",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
+      "kind": "directory",
+      "rowIds": [
+        "f63feafce38a4081825fccf7a1ef67d9"
+      ]
+    },
+    {
+      "path": "api/04.数据治理/08.采集字段/01.采集字段清单.ms",
+      "databasePath": "/magic-api/api/04.数据治理/08.采集字段/01.采集字段清单.ms",
+      "baseSha256": "fc82072975a66523b544327ec550bfdba0392bb544c4ddea99d506afca33d6d7",
+      "kind": "api",
+      "rowIds": [
+        "b19899a1ebeb49a2919fac69f3433fc4"
+      ],
+      "metadataId": "07b31a6510b54fec87b6b26d3b678eb2"
+    },
+    {
+      "path": "api/04.数据治理/08.采集字段/02.核验采集字段清单.ms",
+      "databasePath": "/magic-api/api/04.数据治理/08.采集字段/02.核验采集字段清单.ms",
+      "baseSha256": "bc41605a8a07ca1725acacf25c4ec010c32cae67a7e8ac64ca96358d728edb03",
+      "kind": "api",
+      "rowIds": [
+        "27acb97443ef4eaba56f7f84dc248b2e"
+      ],
+      "metadataId": "7b22c3e0a9104c8888a358c0707c126f"
+    },
+    {
+      "path": "api/04.数据治理/08.采集字段/03.采集字段分页.ms",
+      "databasePath": "/magic-api/api/04.数据治理/08.采集字段/03.采集字段分页.ms",
+      "baseSha256": "c8f5aa89c187e3bead2e8d6c0e1e5b2b5b54ba222a43ed11afa3918de67788ee",
+      "kind": "api",
+      "rowIds": [
+        "0271b59006324ba9bcff188eccad3c29"
+      ],
+      "metadataId": "5c88cf5d07524a1684303a8748f1de47"
+    },
+    {
+      "path": "api/04.数据治理/08.采集字段/04.核验采集字段分页.ms",
+      "databasePath": "/magic-api/api/04.数据治理/08.采集字段/04.核验采集字段分页.ms",
+      "baseSha256": "f13c4038e08dd514e8fb16f13ee8157c6014eaa39f2fb7a595b22aa5ba05bd5b",
+      "kind": "api",
+      "rowIds": [
+        "08ed7493c14f47839391c627affa54b4"
+      ],
+      "metadataId": "d2762b4faa0f4e1c8f19669f3c54ac2c"
+    },
+    {
+      "path": "api/04.数据治理/08.采集字段/05.批量读取采集字段.ms",
+      "databasePath": "/magic-api/api/04.数据治理/08.采集字段/05.批量读取采集字段.ms",
+      "baseSha256": "e3cabc1d56260f9147935a6cce245f283376a5e87b423f4356ea38b4807f00dc",
+      "kind": "api",
+      "rowIds": [
+        "e67389b51907476781e06cba4541e9ac"
+      ],
+      "metadataId": "8466532157014171aaf6ceb1b9f89910"
+    },
+    {
+      "path": "api/04.数据治理/08.采集字段/group.json",
+      "databasePath": "/magic-api/api/04.数据治理/08.采集字段/group.json",
+      "baseSha256": "d4572ea89edd0a66b5805ca456f488ace836eccd1b404132e5450db2442eec74",
+      "kind": "group",
+      "rowIds": [
+        "e8b36a12dd27427ead85c54510434e8c"
+      ],
+      "metadataId": "746218ad99914bdea1a80fc548bbdd4b"
+    },
+    {
+      "path": "api/04.数据治理/09.数仓分层",
+      "databasePath": "/magic-api/api/04.数据治理/09.数仓分层/",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
+      "rowIds": [
+        "4b78cd438d324510b12367d903610342"
+      ],
+      "kind": "directory"
+    },
+    {
+      "path": "api/04.数据治理/09.数仓分层/01.基础层列表.ms",
+      "databasePath": "/magic-api/api/04.数据治理/09.数仓分层/01.基础层列表.ms",
+      "rowIds": [
+        "5ab722975fb242aa9944638c3fa9c51b"
+      ],
+      "kind": null,
+      "baseSha256": "3a235dfb2bbba2ee40321aba52b3cda0936ea9b9d63192d5086e284468149cca",
+      "metadataId": "5ab722975fb242aa9944638c3fa9c51b"
+    },
+    {
+      "path": "api/04.数据治理/09.数仓分层/02.服务层列表.ms",
+      "databasePath": "/magic-api/api/04.数据治理/09.数仓分层/02.服务层列表.ms",
+      "rowIds": [
+        "ea38fe47d5324bf0be61209dbfef3791"
+      ],
+      "kind": null,
+      "baseSha256": "846d85bcee3dd843979ae3570822544fa05c77f09ebfc1c8b93114bb36e7f455",
+      "metadataId": "ea38fe47d5324bf0be61209dbfef3791"
+    },
+    {
+      "path": "api/04.数据治理/09.数仓分层/03.贴源层列表.ms",
+      "databasePath": "/magic-api/api/04.数据治理/09.数仓分层/03.贴源层列表.ms",
+      "rowIds": [
+        "resource_ods_list_01"
+      ],
+      "kind": null,
+      "baseSha256": "8573ef09b91568c803ae1c887407bcb2ce32ffc0a8135ba9662ee4467f2ec695",
+      "metadataId": "resource_ods_list_01"
+    },
+    {
+      "path": "api/04.数据治理/09.数仓分层/04.分层数据表公共分页.ms",
+      "databasePath": "/magic-api/api/04.数据治理/09.数仓分层/04.分层数据表公共分页.ms",
+      "rowIds": [
+        "resource_layer_page_01"
+      ],
+      "kind": null,
+      "baseSha256": "f572af1e126ba8597a2fa65f89c13ecd477eeb9963058993b0cf460b8d5fca42",
+      "metadataId": "resource_layer_page_01"
+    },
+    {
+      "path": "api/04.数据治理/09.数仓分层/05.资源中心关联数据源选项.ms",
+      "databasePath": "/magic-api/api/04.数据治理/09.数仓分层/05.资源中心关联数据源选项.ms",
+      "rowIds": [
+        "dwm_center_datasource_options_01"
+      ],
+      "kind": "api",
+      "baseSha256": "c411aa0c8a138707e50b7a1f0794c86a92aab284473ee51888de4c9bbc3ec9aa",
+      "metadataId": "dwm_center_datasource_options_01"
+    },
+    {
+      "path": "api/04.数据治理/09.数仓分层/06.保存分层节点配置.ms",
+      "databasePath": "/magic-api/api/04.数据治理/09.数仓分层/06.保存分层节点配置.ms",
+      "rowIds": [
+        "dwm_center_node_save_01"
+      ],
+      "kind": "api",
+      "baseSha256": "d595c4acb66457f77edff31e9839a605106b8ca818f193c2d0b50542f4d791b6",
+      "metadataId": "dwm_center_node_save_01"
+    },
+    {
+      "path": "api/04.数据治理/09.数仓分层/group.json",
+      "databasePath": "/magic-api/api/04.数据治理/09.数仓分层/group.json",
+      "baseSha256": "fb80cdfef34a0f381107ad05e94db4a80f70433025cabe828afa0a177af76b7c",
+      "rowIds": [
+        "518f1014ee4143cbad1ee7a9aebbbe32"
+      ],
+      "kind": "group",
+      "metadataId": "fa824b407ef84972b2daa95187dbabb4"
+    },
+    {
+      "path": "api/04.数据治理/10.资源运营",
+      "databasePath": "/magic-api/api/04.数据治理/10.资源运营/",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
+      "rowIds": [
+        "db49603b8c8744a4af612be5e8bf18c4"
+      ],
+      "kind": "directory"
+    },
+    {
+      "path": "api/04.数据治理/10.资源运营/01.资源运营概览.ms",
+      "databasePath": "/magic-api/api/04.数据治理/10.资源运营/01.资源运营概览.ms",
+      "rowIds": [
+        null
+      ],
+      "kind": null,
+      "baseSha256": "40cc8fcd77f6d8c0be040b645270865df680783ab143a58d0335dd61024fca0c",
+      "metadataId": "rc9c090d43fa64a71bf2f2a6d10a0001"
+    },
+    {
+      "path": "api/04.数据治理/10.资源运营/02.资源运营记录列表.ms",
+      "databasePath": "/magic-api/api/04.数据治理/10.资源运营/02.资源运营记录列表.ms",
+      "rowIds": [
+        null
+      ],
+      "kind": null,
+      "baseSha256": "b34ea207d68aa40ddc483c06a7a70f855fa3e4b38908924af274e829741bd1a8",
+      "metadataId": "rc9c090d43fa64a71bf2f2a6d10a0002"
+    },
+    {
+      "path": "api/04.数据治理/10.资源运营/03.资源运营记录保存.ms",
+      "databasePath": "/magic-api/api/04.数据治理/10.资源运营/03.资源运营记录保存.ms",
+      "rowIds": [
+        null
+      ],
+      "kind": null,
+      "baseSha256": "9ca8589bb1b32618314e2bd32f29cc65c61ec4c19a63f632922ea026feef7853",
+      "metadataId": "rc9c090d43fa64a71bf2f2a6d10a0003"
+    },
+    {
+      "path": "api/04.数据治理/10.资源运营/04.资源运营记录删除.ms",
+      "databasePath": "/magic-api/api/04.数据治理/10.资源运营/04.资源运营记录删除.ms",
+      "rowIds": [
+        null
+      ],
+      "kind": null,
+      "baseSha256": "30713b47628a0f51606cfc7c9bc9097866ada141f0c3cfe0bc5d45533646245b",
+      "metadataId": "rc9c090d43fa64a71bf2f2a6d10a0004"
+    },
+    {
+      "path": "api/04.数据治理/10.资源运营/05.资源操作.ms",
+      "databasePath": "/magic-api/api/04.数据治理/10.资源运营/05.资源操作.ms",
+      "rowIds": [
+        "b6aaff9e31925977b94369d347e7c32a"
+      ],
+      "kind": "api",
+      "baseSha256": "c4a5af043431be9921da2fc7ac8063502f95f600d1f260b01fb27418c109d435",
+      "metadataId": "b6aaff9e31925977b94369d347e7c32a"
+    },
+    {
+      "path": "api/04.数据治理/10.资源运营/06.资源状态.ms",
+      "databasePath": "/magic-api/api/04.数据治理/10.资源运营/06.资源状态.ms",
+      "rowIds": [
+        "f32458ca37a55794b4cb49cfb191ca76"
+      ],
+      "kind": "api",
+      "baseSha256": "2180ef8ae3c4ed810d6b017dd313c560a6719405e589a5c6c0c47b9650d0ae69",
+      "metadataId": "f32458ca37a55794b4cb49cfb191ca76"
+    },
+    {
+      "path": "api/04.数据治理/10.资源运营/group.json",
+      "databasePath": "/magic-api/api/04.数据治理/10.资源运营/group.json",
+      "baseSha256": "0334f087e1b2e1c7bacf45bc611f987586a99e5a64df445be14af81be5dd7b6f",
+      "rowIds": [
+        "9cbc14e441b6456589d64b3b6a164545"
+      ],
+      "kind": "group",
+      "metadataId": "89db9624d0e543cd9cb97631c19be661"
+    },
+    {
+      "path": "api/04.数据治理/11.质量任务",
+      "databasePath": "/magic-api/api/04.数据治理/11.质量任务/",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
+      "rowIds": [
+        "f1eb8b6fbb8844878f17c416b2465e35"
+      ],
+      "kind": "directory"
+    },
+    {
+      "path": "api/04.数据治理/11.质量任务/01.任务分页.ms",
+      "databasePath": "/magic-api/api/04.数据治理/11.质量任务/01.任务分页.ms",
+      "rowIds": [
+        "a1000000000000000000000000000002"
+      ],
+      "kind": null,
+      "baseSha256": "1f2d4321894c9dac1c59931b6d94d0db35a89c5e87071a9a9949621a9b52af9d",
+      "metadataId": "a1000000000000000000000000000002"
+    },
+    {
+      "path": "api/04.数据治理/11.质量任务/02.任务详情.ms",
+      "databasePath": "/magic-api/api/04.数据治理/11.质量任务/02.任务详情.ms",
+      "rowIds": [
+        "a1000000000000000000000000000003"
+      ],
+      "kind": null,
+      "baseSha256": "a30ca208e3fcf55edc9e7b3032be6e85909eefec66ab21319e1a0cd014cf9dfc",
+      "metadataId": "a1000000000000000000000000000003"
+    },
+    {
+      "path": "api/04.数据治理/11.质量任务/03.保存任务.ms",
+      "databasePath": "/magic-api/api/04.数据治理/11.质量任务/03.保存任务.ms",
+      "rowIds": [
+        "a1000000000000000000000000000004"
+      ],
+      "kind": null,
+      "baseSha256": "8c420b09f5b86afb87c5f8633325e13be6964f8a3ccfabbbf1c3dad0906be28e",
+      "metadataId": "a1000000000000000000000000000004"
+    },
+    {
+      "path": "api/04.数据治理/11.质量任务/04.任务预检.ms",
+      "databasePath": "/magic-api/api/04.数据治理/11.质量任务/04.任务预检.ms",
+      "rowIds": [
+        "a1000000000000000000000000000005"
+      ],
+      "kind": null,
+      "baseSha256": "85ded05b49565ae1d860dd79ac98ee81effafae11b73df8f4468781664872dea",
+      "metadataId": "a1000000000000000000000000000005"
+    },
+    {
+      "path": "api/04.数据治理/11.质量任务/05.任务启停.ms",
+      "databasePath": "/magic-api/api/04.数据治理/11.质量任务/05.任务启停.ms",
+      "rowIds": [
+        "a1000000000000000000000000000006"
+      ],
+      "kind": null,
+      "baseSha256": "79fb43f98323565579794a0bdd83d7b0822f498774d61a966b09f60f5504c134",
+      "metadataId": "a1000000000000000000000000000006"
+    },
+    {
+      "path": "api/04.数据治理/11.质量任务/06.删除质检任务.ms",
+      "databasePath": "/magic-api/api/04.数据治理/11.质量任务/06.删除质检任务.ms",
+      "rowIds": [
+        null
+      ],
+      "kind": null,
+      "baseSha256": "70e5264f27b843a21d01bcfe640853eb40c0c7e50ae32d0fd3c9e69f8bcf30ee",
+      "metadataId": "a1000000000000000000000000000016"
+    },
+    {
+      "path": "api/04.数据治理/11.质量任务/group.json",
+      "databasePath": "/magic-api/api/04.数据治理/11.质量任务/group.json",
+      "baseSha256": "ac44ff14ba2faed4f1a914804dbe8d44ae423c5208b6ae3802032f184dfd5438",
+      "rowIds": [
+        "97caadf85ee7473f98a0c54b361d3d70"
+      ],
+      "kind": "group",
+      "metadataId": "ec0b1d9bf20c4b26813f0f04f82fdcd2"
+    },
+    {
+      "path": "api/04.数据治理/12.质量实例",
+      "databasePath": "/magic-api/api/04.数据治理/12.质量实例/",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
+      "rowIds": [
+        "7f9fa5a46a814b4cac093fd849edc20b"
+      ],
+      "kind": "directory"
+    },
+    {
+      "path": "api/04.数据治理/12.质量实例/01.手动发起.ms",
+      "databasePath": "/magic-api/api/04.数据治理/12.质量实例/01.手动发起.ms",
+      "rowIds": [
+        "a1000000000000000000000000000007"
+      ],
+      "kind": null,
+      "baseSha256": "3f6ba1cc881194104826ecfdf18b852e3388a0b6c6643642986272261979869c",
+      "metadataId": "a1000000000000000000000000000007"
+    },
+    {
+      "path": "api/04.数据治理/12.质量实例/02.实例分页.ms",
+      "databasePath": "/magic-api/api/04.数据治理/12.质量实例/02.实例分页.ms",
+      "rowIds": [
+        "a1000000000000000000000000000008"
+      ],
+      "kind": null,
+      "baseSha256": "ad860c6cfb581ae57b58e08f8363e64f0a32dd5a6a20e69c6d9d28da8d79e2dd",
+      "metadataId": "a1000000000000000000000000000008"
+    },
+    {
+      "path": "api/04.数据治理/12.质量实例/03.实例详情.ms",
+      "databasePath": "/magic-api/api/04.数据治理/12.质量实例/03.实例详情.ms",
+      "rowIds": [
+        "a1000000000000000000000000000009"
+      ],
+      "kind": null,
+      "baseSha256": "90da583cc64104b0777b5477c9fe6711b0d3f9a88f4d0658882af0ab55129f1c",
+      "metadataId": "a1000000000000000000000000000009"
+    },
+    {
+      "path": "api/04.数据治理/12.质量实例/04.问题样例分页.ms",
+      "databasePath": "/magic-api/api/04.数据治理/12.质量实例/04.问题样例分页.ms",
+      "rowIds": [
+        "a1000000000000000000000000000010"
+      ],
+      "kind": null,
+      "baseSha256": "1e8e846b77474b89e05c1d88a2d48970647d45115b3727adffaaeb2fec065f8e",
+      "metadataId": "a1000000000000000000000000000010"
+    },
+    {
+      "path": "api/04.数据治理/12.质量实例/05.取消实例.ms",
+      "databasePath": "/magic-api/api/04.数据治理/12.质量实例/05.取消实例.ms",
+      "rowIds": [
+        "a1000000000000000000000000000011"
+      ],
+      "kind": null,
+      "baseSha256": "2bb5625bbc4027a6d22f977499d5e905da0607112a770f917866a1da220e2597",
+      "metadataId": "a1000000000000000000000000000011"
+    },
+    {
+      "path": "api/04.数据治理/12.质量实例/group.json",
+      "databasePath": "/magic-api/api/04.数据治理/12.质量实例/group.json",
+      "baseSha256": "805e8ac3d4818bb5d46873510811046acd8df9c7bd3f62f6f9074ac8332fdef7",
+      "rowIds": [
+        "b95f15fd5fa94f28a1637bed550d68c0"
+      ],
+      "kind": "group",
+      "metadataId": "7391edbbd74b46969f5a885e04cd5ee7"
+    },
+    {
+      "path": "api/04.数据治理/13.质量候选",
+      "databasePath": "/magic-api/api/04.数据治理/13.质量候选/",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
+      "rowIds": [
+        "08448203a8b249e597d6814d5ea66735"
+      ],
+      "kind": "directory"
+    },
+    {
+      "path": "api/04.数据治理/13.质量候选/01.数据源选项.ms",
+      "databasePath": "/magic-api/api/04.数据治理/13.质量候选/01.数据源选项.ms",
+      "rowIds": [
+        "a1000000000000000000000000000012"
+      ],
+      "kind": null,
+      "baseSha256": "64d6309ad62e3dd80d23d1267fa3f3ea2b040501b979866243bdde95fc923027",
+      "metadataId": "a1000000000000000000000000000012"
+    },
+    {
+      "path": "api/04.数据治理/13.质量候选/02.数据表选项.ms",
+      "databasePath": "/magic-api/api/04.数据治理/13.质量候选/02.数据表选项.ms",
+      "rowIds": [
+        "a1000000000000000000000000000013"
+      ],
+      "kind": null,
+      "baseSha256": "70391684b8c1f03a5d810555d135a4d3ecab64cf238f6f77054ac10ba7fe57af",
+      "metadataId": "a1000000000000000000000000000013"
+    },
+    {
+      "path": "api/04.数据治理/13.质量候选/03.字段选项.ms",
+      "databasePath": "/magic-api/api/04.数据治理/13.质量候选/03.字段选项.ms",
+      "rowIds": [
+        null
+      ],
+      "kind": null,
+      "baseSha256": "fef120d1d53f88ab4429328012d067429fc3f7e4c8e20c0dc6a5bac642dc19e4",
+      "metadataId": "a1000000000000000000000000000014"
+    },
+    {
+      "path": "api/04.数据治理/13.质量候选/04.规则模板.ms",
+      "databasePath": "/magic-api/api/04.数据治理/13.质量候选/04.规则模板.ms",
+      "rowIds": [
+        "a1000000000000000000000000000015"
+      ],
+      "kind": null,
+      "baseSha256": "84c00c447fc2ee653bcbef184c5674a20a115a200d444faa3b99572e161ec268",
+      "metadataId": "a1000000000000000000000000000015"
+    },
+    {
+      "path": "api/04.数据治理/13.质量候选/05.责任组织选项.ms",
+      "databasePath": "/magic-api/api/04.数据治理/13.质量候选/05.责任组织选项.ms",
+      "rowIds": [
+        null
+      ],
+      "kind": null,
+      "baseSha256": "d73adb281af1381d7a9c8aaf35da49b555010cc4e35271d6a88768bb062e9b94",
+      "metadataId": "a1000000000000000000000000000017"
+    },
+    {
+      "path": "api/04.数据治理/13.质量候选/group.json",
+      "databasePath": "/magic-api/api/04.数据治理/13.质量候选/group.json",
+      "baseSha256": "820d4393198aee68a2254f970c6780ef74478621c337ceaad3b5edda15e13fcd",
+      "rowIds": [
+        "0701837296c94d6587b97f25d100f8d2"
+      ],
+      "kind": "group",
+      "metadataId": "f5cea4fc64d44c7ebd024067f72f923d"
+    },
+    {
+      "path": "api/04.数据治理/14.质量工单",
+      "databasePath": "/magic-api/api/04.数据治理/14.质量工单/",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
+      "rowIds": [
+        "97582fd552cd4f10a6912d0e2b0d871c"
+      ],
+      "kind": "directory"
+    },
+    {
+      "path": "api/04.数据治理/14.质量工单/01.创建质量工单.ms",
+      "databasePath": "/magic-api/api/04.数据治理/14.质量工单/01.创建质量工单.ms",
+      "rowIds": [
+        null
+      ],
+      "kind": null,
+      "baseSha256": "c081a976bec19d50b9ca261976eff97980112d83d1adc1f494481feeebcddf48",
+      "metadataId": "wx_quality_work_create_01"
+    },
+    {
+      "path": "api/04.数据治理/14.质量工单/02.推进质量工单.ms",
+      "databasePath": "/magic-api/api/04.数据治理/14.质量工单/02.推进质量工单.ms",
+      "rowIds": [
+        null
+      ],
+      "kind": null,
+      "baseSha256": "23f365d3e3519ada30fe48a22f4a4f50d866e2d4b3c1f00301238e7e5d46d21b",
+      "metadataId": "wx_quality_work_transition_01"
+    },
+    {
+      "path": "api/04.数据治理/14.质量工单/03.质量工单列表.ms",
+      "databasePath": "/magic-api/api/04.数据治理/14.质量工单/03.质量工单列表.ms",
+      "rowIds": [
+        null
+      ],
+      "kind": null,
+      "baseSha256": "17bcd57d4e40725e7caea756f2cfc55abe0f3e5359cb500e6091b92816f1890c",
+      "metadataId": "wx_quality_work_page_01"
+    },
+    {
+      "path": "api/04.数据治理/14.质量工单/group.json",
+      "databasePath": "/magic-api/api/04.数据治理/14.质量工单/group.json",
+      "baseSha256": "af0d7a7cbf9d2629e1e6157b97369dd2b1a85a12a341a2d3f586ab6ee8be374c",
+      "rowIds": [
+        "acbbdff19329425282688b1451e01866"
+      ],
+      "kind": "group",
+      "metadataId": "341e0d87ae9d400a923ea5ae6d59c06a"
+    },
+    {
+      "path": "api/04.数据治理/15.质检语句模板",
+      "databasePath": "/magic-api/api/04.数据治理/15.质检语句模板/",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
+      "rowIds": [
+        "9e8b169956f345238aa493010c6cb329"
+      ],
+      "kind": "directory"
+    },
+    {
+      "path": "api/04.数据治理/15.质检语句模板/01.查询语句模板分页.ms",
+      "databasePath": "/magic-api/api/04.数据治理/15.质检语句模板/01.查询语句模板分页.ms",
+      "rowIds": [
+        null
+      ],
+      "kind": null,
+      "baseSha256": "1f192ce54a246d255ca2d08e8d96a3c2145ce898628f9bf116e43ed51f52cca5",
+      "metadataId": "quality_sql_template_page_v1"
+    },
+    {
+      "path": "api/04.数据治理/15.质检语句模板/02.保存查询语句模板.ms",
+      "databasePath": "/magic-api/api/04.数据治理/15.质检语句模板/02.保存查询语句模板.ms",
+      "rowIds": [
+        null
+      ],
+      "kind": null,
+      "baseSha256": "21d7dbcd999366d4e1eb40a895e057a89a8b5bbb272e61bc98f2988fd9d8bb78",
+      "metadataId": "quality_sql_template_save_v1"
+    },
+    {
+      "path": "api/04.数据治理/15.质检语句模板/03.删除查询语句模板.ms",
+      "databasePath": "/magic-api/api/04.数据治理/15.质检语句模板/03.删除查询语句模板.ms",
+      "rowIds": [
+        null
+      ],
+      "kind": null,
+      "baseSha256": "fe676ee7314fc38b55765697b9293084269771d99e3a9d25c89c7af2804d9837",
+      "metadataId": "quality_sql_template_delete_v1"
+    },
+    {
+      "path": "api/04.数据治理/15.质检语句模板/group.json",
+      "databasePath": "/magic-api/api/04.数据治理/15.质检语句模板/group.json",
+      "baseSha256": "5fb5b570d208a17e0f6f3bf5da1af0520facf2556d0b8b472ec2bf5266100c66",
+      "rowIds": [
+        "273f37d78638485ca7b4e5126709ccb6"
+      ],
+      "kind": "group",
+      "metadataId": "123cac05f967419091ba7b8a840afb4c"
+    },
+    {
+      "path": "api/04.数据治理/16.逻辑关系",
+      "databasePath": "/magic-api/api/04.数据治理/16.逻辑关系/",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
+      "rowIds": [
+        "d4747b0f3c2b4741af7da5e0b1f3e783"
+      ],
+      "kind": "directory"
+    },
+    {
+      "path": "api/04.数据治理/16.逻辑关系/01.发现结构关系.ms",
+      "databasePath": "/magic-api/api/04.数据治理/16.逻辑关系/01.发现结构关系.ms",
+      "rowIds": [
+        "17622f2008b87514827ab84be6f847ec"
+      ],
+      "kind": "api",
+      "baseSha256": "a887a48cc372541f708a67479ebdc7d4b60c0cc04824daf03bb8cc20de7d49c2",
+      "metadataId": "dwm_metadata_governance_discover_01"
+    },
+    {
+      "path": "api/04.数据治理/16.逻辑关系/02.保存逻辑关系.ms",
+      "databasePath": "/magic-api/api/04.数据治理/16.逻辑关系/02.保存逻辑关系.ms",
+      "rowIds": [
+        "f0cc6fe477a76af96e31a1e36bfe906a"
+      ],
+      "kind": "api",
+      "baseSha256": "60c54683cd3f8b071c5bbd960a3399750c947cec4a9b9ca4d60f43a13b959d1f",
+      "metadataId": "dwm_metadata_governance_save_relation_01"
+    },
+    {
+      "path": "api/04.数据治理/16.逻辑关系/03.删除逻辑关系.ms",
+      "databasePath": "/magic-api/api/04.数据治理/16.逻辑关系/03.删除逻辑关系.ms",
+      "rowIds": [
+        "68e82553351c53b7f23196a97f4c313a"
+      ],
+      "kind": "api",
+      "baseSha256": "e0a129dd4101b768fa6a197fd9eadd3c409cac45b2d2a3bec702b6b5783080c1",
+      "metadataId": "dwm_metadata_governance_delete_relation_01"
+    },
+    {
+      "path": "api/04.数据治理/16.逻辑关系/04.验证关系数据.ms",
+      "databasePath": "/magic-api/api/04.数据治理/16.逻辑关系/04.验证关系数据.ms",
+      "rowIds": [
+        null
+      ],
+      "kind": null,
+      "baseSha256": "bfc6bc096acc95e5170d7bdd4037726e7b2d948ce784276b9f2a53d8c918837d",
+      "metadataId": "dwm_metadata_governance_validate_01"
+    },
+    {
+      "path": "api/04.数据治理/16.逻辑关系/group.json",
+      "databasePath": "/magic-api/api/04.数据治理/16.逻辑关系/group.json",
+      "baseSha256": "f3389c9acfb52180dd669a1b5b981b56f7f29121528cc1811e845d318709da49",
+      "rowIds": [
+        "1185daca99b642ce9324059b85d87b59"
+      ],
+      "kind": "group",
+      "metadataId": "335ef5caa54f4c6ca44e616cca6cc00a"
+    },
+    {
+      "path": "api/04.数据治理/17.关系血缘",
+      "databasePath": "/magic-api/api/04.数据治理/17.关系血缘/",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
+      "rowIds": [
+        "b986049405f34b7fa2020b8b6c607fe5"
+      ],
+      "kind": "directory"
+    },
+    {
+      "path": "api/04.数据治理/17.关系血缘/01.查看关系依据.ms",
+      "databasePath": "/magic-api/api/04.数据治理/17.关系血缘/01.查看关系依据.ms",
+      "rowIds": [
+        "3f918ace5ddb29422479907694a867dd"
+      ],
+      "kind": "api",
+      "baseSha256": "2af090f83c263c1b2b95ba06d1cb84c0b902e42d68399273b64663ef2cf08511",
+      "metadataId": "dwm_lineage_evidence_01"
+    },
+    {
+      "path": "api/04.数据治理/17.关系血缘/02.查看血缘覆盖.ms",
+      "databasePath": "/magic-api/api/04.数据治理/17.关系血缘/02.查看血缘覆盖.ms",
+      "rowIds": [
+        "c9af71c7e66478f6c4af4a1150fc7d4f"
+      ],
+      "kind": "api",
+      "baseSha256": "afc347835de59e576a931515d3f3e23b0e0ad6d048347577964b7c3bce45178e",
+      "metadataId": "dwm_lineage_coverage_01"
+    },
+    {
+      "path": "api/04.数据治理/17.关系血缘/group.json",
+      "databasePath": "/magic-api/api/04.数据治理/17.关系血缘/group.json",
+      "baseSha256": "1ca7f1629d2bd9dc8c4b80e1ff5c13c722a4426eca2a249aff475b0daf5cec11",
+      "rowIds": [
+        "b1cb6cff26984e2cbe235c35076d68b0"
+      ],
+      "kind": "group",
+      "metadataId": "43712e2ff2134664bc85724de61230d8"
+    },
+    {
+      "path": "api/04.数据治理/18.物理外键",
+      "databasePath": "/magic-api/api/04.数据治理/18.物理外键/",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
+      "rowIds": [
+        "613935d922624db4914e12a67e9e0653"
+      ],
+      "kind": "directory"
+    },
+    {
+      "path": "api/04.数据治理/18.物理外键/01.预检查物理外键.ms",
+      "databasePath": "/magic-api/api/04.数据治理/18.物理外键/01.预检查物理外键.ms",
+      "rowIds": [
+        null
+      ],
+      "kind": null,
+      "baseSha256": "e9b1ed1562683c55ece2508b3ef38307dce9cba63d81cbd30719f7c2afe7a875",
+      "metadataId": "dwm_metadata_governance_fk_preview_01"
+    },
+    {
+      "path": "api/04.数据治理/18.物理外键/02.创建物理外键.ms",
+      "databasePath": "/magic-api/api/04.数据治理/18.物理外键/02.创建物理外键.ms",
+      "rowIds": [
+        null
+      ],
+      "kind": null,
+      "baseSha256": "70972d81a8b7f48acf1ca555a815765e986f6290c3624c3c855a167000da3078",
+      "metadataId": "dwm_metadata_governance_fk_create_01"
+    },
+    {
+      "path": "api/04.数据治理/18.物理外键/group.json",
+      "databasePath": "/magic-api/api/04.数据治理/18.物理外键/group.json",
+      "baseSha256": "7f27fd869d454d49b5fa4aa23526244a04684e3828e58c48466f26d6a0ca4dbe",
+      "rowIds": [
+        "57d8daabd02347bd81cf7875ce126516"
+      ],
+      "kind": "group",
+      "metadataId": "e99b14c3772b40fdb8abf241878e67cf"
+    },
+    {
+      "path": "api/04.数据治理/19.字段对标",
+      "databasePath": "/magic-api/api/04.数据治理/19.字段对标/",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
+      "rowIds": [
+        "c50ceb3fc90a4b2088f01892eb054e81"
+      ],
+      "kind": "directory"
+    },
+    {
+      "path": "api/04.数据治理/19.字段对标/01.字段对标引用清单.ms",
+      "databasePath": "/magic-api/api/04.数据治理/19.字段对标/01.字段对标引用清单.ms",
+      "rowIds": [
+        null
+      ],
+      "kind": null,
+      "baseSha256": "f444f0c28d2087192d7b2ca14a40776c35ae47a31119cdf51585ac334dfa61c5",
+      "metadataId": "dwm_metadata_governance_bindings_list_01"
+    },
+    {
+      "path": "api/04.数据治理/19.字段对标/02.保存字段对标引用.ms",
+      "databasePath": "/magic-api/api/04.数据治理/19.字段对标/02.保存字段对标引用.ms",
+      "rowIds": [
+        null
+      ],
+      "kind": null,
+      "baseSha256": "a480878a188598d9363a7eaea8a24d1d8221441de8598344f4d6c3942b36a719",
+      "metadataId": "dwm_metadata_governance_bindings_save_01"
+    },
+    {
+      "path": "api/04.数据治理/19.字段对标/group.json",
+      "databasePath": "/magic-api/api/04.数据治理/19.字段对标/group.json",
+      "baseSha256": "6f007f6fae65e606dfdb28284533e43f1a92348c11d5050b699d1557c642fc6d",
+      "rowIds": [
+        "f3edb77f96e044dc943a1bd3c23f4724"
+      ],
+      "kind": "group",
+      "metadataId": "159801d0901641f7a4cd41877e70f7a3"
     },
     {
       "path": "api/04.数据治理/group.json",
@@ -2645,7 +3040,7 @@
         "cc09d9129bd34d48a6a695c4e9074ffc"
       ],
       "kind": "api",
-      "baseSha256": "6c128ffaeb27de934efa3294fdd1bdb57f3bd6ffa0bb823e7bf8bc622f298d9b",
+      "baseSha256": "a4eb7eb51e90145b8aaa5631a3ed5edc91ef0274ee6a71b8d69e479b41ad030d",
       "metadataId": "334f3354e13e57c89cbbf359dcf39e9c"
     },
     {
@@ -2655,7 +3050,7 @@
         "03e5196d10314088b4bf1c2a3f7ccf31"
       ],
       "kind": "api",
-      "baseSha256": "073e82d97f1272da326aba611b64f54a48106b4e985835129e7c401ba9c52b86",
+      "baseSha256": "d83c06b4c7912a4d1a7c9b31c38ed06d75173aae1bf903be32f4c0373a7e985a",
       "metadataId": "492aa26450c85c2ca40ea4c7e77d33d3"
     },
     {
@@ -2665,7 +3060,7 @@
         "5c44de7c3fb143b595fcce9169605b09"
       ],
       "kind": "api",
-      "baseSha256": "8cc9225b35dba072ecb2ca4b3581b51d78bf24b1ba400b64f3a3fc4b52585658",
+      "baseSha256": "c9bd6d8680f71d77b2ef8d42053adf2b4f5a51533ffe9eedd37410c7f83cb6bb",
       "metadataId": "c0573134cc5c524492bc5b8fb882e168"
     },
     {
@@ -2675,7 +3070,7 @@
         "83e8bcb651ae4d12ad8240decb834588"
       ],
       "kind": "api",
-      "baseSha256": "edd3282c74a2f05e126b5ac092bac034c58bf4a57bcd96e4337216cbe9420fce",
+      "baseSha256": "3ec5ff424bebfd16fb2138d5c1c127f1124049efce70124a0160ab6eb020e40b",
       "metadataId": "297753ebb8fe51eda48002a10d26ff1e"
     },
     {
@@ -2685,148 +3080,78 @@
         "060746cf2a174824afa6209a334ab059"
       ],
       "kind": "api",
-      "baseSha256": "7036a4497fe27c72dcf6ec65b23e88a1a3494e516af0aee6b89e11503a08bd82",
+      "baseSha256": "f58ceff809b50a2dcbd1a0d93e7f6677e82548d7763191e409cbec36fb32fa74",
       "metadataId": "3d31df37f14553e48a5721cf3e073309"
     },
     {
       "path": "api/05.数据服务/01.服务编排/06.查询画布流程详情.ms",
       "databasePath": "/magic-api/api/05.数据服务/01.服务编排/06.查询画布流程详情.ms",
-      "baseSha256": "4e63c429fd9135be65731d22226619056f2558c3c8e8255b779d80195f1705bd",
       "rowIds": [
         "04bb5f0daa6340729403e76665977943"
       ],
       "kind": "api",
+      "baseSha256": "5c6d220bf5e5f8b2b2bb1bbcbe08ecb3823c3f6e38be5b1caded6aa3b95d5518",
       "metadataId": "flowserve_canvas_flow_get_v1"
     },
     {
       "path": "api/05.数据服务/01.服务编排/07.核验画布流程详情.ms",
       "databasePath": "/magic-api/api/05.数据服务/01.服务编排/07.核验画布流程详情.ms",
-      "baseSha256": "3272c8fa9cba0e18a2fb11265abc61feca5112430cd29ec1a1621db2429d8d55",
       "rowIds": [
         "c50ebc6f12044d3fa5ea74a4c59dbb46"
       ],
       "kind": "api",
+      "baseSha256": "ec65da6a191318617449e56f8516c9bb6d03bc1ea85329d846efcb10aeac6eeb",
       "metadataId": "flowserve_canvas_flow_head_v1"
     },
     {
       "path": "api/05.数据服务/01.服务编排/08.查询画布运行节点.ms",
       "databasePath": "/magic-api/api/05.数据服务/01.服务编排/08.查询画布运行节点.ms",
-      "baseSha256": "506602c69d44773c5420e6d846a950675a00b3fb534815a4a2e9f8a41f5c2741",
       "rowIds": [
         "d1711f8bdba64ece974eab71b377fc3a"
       ],
       "kind": "api",
+      "baseSha256": "49b948bd1cc1e2621e8462979b3589fe662d7a97f3db7411b5abac630712a4d1",
       "metadataId": "flowserve_canvas_nodes_get_v1"
     },
     {
       "path": "api/05.数据服务/01.服务编排/09.核验画布运行节点.ms",
       "databasePath": "/magic-api/api/05.数据服务/01.服务编排/09.核验画布运行节点.ms",
-      "baseSha256": "9ed10a6c36222deacf5f2fd7075dffa44cb83706e01acf49a4fba9906160af6f",
       "rowIds": [
         "27d9c1eefbcf45138fdc79752d8d87b4"
       ],
       "kind": "api",
+      "baseSha256": "5c71d2107743968a175d1d4f6385075c959651d9b8ae5ea2c5e54d709493a0c6",
       "metadataId": "flowserve_canvas_nodes_head_v1"
     },
     {
-      "path": "api/05.数据服务/01.服务编排/10.删除网关资产.ms",
-      "databasePath": "/magic-api/api/05.数据服务/01.服务编排/10.删除网关资产.ms",
-      "baseSha256": "d2208a05d82132bdee93137964cb333cb1e91a3c3ebba7d8a1d62d540cf2fe67",
-      "rowIds": [
-        "07ef9bbe176b43dcb275f479e1de839c"
-      ],
-      "kind": null,
-      "metadataId": "07ef9bbe176b43dcb275f479e1de839c"
-    },
-    {
-      "path": "api/05.数据服务/01.服务编排/11.保存服务分组.ms",
-      "databasePath": "/magic-api/api/05.数据服务/01.服务编排/11.保存服务分组.ms",
-      "baseSha256": "891000bcbee722edd6f90408c39e018e0afda237e2696c34649272bc2546f70a",
-      "rowIds": [
-        "b51895b7229f4638b70233a29567ccd7"
-      ],
-      "kind": null,
-      "metadataId": "b51895b7229f4638b70233a29567ccd7"
-    },
-    {
-      "path": "api/05.数据服务/01.服务编排/12.服务分组列表.ms",
-      "databasePath": "/magic-api/api/05.数据服务/01.服务编排/12.服务分组列表.ms",
-      "baseSha256": "ebfe3d0b4856b0c2250d12d803cbffe67c1f47e4a270a752e19f846f5a533f9d",
-      "rowIds": [
-        "5d26a3dfa99b49edbe32d53bdfca061e"
-      ],
-      "kind": null,
-      "metadataId": "5d26a3dfa99b49edbe32d53bdfca061e"
-    },
-    {
-      "path": "api/05.数据服务/01.服务编排/13.删除服务分组.ms",
-      "databasePath": "/magic-api/api/05.数据服务/01.服务编排/13.删除服务分组.ms",
-      "baseSha256": "c9c0240a0ff722b4ba3b52146404e2a9cd0af873fd2571d9cbf32b78364d8aab",
-      "rowIds": [
-        "gateway_group_delete_20260726"
-      ],
-      "kind": null,
-      "metadataId": "gateway_group_delete_20260726"
-    },
-    {
-      "path": "api/05.数据服务/01.服务编排/14.服务列表.ms",
-      "databasePath": "/magic-api/api/05.数据服务/01.服务编排/14.服务列表.ms",
-      "baseSha256": "e3db93676694e5702d4a4512314f889bafe0edc74184c4238f95b77342029ba6",
+      "path": "api/05.数据服务/01.服务编排/10.服务列表.ms",
+      "databasePath": "/magic-api/api/05.数据服务/01.服务编排/10.服务列表.ms",
       "rowIds": [
         "510fe82cba4a42248abd1faefc515441"
       ],
       "kind": null,
+      "baseSha256": "3b28e1ee440fed0e93f1a67cf64f397f4c996e50181c2c660b64a18336561a3e",
       "metadataId": "510fe82cba4a42248abd1faefc515441"
     },
     {
-      "path": "api/05.数据服务/01.服务编排/15.服务详情.ms",
-      "databasePath": "/magic-api/api/05.数据服务/01.服务编排/15.服务详情.ms",
-      "baseSha256": "bdc7cf71c4c609c9130a054fcaa432f9e53f07956a9a1e193afcff38da1244a4",
+      "path": "api/05.数据服务/01.服务编排/11.服务详情.ms",
+      "databasePath": "/magic-api/api/05.数据服务/01.服务编排/11.服务详情.ms",
       "rowIds": [
         "1cc3266227a24804b9ba7c3a9e00d724"
       ],
       "kind": "api",
+      "baseSha256": "3325bb38d9f62dc4a0d5c5bb7e72c07f7d2301269084a311bcf96badbe9e910e",
       "metadataId": "1cc3266227a24804b9ba7c3a9e00d724"
     },
     {
-      "path": "api/05.数据服务/01.服务编排/16.调试服务接口.ms",
-      "databasePath": "/magic-api/api/05.数据服务/01.服务编排/16.调试服务接口.ms",
-      "baseSha256": "f67609eaa18c0188591a3c42ebc3497640c43551d1b61719801c98cdd85f738d",
+      "path": "api/05.数据服务/01.服务编排/12.调试服务接口.ms",
+      "databasePath": "/magic-api/api/05.数据服务/01.服务编排/12.调试服务接口.ms",
       "rowIds": [
         "eaf30ca304034ef8a61c404e17e6cde9"
       ],
       "kind": "api",
+      "baseSha256": "e653d650b4d337f673da80f51861db578a91c4588d9e7fa0dcc1e9cb98c1fa13",
       "metadataId": "c7a2c918325a452c84ac391e3e2c6a11"
-    },
-    {
-      "path": "api/05.数据服务/01.服务编排/17.保存网关服务.ms",
-      "databasePath": "/magic-api/api/05.数据服务/01.服务编排/17.保存网关服务.ms",
-      "baseSha256": "f2a5885b8c4a28c9668f67be93771defb820cc1219bc2b542c66c02ae468c5e9",
-      "rowIds": [
-        "d5a7019f5e4a4a92a34543c1f5290005"
-      ],
-      "kind": null,
-      "metadataId": "d5a7019f5e4a4a92a34543c1f5290005"
-    },
-    {
-      "path": "api/05.数据服务/01.服务编排/18.打开服务编排.ms",
-      "databasePath": "/magic-api/api/05.数据服务/01.服务编排/18.打开服务编排.ms",
-      "baseSha256": "52b299bcb0cc75d314651fdc145966bebc02b309c757b4c47b4b429cab3fa816",
-      "rowIds": [
-        "9deeb20063894101b5e3f1157fefd6bf"
-      ],
-      "kind": "api",
-      "metadataId": "ad50e98d5f5e40ed861e767c0426d770"
-    },
-    {
-      "path": "api/05.数据服务/01.服务编排/19.服务授权申请.ms",
-      "databasePath": "/magic-api/api/05.数据服务/01.服务编排/19.服务授权申请.ms",
-      "baseSha256": "e381204e82276f18ce1290b8b7186185d49c3c661f1a348c2c300e127feded50",
-      "rowIds": [
-        "d9a3f2da3b8249c1b669cca85f5a0b78"
-      ],
-      "kind": "api",
-      "metadataId": "860805c3bf744fb18e2dce79d4d1739d"
     },
     {
       "path": "api/05.数据服务/01.服务编排/group.json",
@@ -3085,8 +3410,8 @@
       "metadataId": "8c4d2f6a1b7e4c3d9a0f5e2b6d8c1a37"
     },
     {
-      "path": "api/05.数据服务/06.服务治理",
-      "databasePath": "/magic-api/api/05.数据服务/06.服务治理/",
+      "path": "api/05.数据服务/06.定时任务",
+      "databasePath": "/magic-api/api/05.数据服务/06.定时任务/",
       "rowIds": [
         "1b704f6247fb4cb1b329fa11581ad802"
       ],
@@ -3094,284 +3419,487 @@
       "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "api/05.数据服务/06.服务治理/01.分层列表.ms",
-      "databasePath": "/magic-api/api/05.数据服务/06.服务治理/01.分层列表.ms",
-      "rowIds": [
-        "edc3862670e1487ab022d72a00c14e48"
-      ],
-      "kind": "api",
-      "baseSha256": "1618bd717f1af222fefe422359f0200ae2bd3c033441776e0c24b55c5262b49d",
-      "metadataId": "3c03093a32844f6b81e42c2d2619d645"
-    },
-    {
-      "path": "api/05.数据服务/06.服务治理/02.分层保存.ms",
-      "databasePath": "/magic-api/api/05.数据服务/06.服务治理/02.分层保存.ms",
-      "rowIds": [
-        "e550a4dbe3424ff5a2a571b77f866628"
-      ],
-      "kind": "api",
-      "baseSha256": "f20414224e5d9fc55661e0952d2db7869bead12924b6dfee0c47ae2c24479bcf",
-      "metadataId": "e2a5ae446aea42e3a29ba388ddd41de9"
-    },
-    {
-      "path": "api/05.数据服务/06.服务治理/03.分层状态.ms",
-      "databasePath": "/magic-api/api/05.数据服务/06.服务治理/03.分层状态.ms",
-      "rowIds": [
-        "257d256cd705492aacf241597cd19769"
-      ],
-      "kind": "api",
-      "baseSha256": "01c1bb6389141e00b9f0a508ed221998176eb6ab68cf2057d682e96d5c2c3038",
-      "metadataId": "79c6a95bdabb4192a5cfdd676140c80a"
-    },
-    {
-      "path": "api/05.数据服务/06.服务治理/04.分层初始化.ms",
-      "databasePath": "/magic-api/api/05.数据服务/06.服务治理/04.分层初始化.ms",
-      "rowIds": [
-        "01c82f9a2a8c40ce9c4029dbdc1d4c19"
-      ],
-      "kind": "api",
-      "baseSha256": "2e5dfa3d6a1db24da13917a710271dba63c7d19dfbb9c4b9c0cc3d1e1e69253b",
-      "metadataId": "1caf0bcbb2964dd08bddab6f98a9e75e"
-    },
-    {
-      "path": "api/05.数据服务/06.服务治理/05.分层概览.ms",
-      "databasePath": "/magic-api/api/05.数据服务/06.服务治理/05.分层概览.ms",
-      "rowIds": [
-        "20170ff7fb45412e88da55a2acfd120c"
-      ],
-      "kind": "api",
-      "baseSha256": "af10bc7f4818644c6e5d77289eaae6b392538048b6801f8ffc3bf05a60a15875",
-      "metadataId": "cb06b4cfde2e45fba158477b784c3ea5"
-    },
-    {
-      "path": "api/05.数据服务/06.服务治理/06.对象列表.ms",
-      "databasePath": "/magic-api/api/05.数据服务/06.服务治理/06.对象列表.ms",
-      "rowIds": [
-        "38768d926904436fb104e04d6b4a7366"
-      ],
-      "kind": "api",
-      "baseSha256": "bbce23d4565fd38ca93f23446c7a5e136553e61c73b7ff190c5b2e406a48bf98",
-      "metadataId": "d2e6b6a85fd549718eace4d68b108af6"
-    },
-    {
-      "path": "api/05.数据服务/06.服务治理/07.对象批量纳管.ms",
-      "databasePath": "/magic-api/api/05.数据服务/06.服务治理/07.对象批量纳管.ms",
-      "rowIds": [
-        "ddf681e189914df5a33022433d185bc9"
-      ],
-      "kind": "api",
-      "baseSha256": "fc40f1bb8e2fc9f8a8875b4f98df36193f99a2add773622f31ac2e3c26b91ed3",
-      "metadataId": "55e367e198734f66bb37efe17a7fc9b0"
-    },
-    {
-      "path": "api/05.数据服务/06.服务治理/08.对象生命周期.ms",
-      "databasePath": "/magic-api/api/05.数据服务/06.服务治理/08.对象生命周期.ms",
-      "rowIds": [
-        "afeb5d0396bf49ebb736ce8620df8b9c"
-      ],
-      "kind": "api",
-      "baseSha256": "9ab4ebd4467667cfcf5c570fb8706cb6d4145dafff45d2334b91086d4e2ce238",
-      "metadataId": "793387e9e9394d2f9e39ac8aaa696505"
-    },
-    {
-      "path": "api/05.数据服务/06.服务治理/09.规则列表.ms",
-      "databasePath": "/magic-api/api/05.数据服务/06.服务治理/09.规则列表.ms",
-      "rowIds": [
-        "593defbe212a48bd9f4d94188e1caa45"
-      ],
-      "kind": "api",
-      "baseSha256": "ca7fab79f65a344eecb6c07d5f70b60cc894ed334540f578463ecc47baa4b069",
-      "metadataId": "1ba32da0a958422e934662fc1c1b55fb"
-    },
-    {
-      "path": "api/05.数据服务/06.服务治理/10.规则保存.ms",
-      "databasePath": "/magic-api/api/05.数据服务/06.服务治理/10.规则保存.ms",
-      "rowIds": [
-        "ae9a6e62f1f64b25824c13715995aa99"
-      ],
-      "kind": "api",
-      "baseSha256": "72871bd50187628f3697d17cb059f0c243829dfdc5f1edc3736babec2cb4c6ad",
-      "metadataId": "70cfff4ea75848ba85f7c5f5a645ce52"
-    },
-    {
-      "path": "api/05.数据服务/06.服务治理/11.入湖校验.ms",
-      "databasePath": "/magic-api/api/05.数据服务/06.服务治理/11.入湖校验.ms",
-      "rowIds": [
-        "2cb04c6471e541efa375fc35b5bfa6c9"
-      ],
-      "kind": "api",
-      "baseSha256": "b95b811c53c40db489e2c863bf70b7754ad28cbd31245de59c803ca4ca71f7b0",
-      "metadataId": "4beadabc28554b528aaf179adf1b9972"
-    },
-    {
-      "path": "api/05.数据服务/06.服务治理/12.出湖申请.ms",
-      "databasePath": "/magic-api/api/05.数据服务/06.服务治理/12.出湖申请.ms",
-      "rowIds": [
-        "3b6332fa5a3e4aa0a1a917c4839d91ff"
-      ],
-      "kind": "api",
-      "baseSha256": "4e93beb477395374b0701f9e66215dc536e0ab197277f5232409d929a92d2afd",
-      "metadataId": "f4f1ed3666744afc9df1b2d847dfddb3"
-    },
-    {
-      "path": "api/05.数据服务/06.服务治理/13.路由管理.ms",
-      "databasePath": "/magic-api/api/05.数据服务/06.服务治理/13.路由管理.ms",
-      "rowIds": [
-        "552d80498e8047bc9c3ab5cd809f3e82"
-      ],
-      "kind": "api",
-      "baseSha256": "dc29a8ca98246420ac2e07c96a32bc124d3e0d58366d0af54f1799d05b218429",
-      "metadataId": "6a1c3f2b9d7e4a5c8b0f1e2d3c4a5b60"
-    },
-    {
-      "path": "api/05.数据服务/06.服务治理/14.策略管理.ms",
-      "databasePath": "/magic-api/api/05.数据服务/06.服务治理/14.策略管理.ms",
-      "rowIds": [
-        "85673ca80ea847dda8f1f01a205bed93"
-      ],
-      "kind": "api",
-      "baseSha256": "1819d1540fa72e607f7a9c449bc16c71aedd931d7bc5522496a93a6e75410576",
-      "metadataId": "7b2d4e3c0e8f4b6d9c1a2f3e4d5b6c71"
-    },
-    {
-      "path": "api/05.数据服务/06.服务治理/15.网络区域.ms",
-      "databasePath": "/magic-api/api/05.数据服务/06.服务治理/15.网络区域.ms",
-      "rowIds": [
-        "a63a870674de4c76a8b9c92be5e0a9af"
-      ],
-      "kind": "api",
-      "baseSha256": "35ba1e7523b0c08b37a573ffbe451e14559f41c241fa8edebd77f1cb3f518b1f",
-      "metadataId": "8c3e5f4d1f9a4c7e0d2b3a4f5e6c7d82"
-    },
-    {
-      "path": "api/05.数据服务/06.服务治理/16.接入应用.ms",
-      "databasePath": "/magic-api/api/05.数据服务/06.服务治理/16.接入应用.ms",
-      "rowIds": [
-        "9bbfb7651c1b49e185a1da0bf770ab91"
-      ],
-      "kind": "api",
-      "baseSha256": "0f797a4a7242935989b8d183f42b87a609dfe4298d0afb327b1f842fe21b52c6",
-      "metadataId": "9d4f6a5e2a0b4d8f1e3c4b5a6f7d8e93"
-    },
-    {
-      "path": "api/05.数据服务/06.服务治理/17.服务实例.ms",
-      "databasePath": "/magic-api/api/05.数据服务/06.服务治理/17.服务实例.ms",
-      "rowIds": [
-        "9a1901b6bf6e45ea8b4a4c378e8b4f33"
-      ],
-      "kind": "api",
-      "baseSha256": "15e5ac80a3c5cba858952b6e3ee2c7bd7bb155679c6bbd3c47a30a025096418b",
-      "metadataId": "ae5a7b6f3b1c4e9a2f4d5c6b7a8e9f04"
-    },
-    {
-      "path": "api/05.数据服务/06.服务治理/18.灰度发布.ms",
-      "databasePath": "/magic-api/api/05.数据服务/06.服务治理/18.灰度发布.ms",
-      "rowIds": [
-        "be6f8b35659445c58a5893679f6519e1"
-      ],
-      "kind": "api",
-      "baseSha256": "19e1a31c6c1731576c476d9dd64b26148d53b9e333b2b13767a4f98c2755c014",
-      "metadataId": "bf6b8c7a4c2d5f0b3a5e6d7c8b9f0a15"
-    },
-    {
-      "path": "api/05.数据服务/06.服务治理/19.网关日志.ms",
-      "databasePath": "/magic-api/api/05.数据服务/06.服务治理/19.网关日志.ms",
-      "rowIds": [
-        "057169205174487da0c88cc6bf0a899e"
-      ],
-      "kind": "api",
-      "baseSha256": "b095f70c731c050fd0be6b71c9aa2a81e2cd25cd8877a4d0931252813bb9b2d5",
-      "metadataId": "c07c9d8b5d3e6a1c4b6f7e8d9c0a1b26"
-    },
-    {
-      "path": "api/05.数据服务/06.服务治理/20.小时指标.ms",
-      "databasePath": "/magic-api/api/05.数据服务/06.服务治理/20.小时指标.ms",
-      "rowIds": [
-        "e33e6c74df75461fb14ae3142bc0b878"
-      ],
-      "kind": "api",
-      "baseSha256": "7abe25ae1bb63a49d0c58608faf78743a7de74e39a858f68cec6056f211f79d1",
-      "metadataId": "d18d0e9c6e4f7b2d5c7a8f9e0d1b2c37"
-    },
-    {
-      "path": "api/05.数据服务/06.服务治理/21.服务订阅.ms",
-      "databasePath": "/magic-api/api/05.数据服务/06.服务治理/21.服务订阅.ms",
-      "rowIds": [
-        "b7385ece3664496bafa04a37e133b79e"
-      ],
-      "kind": "api",
-      "baseSha256": "8c6391d579829e50d1a6e56f562b588025faef79fcaf672e7f14acbc75820db2",
-      "metadataId": "e29e1f0d7f5a8c3e6d8b9a0f1e2c3d48"
-    },
-    {
-      "path": "api/05.数据服务/06.服务治理/22.服务反馈.ms",
-      "databasePath": "/magic-api/api/05.数据服务/06.服务治理/22.服务反馈.ms",
-      "rowIds": [
-        "fde0b8728a9144d3bd2434ba80c626b2"
-      ],
-      "kind": "api",
-      "baseSha256": "1da0a2ec2a769a910ddb650d4890c1d4b4e61cda07a8cac9e1673fe0113795bb",
-      "metadataId": "f3af2a1e8a6b9d4f7e9c0b1a2f3d4e59"
-    },
-    {
-      "path": "api/05.数据服务/06.服务治理/23.服务合集.ms",
-      "databasePath": "/magic-api/api/05.数据服务/06.服务治理/23.服务合集.ms",
-      "rowIds": [
-        "0bc4c3ea0c4a44ed8c4acd23761505a8"
-      ],
-      "kind": "api",
-      "baseSha256": "76258282a320a0031518f841df07a1659f2395cdf1f6bb89cd27b79ca2f7ec1c",
-      "metadataId": "a40b3b2f9b7c0e5a8f0d1c2b3a4e5f6a"
-    },
-    {
-      "path": "api/05.数据服务/06.服务治理/24.网关调用.ms",
-      "databasePath": "/magic-api/api/05.数据服务/06.服务治理/24.网关调用.ms",
-      "rowIds": [
-        "e7df5a3e4be545bbae728a61fa329ddb"
-      ],
-      "kind": "api",
-      "baseSha256": "106a5c67dc8c51f94671e6a9a96d16843657ce896d4e95e1931ef5c1a9fa6dd0",
-      "metadataId": "b51c4c3a0c8d1f6b9a1e2d3c4b5f6a7b"
-    },
-    {
-      "path": "api/05.数据服务/06.服务治理/25.定时任务列表.ms",
-      "databasePath": "/magic-api/api/05.数据服务/06.服务治理/25.定时任务列表.ms",
+      "path": "api/05.数据服务/06.定时任务/01.定时任务列表.ms",
+      "databasePath": "/magic-api/api/05.数据服务/06.定时任务/01.定时任务列表.ms",
       "rowIds": [
         "8d9c4c5586f149068b14d1c708fd15db"
       ],
       "kind": "api",
-      "baseSha256": "116cebe376b8a55ace83929f59152d169971deff728a64db60ac296236d8d948",
+      "baseSha256": "095de4087dd3b79dd95e761f7c9571e4d5c7b1d6c033b46a6acbbb73f4fcf05e",
       "metadataId": "7d2f4a9c1e8b4c6d0a3f5e7b9c1d2a84"
     },
     {
-      "path": "api/05.数据服务/06.服务治理/26.定时任务管理.ms",
-      "databasePath": "/magic-api/api/05.数据服务/06.服务治理/26.定时任务管理.ms",
+      "path": "api/05.数据服务/06.定时任务/02.定时任务管理.ms",
+      "databasePath": "/magic-api/api/05.数据服务/06.定时任务/02.定时任务管理.ms",
       "rowIds": [
         "2e1b9f2e2fb147e3b03560f1db48f20d"
       ],
       "kind": "api",
-      "baseSha256": "16538a0a64930fd65aeb772c893921dd51d0d91d104e83ab62ae91180a5790a9",
+      "baseSha256": "a7d61f3f725350716221508f8dd193b123e7d166f0cdffa2b159676127bb32c4",
       "metadataId": "8e3a5b0d2f1c4d7e9a6b0c2f4d8e1b73"
     },
     {
-      "path": "api/05.数据服务/06.服务治理/27.定时任务日志.ms",
-      "databasePath": "/magic-api/api/05.数据服务/06.服务治理/27.定时任务日志.ms",
+      "path": "api/05.数据服务/06.定时任务/03.定时任务日志.ms",
+      "databasePath": "/magic-api/api/05.数据服务/06.定时任务/03.定时任务日志.ms",
       "rowIds": [
         "f4c855a9e4a24ebfb9dae093e9bf9b6f"
       ],
       "kind": "api",
-      "baseSha256": "333d701b18f7c36359ae06f8515ae04de0091e2fe491536b521442b580362a16",
+      "baseSha256": "15f41a6f8ea358953faafa33c72e875722a02130837ca517ff054ab995452034",
       "metadataId": "9f4b6c1e3a2d4f8b0c7d1e5a9b3f6c82"
     },
     {
-      "path": "api/05.数据服务/06.服务治理/group.json",
-      "databasePath": "/magic-api/api/05.数据服务/06.服务治理/group.json",
+      "path": "api/05.数据服务/06.定时任务/group.json",
+      "databasePath": "/magic-api/api/05.数据服务/06.定时任务/group.json",
       "rowIds": [
         "a64d3a9579d34935968841cec93e0e02"
       ],
       "kind": "api",
-      "baseSha256": "687f9236990b7aa1c19c942f1e277693c124e0f8eea5eca4462e06d198b0be6d",
+      "baseSha256": "354caaf7d35ac216cf74eba4f77b03fa894f3a3e62359d8c6ab40ba114eda66d",
       "metadataId": "c452aa598f245789a90d40ae2091e57c"
+    },
+    {
+      "path": "api/05.数据服务/07.网关资产",
+      "databasePath": "/magic-api/api/05.数据服务/07.网关资产/",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
+      "rowIds": [
+        "38abefbf938b43e8b0ab18bc2550a92b"
+      ],
+      "kind": "directory"
+    },
+    {
+      "path": "api/05.数据服务/07.网关资产/01.删除网关资产.ms",
+      "databasePath": "/magic-api/api/05.数据服务/07.网关资产/01.删除网关资产.ms",
+      "rowIds": [
+        "07ef9bbe176b43dcb275f479e1de839c"
+      ],
+      "kind": null,
+      "baseSha256": "c9ee07e6a91aa57609005c10c1787d81621d5c845333d470e1c7c82b5e7df1ef",
+      "metadataId": "07ef9bbe176b43dcb275f479e1de839c"
+    },
+    {
+      "path": "api/05.数据服务/07.网关资产/02.保存网关服务.ms",
+      "databasePath": "/magic-api/api/05.数据服务/07.网关资产/02.保存网关服务.ms",
+      "rowIds": [
+        "d5a7019f5e4a4a92a34543c1f5290005"
+      ],
+      "kind": null,
+      "baseSha256": "9fa5e5835e3ee7bebcff26077781f789efa52f1839e9b5de03f2ff2ba84c0670",
+      "metadataId": "d5a7019f5e4a4a92a34543c1f5290005"
+    },
+    {
+      "path": "api/05.数据服务/07.网关资产/03.打开服务编排.ms",
+      "databasePath": "/magic-api/api/05.数据服务/07.网关资产/03.打开服务编排.ms",
+      "rowIds": [
+        "9deeb20063894101b5e3f1157fefd6bf"
+      ],
+      "kind": "api",
+      "baseSha256": "14e2d9f49364414c016b2daceddd2e4d61b7d897b3c747745167bb9e6dec7f35",
+      "metadataId": "ad50e98d5f5e40ed861e767c0426d770"
+    },
+    {
+      "path": "api/05.数据服务/07.网关资产/04.服务授权申请.ms",
+      "databasePath": "/magic-api/api/05.数据服务/07.网关资产/04.服务授权申请.ms",
+      "rowIds": [
+        "d9a3f2da3b8249c1b669cca85f5a0b78"
+      ],
+      "kind": "api",
+      "baseSha256": "899156ac7a05a3233c8896817d9de04da0579f5e158c68df22f1d1809c7a4f1b",
+      "metadataId": "860805c3bf744fb18e2dce79d4d1739d"
+    },
+    {
+      "path": "api/05.数据服务/07.网关资产/05.路由管理.ms",
+      "databasePath": "/magic-api/api/05.数据服务/07.网关资产/05.路由管理.ms",
+      "rowIds": [
+        "552d80498e8047bc9c3ab5cd809f3e82"
+      ],
+      "kind": "api",
+      "baseSha256": "a792b94f7acf58cb427ac28b4f78dfc469f64226c5a36b12248473bb2d858344",
+      "metadataId": "6a1c3f2b9d7e4a5c8b0f1e2d3c4a5b60"
+    },
+    {
+      "path": "api/05.数据服务/07.网关资产/06.策略管理.ms",
+      "databasePath": "/magic-api/api/05.数据服务/07.网关资产/06.策略管理.ms",
+      "rowIds": [
+        "85673ca80ea847dda8f1f01a205bed93"
+      ],
+      "kind": "api",
+      "baseSha256": "ee1251e9272ecb19467513825378f1b17bba484137c756056ec17c20bc7c86e6",
+      "metadataId": "7b2d4e3c0e8f4b6d9c1a2f3e4d5b6c71"
+    },
+    {
+      "path": "api/05.数据服务/07.网关资产/07.网络区域.ms",
+      "databasePath": "/magic-api/api/05.数据服务/07.网关资产/07.网络区域.ms",
+      "rowIds": [
+        "a63a870674de4c76a8b9c92be5e0a9af"
+      ],
+      "kind": "api",
+      "baseSha256": "b0e91092c651c554facc4454e7f626687fe9d86a841b81d5919f28830302f5b1",
+      "metadataId": "8c3e5f4d1f9a4c7e0d2b3a4f5e6c7d82"
+    },
+    {
+      "path": "api/05.数据服务/07.网关资产/08.接入应用.ms",
+      "databasePath": "/magic-api/api/05.数据服务/07.网关资产/08.接入应用.ms",
+      "rowIds": [
+        "9bbfb7651c1b49e185a1da0bf770ab91"
+      ],
+      "kind": "api",
+      "baseSha256": "ad50edd09d4d9aaffd344c44944d9022d1178740258634b0afbbebb98c572c3d",
+      "metadataId": "9d4f6a5e2a0b4d8f1e3c4b5a6f7d8e93"
+    },
+    {
+      "path": "api/05.数据服务/07.网关资产/group.json",
+      "databasePath": "/magic-api/api/05.数据服务/07.网关资产/group.json",
+      "baseSha256": "40f23e2271696843b716a8a8471b74666c301657e4f5e0c558afeaceddec2654",
+      "rowIds": [
+        "66d5d123385d466fb57cc75e1fbfeca2"
+      ],
+      "kind": "group",
+      "metadataId": "9a427a26bc984532b8595da7142765d2"
+    },
+    {
+      "path": "api/05.数据服务/08.网关分组",
+      "databasePath": "/magic-api/api/05.数据服务/08.网关分组/",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
+      "rowIds": [
+        "f987dadc313a4ee696d2a65958754e02"
+      ],
+      "kind": "directory"
+    },
+    {
+      "path": "api/05.数据服务/08.网关分组/01.保存服务分组.ms",
+      "databasePath": "/magic-api/api/05.数据服务/08.网关分组/01.保存服务分组.ms",
+      "rowIds": [
+        "b51895b7229f4638b70233a29567ccd7"
+      ],
+      "kind": null,
+      "baseSha256": "107888138e111aabd91c3f6cbee3fe60798a9deb40d7c14a61be7bbbfff32557",
+      "metadataId": "b51895b7229f4638b70233a29567ccd7"
+    },
+    {
+      "path": "api/05.数据服务/08.网关分组/02.服务分组列表.ms",
+      "databasePath": "/magic-api/api/05.数据服务/08.网关分组/02.服务分组列表.ms",
+      "rowIds": [
+        "5d26a3dfa99b49edbe32d53bdfca061e"
+      ],
+      "kind": null,
+      "baseSha256": "cd56cbab54a099655b058e782c6a1f7c8e985845fd162a93e562b49e2e10ce22",
+      "metadataId": "5d26a3dfa99b49edbe32d53bdfca061e"
+    },
+    {
+      "path": "api/05.数据服务/08.网关分组/03.删除服务分组.ms",
+      "databasePath": "/magic-api/api/05.数据服务/08.网关分组/03.删除服务分组.ms",
+      "rowIds": [
+        "gateway_group_delete_20260726"
+      ],
+      "kind": null,
+      "baseSha256": "09a503e10a2e1acc8328858c88e4c935c15acbdbfe0150fb08864fdfde2a9c44",
+      "metadataId": "gateway_group_delete_20260726"
+    },
+    {
+      "path": "api/05.数据服务/08.网关分组/group.json",
+      "databasePath": "/magic-api/api/05.数据服务/08.网关分组/group.json",
+      "baseSha256": "8c5e1ec95b59f0c1f2b444dc94fc99ae45c88104e58ced1d11a056864e5c3e55",
+      "rowIds": [
+        "4fba94c9751148b8815c606dcdc0f19b"
+      ],
+      "kind": "group",
+      "metadataId": "eacac524a32749d0bed46e8d752ef8bc"
+    },
+    {
+      "path": "api/05.数据服务/09.湖仓分层",
+      "databasePath": "/magic-api/api/05.数据服务/09.湖仓分层/",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
+      "rowIds": [
+        "e18ae089154140fea2fbbfb18fd583d5"
+      ],
+      "kind": "directory"
+    },
+    {
+      "path": "api/05.数据服务/09.湖仓分层/01.分层列表.ms",
+      "databasePath": "/magic-api/api/05.数据服务/09.湖仓分层/01.分层列表.ms",
+      "rowIds": [
+        "edc3862670e1487ab022d72a00c14e48"
+      ],
+      "kind": "api",
+      "baseSha256": "9661915aca56354ca406da1824114813e9bbd1a6db45b05f7d05343d3450ae90",
+      "metadataId": "3c03093a32844f6b81e42c2d2619d645"
+    },
+    {
+      "path": "api/05.数据服务/09.湖仓分层/02.分层保存.ms",
+      "databasePath": "/magic-api/api/05.数据服务/09.湖仓分层/02.分层保存.ms",
+      "rowIds": [
+        "e550a4dbe3424ff5a2a571b77f866628"
+      ],
+      "kind": "api",
+      "baseSha256": "053ba9ee35a00bce19db84b443a72c1e792677cd5ca67ccb42ae0dd61916b338",
+      "metadataId": "e2a5ae446aea42e3a29ba388ddd41de9"
+    },
+    {
+      "path": "api/05.数据服务/09.湖仓分层/03.分层状态.ms",
+      "databasePath": "/magic-api/api/05.数据服务/09.湖仓分层/03.分层状态.ms",
+      "rowIds": [
+        "257d256cd705492aacf241597cd19769"
+      ],
+      "kind": "api",
+      "baseSha256": "6503cb874ef0fe4094a4f72a517fe88ed4e2ec21c41deade97ef6d690cd3656f",
+      "metadataId": "79c6a95bdabb4192a5cfdd676140c80a"
+    },
+    {
+      "path": "api/05.数据服务/09.湖仓分层/04.分层初始化.ms",
+      "databasePath": "/magic-api/api/05.数据服务/09.湖仓分层/04.分层初始化.ms",
+      "rowIds": [
+        "01c82f9a2a8c40ce9c4029dbdc1d4c19"
+      ],
+      "kind": "api",
+      "baseSha256": "47731c08863c9f5ff0f6c21e9bade555771dfa3725f8b35cd22731a4fb578e7b",
+      "metadataId": "1caf0bcbb2964dd08bddab6f98a9e75e"
+    },
+    {
+      "path": "api/05.数据服务/09.湖仓分层/05.分层概览.ms",
+      "databasePath": "/magic-api/api/05.数据服务/09.湖仓分层/05.分层概览.ms",
+      "rowIds": [
+        "20170ff7fb45412e88da55a2acfd120c"
+      ],
+      "kind": "api",
+      "baseSha256": "3f2d6b3dfe6140d0e4c675bf844cd24ec20233ec952062927dcc03563240699f",
+      "metadataId": "cb06b4cfde2e45fba158477b784c3ea5"
+    },
+    {
+      "path": "api/05.数据服务/09.湖仓分层/group.json",
+      "databasePath": "/magic-api/api/05.数据服务/09.湖仓分层/group.json",
+      "baseSha256": "326f828a9a212d6de8a09b3299c1b5a7e3addd6994c8c103cf2e500bc328de23",
+      "rowIds": [
+        "bf18a8e167f6463ba8d0ca1ff57d2ae4"
+      ],
+      "kind": "group",
+      "metadataId": "b5badef9297e4dbb8a6028e72a393d4e"
+    },
+    {
+      "path": "api/05.数据服务/10.湖仓对象",
+      "databasePath": "/magic-api/api/05.数据服务/10.湖仓对象/",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
+      "rowIds": [
+        "d446c010261e4f119971b8192fdf1343"
+      ],
+      "kind": "directory"
+    },
+    {
+      "path": "api/05.数据服务/10.湖仓对象/01.对象列表.ms",
+      "databasePath": "/magic-api/api/05.数据服务/10.湖仓对象/01.对象列表.ms",
+      "rowIds": [
+        "38768d926904436fb104e04d6b4a7366"
+      ],
+      "kind": "api",
+      "baseSha256": "48b3d2dd13d5b242d79cf77557fab233c575b2996f42b2200639ba3d14c13843",
+      "metadataId": "d2e6b6a85fd549718eace4d68b108af6"
+    },
+    {
+      "path": "api/05.数据服务/10.湖仓对象/02.对象批量纳管.ms",
+      "databasePath": "/magic-api/api/05.数据服务/10.湖仓对象/02.对象批量纳管.ms",
+      "rowIds": [
+        "ddf681e189914df5a33022433d185bc9"
+      ],
+      "kind": "api",
+      "baseSha256": "3bd05a905328f8f915b59350170921bfbabbab3f0d5c19a527be38d5c27ff842",
+      "metadataId": "55e367e198734f66bb37efe17a7fc9b0"
+    },
+    {
+      "path": "api/05.数据服务/10.湖仓对象/03.对象生命周期.ms",
+      "databasePath": "/magic-api/api/05.数据服务/10.湖仓对象/03.对象生命周期.ms",
+      "rowIds": [
+        "afeb5d0396bf49ebb736ce8620df8b9c"
+      ],
+      "kind": "api",
+      "baseSha256": "e07fa9a9c9ad1f79dcd25aa22f3e24efc92b6b2084a15e40f01415ea62ce3fac",
+      "metadataId": "793387e9e9394d2f9e39ac8aaa696505"
+    },
+    {
+      "path": "api/05.数据服务/10.湖仓对象/group.json",
+      "databasePath": "/magic-api/api/05.数据服务/10.湖仓对象/group.json",
+      "baseSha256": "5beb20b9bcfbf2c79d1e1ab7176c7583ef8f1f5d8595d0897b9c6361656fd593",
+      "rowIds": [
+        "dbd2c60b80e3422198f093e9f72ede2c"
+      ],
+      "kind": "group",
+      "metadataId": "11f572cb355b47ec94d4da477e16dc26"
+    },
+    {
+      "path": "api/05.数据服务/11.入出湖规则",
+      "databasePath": "/magic-api/api/05.数据服务/11.入出湖规则/",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
+      "rowIds": [
+        "c4dbee26f1164fe6aadd7ea1438e7011"
+      ],
+      "kind": "directory"
+    },
+    {
+      "path": "api/05.数据服务/11.入出湖规则/01.规则列表.ms",
+      "databasePath": "/magic-api/api/05.数据服务/11.入出湖规则/01.规则列表.ms",
+      "rowIds": [
+        "593defbe212a48bd9f4d94188e1caa45"
+      ],
+      "kind": "api",
+      "baseSha256": "97a2d4acdea4aa0c6bceb1c39fe48e2fc6816bf3914790f093f34d2b4ff225f9",
+      "metadataId": "1ba32da0a958422e934662fc1c1b55fb"
+    },
+    {
+      "path": "api/05.数据服务/11.入出湖规则/02.规则保存.ms",
+      "databasePath": "/magic-api/api/05.数据服务/11.入出湖规则/02.规则保存.ms",
+      "rowIds": [
+        "ae9a6e62f1f64b25824c13715995aa99"
+      ],
+      "kind": "api",
+      "baseSha256": "5e184341e58a1e18dcea13b918030b9aefac0b5b724fe08437adaca552358819",
+      "metadataId": "70cfff4ea75848ba85f7c5f5a645ce52"
+    },
+    {
+      "path": "api/05.数据服务/11.入出湖规则/03.入湖校验.ms",
+      "databasePath": "/magic-api/api/05.数据服务/11.入出湖规则/03.入湖校验.ms",
+      "rowIds": [
+        "2cb04c6471e541efa375fc35b5bfa6c9"
+      ],
+      "kind": "api",
+      "baseSha256": "513e43564918e1c3fa846fe116c48ea62ef163976b68c46e6eb7bd866764cc89",
+      "metadataId": "4beadabc28554b528aaf179adf1b9972"
+    },
+    {
+      "path": "api/05.数据服务/11.入出湖规则/04.出湖申请.ms",
+      "databasePath": "/magic-api/api/05.数据服务/11.入出湖规则/04.出湖申请.ms",
+      "rowIds": [
+        "3b6332fa5a3e4aa0a1a917c4839d91ff"
+      ],
+      "kind": "api",
+      "baseSha256": "13ea0fceb44968e758755cc54ada2317e17a40cec7bc398796c4b1df64fcc739",
+      "metadataId": "f4f1ed3666744afc9df1b2d847dfddb3"
+    },
+    {
+      "path": "api/05.数据服务/11.入出湖规则/group.json",
+      "databasePath": "/magic-api/api/05.数据服务/11.入出湖规则/group.json",
+      "baseSha256": "529a5f4fef1222f13a5e429b46e5f6ecd4c9789589ccbb1565d531e57a9c942d",
+      "rowIds": [
+        "4ac7419d33454a568cbebbbd59d2471b"
+      ],
+      "kind": "group",
+      "metadataId": "2f650f81f8c243368d56eef608316408"
+    },
+    {
+      "path": "api/05.数据服务/12.网关运行",
+      "databasePath": "/magic-api/api/05.数据服务/12.网关运行/",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
+      "rowIds": [
+        "8c1eb5d52ae9448ab346e51107787645"
+      ],
+      "kind": "directory"
+    },
+    {
+      "path": "api/05.数据服务/12.网关运行/01.服务实例.ms",
+      "databasePath": "/magic-api/api/05.数据服务/12.网关运行/01.服务实例.ms",
+      "rowIds": [
+        "9a1901b6bf6e45ea8b4a4c378e8b4f33"
+      ],
+      "kind": "api",
+      "baseSha256": "88f5fdd08be5233ffc5a8de2420506a6342bd259042d6fddc3b7f0dc422ade92",
+      "metadataId": "ae5a7b6f3b1c4e9a2f4d5c6b7a8e9f04"
+    },
+    {
+      "path": "api/05.数据服务/12.网关运行/02.灰度发布.ms",
+      "databasePath": "/magic-api/api/05.数据服务/12.网关运行/02.灰度发布.ms",
+      "rowIds": [
+        "be6f8b35659445c58a5893679f6519e1"
+      ],
+      "kind": "api",
+      "baseSha256": "d4ccc9452eee0f55abb9318c4ede87cec13034db6db19a4282403d11f9284495",
+      "metadataId": "bf6b8c7a4c2d5f0b3a5e6d7c8b9f0a15"
+    },
+    {
+      "path": "api/05.数据服务/12.网关运行/03.网关日志.ms",
+      "databasePath": "/magic-api/api/05.数据服务/12.网关运行/03.网关日志.ms",
+      "rowIds": [
+        "057169205174487da0c88cc6bf0a899e"
+      ],
+      "kind": "api",
+      "baseSha256": "b493c91bccdaed166b499e8048c895686b3b236700be170b7d7068eef98406e0",
+      "metadataId": "c07c9d8b5d3e6a1c4b6f7e8d9c0a1b26"
+    },
+    {
+      "path": "api/05.数据服务/12.网关运行/04.小时指标.ms",
+      "databasePath": "/magic-api/api/05.数据服务/12.网关运行/04.小时指标.ms",
+      "rowIds": [
+        "e33e6c74df75461fb14ae3142bc0b878"
+      ],
+      "kind": "api",
+      "baseSha256": "fc28e8709f7a34d2584864e0d17c23d2fa738135b92c7d39d34cc41ef5608a4b",
+      "metadataId": "d18d0e9c6e4f7b2d5c7a8f9e0d1b2c37"
+    },
+    {
+      "path": "api/05.数据服务/12.网关运行/05.网关调用.ms",
+      "databasePath": "/magic-api/api/05.数据服务/12.网关运行/05.网关调用.ms",
+      "rowIds": [
+        "e7df5a3e4be545bbae728a61fa329ddb"
+      ],
+      "kind": "api",
+      "baseSha256": "31d02b6a5b03bfae527431b807f10cb73feca4177e85cf5a3e1219c121b07532",
+      "metadataId": "b51c4c3a0c8d1f6b9a1e2d3c4b5f6a7b"
+    },
+    {
+      "path": "api/05.数据服务/12.网关运行/group.json",
+      "databasePath": "/magic-api/api/05.数据服务/12.网关运行/group.json",
+      "baseSha256": "cb472e7c4df368fd9868e98061885f5a81240ea5f01bdcd1212459a7b8d38e3a",
+      "rowIds": [
+        "d632e62a13924380a1dc290bd7abfad9"
+      ],
+      "kind": "group",
+      "metadataId": "115458a314ce4956b65d27d47afd61ce"
+    },
+    {
+      "path": "api/05.数据服务/13.服务运营",
+      "databasePath": "/magic-api/api/05.数据服务/13.服务运营/",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
+      "rowIds": [
+        "1dcbac9d695f4827b63f43c9c6ab4bc9"
+      ],
+      "kind": "directory"
+    },
+    {
+      "path": "api/05.数据服务/13.服务运营/01.服务订阅.ms",
+      "databasePath": "/magic-api/api/05.数据服务/13.服务运营/01.服务订阅.ms",
+      "rowIds": [
+        "b7385ece3664496bafa04a37e133b79e"
+      ],
+      "kind": "api",
+      "baseSha256": "b0a72911b02395e4f0c1e16f3b485a0cbae7e67ff7bd39b57146b068119837eb",
+      "metadataId": "e29e1f0d7f5a8c3e6d8b9a0f1e2c3d48"
+    },
+    {
+      "path": "api/05.数据服务/13.服务运营/02.服务反馈.ms",
+      "databasePath": "/magic-api/api/05.数据服务/13.服务运营/02.服务反馈.ms",
+      "rowIds": [
+        "fde0b8728a9144d3bd2434ba80c626b2"
+      ],
+      "kind": "api",
+      "baseSha256": "38032c20d490ba5f0f42cc2ca65ef0fae17a1bfb16692b4282e8e9a67051eb4f",
+      "metadataId": "f3af2a1e8a6b9d4f7e9c0b1a2f3d4e59"
+    },
+    {
+      "path": "api/05.数据服务/13.服务运营/03.服务合集.ms",
+      "databasePath": "/magic-api/api/05.数据服务/13.服务运营/03.服务合集.ms",
+      "rowIds": [
+        "0bc4c3ea0c4a44ed8c4acd23761505a8"
+      ],
+      "kind": "api",
+      "baseSha256": "58429cb800ac60defedd68d6c5c0b4b793425c973902eb4bfcc7daa9618717e9",
+      "metadataId": "a40b3b2f9b7c0e5a8f0d1c2b3a4e5f6a"
+    },
+    {
+      "path": "api/05.数据服务/13.服务运营/group.json",
+      "databasePath": "/magic-api/api/05.数据服务/13.服务运营/group.json",
+      "baseSha256": "77119bc7d46c807fe3266dd161b369a715654f04007bc761e996d40547264e6b",
+      "rowIds": [
+        "47881bf41d8f4f429ed3733135aed8b3"
+      ],
+      "kind": "group",
+      "metadataId": "094cd528dceb45278146eb6f68aa9c2b"
     },
     {
       "path": "api/05.数据服务/group.json",
@@ -3620,11 +4148,11 @@
     {
       "path": "api/07.系统管理/01.用户管理/01.用户分页.ms",
       "databasePath": "/magic-api/api/07.系统管理/01.用户管理/01.用户分页.ms",
-      "baseSha256": "f9e70d0272ccfd96cde1b6db3fec595f6cbd2046b21d26388d7c29b7ec87b7c7",
       "rowIds": [
         "f75db35437b546f8a8c8e4eda6740e33"
       ],
       "kind": null,
+      "baseSha256": "ae16a65f02dd11e5f492f7f8e26b3edfc705049d430fee53a77eee1abc837b22",
       "metadataId": "f75db35437b546f8a8c8e4eda6740e33"
     },
     {
@@ -3650,61 +4178,41 @@
     {
       "path": "api/07.系统管理/01.用户管理/04.用户保存修改.ms",
       "databasePath": "/magic-api/api/07.系统管理/01.用户管理/04.用户保存修改.ms",
-      "baseSha256": "51cb5cd49aacfc0b4e274656b7cbb46cb456b16f51868baba8bf1b9fffe1aaf4",
       "rowIds": [
         "0db56c0aa4a5420ebc7f303b2fc06e8b"
       ],
       "kind": null,
+      "baseSha256": "16ae12701a109125eb9adf2cc88dfb2a5ef8bfa6d9cd6de253fa9e8d780b05d3",
       "metadataId": "0db56c0aa4a5420ebc7f303b2fc06e8b"
     },
     {
-      "path": "api/07.系统管理/01.用户管理/05.在线用户分页.ms",
-      "databasePath": "/magic-api/api/07.系统管理/01.用户管理/05.在线用户分页.ms",
-      "baseSha256": "9302f1eed2a606a059a641ec24f4a98ae866e07a59761a870edf427c94591a61",
-      "rowIds": [
-        "6743b6c46a384a7c8881d0a582a3947e"
-      ],
-      "kind": null,
-      "metadataId": "6743b6c46a384a7c8881d0a582a3947e"
-    },
-    {
-      "path": "api/07.系统管理/01.用户管理/06.强制下线.ms",
-      "databasePath": "/magic-api/api/07.系统管理/01.用户管理/06.强制下线.ms",
-      "baseSha256": "f4e49980a4cbbc0af061c0359dd0afc26c893ba8468084e9355a99403778ce6d",
-      "rowIds": [
-        "72bece30af4d4ca998f0378d6ba69923"
-      ],
-      "kind": null,
-      "metadataId": "72bece30af4d4ca998f0378d6ba69923"
-    },
-    {
-      "path": "api/07.系统管理/01.用户管理/07.用户角色保存.ms",
-      "databasePath": "/magic-api/api/07.系统管理/01.用户管理/07.用户角色保存.ms",
+      "path": "api/07.系统管理/01.用户管理/05.用户角色保存.ms",
+      "databasePath": "/magic-api/api/07.系统管理/01.用户管理/05.用户角色保存.ms",
       "rowIds": [
         "user_role_save_01"
       ],
       "kind": null,
-      "baseSha256": "77257cc4e387e15ef41e46dc4992a357b7d118a65e32a668afcf3534d6f07dbc",
+      "baseSha256": "ce76fc949f45fdb2e8c3ddec1c01dec1d640447c5bc69e2f4b1a13fb4ded976e",
       "metadataId": "user_role_save_01"
     },
     {
-      "path": "api/07.系统管理/01.用户管理/08.用户角色查询.ms",
-      "databasePath": "/magic-api/api/07.系统管理/01.用户管理/08.用户角色查询.ms",
-      "baseSha256": "471774ac7ef01a6a04a2c328c842a59270edf1e414095829cde8277cc6047b90",
+      "path": "api/07.系统管理/01.用户管理/06.用户角色查询.ms",
+      "databasePath": "/magic-api/api/07.系统管理/01.用户管理/06.用户角色查询.ms",
       "rowIds": [
         "user_role_assignments_01"
       ],
       "kind": null,
+      "baseSha256": "ee2e98c55d2a89154c0bccb5257d59d14f9664cb5286bba914af91af179b2d33",
       "metadataId": "user_role_assignments_01"
     },
     {
-      "path": "api/07.系统管理/01.用户管理/09.用户角色选项.ms",
-      "databasePath": "/magic-api/api/07.系统管理/01.用户管理/09.用户角色选项.ms",
-      "baseSha256": "15cecf7d5cd7bd6ce8d6933a4b064fcfd9e0af10d140683e5c696a4d0c926347",
+      "path": "api/07.系统管理/01.用户管理/07.用户角色选项.ms",
+      "databasePath": "/magic-api/api/07.系统管理/01.用户管理/07.用户角色选项.ms",
       "rowIds": [
         "user_role_options_01"
       ],
       "kind": null,
+      "baseSha256": "15c5ad130d51f8d7b6bdc4e7c2aeb12935d7aef72e16b8d17d41a56ff945c232",
       "metadataId": "user_role_options_01"
     },
     {
@@ -3739,11 +4247,11 @@
     {
       "path": "api/07.系统管理/02.角色管理/02.角色保存修改.ms",
       "databasePath": "/magic-api/api/07.系统管理/02.角色管理/02.角色保存修改.ms",
-      "baseSha256": "52e4317b94fae8225be16d6b9bb643a0f24f0e8b004ee56d32e6028040155306",
       "rowIds": [
         "347601b7dc2b45c8a52dd14221e17518"
       ],
       "kind": null,
+      "baseSha256": "3c5d31cef194f0ae9c11fe479fbdc1d9c737248f53035fa7ed272dec5bc1761d",
       "metadataId": "347601b7dc2b45c8a52dd14221e17518"
     },
     {
@@ -3759,11 +4267,11 @@
     {
       "path": "api/07.系统管理/02.角色管理/04.角色兼容分页.ms",
       "databasePath": "/magic-api/api/07.系统管理/02.角色管理/04.角色兼容分页.ms",
-      "baseSha256": "a9ed83b25cbc282636890c9a697f7747941f14d72f89fb5645475d97d8018497",
       "rowIds": [
         "9793b13bdb0d4d09bc1f909e7d1bd122"
       ],
       "kind": null,
+      "baseSha256": "6ede31688e1471fc92f2767e25dbf292bc9b54373efab2b8068b58d70d2d409f",
       "metadataId": "9793b13bdb0d4d09bc1f909e7d1bd122"
     },
     {
@@ -3798,11 +4306,11 @@
     {
       "path": "api/07.系统管理/03.机构管理/02.机构保存修改.ms",
       "databasePath": "/magic-api/api/07.系统管理/03.机构管理/02.机构保存修改.ms",
-      "baseSha256": "d4f305814dd6fc7219997ea0c0e11f2dc30dd275b33b05e8ed1e25490a7ecd35",
       "rowIds": [
         "885b78dbd4474a4cb47566030e050c76"
       ],
       "kind": null,
+      "baseSha256": "bbbab9ed1c8123ecd1ca1abfdb8a03251e50648fedc3ccefc4db4e527a85292f",
       "metadataId": "885b78dbd4474a4cb47566030e050c76"
     },
     {
@@ -3828,11 +4336,11 @@
     {
       "path": "api/07.系统管理/03.机构管理/05.部门兼容分页.ms",
       "databasePath": "/magic-api/api/07.系统管理/03.机构管理/05.部门兼容分页.ms",
-      "baseSha256": "af4d548141e9358e5e1ff0fd96aeed83ee6300e68bd94a00e7e947c6119e3b24",
       "rowIds": [
         "65f57b8f1ff0494c907edc88374859bb"
       ],
       "kind": null,
+      "baseSha256": "3e32d67ccb2d59664f87206d6105e74a35921d74eb056337ee5c7575fe2488ac",
       "metadataId": "65f57b8f1ff0494c907edc88374859bb"
     },
     {
@@ -3842,17 +4350,17 @@
         "9caa9255f24d4bd08ca8de3ab9eb7de5"
       ],
       "kind": null,
-      "baseSha256": "698ba7dcb71a7d8e27c1a0bbcf705b6360ab8904df0e005bba5521b03dadf02b",
+      "baseSha256": "ae56621b48f817e58d70a66872b0dad9cdace0b9afa4ddca0d92a7b282b1af76",
       "metadataId": "9caa9255f24d4bd08ca8de3ab9eb7de5"
     },
     {
       "path": "api/07.系统管理/03.机构管理/07.组织机构树查询.ms",
       "databasePath": "/magic-api/api/07.系统管理/03.机构管理/07.组织机构树查询.ms",
-      "baseSha256": "288a2fab8d53a310cb3bc12032028a7d84247c096686cb3768a08b36f788a9f4",
       "rowIds": [
         "14c675168c134d4ea7d0c3ac3bc98131"
       ],
       "kind": null,
+      "baseSha256": "6e9dd94f9341d274d03c45696a11a33cf2f777af3fc81d27c87b6950b291f89b",
       "metadataId": "14c675168c134d4ea7d0c3ac3bc98131"
     },
     {
@@ -3877,51 +4385,51 @@
     {
       "path": "api/07.系统管理/04.菜单管理/01.菜单保存修改.ms",
       "databasePath": "/magic-api/api/07.系统管理/04.菜单管理/01.菜单保存修改.ms",
-      "baseSha256": "c614d1b743e5f442d21aa8b2c90a2e4d1a1022d2c980272f624a15c22e5b2d0a",
       "rowIds": [
         "57d488fe51404e37afe8528c348c87ee"
       ],
       "kind": null,
+      "baseSha256": "c5d5889604e307c2f88218fa512d6c626cbc1bc25b34aa0d6929f86dff913f49",
       "metadataId": "57d488fe51404e37afe8528c348c87ee"
     },
     {
       "path": "api/07.系统管理/04.菜单管理/02.菜单状态修改.ms",
       "databasePath": "/magic-api/api/07.系统管理/04.菜单管理/02.菜单状态修改.ms",
-      "baseSha256": "60179ecaf8c201004d34fedaf729b8806c6236d1a33166e2d3386d4d7a470528",
       "rowIds": [
         "ad79907ebe4c4acca241d7e740e9e91b"
       ],
       "kind": null,
+      "baseSha256": "983f20d954a21098f43e62dac066533f93192c152820f3c83b96b759ff8e85f6",
       "metadataId": "ad79907ebe4c4acca241d7e740e9e91b"
     },
     {
       "path": "api/07.系统管理/04.菜单管理/03.菜单排序.ms",
       "databasePath": "/magic-api/api/07.系统管理/04.菜单管理/03.菜单排序.ms",
-      "baseSha256": "df3a990d7c097eec207bbd573b2327655345b94e6b542308bf700823210a6704",
       "rowIds": [
         "daaca32a76bd4787ba35d3d1ef4f871f"
       ],
       "kind": null,
+      "baseSha256": "0860c09d219964c5e5d0f3814ca4f3f348f661e288dec2cd758e579bb5b6e779",
       "metadataId": "daaca32a76bd4787ba35d3d1ef4f871f"
     },
     {
       "path": "api/07.系统管理/04.菜单管理/04.菜单删除.ms",
       "databasePath": "/magic-api/api/07.系统管理/04.菜单管理/04.菜单删除.ms",
-      "baseSha256": "4f932a0321a52967cfe46631e65d4df557bd3c328418879ca88d593954618864",
       "rowIds": [
         "c1e127f305fd44ac827bab7bb2c65550"
       ],
       "kind": null,
+      "baseSha256": "b8793f81f55bbedbac05fdcee21eb68fc064adb9cbf7022f996794d27aa81741",
       "metadataId": "c1e127f305fd44ac827bab7bb2c65550"
     },
     {
       "path": "api/07.系统管理/04.菜单管理/05.菜单路由查询.ms",
       "databasePath": "/magic-api/api/07.系统管理/04.菜单管理/05.菜单路由查询.ms",
-      "baseSha256": "bc30b2f2960d2b3d5360d3d4e4570b40f8bdc9ea056a1afb9e84ed418504f1c1",
       "rowIds": [
         "1dc43be6fbe648ea979c59fa37da7fb8"
       ],
       "kind": null,
+      "baseSha256": "eaff903eb2a1cf799ae32c6e63772ee61c4d0584984534b07806ce7850bb343e",
       "metadataId": "1dc43be6fbe648ea979c59fa37da7fb8"
     },
     {
@@ -3956,21 +4464,21 @@
     {
       "path": "api/07.系统管理/05.权限管理/01.用户菜单查询.ms",
       "databasePath": "/magic-api/api/07.系统管理/05.权限管理/01.用户菜单查询.ms",
-      "baseSha256": "5fdae70238efdd8fae4c06be14c40a05aff0aff6053e6ac78aba88bada0628ea",
       "rowIds": [
         "c6ccbc4af86e4b599db7bf9cac8d774c"
       ],
       "kind": null,
+      "baseSha256": "aab1dbcea010b93d563ce21964c0fa6ecf0d347ae2fe13dd820c308591a7554c",
       "metadataId": "c6ccbc4af86e4b599db7bf9cac8d774c"
     },
     {
       "path": "api/07.系统管理/05.权限管理/02.角色菜单查询.ms",
       "databasePath": "/magic-api/api/07.系统管理/05.权限管理/02.角色菜单查询.ms",
-      "baseSha256": "c9f46bb638e3fecca7d8d8818344607009ff53ba7f44824c3a34f3cc2110e21d",
       "rowIds": [
         "7cca7dbb12174db680af8e5b81aeca5d"
       ],
       "kind": null,
+      "baseSha256": "aa9dde306e53795af8e63faf021d1d0cff4681539bf4699c4aea5e0e4b3b12da",
       "metadataId": "7cca7dbb12174db680af8e5b81aeca5d"
     },
     {
@@ -3980,7 +4488,7 @@
         "e4445190b9a543c89d23b3a6adacffc5"
       ],
       "kind": null,
-      "baseSha256": "4efd4ff401e3a34e03bd90cf3c98cc8620e0263bc2881701837a60420a237b5d",
+      "baseSha256": "b9718672c014fc2f3db9baa566f3cbc2415f6860d352b4be3bacdb5d05e6790f",
       "metadataId": "e4445190b9a543c89d23b3a6adacffc5"
     },
     {
@@ -4045,180 +4553,90 @@
     {
       "path": "api/07.系统管理/07.审批中心",
       "databasePath": "/magic-api/api/07.系统管理/07.审批中心/",
-      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
       "rowIds": [
         null
       ],
-      "kind": "directory"
+      "kind": "directory",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
       "path": "api/07.系统管理/07.审批中心/01.查看审批信息.ms",
       "databasePath": "/magic-api/api/07.系统管理/07.审批中心/01.查看审批信息.ms",
-      "baseSha256": "6c5eb5ccaa7ad90a59f8fc5c3d117515967879f95f52eb61b1ce750a95abecc2",
       "rowIds": [
         "e827efbdb789464ea6fbf4b8570f4a61"
       ],
       "kind": null,
+      "baseSha256": "c0028454d7dfaa7853d2f55622938e093cea8cf4807a62744d187c660d0e6523",
       "metadataId": "e827efbdb789464ea6fbf4b8570f4a61"
     },
     {
-      "path": "api/07.系统管理/07.审批中心/02.删除常用意见.ms",
-      "databasePath": "/magic-api/api/07.系统管理/07.审批中心/02.删除常用意见.ms",
-      "baseSha256": "6d0ef995878e6a6d047db3b5e9c79284ef9dcf573ce19b00836e03c72830f06e",
-      "rowIds": [
-        "88f84dd78cbb42899740f49437a41148"
-      ],
-      "kind": null,
-      "metadataId": "88f84dd78cbb42899740f49437a41148"
-    },
-    {
-      "path": "api/07.系统管理/07.审批中心/03.常用意见列表.ms",
-      "databasePath": "/magic-api/api/07.系统管理/07.审批中心/03.常用意见列表.ms",
-      "baseSha256": "dc4ecd0722564330cf62721087145e3b1c3c9af26aefac843a249a2dd3d5965e",
-      "rowIds": [
-        "f8a5b9d39f3a43dabb3ddcbd0c1a2aed"
-      ],
-      "kind": null,
-      "metadataId": "f8a5b9d39f3a43dabb3ddcbd0c1a2aed"
-    },
-    {
-      "path": "api/07.系统管理/07.审批中心/04.流程分页查询.ms",
-      "databasePath": "/magic-api/api/07.系统管理/07.审批中心/04.流程分页查询.ms",
-      "baseSha256": "68a68faeddeab85519c1706b0e981ed31572dcdb3320a862d1e894347afd0315",
+      "path": "api/07.系统管理/07.审批中心/02.审批事项分页.ms",
+      "databasePath": "/magic-api/api/07.系统管理/07.审批中心/02.审批事项分页.ms",
       "rowIds": [
         "f23cef22cacc4a8cbe5ac3df7c3a1566"
       ],
       "kind": null,
+      "baseSha256": "895e421ecbaf93807888929ae2971dfc366d5697a7cbfea6b321b52c96bafc9a",
       "metadataId": "f23cef22cacc4a8cbe5ac3df7c3a1566"
     },
     {
-      "path": "api/07.系统管理/07.审批中心/05.流程定义列表.ms",
-      "databasePath": "/magic-api/api/07.系统管理/07.审批中心/05.流程定义列表.ms",
-      "baseSha256": "385318145b58ff5c8d384dc7271504967f07a858d16227efcf0412d27bf8160b",
-      "rowIds": [
-        "6c3ab97a62ce4aec8b9fb91d17703726"
-      ],
-      "kind": null,
-      "metadataId": "6c3ab97a62ce4aec8b9fb91d17703726"
-    },
-    {
-      "path": "api/07.系统管理/07.审批中心/06.资源申请分页.ms",
-      "databasePath": "/magic-api/api/07.系统管理/07.审批中心/06.资源申请分页.ms",
-      "baseSha256": "7a21570f0d7b8514adadf6d4a013a32edeeeb094dd747b5815c2b689dccb8048",
+      "path": "api/07.系统管理/07.审批中心/03.资源申请分页.ms",
+      "databasePath": "/magic-api/api/07.系统管理/07.审批中心/03.资源申请分页.ms",
       "rowIds": [
         "ce1844634b80491c8aeb9c7da6ebec7e"
       ],
       "kind": null,
+      "baseSha256": "9fc38f65fe098b82d5bbae1994917f582a1ca602b89177ca025388bc7523ebc9",
       "metadataId": "ce1844634b80491c8aeb9c7da6ebec7e"
     },
     {
-      "path": "api/07.系统管理/07.审批中心/07.审批统计.ms",
-      "databasePath": "/magic-api/api/07.系统管理/07.审批中心/07.审批统计.ms",
-      "baseSha256": "473d71943884eda5cb3f7021624e216b9b28aefa9a738980e995a8fab4cd0be1",
+      "path": "api/07.系统管理/07.审批中心/04.审批统计.ms",
+      "databasePath": "/magic-api/api/07.系统管理/07.审批中心/04.审批统计.ms",
       "rowIds": [
         null
       ],
       "kind": null,
+      "baseSha256": "a4db56d4d064bd4ba8495862f89b2e90ad32f047ff1e85ef41a60037c903b3fb",
       "metadataId": "a75efba824d64e6f9a3f12561f0a9f10"
     },
     {
-      "path": "api/07.系统管理/07.审批中心/08.取消委托规则.ms",
-      "databasePath": "/magic-api/api/07.系统管理/07.审批中心/08.取消委托规则.ms",
-      "baseSha256": "6e56b84af46e8635c672616e97aeeb8a01bf36720aef6be04407bff4e1964d0e",
-      "rowIds": [
-        "b81216bf81ee41d8ad5d09526bf07703"
-      ],
-      "kind": null,
-      "metadataId": "b81216bf81ee41d8ad5d09526bf07703"
-    },
-    {
-      "path": "api/07.系统管理/07.审批中心/09.回调处理(节点处理结束回调).ms",
-      "databasePath": "/magic-api/api/07.系统管理/07.审批中心/09.回调处理(节点处理结束回调).ms",
-      "baseSha256": "8fadbdb172ab0e8172045f24fe179faf5fce679e411d4d74eef29f8c8e035d09",
-      "rowIds": [
-        "c30f3718868148ce84e65217f49a7720"
-      ],
-      "kind": null,
-      "metadataId": "c30f3718868148ce84e65217f49a7720"
-    },
-    {
-      "path": "api/07.系统管理/07.审批中心/10.办理.ms",
-      "databasePath": "/magic-api/api/07.系统管理/07.审批中心/10.办理.ms",
-      "baseSha256": "2a23f993185521d8d6b6da09af1c507e8ba9653165e347243b009c99b7905707",
+      "path": "api/07.系统管理/07.审批中心/05.办理审批任务.ms",
+      "databasePath": "/magic-api/api/07.系统管理/07.审批中心/05.办理审批任务.ms",
       "rowIds": [
         "8f4c71e2ae344e69a59682e86aed2661"
       ],
       "kind": null,
+      "baseSha256": "fae02988878797c50907ba0ef7122d13780814c1ccca9c2e89b9d6438588f488",
       "metadataId": "8f4c71e2ae344e69a59682e86aed2661"
     },
     {
-      "path": "api/07.系统管理/07.审批中心/11.获取前驱节点(驳回使用).ms",
-      "databasePath": "/magic-api/api/07.系统管理/07.审批中心/11.获取前驱节点(驳回使用).ms",
-      "baseSha256": "866e7703dda97d5d87710699c186dde9b42c1ae3a005985d7971e868a34e2051",
+      "path": "api/07.系统管理/07.审批中心/06.查询可退回节点.ms",
+      "databasePath": "/magic-api/api/07.系统管理/07.审批中心/06.查询可退回节点.ms",
       "rowIds": [
         "aa7ece2e7d394aea8e6d84b8c5ab1fb6"
       ],
       "kind": null,
+      "baseSha256": "d4ce4313431b4cf92b5f6dd067f48ded6a326b0a56d5b694e955e6bccdb930af",
       "metadataId": "aa7ece2e7d394aea8e6d84b8c5ab1fb6"
     },
     {
-      "path": "api/07.系统管理/07.审批中心/12.保存或修改流程.ms",
-      "databasePath": "/magic-api/api/07.系统管理/07.审批中心/12.保存或修改流程.ms",
-      "baseSha256": "7f3f84bc702ed3237ef43233ffd355f93967703e5e4ab6cb0b219eaf27765e81",
+      "path": "api/07.系统管理/07.审批中心/07.处理节点完成事件.ms",
+      "databasePath": "/magic-api/api/07.系统管理/07.审批中心/07.处理节点完成事件.ms",
       "rowIds": [
-        "f058946e714846049e38be378047d1c6"
+        "c30f3718868148ce84e65217f49a7720"
       ],
       "kind": null,
-      "metadataId": "f058946e714846049e38be378047d1c6"
-    },
-    {
-      "path": "api/07.系统管理/07.审批中心/13.流程定义列表.ms",
-      "databasePath": "/magic-api/api/07.系统管理/07.审批中心/13.流程定义列表.ms",
-      "baseSha256": "904132b533ac7fca6553a428a1db91b28a16edf11e4eaf212ccff407d3c2610c",
-      "rowIds": [
-        "169959dd8fb148e68b4cfe4644f63c76"
-      ],
-      "kind": null,
-      "metadataId": "169959dd8fb148e68b4cfe4644f63c76"
-    },
-    {
-      "path": "api/07.系统管理/07.审批中心/14.流程操作.ms",
-      "databasePath": "/magic-api/api/07.系统管理/07.审批中心/14.流程操作.ms",
-      "baseSha256": "f3d51777e8a9940671a02ba61595d90f65c4712ab3190252add0cec23bee91a8",
-      "rowIds": [
-        "c07b80ac993947689394afcb66e3efba"
-      ],
-      "kind": null,
-      "metadataId": "c07b80ac993947689394afcb66e3efba"
-    },
-    {
-      "path": "api/07.系统管理/07.审批中心/15.保存审批委托.ms",
-      "databasePath": "/magic-api/api/07.系统管理/07.审批中心/15.保存审批委托.ms",
-      "baseSha256": "fcdef4d8c6eb581e9186950827731b9961a3be107cbd84249cb7684169ec0391",
-      "rowIds": [
-        "b81216bf81ee41d8ad5d09526bf07702"
-      ],
-      "kind": null,
-      "metadataId": "b81216bf81ee41d8ad5d09526bf07702"
-    },
-    {
-      "path": "api/07.系统管理/07.审批中心/16.审批委托列表.ms",
-      "databasePath": "/magic-api/api/07.系统管理/07.审批中心/16.审批委托列表.ms",
-      "baseSha256": "7463620b607c396ee62ede2c12844545ed72d790b94369ff8339adb74e2aa940",
-      "rowIds": [
-        "b81216bf81ee41d8ad5d09526bf07701"
-      ],
-      "kind": null,
-      "metadataId": "b81216bf81ee41d8ad5d09526bf07701"
+      "baseSha256": "8df458ccce90da905c2ef75c2a07744ffb0163bd57eadb59f3e394de2e48337e",
+      "metadataId": "c30f3718868148ce84e65217f49a7720"
     },
     {
       "path": "api/07.系统管理/07.审批中心/group.json",
       "databasePath": "/magic-api/api/07.系统管理/07.审批中心/group.json",
-      "baseSha256": "d3f3e6e2f44c64d6a7d0137075202a0c25af00770117e45d521a9746204acc10",
       "rowIds": [
         "b2bc4c16954544a69d4bcb4700dadce1"
       ],
       "kind": null,
+      "baseSha256": "d3f3e6e2f44c64d6a7d0137075202a0c25af00770117e45d521a9746204acc10",
       "metadataId": "b2bc4c16954544a69d4bcb4700dadce1"
     },
     {
@@ -4295,7 +4713,7 @@
         "fa5e60254452443a8d512df21c6eed53"
       ],
       "kind": null,
-      "baseSha256": "c1df2e3d35b8c1377796a22690ba0f071e3c9b26ae6eb459ff97bb9e6b374aa1",
+      "baseSha256": "166edd3a7b1326c1c39a5eb92dea713ae631502f437cba29ff621644bba3a1f6",
       "metadataId": "fa5e60254452443a8d512df21c6eed53"
     },
     {
@@ -4374,7 +4792,7 @@
         "tenant_user_page_magic_01"
       ],
       "kind": null,
-      "baseSha256": "49ef61db5afee1de68b224770003cd1e2a2c44a58703140c7468ac47307f36cd",
+      "baseSha256": "6c30ecbf5623f30d38135912b579ad9ecc41574cc2f7bc234a57ff4283f1022e",
       "metadataId": "tenant_user_page_magic_01"
     },
     {
@@ -4384,7 +4802,7 @@
         "tenant_assign_user_magic_01"
       ],
       "kind": null,
-      "baseSha256": "6e56faadb6dfe1048f612b5aa934cca3f5b57b184fdf7702403503abd2ca43f5",
+      "baseSha256": "70898f753c2dd61d46a769d74df35ef05d5d48295c59da70ee975c9483cf1e9d",
       "metadataId": "tenant_assign_user_magic_01"
     },
     {
@@ -4394,7 +4812,7 @@
         "tenant_unassign_user_magic_01"
       ],
       "kind": null,
-      "baseSha256": "ef32785790b28391a59f76463f8de852c29bcb795843e106523a219f6c1f24fe",
+      "baseSha256": "ecb6fa2c6ca51819261f4963c37130383f99a261e7b10da6a8039835c34aa8ac",
       "metadataId": "tenant_unassign_user_magic_01"
     },
     {
@@ -4494,6 +4912,192 @@
       "kind": "group",
       "baseSha256": "6334950ec786fbb344899a13b687904ed5026e80e9f198d94f1fb998db23c3e6",
       "metadataId": "sym_scope_group_v1"
+    },
+    {
+      "path": "api/07.系统管理/14.在线用户",
+      "databasePath": "/magic-api/api/07.系统管理/14.在线用户/",
+      "rowIds": [
+        null
+      ],
+      "kind": "directory",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
+    },
+    {
+      "path": "api/07.系统管理/14.在线用户/01.在线用户分页.ms",
+      "databasePath": "/magic-api/api/07.系统管理/14.在线用户/01.在线用户分页.ms",
+      "rowIds": [
+        "6743b6c46a384a7c8881d0a582a3947e"
+      ],
+      "kind": null,
+      "baseSha256": "23150cdda075d0d57a4c38e523a4a75bc0fd3aa096b8da2295f7162d09b64e03",
+      "metadataId": "6743b6c46a384a7c8881d0a582a3947e"
+    },
+    {
+      "path": "api/07.系统管理/14.在线用户/02.强制下线.ms",
+      "databasePath": "/magic-api/api/07.系统管理/14.在线用户/02.强制下线.ms",
+      "rowIds": [
+        "72bece30af4d4ca998f0378d6ba69923"
+      ],
+      "kind": null,
+      "baseSha256": "892b7d4a95c4665a9d385fc4f82c67470c5b3283a4260ea880758fd65297af74",
+      "metadataId": "72bece30af4d4ca998f0378d6ba69923"
+    },
+    {
+      "path": "api/07.系统管理/14.在线用户/group.json",
+      "databasePath": "/magic-api/api/07.系统管理/14.在线用户/group.json",
+      "rowIds": [
+        "233f8dfac689437d97d8cc1374314b96"
+      ],
+      "kind": null,
+      "baseSha256": "e32a89ce41dbbf0f5b6d7cbab931a8ba2f3b6e656681980299279ca81ca9611c",
+      "metadataId": "233f8dfac689437d97d8cc1374314b96"
+    },
+    {
+      "path": "api/07.系统管理/15.流程定义",
+      "databasePath": "/magic-api/api/07.系统管理/15.流程定义/",
+      "rowIds": [
+        "96dcb46df07a4f4eb22775cdb88927ab"
+      ],
+      "kind": "directory",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
+    },
+    {
+      "path": "api/07.系统管理/15.流程定义/01.流程定义分页.ms",
+      "databasePath": "/magic-api/api/07.系统管理/15.流程定义/01.流程定义分页.ms",
+      "rowIds": [
+        "169959dd8fb148e68b4cfe4644f63c76"
+      ],
+      "kind": null,
+      "baseSha256": "113960e9a92f80d8fb6bd19a7824b48865d634a79dbf18194e486dfb32b0569b",
+      "metadataId": "169959dd8fb148e68b4cfe4644f63c76"
+    },
+    {
+      "path": "api/07.系统管理/15.流程定义/02.已发布流程选项.ms",
+      "databasePath": "/magic-api/api/07.系统管理/15.流程定义/02.已发布流程选项.ms",
+      "rowIds": [
+        "6c3ab97a62ce4aec8b9fb91d17703726"
+      ],
+      "kind": null,
+      "baseSha256": "0c23992d3129b69c9a04e28eac495d7de2a55b12828ac16fac41acbfbbd97b4f",
+      "metadataId": "6c3ab97a62ce4aec8b9fb91d17703726"
+    },
+    {
+      "path": "api/07.系统管理/15.流程定义/03.保存流程定义.ms",
+      "databasePath": "/magic-api/api/07.系统管理/15.流程定义/03.保存流程定义.ms",
+      "rowIds": [
+        "f058946e714846049e38be378047d1c6"
+      ],
+      "kind": null,
+      "baseSha256": "422f1cd1442a63f67e3b4ef73e4a09124f2c39c715dfcfdd931148328f71434e",
+      "metadataId": "f058946e714846049e38be378047d1c6"
+    },
+    {
+      "path": "api/07.系统管理/15.流程定义/04.操作流程定义.ms",
+      "databasePath": "/magic-api/api/07.系统管理/15.流程定义/04.操作流程定义.ms",
+      "rowIds": [
+        "c07b80ac993947689394afcb66e3efba"
+      ],
+      "kind": null,
+      "baseSha256": "ec23b4620fd5522f083fa41c9b532ad73989c37e9f0c1847326c2116c8f93943",
+      "metadataId": "c07b80ac993947689394afcb66e3efba"
+    },
+    {
+      "path": "api/07.系统管理/15.流程定义/group.json",
+      "databasePath": "/magic-api/api/07.系统管理/15.流程定义/group.json",
+      "rowIds": [
+        "813242ab2944412c9f52707256ea7c8d"
+      ],
+      "kind": null,
+      "baseSha256": "3eeb2a02c004f7d0d1622c226e4187e8388f17c5baa8513f021d0fa930cffdf4",
+      "metadataId": "5f6726d5f8f44059a0151b1f35f42320"
+    },
+    {
+      "path": "api/07.系统管理/16.审批委托",
+      "databasePath": "/magic-api/api/07.系统管理/16.审批委托/",
+      "rowIds": [
+        "726ee4c988874ce7a9de51c284d6cd5a"
+      ],
+      "kind": "directory",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
+    },
+    {
+      "path": "api/07.系统管理/16.审批委托/01.审批委托列表.ms",
+      "databasePath": "/magic-api/api/07.系统管理/16.审批委托/01.审批委托列表.ms",
+      "rowIds": [
+        "b81216bf81ee41d8ad5d09526bf07701"
+      ],
+      "kind": null,
+      "baseSha256": "04e2bd3253a527e143cf0be77e3a18962f4d043cee0f93cd8831545a4c3f0ff0",
+      "metadataId": "b81216bf81ee41d8ad5d09526bf07701"
+    },
+    {
+      "path": "api/07.系统管理/16.审批委托/02.保存审批委托.ms",
+      "databasePath": "/magic-api/api/07.系统管理/16.审批委托/02.保存审批委托.ms",
+      "rowIds": [
+        "b81216bf81ee41d8ad5d09526bf07702"
+      ],
+      "kind": null,
+      "baseSha256": "45fd0ade065842a64fe872977b881744ae0b868136588263d9f5efe1309b0aad",
+      "metadataId": "b81216bf81ee41d8ad5d09526bf07702"
+    },
+    {
+      "path": "api/07.系统管理/16.审批委托/03.取消审批委托.ms",
+      "databasePath": "/magic-api/api/07.系统管理/16.审批委托/03.取消审批委托.ms",
+      "rowIds": [
+        "b81216bf81ee41d8ad5d09526bf07703"
+      ],
+      "kind": null,
+      "baseSha256": "fcdcba7584e91a5cc9047629c6450ef83164491eea7793837ef7581c0ef68d76",
+      "metadataId": "b81216bf81ee41d8ad5d09526bf07703"
+    },
+    {
+      "path": "api/07.系统管理/16.审批委托/group.json",
+      "databasePath": "/magic-api/api/07.系统管理/16.审批委托/group.json",
+      "rowIds": [
+        "c8b69862aea749bcae48c20362b34b91"
+      ],
+      "kind": null,
+      "baseSha256": "fcf257a62c86b92e2755c2ad7733c05bc5e483113d9209aee3411741ca3eb75d",
+      "metadataId": "c1237871230f4f478b31fc9b2d00b13c"
+    },
+    {
+      "path": "api/07.系统管理/17.审批意见",
+      "databasePath": "/magic-api/api/07.系统管理/17.审批意见/",
+      "rowIds": [
+        "6a24ac0a501c4989bfb83bb3df8d42fc"
+      ],
+      "kind": "directory",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
+    },
+    {
+      "path": "api/07.系统管理/17.审批意见/01.常用意见列表.ms",
+      "databasePath": "/magic-api/api/07.系统管理/17.审批意见/01.常用意见列表.ms",
+      "rowIds": [
+        "f8a5b9d39f3a43dabb3ddcbd0c1a2aed"
+      ],
+      "kind": null,
+      "baseSha256": "6149bc8b8a9bf30346d4d2e482662f53baf6b492297afaaf946399a2811e1796",
+      "metadataId": "f8a5b9d39f3a43dabb3ddcbd0c1a2aed"
+    },
+    {
+      "path": "api/07.系统管理/17.审批意见/02.删除常用意见.ms",
+      "databasePath": "/magic-api/api/07.系统管理/17.审批意见/02.删除常用意见.ms",
+      "rowIds": [
+        "88f84dd78cbb42899740f49437a41148"
+      ],
+      "kind": null,
+      "baseSha256": "63674f94c6b87586cc7c35451342fbb2d8989a9df033488f6096c9fbfc4f284f",
+      "metadataId": "88f84dd78cbb42899740f49437a41148"
+    },
+    {
+      "path": "api/07.系统管理/17.审批意见/group.json",
+      "databasePath": "/magic-api/api/07.系统管理/17.审批意见/group.json",
+      "rowIds": [
+        "8751a0a3606b444894c1589a38f41f1d"
+      ],
+      "kind": null,
+      "baseSha256": "4e6fd88767180dee1c6cc70e65455aaf0f340787f5a26119d35b9d2ff7d7dfbd",
+      "metadataId": "08e1a2c4867d44009e15a322d2aea3ee"
     },
     {
       "path": "api/07.系统管理/group.json",
@@ -7485,7 +8089,7 @@
         "8fda5b541c5047e3a1b74bf692025a31"
       ],
       "kind": "function",
-      "baseSha256": "b35115408d764b18930f531c07219dcdbe9c110e7d44782aa63b5791c739125e",
+      "baseSha256": "40e5d94a64faae58d35a3a7298fe5dd08af3f6ec1c7c947dbc238a71b3ae2912",
       "metadataId": "f3a8100dc6474a759ec52ec6d2b1f116"
     },
     {
@@ -8109,6 +8713,96 @@
       "baseSha256": "8f334072d1e99faeea864d6bc2a85f72eab1716a5eb00a25e363cabb6e9a070e"
     },
     {
+      "path": "function/01.通用函数/76.元数据目录查询范围.ms",
+      "databasePath": "/magic-api/function/01.通用函数/76.元数据目录查询范围.ms",
+      "baseSha256": "32b5f81d03d19fc04f94f19f973507ca503e6bd4a4007a6c152f02037fffaffc",
+      "kind": "function",
+      "rowIds": [
+        "c51540bb5e5641ffbfc84d79a5ecafc3"
+      ],
+      "metadataId": "cc92b11b7eb845768205468cb139d247"
+    },
+    {
+      "path": "function/01.通用函数/77.元数据目录请求参数.ms",
+      "databasePath": "/magic-api/function/01.通用函数/77.元数据目录请求参数.ms",
+      "baseSha256": "cad82f440f7d1ce3493d14b7718d0a884d0fb5740f03ac69b8b5d721b39c439b",
+      "kind": "function",
+      "rowIds": [
+        "85df67e18a504e26bdb2386ed9034c95"
+      ],
+      "metadataId": "c24248f72ceb4fdebc665422701e7c34"
+    },
+    {
+      "path": "function/01.通用函数/78.元数据目录查询响应.ms",
+      "databasePath": "/magic-api/function/01.通用函数/78.元数据目录查询响应.ms",
+      "baseSha256": "cb08aac46fe32a6749274880bb978a2e1c4797b5ab3329f79dce703cc4a29b65",
+      "kind": "function",
+      "rowIds": [
+        "d1a6dbd9bf7243bb9913d277dde2209d"
+      ],
+      "metadataId": "f10c3898f07848f0975a9dc1baa426ac"
+    },
+    {
+      "path": "function/01.通用函数/79.采集字段结构化范围.ms",
+      "databasePath": "/magic-api/function/01.通用函数/79.采集字段结构化范围.ms",
+      "baseSha256": "9c6bf2e1f97aae5c47b7e087cb3779ef326b74976be96eb0191ffdcac9493be8",
+      "kind": "function",
+      "rowIds": [
+        "1d36fde85cb34c01a3e9c86555fac220"
+      ],
+      "metadataId": "e30966d29ca7423fa7cde295f8918b28"
+    },
+    {
+      "path": "function/01.通用函数/80.目录关联服务分页.ms",
+      "databasePath": "/magic-api/function/01.通用函数/80.目录关联服务分页.ms",
+      "baseSha256": "c989ff0d7cbd1ad0b3cd0d49daf81bc97d83a0da93ccb49e62e317d84deb3a88",
+      "kind": "function",
+      "rowIds": [
+        "34b67308ce3348a7adb32e1232175a6c"
+      ],
+      "metadataId": "228019db42f7433899e76c65dab6e582"
+    },
+    {
+      "path": "function/01.通用函数/81.目录关联表资源.ms",
+      "databasePath": "/magic-api/function/01.通用函数/81.目录关联表资源.ms",
+      "baseSha256": "686553d65baa7b96d6c2cae556152625e093236f9bbeb4bd527116c59a7744ce",
+      "kind": "function",
+      "rowIds": [
+        "242086aa1e19452e984f934c2291dc7c"
+      ],
+      "metadataId": "3ff834baaa2e4c028ac0159f903d4eea"
+    },
+    {
+      "path": "function/01.通用函数/82.采集表分页.ms",
+      "databasePath": "/magic-api/function/01.通用函数/82.采集表分页.ms",
+      "baseSha256": "fb15d927f26b097b6e9d56fdd5c9c779ed59b88bc8ac705a7bbbbb9264590246",
+      "kind": "function",
+      "rowIds": [
+        "279e24c150384fcd94ab33ae7e61bca7"
+      ],
+      "metadataId": "e4e9c341f7204025a438da78107217c1"
+    },
+    {
+      "path": "function/01.通用函数/83.采集字段分页或清单.ms",
+      "databasePath": "/magic-api/function/01.通用函数/83.采集字段分页或清单.ms",
+      "baseSha256": "32395cc862a41816ebacfab6f13dba4ff767b3c974f7505afc31819504b92ee6",
+      "kind": "function",
+      "rowIds": [
+        "84a7234a1a2c4861928dceb53ca47dfe"
+      ],
+      "metadataId": "aa4d85f493a64aff8d75eb0ee5693cfe"
+    },
+    {
+      "path": "function/01.通用函数/84.数据标准代码集匹配.ms",
+      "databasePath": "/magic-api/function/01.通用函数/84.数据标准代码集匹配.ms",
+      "baseSha256": "98aae32d23a19515060456014c6c54bfa8c6b8079470596b13edc881e9b6a73f",
+      "rowIds": [
+        "715cf8a0ca1b4b6a989384d9850179ba"
+      ],
+      "kind": "api",
+      "metadataId": "dwm_standard_code_resolution_01"
+    },
+    {
       "path": "function/01.通用函数/group.json",
       "databasePath": "/magic-api/function/01.通用函数/group.json",
       "rowIds": [
@@ -8134,7 +8828,7 @@
         "01d4080a35c3490f9160b2c0db639c05"
       ],
       "kind": null,
-      "baseSha256": "7f56ee044ea3b7a5bd92142fe00ffe4273b0a349f0df2e213948e3b68f8e9db5",
+      "baseSha256": "ca4163db32a0c3dff37dc1a4ac07bd727c9fe907ab88682a0d7e3ed9611ff0f5",
       "metadataId": "ga_local_users_01"
     },
     {

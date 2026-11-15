@@ -11,7 +11,7 @@
   "lock": null,
   "createBy": null,
   "updateBy": null,
-  "path": "/userMenu",
+  "path": "/tree",
   "method": "POST",
   "parameters": [],
   "options": [],
@@ -24,27 +24,14 @@
   "responseBodyDefinition": null
 }
 ================================
-// 接口：01.用户菜单查询
-// 路由：POST /sym/auth/userMenu
-// 业务说明：获取当前用户菜单接口（基于角色权限，返回Vue路由树结构）；使用请求参数 appId；涉及 rm_user_role_rela_t、rm_role_t、rm_role_menu_rela_t、rm_menu_t 等业务表。
 import tenantAccounts
 import tenantRuntime
 import "@post:/sym/user/me" as me
-import cn.dev33.satoken.stp.StpUtil
 import cn.hutool.core.util.StrUtil
 
-
-// 获取当前用户菜单接口（基于角色权限，返回Vue路由树结构）
-// 路径: /sym/menu/userMenu
-// 方法: POST
-// 数据源: sso (192.168.175.86:3306)
-// 参数: appId (可选,按应用过滤)
-// 说明: 根据当前用户→角色→菜单资源，构建Vue路由树
-//       resource_type: 0=菜单 1=按钮(跳过) 2=分组菜单
-//       open_type: 0=内嵌 1=iframe 2=新页面
-
-
-// 获取当前用户ID
+// 读取当前租户用户在目标应用的菜单树。
+var tenant = tenantRuntime.id()
+if (!tenant) { exit 401, '当前租户无效' }
 var userId = me().id;
 // 解析请求体并为可选参数设置默认值。
 var appId = body?.appId || tenantAccounts.session().get("appId");
@@ -52,7 +39,7 @@ var appId = body?.appId || tenantAccounts.session().get("appId");
 try {
     // 1. 查询用户所属角色
     var userRoles = db.table("rm_user_role_rela_t")
-        .where().eq("user_id", userId)
+        .where().eq("tenant_id", tenant).eq("user_id", userId)
         .select();
 
     if (!userRoles || userRoles.size() == 0) {
@@ -65,13 +52,13 @@ try {
         roleIds.add(row.roleId);
     }
 
-    if(tenantAccounts.isLocal(tenantRuntime.id())) {
-      var activeRoles=db.table('rm_role_t').where().in('id',roleIds).eq('app_id',appId).eq('deleted',0).eq('status',0).select();
+    if(tenantAccounts.isLocal(tenant)) {
+      var activeRoles=db.table('rm_role_t').where().eq('tenant_id', tenant).in('id',roleIds.distinct()).eq('app_id',appId).eq('deleted',0).eq('status',0).select();
       roleIds=activeRoles.map(r=>r.id);if(roleIds.size()==0) {return [];}
     }
     // 2. 查询角色关联的菜单资源ID
     var roleResources = db.table("rm_role_menu_rela_t")
-        .where().in("role_id", roleIds)
+        .where().eq("tenant_id", tenant).in("role_id", roleIds.distinct())
         .select();
 
     if (!roleResources || roleResources.size() == 0) {
@@ -86,7 +73,7 @@ try {
 
     // 3. 查询菜单资源详情（只取未删除的菜单和分组，排除按钮，status=1的标记hidden）
     var query = db.table("rm_menu_t")
-        .where().in("id", resourceIds)
+        .where().eq("tenant_id", tenant).in("id", resourceIds.distinct())
         .eq("deleted", 0)
         .ne("resource_type", 1);
 
@@ -98,12 +85,17 @@ try {
 
     // 4. 构建Vue路由树
     var itemMap = {};
+    var childrenByParent = {};
     for (res in resources) {
         itemMap[res.id] = res;
+        var parent = res.parentId || '';
+        if (childrenByParent[parent] == null) { childrenByParent[parent] = []; }
+        childrenByParent[parent].add(res);
     }
 
     // 构建每个节点的完整路径（向上递归拼接url）
     var fullPathMap = {};
+    var activePath = {};
     var getFullPath = (resId) => {
         if (fullPathMap[resId]) { return fullPathMap[resId]; }
         var res = itemMap[resId];
@@ -114,7 +106,10 @@ try {
             // 返回当前业务分支的标准结果。
             return url;
         }
+        if (activePath[resId]) { exit 500, '菜单父级存在循环'; }
+        activePath[resId] = true;
         var parentPath = getFullPath(res.parentId);
+        activePath.remove(resId);
         fullPathMap[resId] = parentPath + url;
         // 返回当前业务分支的标准结果。
         return fullPathMap[resId];
@@ -187,7 +182,7 @@ try {
     // 递归构建子树
     var buildChildren = (parentId) => {
         var children = [];
-        for (res in resources) {
+        for (res in (childrenByParent[parentId] || [])) {
             if (res.parentId == parentId) {
                 var childNode = buildNode(res);
 

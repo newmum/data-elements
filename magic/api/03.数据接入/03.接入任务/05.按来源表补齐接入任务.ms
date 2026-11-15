@@ -39,6 +39,7 @@ import java.lang.IllegalArgumentException
 import java.lang.Integer
 import java.util.Locale
 import java.util.Objects
+import java.net.URI
 
 // POST /ods/job/fill 按来源表补齐接入任务。
 /**
@@ -1041,6 +1042,48 @@ var mappingDsl = (sourceColumns, targetColumns, sourceTable, lookupSources, tran
     })
 }
 
+// 将登记连接转换为 NiFi 节点配置。在内存执行，不额外读取来源库。
+var resolveElasticsearchConnection = (sourceCfg) => {
+    // 登记页保存的是 HTTP 地址和账号。NiFi 的节点列表要求每个节点都有协议和端口。
+    var protocol = text(first(sourceCfg, ['protocol', 'scheme']) || 'http').trim().toLowerCase(Locale.ROOT)
+    var endpoints = text(first(sourceCfg, ['nodes', 'jdbcURL', 'jdbcUrl', 'jdbc_url'])).trim()
+    if (blank(endpoints)) {
+        var host = text(first(sourceCfg, ['host', 'dbMetaIp'])).trim()
+        if (blank(host)) { exit 400, 'Elasticsearch 来源缺少已登记的连接地址' }
+        endpoints = host.matches('(?i)^https?://.*') ? host
+            : host + ':' + (first(sourceCfg, ['port', 'dbMetaPort']) || 9200)
+    }
+    var hosts = []
+    for (endpoint in endpoints.split(',')) {
+        var address = endpoint.trim()
+        try {
+            var uri = URI.create(address.matches('(?i)^https?://.*') ? address : protocol + '://' + address)
+            var scheme = text(uri.getScheme()).toLowerCase(Locale.ROOT)
+            if (!['http', 'https'].contains(scheme) || uri.getHost() == null || uri.getUserInfo() != null
+                    || uri.getQuery() != null || uri.getFragment() != null || !['', '/'].contains(text(uri.getPath()))
+                    || uri.getPort() == 0 || uri.getPort() > 65535) {
+                exit 400, 'Elasticsearch 节点须使用 HTTP 或 HTTPS 主机地址，账号和密码请单独登记'
+            }
+            var port = uri.getPort() < 0 ? (scheme == 'https' ? 443 : 80) : uri.getPort()
+            var authority = uri.getHost() + ':' + port
+            if (hosts.isEmpty()) {
+                // 既有组件模板给首个节点添加协议，后续节点使用完整地址。
+                protocol = scheme
+                hosts.add(authority)
+            } else {
+                hosts.add(scheme + '://' + authority)
+            }
+        } catch (invalidUri) {
+            exit 400, 'Elasticsearch 节点地址无效，请检查登记的主机和端口'
+        }
+    }
+    var authMethod = text(first(sourceCfg, ['authMethod'])).trim().toUpperCase(Locale.ROOT)
+    if (blank(authMethod)) {
+        authMethod = !blank(sourceCfg.apiKey) ? 'API_KEY' : (blank(sourceCfg.username) ? 'NONE' : 'BASIC')
+    }
+    return { nodes: String.join(',', hosts), protocol: protocol, authMethod: authMethod }
+}
+
 return db.transaction(() => {
 var sourceTableId = text(body?.tableId || body?.sourceTableId || body?.tid).trim()
 if (blank(tenantId)) { exit 401, '当前登录租户无效，请重新登录' }
@@ -1521,12 +1564,15 @@ for (existingTask in existingTasks) {
         continue
     }
     var taskReasons = []
-    for (fileNode in (existingDslObject.nodes == null ? [] : existingDslObject.nodes)) {
-        if (['source.ftp', 'source.sftp'].contains(text(fileNode.manifestKey))
-            && blank(fileNode.config?.sourceFileName) && blank(fileNode.config?.logicalSourceDatasourceId)) {
+    for (existingNode in (existingDslObject.nodes == null ? [] : existingDslObject.nodes)) {
+        if (['source.ftp', 'source.sftp'].contains(text(existingNode.manifestKey))
+            && blank(existingNode.config?.sourceFileName) && blank(existingNode.config?.logicalSourceDatasourceId)) {
             taskReasons.add('文件来源仍使用旧表名匹配规则，需确认后重新生成精确文件采集配置')
         }
-
+        if (existingNode.manifestKey == 'source.elasticsearch'
+                && (blank(existingNode.config?.nodes) || text(existingNode.config.nodes).matches('(?i)^https?://.*'))) {
+            taskReasons.add('Elasticsearch 来源缺少可部署的节点配置，需确认后按登记连接重新生成')
+        }
     }
     if (wrongHopSource) { taskReasons.add('已有任务的来源与所选目标顺序不一致，需确认后按级联链路重建') }
     if (legacyMultiTarget) { taskReasons.add('历史任务包含多个目标库，需确认后拆分为独立任务') }
@@ -1764,6 +1810,7 @@ if (sourceManifestKey == 'source.minio') {
 // Each registered index/topic is a distinct dataset; a datasource-wide wildcard or
 // comma-separated topic scope must never flow into an individual table's task.
 if (sourceManifestKey == 'source.elasticsearch') {
+    sourceNodeConfig.putAll(resolveElasticsearchConnection(sourceCfg))
     sourceNodeConfig.defaultIndex = sourceTableName
     sourceNodeConfig.queryJson = '{"query":{"match_all":{}},"size":1000}'
     sourceNodeConfig.syncMode = 'FULL'

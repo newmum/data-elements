@@ -252,8 +252,7 @@ if (viewLevel == 'tableDetail') {
     }
 }
 
-var distributionView = false
-// 接入列表一次取得当前租户的 ODS 绑定分类，随后从主列表排除这些来源。
+// 一次取得当前租户 ODS 绑定，直接抽取的已登记文件来源可以同时作为 ODS 落地库。
 var odsClassification = odsSourceClassifier()
 var warehouseDatasourceIds = odsClassification.query.grouped(odsClassification.projection, odsClassification.groups)
     .map(row => text(row.source_id)).filter(id => !blank(id))
@@ -275,7 +274,8 @@ var requestedDatasourceType=text(body?.datasourceType).trim().toLowerCase()
 if(requestedDatasourceType.length()>80) {exit 400,'数据源类型过长'}
 var datasourceTypeStatistics={unit:'table',complete:body?.includeDatasourceTypeStatistics==true,total:0,typeCounts:{},dbTypes:{}}
 
-var matchesTaskCategory = (datasource) => distributionView == warehouseDatasourceIds.contains(text(first(datasource, ['tid', 'id'])))
+var matchesTaskCategory = (datasource) =>
+    !warehouseDatasourceIds.contains(text(first(datasource, ['tid', 'id']))) || odsClassification.isDirectFileSource(datasource)
 
 if (viewLevel == 'table') {
     var tableKeyword = text(body?.keyword).trim()

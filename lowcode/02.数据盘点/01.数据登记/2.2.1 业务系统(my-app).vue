@@ -443,7 +443,7 @@ const handleAction = (type: string, row?: any) => {
       handleAction("refresh");
       state.leftLoading = true;
       Promise.all([
-        $common.post("/sym/org/getOrgTree", { parentId: $user.orgRootId }),
+        $common.post("/sym/org/tree", { parentId: $user.orgRootId }),
         $common.post("/dst/statistics/common", {
           countFields: ["orgId"],
           conditions: [{ field: "assetType", type: "match", value: "app" }],

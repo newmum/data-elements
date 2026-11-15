@@ -54,7 +54,7 @@
     {
       "name": "action",
       "value": "download",
-      "description": "真实数据示例参数：action",
+      "description": "upload 上传通用附件，upload-report 上传数据上报原件，download 下载，delete 删除通用附件",
       "required": false,
       "dataType": "String",
       "type": null,
@@ -96,7 +96,7 @@
   "headers": [],
   "paths": [],
   "responseBody": "{\n    \"code\": 500,\n    \"msg\": \"fileId不正确\",\n    \"success\": false,\n    \"data\": null\n}",
-  "description": "按当前租户上传、删除或流式读取业务附件。上传接收 multipart 文件，返回附件标识和下载地址。",
+  "description": "按当前租户上传、删除或流式读取业务附件。数据上报原件上传校验登录、格式和大小，完成磁盘写入及文件登记后返回标识和下载地址。",
   "requestBodyDefinition": null,
   "responseBodyDefinition": {
     "name": "",
@@ -171,14 +171,79 @@ import com.linewell.dataelement.utils.MinioUtils
 import cn.hutool.core.util.IdUtil
 import log
 import '@/common/configData' as configData
+import '@/common/reportoriginal' as reportOriginal
 import systemConfig
 import response;
 import cn.hutool.core.util.StrUtil;
 import cn.dev33.satoken.stp.StpUtil
+import java.nio.charset.StandardCharsets
+import org.springframework.http.ContentDisposition
 
 // POST /dst/file/manage 按当前租户上传、删除或流式读取业务附件。上传接收 multipart 文件，返回附件标识和下载地址。
+// upload-report 校验上传者与原件类型，通过 /common/reportoriginal 写磁盘；登记失败时清除此份原件。
 
 var tenantId = tenantRuntime.id()
+if (action == 'upload-report') {
+    StpUtil.checkLogin()
+    if (tenantId == null || (tenantId + '').trim() == '') { exit 401, '请重新登录后办理数据上报' }
+    if (file == null || file.isEmpty() || file.getSize() > 10485760) {
+        exit 400, '数据上报原件大小须在 1 字节至 10 MB 之间'
+    }
+    var fileName = file.getOriginalFilename()
+    if (fileName == null || fileName.length() > 255 || fileName.contains('/') || fileName.contains('\\')
+        || !fileName.matches('(?i)[^\\p{Cntrl}]+\\.(csv|xlsx|xls|txt|json)')) {
+        exit 400, '仅支持文件名有效的 CSV、Excel、TXT、JSON 数据文件'
+    }
+    var actorId = StpUtil.getLoginIdAsString()
+    var originalId = IdUtil.fastSimpleUUID()
+    var storageKey = 'report-local:' + originalId
+    try {
+        reportOriginal('write', tenantId, storageKey, file)
+    } catch (e) {
+        log.warn('上报原件落盘失败，原件标识 {}', originalId)
+        exit 500, '上传原件保存失败，请重试'
+    }
+    var now = new Date()
+    try {
+        var inserted = db.table('file_upload_t').primary('tid').insert({
+            tid: originalId, file_path: storageKey, file_name: fileName,
+            file_size: file.getSize(), file_suffix: fileName.substring(fileName.lastIndexOf('.') + 1),
+            tenant_id: tenantId, created_by: actorId, updated_by: actorId,
+            created_time: now, updated_time: now, is_del: 0
+        })
+        if (inserted == 0) { throw new IllegalStateException('无法登记上传原件') }
+    } catch (e) {
+        // 插入结果可能因连接中断未返回。重新核对记录后再清理，避免删除已提交记录的原件。
+        var confirmed = null
+        try {
+            confirmed = db.table('file_upload_t').where().eq('tid', originalId).eq('tenant_id', tenantId).eq('is_del', 0).selectOne()
+            if (confirmed == null) { reportOriginal('discard', tenantId, storageKey, null) }
+        } catch (cleanupError) { log.warn('无法确认上报原件登记或清理状态，原件标识 {}', originalId) }
+        if (confirmed == null || confirmed.filePath != storageKey) { exit 500, '上传原件登记失败，请重试' }
+    }
+    var downloadUrl = `/dst/file/download?fileId=${originalId}`
+    return { tid: originalId, name: fileName, url: downloadUrl, preView: downloadUrl }
+}
+
+var existing = null
+if (action == 'download' || action == 'delete') {
+    var id = action == 'download' ? fileId : tid
+    existing = db.table('file_upload_t').where().eq('tid', id).eq('tenant_id', tenantId).eq('is_del', 0).selectOne()
+    if (existing == null) { exit 500, 'fileId不正确' }
+    if (existing.filePath != null && existing.filePath.startsWith('report-local:')) {
+        StpUtil.checkLogin()
+        if (action == 'delete') { exit 400, '请在数据上报登记清单中管理原件' }
+        var stream = null
+        try { stream = reportOriginal('open', tenantId, existing.filePath, null) }
+        catch (e) { exit 404, '上传原件不可读取' }
+        try {
+            response.setHeader('Content-Type', 'application/octet-stream')
+            response.setHeader('Content-Disposition', ContentDisposition.attachment().filename(existing.fileName, StandardCharsets.UTF_8).toString())
+            stream.transferTo(response.getOutputStream())
+        } finally { stream.close() }
+        return response.end()
+    }
+}
 log.info("bucket:{}",bucket)
 if(bucket == null || bucket == ""){
   bucket = bucket || "attachment"
@@ -240,22 +305,14 @@ if(action == 'upload'){
     }
 }
 else if(action == 'delete'){
-    // 从 MySQL 业务表读取当前有效数据。
-    var fileInfo =  db.table("file_upload_t").where().eq("tid", tid).eq("tenant_id", tenantId).selectOne()
-    var relaName = StrUtil.subAfter(fileInfo.filePath, "/", false);
+    var relaName = StrUtil.subAfter(existing.filePath, "/", false);
     // 删除单个文件
     return MinioUtils.deleteFile(bucket, relaName);
 }
 else if(action == 'download'){
-    // 从 MySQL 业务表读取当前有效数据。
-    var fileInfo =  db.table("file_upload_t").where().eq("tid", tid).eq("tenant_id", tenantId).selectOne()
-    if(fileInfo == null){
-        // 参数或业务状态不满足要求时立即终止请求。
-        exit 500, "fileId不正确";
-    }
     // 下载单个文件
-    relaName = StrUtil.subAfter(fileInfo.filePath, "/", false);
-    bucket =  StrUtil.subBefore(fileInfo.filePath, "/", false);
-    response.setHeader("Content-disposition", "attachment; filename="+ fileInfo.fileName);
+    relaName = StrUtil.subAfter(existing.filePath, "/", false);
+    bucket =  StrUtil.subBefore(existing.filePath, "/", false);
+    response.setHeader("Content-disposition", "attachment; filename="+ existing.fileName);
     MinioUtils.downloadFile(bucket, relaName, response.getOutputStream());
 }

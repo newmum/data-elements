@@ -42,7 +42,7 @@ export function RegistrationEditor({ type, id, onClose, onSaved }: { type: Regis
         if (type === 'applications') record = await platformApi<Draft>('/dst/application/detail', { tid: id });
         if (type === 'databases') record = draftFromDetail(await datasourceRegistrationApi.detail(id));
         if (type === 'catalogs') { const result = await catalogRegistrationApi.detail(id); record = result.detail; dataItems = result.items; }
-        if (type === 'apis') record = await platformApi<Draft>('/dws/flowserve/gateway/api/detail', { apiId: id });
+        if (type === 'apis') record = await platformApi<Draft>('/dws/flowserve/service', { apiId: id });
         if (!record || typeof record !== 'object') throw new Error('登记信息未完整返回，请重试');
       }
       if (seq !== request.current) return;
@@ -95,7 +95,7 @@ export function RegistrationEditor({ type, id, onClose, onSaved }: { type: Regis
         const old = existing.current; const provider = old.providerConfig && typeof old.providerConfig === 'object' ? old.providerConfig as Draft : {};
         const publish = old.publishConfig && typeof old.publishConfig === 'object' ? old.publishConfig as Draft : {};
         const extension = old.extendInfo && typeof old.extendInfo === 'object' ? old.extendInfo as Draft : {};
-        result = await platformApi('/dws/flowserve/gateway/save', { ...old, ...props, ...(id ? { id } : {}), serviceName: text(values.serviceName).trim(), providerConfig: { ...provider, protocol: values.protocol || 'HTTP', address: values.uri, httpMethod: values.method }, publishConfig: { ...publish, publishAddress: values.uri, publishMethod: values.method }, publishParams: parameters.map(({ clientKey: _key, ...item }) => item), extendInfo: { ...extension, orgId: values.orgId, apiDescription: values.serviceDesc, responseExample: values.responseExample, requestExample: values.requestExample, responseDescription: values.responseDescription } });
+        result = await platformApi('/dws/gateway/save', { ...old, ...props, ...(id ? { id } : {}), serviceName: text(values.serviceName).trim(), providerConfig: { ...provider, protocol: values.protocol || 'HTTP', address: values.uri, httpMethod: values.method }, publishConfig: { ...publish, publishAddress: values.uri, publishMethod: values.method }, publishParams: parameters.map(({ clientKey: _key, ...item }) => item), extendInfo: { ...extension, orgId: values.orgId, apiDescription: values.serviceDesc, responseExample: values.responseExample, requestExample: values.requestExample, responseDescription: values.responseDescription } });
       }
       const savedId = result?.tid || result?.id; if (!savedId) { setUncertain(true); throw new Error('保存结果尚未确认，请关闭窗口并刷新列表核对'); }
       dirty.current = false;

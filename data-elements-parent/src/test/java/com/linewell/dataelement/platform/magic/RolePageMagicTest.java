@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.linewell.dataelement.platform.magic.result.MagicApiResultProvider;
 import com.linewell.dataelement.platform.tenant.api.TenantMagicModule;
 import com.linewell.dataelement.platform.tenant.domain.TenantContext;
 import com.linewell.dataelement.utils.StructuredValues;
@@ -26,6 +27,8 @@ import java.util.stream.IntStream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.ssssssss.magicapi.modules.db.dialect.DialectAdapter;
+import org.ssssssss.magicapi.modules.db.model.PageResult;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.ssssssss.script.MagicScript;
@@ -42,6 +45,38 @@ class RolePageMagicTest {
     private static final Set<String> ROLE_KEYS = Set.of("tenantId", "id", "createId", "updateId", "deleted",
             "createTime", "updateTime", "status", "name", "codeNum", "description", "appId", "sortNum",
             "dataScope", "userCount", "permCount", "userIds");
+
+    @Test
+    void compatibilityPageBatchesIdsAndUsesSessionTenant() throws Exception {
+        var fixture = new Fixture("MySQL");
+        var valid = IntStream.range(0, 100).mapToObj(i -> "compat-%03d".formatted(i)).toList();
+        for (int index = 0; index < valid.size(); index++) {
+            var id = valid.get(index);
+            fixture.role(TENANT, APP, id, id, id, index, 0, 0);
+        }
+        fixture.role(OTHER, APP, valid.getFirst(), "外租户同标识", "duplicate", 0, 0, 0);
+        fixture.role(OTHER, APP, "foreign", "外租户角色", "foreign", 0, 0, 0);
+        var script = MagicScript.create(CanonicalMagicSources.byId("9793b13bdb0d4d09bc1f909e7d1bd122")
+                .replaceAll("(?m)^import .*\\R", ""), null);
+        var db = DatasourceCompletionMagicTest.magicDb(fixture.source);
+        db.setDialectAdapter(new DialectAdapter());
+        db.setResultProvider(new MagicApiResultProvider());
+        for (int size : List.of(20, 100)) {
+            var allowed = valid.subList(0, size - 1);
+            var requested = new ArrayList<>(allowed);
+            requested.add("foreign");
+            Map<String, Object> input = Map.of("db", db, "tenantAccounts", fixture.accounts,
+                    "tenantRuntime", new TenantMagicModule(null), "limit", size, "offset", 0,
+                    "body", Map.of("tenantId", OTHER), "ids", String.join(",", requested));
+            fixture.source.statements.clear();
+            Object result = TenantContext.call(TENANT, () -> script.execute(new MagicScriptContext(input)));
+            var page = assertInstanceOf(PageResult.class, result);
+            var rows = StructuredValues.objectRows(page.getList());
+            assertEquals(allowed, rows.stream().map(row -> row.get("id")).toList());
+            assertTrue(rows.stream().allMatch(row -> TENANT.equals(row.get("tenantId"))));
+            assertEquals(2, fixture.source.statements.size());
+        }
+    }
 
     @ParameterizedTest
     @ValueSource(strings = {"MySQL", "PostgreSQL"})

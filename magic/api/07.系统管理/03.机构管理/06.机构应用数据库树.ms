@@ -9,7 +9,7 @@
   "lock": null,
   "createBy": null,
   "updateBy": null,
-  "path": "/getOrgAppDbTree",
+  "path": "/assets",
   "method": "POST",
   "parameters": [],
   "options": [],
@@ -17,132 +17,88 @@
   "headers": [],
   "paths": [],
   "responseBody": null,
-  "description": "执行 Elasticsearch 查询或索引同步，保持检索结果与主数据一致；使用请求参数 parentId；涉及 rm_org_t 等业务表。",
+  "description": "从当前租户的物理索引按角色可见范围读取机构、应用与数据库树。默认使用租户配置的组织根。",
   "requestBodyDefinition": null,
   "responseBodyDefinition": null
 }
 ================================
 import '@/common/configData' as configData
 import com.linewell.dataelement.elasticsearch.EsCommonService as esCommonService
+import dataScope
+import db
 import jsons
+import tenantRuntime
 
-// POST /sym/org/getOrgAppDbTree 从当前请求的数据源读取配置根下的机构。
-// 批量检索有效机构的应用和数据库资产，将它们组装为机构树，不修改资产或索引。
+// 按当前租户和配置根读取机构，查询角色可见的索引资产并核对应用与数据库的机构关联。
+var tenantId = tenantRuntime.id()
+if (!tenantId) { exit 401, '当前租户无效' }
+var config = configData()
+var rootId = config.orgRootId
+var parent = db.table('rm_org_t').where().eq('tenant_id', tenantId)
+    .eq('id', rootId).eq('deleted', 0).selectOne()
+if (parent == null || !parent.serialNumber) { return [] }
 
-// 解析请求体并为可选参数设置默认值。
-var parentId = configData().orgRootId//body?.parentId ? body?.parentId : query?.parentId
-
-
-// 从 MySQL 业务表读取当前有效数据。
-var parent = db.table('rm_org_t').where().eq("id",parentId).selectOne();
-
-
-// 从 MySQL 业务表读取当前有效数据。
-var list = db.table('rm_org_t').excludes("shortName","creditCode","standard","createId","updateId","createTime","updateTime","deleted")
-    .where()
+var page = db.table('rm_org_t')
+    .excludes('shortName','creditCode','standard','createId','updateId','createTime','updateTime','deleted')
+    .where().eq('tenant_id', tenantId).eq('deleted', 0)
     .like('serial_number', parent.serialNumber + '%')
-    .eq('deleted', '0')
-
-var rows = list.orderBy('sort_num').select()
-
-var ids =[]
-if (rows == null) {
-    rows = []
-} else {
-    rows.each(item -> {
-        ids.add(item.id)
-    })
+    .orderBy('sort_num').orderBy('id', 'asc').page(10001, 0)
+if (page.total > 10000) { exit 413, '机构树超过10000项' }
+var rows = page.list
+var orgs = {}
+var roots = []
+for (node in rows) {
+    node.label = node.name
+    node.value = node.id
+    node.children = []
+    orgs[node.id] = node
 }
-
-var jsonQuery = {
-    "bool": {
-      "filter": [
-        { "terms": { "orgId": ids } },
-        { "terms": { "assetType": ["app","db"] } }
-      ]
+for (node in rows) {
+    if (node.parentId == rootId) {
+        roots.add(node)
+    } else if (orgs[node.parentId] != null && node.id != rootId) {
+        orgs[node.parentId].children.add(node)
     }
 }
-// 执行 Elasticsearch 查询或索引同步，保持检索结果与主数据一致。
-existInxex = esCommonService.indexExists("dataassets");
-var esDataList
-if(!existInxex){
-    esDataList = []
-}else {
-    // 执行 Elasticsearch 查询或索引同步，保持检索结果与主数据一致。
-    esDataList = esCommonService.searchByJsonQuery("dataassets", jsons.toJSONStr(jsonQuery) ,Map.class, 1,2000).list
+
+var scope = dataScope.resource('COMPONENT:DST-DETAIL')
+if (!['ALL', 'ORG', 'OWNER'].contains(scope?.scope) || !scope?.userId) {
+    exit 403, '无法确定当前数据范围'
 }
-
-var mapDb = {}
-var mapApp = {}
-//遍历应用
-esDataList.each(item -> {
-    if(item.assetType == 'app'){
-        if( mapApp[item.orgId] == null){
-            mapApp[item.orgId] = []
-        }
-        mapApp[item.orgId].add(item)
-    }else  if(item.assetType == 'db' && item.orgId != null){
-        if( mapDb[item.orgId] == null){
-            mapDb[item.orgId] = []
-        }
-       mapDb[item.orgId].add(item)
-    }
-})
-
-var appRows = []
- rows.each(item -> {
-        if(mapApp[item.id] != null){
-            mapApp[item.id].each(t -> {
-                let temp = {}
-                temp.tid = t.id
-                temp.id = t.id
-                temp.parentId = item.id
-                temp.name = t.appName
-                temp.type = "app"
-                appRows.add(temp)
-            }) 
-        }
-    }) 
-
-//添加组织机构下应用信息
-rows.addAll(appRows)
-
-
-var dbRows = []
-appRows.each(item -> {
-    if(mapDb[item.parentId] != null){
-            mapDb[item.parentId].each(t -> {
-                //比较应用id是否一致
-                if(item.id == t.appId) {
-                    let temp = {}
-                    temp.tid = t.id
-                    temp.id = t.id
-                    temp.parentId = item.tid
-                    temp.name = t.dbName
-                    temp.type = "db"
-                    temp.dbType = t.dbType
-                    dbRows.add(temp)
-                }
-            }) 
-        }
-    })
-
-//添加组织机构下数据库信息
-rows.addAll(dbRows)
-
-rows.each(item ->{
-    item.label = item.name
-    item.value = item.id
-})
-
-
-var toTree = (list,parentId)=>{
-    // 返回当前业务分支的标准结果。
-    return list.filter(it => it.parentId == parentId) // 根据parentId 过滤当前节点
-    .each(it=>{
-        it.children = toTree(list,it.id)    // 过滤后循环这些节点递归添加children属性
-    }) 
+var orgIds = rows.map(node => node.id)
+if (scope.scope == 'ORG') {
+    orgIds = orgIds.filter(id => scope.organizationIds.contains(id))
 }
+if (orgIds.isEmpty() || !esCommonService.indexExists(config.es_dataassets)) { return roots }
 
-// 根节点为 0
-return toTree(rows, parentId)
+var filters = [{terms: {orgId: orgIds}}, {terms: {assetType: ['app', 'db']}}]
+if (scope.scope == 'OWNER') { filters.add({term: {createdBy: scope.userId}}) }
+// 索引服务按请求上下文选择物理租户索引，保持历史索引资产 ID 与前端计数的对应。
+var matches = esCommonService.searchByJsonQuery(config.es_dataassets, jsons.toJSONStr({bool: {filter: filters}}),
+    Map.class, 1, 2000)
+if (matches.total > 2000) { exit 413, '当前机构资产树超过2000项' }
+
+var visible = asset => {
+    if (!asset?.id || !asset?.orgId || asset.orgId == rootId || orgs[asset.orgId] == null) { return false }
+    if (asset.tenantId && asset.tenantId != tenantId) { return false }
+    if (scope.scope == 'ORG') { return scope.organizationIds.contains(asset.orgId) }
+    return scope.scope == 'ALL' || asset.createdBy == scope.userId
+}
+var applications = {}
+for (asset in matches.list) {
+    if (asset.assetType != 'app' || !visible(asset) || applications[asset.id] != null) { continue }
+    var app = {tid: asset.id, id: asset.id, parentId: asset.orgId, name: asset.appName, type: 'app',
+        label: asset.appName, value: asset.id, children: []}
+    applications[asset.id] = app
+    orgs[asset.orgId].children.add(app)
+}
+var databases = {}
+for (asset in matches.list) {
+    if (asset.assetType != 'db' || !visible(asset) || databases[asset.id] != null) { continue }
+    var app = applications[asset.appId]
+    if (app == null || app.parentId != asset.orgId) { continue }
+    databases[asset.id] = true
+    app.children.add({tid: asset.id, id: asset.id, parentId: app.id, name: asset.dbName, type: 'db',
+        dbType: asset.dbType, label: asset.dbName, value: asset.id, children: []})
+}
+return roots

@@ -160,7 +160,7 @@ export type SharedWorkspace = {
 export async function readSharedCatalog(client: MockMetadataClient) {
   await client.request("GET", "/portal/sso/session");
   const [organizations, statistics] = await Promise.all([
-    client.request<Organization[]>("POST", "/sym/org/getOrgTree"),
+    client.request<Organization[]>("POST", "/sym/org/tree"),
     client.request<{
       orgApps: Record<
         string,

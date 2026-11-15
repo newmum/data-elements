@@ -17,104 +17,121 @@
   "headers": [],
   "paths": [],
   "responseBody": null,
-  "description": "审批详情（GET /sym/approval/info）。按租户校验流程参与人，只读取 Warm-Flow 与本地 sym_* 身份数据；公安LOCAL账号使用本地库与令牌会话，其他租户保留原机制。",
+  "description": "按租户与当前用户的流程参与关系读取审批详情和节点。",
   "requestBodyDefinition": null,
   "responseBodyDefinition": null
 }
 ================================
-// 接口：01.查看审批信息
-// 路由：GET /sym/approval/info
-// 业务说明：审批详情（GET /sym/approval/info）。按租户校验流程参与人，只读取 Warm-Flow 与本地 sym_* 身份数据；公安LOCAL账号使用本地库与令牌会话，其他租户保留原机制。
-import tenantRuntime
 import approvalRuntime
-import tenantAccounts
 import jsons
+import tableRead
+import tenantAccounts
+import tenantRuntime
 
-
-if ((businessId == null || businessId == '') && (instanceId == null || instanceId == '')) {
-    exit -1, 'businessId 和 instanceId 不能同时为空'
+// 读取当前租户的流程详情。仅发起人、当前办理人和历史办理人可查看。
+var business = (businessId || '') + ''
+var requestedInstance = (instanceId || '') + ''
+if (business == '' && requestedInstance == '') { exit -1, 'businessId 和 instanceId 不能同时为空' }
+if (requestedInstance != '' && !requestedInstance.matches('[1-9][0-9]{0,18}')) {
+    exit -1, '审批流程ID无效'
 }
-
+var tenant = tenantRuntime.id()
+if (!tenant) { exit 401, '当前租户无效' }
 var principal = approvalRuntime.principal()
-// 业务租户从当前会话读取，不采用请求体中的租户标识。
-var tenantId = tenantRuntime.id()
-var instance = db.selectOne("""
-    select i.id, i.business_id, i.flow_status, i.definition_id, i.create_by,
-           i.node_code, i.node_name, i.ext, i.create_time, i.update_time,
-           d.flow_code, d.flow_name, null as create_by_name
-      from flow_instance i
-      join flow_definition d on d.id = i.definition_id and d.tenant_id = i.tenant_id
-     where i.tenant_id = #{tenantId}
-       and i.del_flag = '0'
-       <if test="businessId != null and businessId != ''">and i.business_id = #{businessId}</if>
-       <if test="instanceId != null and instanceId != ''">and i.id = #{instanceId}</if>
-""")
-if (instance == null) { exit -1, '审批流程不存在或已删除' }
-
-var permissionList = principal.permissionKeys
-var canView = instance.createBy + '' == principal.userId
+var instances = tableRead.from('flow_instance', 'instance', tenant)
+var instanceField = (name, type) => tableRead.column('instance', name, type)
+var definition = (name, type) => tableRead.column('definition', name, type)
+var instanceFields = {
+    id: instanceField('id', 'NUMBER'), businessId: instanceField('business_id', 'TEXT'),
+    flowStatus: instanceField('flow_status', 'TEXT'), definitionId: instanceField('definition_id', 'NUMBER'),
+    createBy: instanceField('create_by', 'TEXT'), nodeCode: instanceField('node_code', 'TEXT'),
+    nodeName: instanceField('node_name', 'TEXT'), ext: instanceField('ext', 'TEXT'),
+    createTime: instanceField('create_time', 'TIME'), updateTime: instanceField('update_time', 'TIME'),
+    flowCode: definition('flow_code', 'TEXT'), flowName: definition('flow_name', 'TEXT')
+}
+instances.where(tableRead.equal(instanceField('del_flag', 'TEXT'), '0'))
+instances.leftJoin('flow_definition', 'definition', 'id', 'definition_id', [])
+instances.where(tableRead.not(tableRead.isNull(definition('id', 'NUMBER'))))
+if (business != '') { instances.where(tableRead.equal(instanceFields.businessId, business)) }
+if (requestedInstance != '') {
+    var id = requestedInstance.asLong()
+    if (id == null || id <= 0) { exit -1, '审批流程ID无效' }
+    instances.where(tableRead.equal(instanceFields.id, id))
+}
+// 老申请可能有多次流转。没有实例号时按创建时间和主键取最近流程。
+var selected = instances.rows(instanceFields, [instanceFields.createTime, instanceFields.id], ['desc', 'desc'], 1)
+if (selected.isEmpty()) { exit -1, '审批流程不存在或已删除' }
+var instance = selected[0]
+var canView = (instance.createBy + '') == principal.userId
 if (!canView) {
-    var involved = db.selectInt("""
-        select count(*) from flow_user fu
-          join flow_task t on t.id = fu.associated and t.tenant_id = fu.tenant_id
-         where t.instance_id = #{instance.id}
-           and fu.tenant_id = #{tenantId}
-           and fu.del_flag = '0' and t.del_flag = '0'
-           and fu.processed_by in
-           <foreach item="permission" collection="permissionList" open="(" separator="," close=")">
-             #{permission}
-           </foreach>
-    """)
-    var handled = db.selectInt("""
-        select count(*) from flow_his_task h
-         where h.instance_id = #{instance.id}
-           and h.tenant_id = #{tenantId}
-           and h.del_flag = '0'
-           and h.approver = #{principal.userId}
-    """)
-    canView = involved > 0 || handled > 0
+    var current = tableRead.from('flow_user', 'candidate', tenant)
+    var candidate = (name, type) => tableRead.column('candidate', name, type)
+    var taskReference = (name, type) => tableRead.column('task_reference', name, type)
+    current.leftJoin('flow_task', 'task_reference', 'id', 'associated', [
+        tableRead.equal(taskReference('del_flag', 'TEXT'), '0'),
+        tableRead.equal(taskReference('instance_id', 'NUMBER'), instance.id)
+    ])
+    current.where(tableRead.equal(candidate('del_flag', 'TEXT'), '0'))
+    current.where(tableRead.in(candidate('processed_by', 'TEXT'), principal.permissionKeys))
+    current.where(tableRead.not(tableRead.isNull(taskReference('id', 'NUMBER'))))
+    canView = !current.rows({id: taskReference('id', 'NUMBER')}, 1).isEmpty()
+}
+if (!canView) {
+    var involvement = tableRead.from('flow_his_task', 'involvement', tenant)
+    var previous = (name, type) => tableRead.column('involvement', name, type)
+    involvement.where(tableRead.equal(previous('instance_id', 'NUMBER'), instance.id))
+    involvement.where(tableRead.equal(previous('del_flag', 'TEXT'), '0'))
+    involvement.where(tableRead.equal(previous('approver', 'TEXT'), principal.userId))
+    canView = !involvement.rows({id: previous('id', 'NUMBER')}, 1).isEmpty()
 }
 if (!canView) { exit -1, '您不是该流程的发起人或参与人，无权查看' }
 
-var currentTask = db.selectOne("""
-    select id, node_code, node_name, form_custom, form_path
-      from flow_task
-     where instance_id = #{instance.id}
-       and tenant_id = #{tenantId}
-       and del_flag = '0' and node_type = 1
-     order by create_time desc
-""")
-var nodes = db.select("""
-    select h.id, h.node_code, h.node_name, h.node_type as skip_type,
-           h.approver, null as approver_name, h.message,
-           h.create_time, h.update_time
-      from flow_his_task h
-     where h.instance_id = #{instance.id}
-       and h.tenant_id = #{tenantId}
-       and h.del_flag = '0'
-     order by h.create_time
-""")
-nodes.each(item -> item.id = item.id + '')
-var names = tenantAccounts.names(([instance.createBy] + nodes.map(item => item.approver)).filter(item => item != null))
-instance.createByName = names[instance.createBy] || instance.createBy
-nodes.each(item -> item.approverName = names[item.approver] || item.approver)
+var tasks = tableRead.from('flow_task', 'task', tenant)
+var task = (name, type) => tableRead.column('task', name, type)
+tasks.where(tableRead.equal(task('instance_id', 'NUMBER'), instance.id))
+tasks.where(tableRead.equal(task('del_flag', 'TEXT'), '0'))
+tasks.where(tableRead.equal(task('node_type', 'NUMBER'), 1))
+var active = tasks.rows({id: task('id', 'NUMBER'), nodeCode: task('node_code', 'TEXT'),
+    nodeName: task('node_name', 'TEXT')}, [task('create_time', 'TIME'), task('id', 'NUMBER')], ['desc', 'desc'], 1)
+var currentTask = active.isEmpty() ? null : active[0]
+
+var history = tableRead.from('flow_his_task', 'history', tenant)
+var entry = (name, type) => tableRead.column('history', name, type)
+history.where(tableRead.equal(entry('instance_id', 'NUMBER'), instance.id))
+history.where(tableRead.equal(entry('del_flag', 'TEXT'), '0'))
+var historyFields = {
+    id: entry('id', 'NUMBER'), nodeCode: entry('node_code', 'TEXT'), nodeName: entry('node_name', 'TEXT'),
+    skipType: entry('node_type', 'NUMBER'), approver: entry('approver', 'TEXT'), message: entry('message', 'TEXT'),
+    createTime: entry('create_time', 'TIME'), updateTime: entry('update_time', 'TIME')
+}
+var nodes = history.rows(historyFields, [historyFields.createTime, historyFields.id], ['asc', 'asc'], 1001)
+if (nodes.size() > 1000) { exit 413, '流程历史节点超过1000项' }
+var identityIds = []
+if (instance.createBy != null && instance.createBy != '') { identityIds.add(instance.createBy) }
+for (node in nodes) {
+    if (node.approver != null && node.approver != '') { identityIds.add(node.approver) }
+}
+var names = tenantAccounts.names(identityIds.distinct())
+for (node in nodes) {
+    node.id = node.id + ''
+    node.approverName = node.approver == null ? null : (names[node.approver] || node.approver)
+}
+var extension = {}
+if (instance.ext != null && instance.ext != '') {
+    try { extension = jsons.toJSONObject(instance.ext) }
+    catch (error) { extension = {} }
+}
 
 return {
     approvalInfo: {
-        instanceId: instance.id + '',
-        businessId: instance.businessId == null ? null : instance.businessId + '',
-        flowStatus: instance.flowStatus,
-        flowCode: instance.flowCode,
-        flowName: instance.flowName,
-        definitionId: instance.definitionId + '',
-        createBy: instance.createBy + '',
-        createByName: instance.createByName,
-        createTime: instance.createTime,
-        updateTime: instance.updateTime,
-        nodeCode: currentTask?.nodeCode || instance.nodeCode,
-        nodeName: currentTask?.nodeName || instance.nodeName,
+        instanceId: instance.id + '', businessId: instance.businessId,
+        flowStatus: instance.flowStatus, flowCode: instance.flowCode, flowName: instance.flowName,
+        definitionId: instance.definitionId + '', createBy: instance.createBy + '',
+        createByName: instance.createBy == null ? null : (names[instance.createBy] || instance.createBy),
+        createTime: instance.createTime, updateTime: instance.updateTime,
+        nodeCode: currentTask?.nodeCode || instance.nodeCode, nodeName: currentTask?.nodeName || instance.nodeName,
         taskId: currentTask?.id == null ? null : currentTask.id + '',
-        ext: instance.ext == null || instance.ext == '' ? {} : jsons.toJSONObject(instance.ext)
+        ext: extension
     },
     flowNodes: nodes
 }

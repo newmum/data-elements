@@ -16,7 +16,7 @@ describe("shared metadata contracts", () => {
         _query: Record<string, unknown> = {},
       ) => {
         if (path === "/portal/sso/session") return { tid: "tenant" };
-        if (path === "/sym/org/getOrgTree")
+        if (path === "/sym/org/tree")
           return [{ id: "org", name: "实际机构", children: [] }];
         if (path === "/dst/db/stats")
           return {

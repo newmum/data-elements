@@ -421,7 +421,7 @@ python -m unittest discover -s tools/tests
 - 业务优先关联根 `magic/`。仍在 Java 的业务记录为 `pending-magic`，后续按完整调用链迁入 Magic 并回归、发布后再删除 Java；框架或必要技术接口记录为 `technical-retained` 并说明具体理由。不创建空壳 Magic 转发以伪装迁移完成，不按 Java 类为 mock 建另一套业务接口。
 - mock 会话、广播通道、场景修改及详情缓存与真实模式隔离；种子只用于初始化，编辑保存写入专用浏览器状态，不能直接改写工程源码。恢复场景仅清理选定模拟数据。模拟租户与 ALL/ORG/OWNER 在筛选、分页、详情和每个批量 ID 上保持一致，请求参数只能缩小范围。20/100 行保持固定请求数；mock 不执行 SQL，不能用其零 SQL 冒充真实后端的查询数、事务、方言或权限验收。
 - 菜单和组织机构使用 `tools/export-mock-config.py --with-structure` 按当前真实租户绑定只读导出的白名单，保存于同一配置镜像；保留原 ID、父子关系、排序、隐藏状态和组件标识。数据库为空就保存空配置，不从其他租户补齐，不因 Mock 方便增加可见二级菜单。配置中的虚拟 ROOT 记录保留原始镜像，树接口按现行契约返回 ROOT 下的真实机构。
-- 风驰共享模式通过元数据平台同源只读桥消费现有 `/sym/org/getOrgTree`、`/dst/db/stats`、元数据表目录、字段及分页预览契约。业务状态只由元数据平台同源存储维护；每次读取重新检查当前会话和数据源归属，不给风驰复制一份可维护数据或另设业务 API。桥只接受配置中的风驰 origin 与对应 iframe 父窗口，按 nonce 关联响应，限制操作白名单和载荷大小；不传递会话 token、角色或连接信息，不连接真实业务服务。首次读取一张表可另读一次字段，分页 20/100 行均只新增一次预览请求；目录只按用户操作展开，禁止按表或行自动补查。
+- 风驰共享模式通过元数据平台同源只读桥消费现有 `/sym/org/tree`、`/dst/db/stats`、元数据表目录、字段及分页预览契约。业务状态只由元数据平台同源存储维护；每次读取重新检查当前会话和数据源归属，不给风驰复制一份可维护数据或另设业务 API。桥只接受配置中的风驰 origin 与对应 iframe 父窗口，按 nonce 关联响应，限制操作白名单和载荷大小；不传递会话 token、角色或连接信息，不连接真实业务服务。首次读取一张表可另读一次字段，分页 20/100 行均只新增一次预览请求；目录只按用户操作展开，禁止按表或行自动补查。
 - 新增能力与实际覆盖范围更新各前端唯一主文档，执行记录、浏览器截图和构建结果放根 `logs/`。真实 Magic/低代码的修改仍按现行逐资源发布、刷新和回读规则处理；仅增加前端 mock 或在本地读取既有组件不需要向共享库写入模拟内容。
 
 <a id="batch-pagination"></a>
@@ -749,7 +749,7 @@ Use the released `my-db` page at `/register/register-sjkb/list` as the default v
 - 现有对外路由按以下旧前缀盘点。路由改造按新的业务分组逐批切换，旧前缀作为实际调用和回退的核查基线。
   - `/dst` 管理数据盘点，包含库表资源 `/db`、文件操作 `/file` 和数据目录 `/catalog` 等叶组。
   - `/ods`: data access, ETL, and NiFi orchestration.
-  - `/dwm`: data governance.
+  - `/dwm` 管理数据治理。数据元和标准分类树使用 `/standard`，标准代码使用 `/code`，字段标准引用使用 `/binding`。元数据目录、关联服务和表资源使用 `/catalog`，采集字段清单、分页和批读使用 `/column`。资源总览、数仓分层和资源运营分别使用 `/center`、`/layer` 和 `/ops`。质量规则和概览使用 `/quality`，任务、实例、候选、工单及 SQL 模板分别使用 `/qtask`、`/qrun`、`/qoption`、`/qorder` 和 `/qsql`。治理总览、逻辑关系、血缘依据与覆盖、物理外键及字段对标分别使用 `/meta`、`/relation`、`/lineage`、`/foreign` 和 `/align`。已迁移的旧地址按原方法进入同一脚本，并使用相同会话和租户校验。
   - `/dws`: data services and cloud-gateway operations.
   - `/das`: data applications, application repository, screen designer, and application-tab operations.
   - `/idaas`: unified identity management and its explicitly configured tenant-receiver interfaces; platform and tenant-local accounts remain separate.
@@ -778,6 +778,10 @@ Use the released `my-db` page at `/register/register-sjkb/list` as the default v
 - 库表资源 Magic API 位于 `02.数据盘点/02.库表资源`，完整前缀为 `/dst/db`。叶组按数据源、库结构、登记表、字段和数据行编号。数据源卡片及展开表格用 `POST /dst/db/dept` 的 `cards`、`tables` 模式，字段列表为 `GET /dst/db/fields`，分页预览为 `POST /dst/db/preview`。
 - `04.数据治理/03.资源中心/14.资源操作` 使用 `POST /dwm/center/command`，供万象目录编目、资源表格和共享低代码资产中心查询与操作资源。
 - 数据接入业务 Magic API 位于 `03.数据接入`，根路径为 `/ods`。任务分页为 `POST /ods/job/page`，多表编组分页为 `POST /ods/multi/page`，汇聚与分发分页分别为 `POST /ods/ingest/page` 和 `POST /ods/dist/page`，即时对账实例分页为 `POST /ods/recon/page`，ETL 分组树为 `GET /ods/job/groups`。完整叶组按同步节点、服务节点、接入任务、字段映射、任务监控、多表编组、接入登记、对账策略、对账执行、分发、汇聚、目标数据和 API 拉取组织。
+- 数据服务 Magic API 位于 `05.数据服务`，根路径为 `/dws`。服务编排与画布候选接口使用 `/dws/flowserve`，网关资产写入、编排打开与授权申请使用 `/dws/gateway`，服务分组使用 `/dws/gategroup`。流程管理通过查询参数 `id` 指定流程。旧地址按原方法和路径 ID 转发，已发布服务继续使用 `/dws/flowserve/published/` 协议前缀。
+- 湖仓分层使用 `/dws/lake`，对象分页、批量纳管和生命周期使用 `/dws/lakeobject`，规则读取、替换、入湖校验和出湖申请使用 `/dws/lakerule`。按 ID 定位的接口使用查询参数 `id`，兼容入口按旧路径里的 ID 核验。在所属租户分层的行锁下批量纳管对象或整体替换规则，规则删除与插入在同一事务内完成。
+- 网关路由、策略、网络区域和接入应用归入 `/dws/gateway`，实例、灰度、日志、指标和调用归入 `/dws/gaterun`，订阅、反馈和合集归入 `/dws/servicemarket`。原 `/dws/service/gateway/` 的 POST 入口继续转发。实例批量保存先预取请求中的完整业务键并验明显式 ID，心跳按状态批量更新。混入外租户或已删除实例时整批拒绝。
+- 定时任务配置分页、管理和历史日志分别使用 `GET /dws/timer/page`、`POST /dws/timer/manage` 和 `GET /dws/timer/logs`。原定时器地址按 HTTP 方法转发。配置保存支持 `dryRun=true`，兼容五段、六段 Cron。启停在当前租户内锁定配置，对停用任务清空下次触发时间。当前定时配置尚未绑定执行端，已有任务的立即执行返回业务码 501。
 - 共享海通流程的 Magic 业务 API 位于 `09.海通流程接口`，根路径为 `/nifi`。流程设计与模板使用 `/flow`、`/canvas`，接入链路使用 `/chain`，运行状态、部署、流程组、节点及错误公告分别使用 `/run`、`/life`、`/group`、`/node`、`/event`。组件清单用 `/catalog`，字段映射按计划 `/plan`、模板 `/template`、字典 `/dict`、编辑规则 `/map`、运行版本 `/maprun` 组织。流程、组件或节点标识以查询参数传递，例如 `GET /nifi/flow/detail?id=<流程ID>`。
 - `15.连接探查` 下的连接测试、字段探查和表探查沿用海通画布的 `/nifi/api/connection-test`、`/nifi/api/columns-probe`、`/nifi/api/tables-probe`。Magic 负责校验和当前租户的 Hive 登记配置，Java 负责协议连接与诊断。数据源登记的 `/dst/db/srctest` 复用其中的连接探查能力。
 - Data-application Magic resources belong under `06.数据应用` and use `/das` as the public root. Do not retain `/workshop` calls in low-code source/compiled JS or any frontend project.
@@ -829,10 +833,9 @@ Use the released `my-db` page at `/register/register-sjkb/list` as the default v
   - 应用、已完成登记的数据表及无需审批的目录保存为直接可用（`asset_status=2`、`flow_status=2`、无 `flow_order_id`）。数据源使用上述 `0/1/2` 登记进度，结束登记后 `flow_status=2`，无需审批。
   - Do not create legacy order-asset relation rows for `app`, `db`, `table`, or `catalog`.
   - Registration steps after the first data-source step show only Previous/Next; they must not auto-save or auto-submit.
-- The standalone approval center remains available independently of asset registration:
-  - Keep the Warm-Flow dependencies, `com.linewell.dataelement.flow` runtime package, approval controller/service, flow suggestions, and flow relation infrastructure.
-  - 审批中心位于 `/magic-api/api/07.系统管理/07.审批中心/`，公共路由前缀为 `/sym/approval`。
-  - Warm-Flow completion uses the current `/sym/approval/callback/finshHandle` Magic contract. Permission resolution uses `ApprovalPrincipalService`; unused legacy permission/query wrappers are not restored.
+- 独立审批中心沿用 Warm-Flow 运行依赖、审批服务、常用意见及流程关系：
+  - Magic 入口按 `07.审批中心`、`15.流程定义`、`16.审批委托` 和 `17.审批意见` 分组，公共前缀分别为 `/sym/approval`、`/sym/flow`、`/sym/delegation` 和 `/sym/suggestion`。
+  - Warm-Flow 将类型化完成事件发送至 `POST /sym/approval/finish`，业务单标识来自引擎实例。旧地址 `/sym/approval/callback/finshHandle` 指向同一入口，HTTP 传入的伪造事件返回 403。权限由 `ApprovalPrincipalService` 解析。审批详情同时接受业务单号和实例号，列表已有实例号时随业务单号一并提交。
   - Do not reconnect `register-db`, `register-dbTable`, catalog registration, or registration completion to automatic approval submission.
   - Associate current approval operations through the authoritative `data_apply_form_t` / `res_catalog_publish_request` business ID and Warm-Flow `flow_instance.business_id`, not a second asset-order relation table. Load the business record with an explicit current-tenant predicate, resolve applicant/organization and display information in one bounded query, and check initiator ownership or current-tenant organization membership. The subscription and publication approval types must match their actual business records; asset registration must not be reconnected to the retired `checkIn` / `assetUpdate` path. Keep current subscription, publication, task handling and callback contracts.
 - Application systems use `sym_application_t` as their only master table. Data sources use `db_datasource_t` as their only master table. Preserve migrated IDs in each table's `tid`; do not recreate app/db rows in `da_asset_t`.
@@ -867,7 +870,7 @@ Use the released `my-db` page at `/register/register-sjkb/list` as the default v
 - 登记与数据探查的“同步字段”读取该授权来源表的全部字段，将最新非空物理注释同步为字段中文名，来源无注释时保留已填写中文名；加入新增字段并更新结构。按字段名忽略大小写匹配并保留已有字段 ID、字典翻译、统一格式和时间属性等治理设置；同步成功使旧预览失效。字段读取、同步及保存不得以 200 等固定字段数量截断，预览数据行的采样/分页上限与字段数无关；多表请求可按表 ID 有界分批，但每张表的字段必须完整返回，整批逐 ID 校验租户和角色范围。
 - Application systems and data sources keep `sym_application_t` and `db_datasource_t` as their authoritative master tables. Their high-frequency list/search interfaces read the denormalized Elasticsearch index for speed; in this environment the configured physical index is `elements_dataassets` (`configData().es_dataassets`), while `EsCommonService` receives the logical name `dataassets` and adds the `elements_` prefix. Detail interfaces may fall back to MySQL when an index document is absent.
 - Ordinary application-system and data-source save/delete interfaces update MySQL first and then update or remove the matching Elasticsearch document. Dynamic-detail saves that explicitly request `deferIndexRefresh` follow the validated best-effort asynchronous projection contract above and return `indexRefreshPending: true`; do not make a completed authoritative save appear failed because indexing is slow. Use `POST /dst/maintenance/refresh` for one asset and `POST /dst/maintenance/batchRefresh` for reconciliation or full index rebuilds.
-- 索引维护归入 `/dst/maintenance`。旧的资产索引刷新和批量刷新别名已退役。服务构建使用 `POST /dws/flowserve/gateway/api/list` 查询当前授权服务。
+- 索引维护归入 `/dst/maintenance`。旧的资产索引刷新和批量刷新别名已退役。服务构建使用 `POST /dws/flowserve/services` 查询当前授权服务。
 - Never treat Elasticsearch as the source of truth for application systems or data sources. Index refresh must rebuild app documents from `sym_application_t`, db documents from `db_datasource_t` plus `pool_cfg`, and remove stale app/db documents that no longer exist in the master tables.
 - Elasticsearch documents are search projections, not storage for full configuration. Keep datasource credentials and complex `pool_cfg` objects out of ES, convert Hutool `JSONNull` values to real nulls or strings before indexing, and exclude large governance payloads such as `fieldGovernanceConfig`, dictionary profiles, and column arrays. Full values remain in MySQL.
 - For `showConnect=0`, persist the data-source master record but clear direct connection columns and connection keys in `pool_cfg` so credentials cannot reappear in detail views.
@@ -883,7 +886,7 @@ Use the released `my-db` page at `/register/register-sjkb/list` as the default v
 - 新建物化建表的目标数据源默认勾选当前租户、角色可见的 ODS 分域编码 `huiju`、`yuanshi` 对应数据源，并按上述分域配置顺序排列；只存在其中一个时选择该分域，均不存在时留空。不得用名称或选项首项猜测，也不覆盖已有目标表查看时的选择。接入任务外层列表的“数据表”和“接入任务”列不提供排序。
 - 分发任务新建物化建表的目标选项采用接入左树同口径的当前租户、角色可见非 ODS 已登记数据源，按“部门→数据源”级联展示，不默认选择 ODS 分域或任意首项。未完成登记或未提供连接的候选不可选；已保存目标查看时保留原选择。接入与分发展开区使用同一套真实表链路展示，箭头及状态在数据库/表名块之间上下居中；分发列表“数据表”“分发任务”两列不提供排序。
 - 接入与分发链路的当前运行状态采用本页一次批量读取的有效 `nifi_pipeline_t.status`，与画布生命周期保持一致；无有效绑定流程的历史任务才回退 `task_status`。`monitor_status` 保存最近一次执行结果，`SUCCESS` 不能解释为任务停止，也不能覆盖运行态。批量状态查询保留租户、有效记录与链路角色范围，不逐任务请求 NiFi。
-- 接入任务与分发任务按当前租户资源中心 `dataSourceType` 根下有效 ODS 层及其直接子分域在 `dwm_center_layer_source_t` 的实际绑定分类。接入候选排除此数据源集合；分发候选只包含此集合，不能用库名、数据库类型或旧 Hive 标志分类。两类列表、左树与统计均按当前租户、已授权业务入口和有效记录校验，要求来源数据源、来源表 `asset_status > 0`，表类型限业务表、日志表、字典表。ODS 主目标绑定也须计入。菜单显示名为“接入任务”“分发任务”，保留 `/data-convergence`、`/hive-metastore` 路由、菜单 ID 和权限配置。
+- 接入任务与分发任务按当前租户资源中心 `dataSourceType` 根下有效 ODS 层及其直接子分域在 `dwm_center_layer_source_t` 的实际绑定分类。接入候选排除普通 ODS 绑定库，并保留同时承担 ODS 落地存储角色、以“数据抽取方式”独立登记的 FTP/FTPS/SFTP 来源。接入分页和左树采用同一判定。分发候选仍以实际 ODS 绑定为准。两类列表、左树与统计均按当前租户、已授权业务入口和有效记录校验，要求来源数据源、来源表 `asset_status > 0`，表类型限业务表、日志表、字典表。ODS 主目标绑定也须计入。菜单显示名为“接入任务”“分发任务”，保留 `/data-convergence`、`/hive-metastore` 路由、菜单 ID 和权限配置。
 - 接入与分发列表、两棵左树和分发目标选项共用 Magic 函数 `/common/ods-source-classifier`。分类校验当前租户的字典根、层、直接分域和有效绑定，随后各入口校验实际数据源和数据表。业务入口沿用现行同租户范围，数据源管理菜单的部门或本人范围由该菜单单独执行。左树按来源批量统计。分发目标选择排除 ODS 绑定库，最多返回 1,000 项，超过上限时明确拒绝。分发右表按请求指定的字段完成排序和分页，再按该顺序批量补齐任务信息。
 - 海通多表编组分页 `POST /ods/multi/page` 按当前租户和数据源权限验证整组。任一成员的来源失效或不在范围内时隐藏整组。单表任务关联缺失、失效或来源不一致时，成员保留并计入异常。编组统计先在库内聚合再排序分页，当前页成员按组、请求排序键、成员序号及 ID 排序。数据库最多读取 10001 个成员，第 10001 个触发业务码 413。成员批量读取重新核验来源范围，发现权限变化或成员数与分页时不一致，返回业务码 409 并提示刷新。
 - 分页批量返回关联任务的实际来源和全部授权目标，展开区按表 ID 展示连续“业务来源 → 汇聚 → 原始”链路；同一历史任务的多目标是并列写入，不能伪画成串行。候选分类不裁剪已关联下游任务；既有任务的中间来源登记状态为 `0` 时仍可按租户、角色及有效记录只读查看，不能据此放宽新任务创建的登记要求。不得根据同名表推断链路。

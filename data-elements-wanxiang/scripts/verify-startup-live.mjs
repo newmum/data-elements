@@ -8,7 +8,7 @@ const login=await verificationLogin(base,process.env.METADATA_TEST_ACCOUNT,proce
 const headers={token:login.data.token,'Content-Type':'application/json'};
 async function get(path,body){const start=performance.now(),r=await fetch(base+path,{method:body===undefined?'GET':'POST',headers,...(body===undefined?{}:{body:JSON.stringify(body)}),signal:AbortSignal.timeout(30000)}),text=await r.text(),result=JSON.parse(text);assert.equal(result.code,0,path+': '+String(result.msg||result.message||''));return {data:result.data,ms:Math.round(performance.now()-start),bytes:Buffer.byteLength(text)};}
 const tenant=await get('/portal/sso/session');assert.equal(String(tenant.data.tid),'2084109831682699264');
-const summary=await get('/dwm/metadata-governance/summary',{}),catalog=await get('/dwm/metadata-governance/catalog',{});
+const summary=await get('/dwm/meta/summary',{}),catalog=await get('/dwm/meta/catalog',{});
 assert.equal(summary.data.sources,catalog.data.sources.length);
 assert.equal(summary.data.entities,catalog.data.tables.length);
 assert.equal(summary.data.coverage.totalFields,catalog.data.columns.length);

@@ -856,7 +856,7 @@ const loadTree = async () => {
   state.leftLoading = true;
   try {
     const [orgTree, statistics] = await Promise.all([
-      $common.post("/sym/org/getOrgTree", { parentId: $user.orgRootId }),
+      $common.post("/sym/org/tree", { parentId: $user.orgRootId }),
       $common.post(taskPage.treeEndpoint, statisticsPayload()),
     ]);
     orgTreeSource.value = orgTree || [];

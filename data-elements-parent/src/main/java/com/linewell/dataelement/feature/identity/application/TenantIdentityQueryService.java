@@ -48,11 +48,6 @@ public class TenantIdentityQueryService {
     }
 
     @SuppressWarnings("unchecked")
-    public List<Map<String, Object>> list(String tenantId, String name) {
-        return (List<Map<String, Object>>) page(tenantId, 1, 200, null, name, null).get("list");
-    }
-
-    @SuppressWarnings("unchecked")
     public Map<String, Object> find(String tenantId, String id) {
         if (id == null || id.isBlank()) return null;
         var rows = (List<Map<String, Object>>) page(tenantId, 1, 1, List.of(id), null, null).get("list");
@@ -68,7 +63,8 @@ public class TenantIdentityQueryService {
     public Map<String, String> names(List<String> ids) {
         if (ids == null || ids.isEmpty()) return Map.of();
         String tenantId = TenantContext.requireTenantId();
-        if (!policy.isLocal(tenantId)) return control.names(ids);
+        requireScope(tenantId);
+        if (!policy.isLocal(tenantId)) return control.namesForTenant(tenantId, ids);
         Map<String, String> result = new LinkedHashMap<>();
         // Do not truncate workflow name lookups to a single page.
         for (int start=0; start<ids.size(); start+=200) {

@@ -262,7 +262,7 @@ export function CatalogEditorPage() {
       setLoading(false);
       const linkedTableId = params.get('resource') || params.get('table');
       if (linkedTableId && ids.length) {
-        void resourceGet<CenterTablePage>('/dwm/metadata-governance/tables/page',
+        void resourceGet<CenterTablePage>('/dwm/catalog/tables',
           { sourceIds: ids.join(','), tableId: linkedTableId, pageNo: 1, pageSize: 1 })
           .then(page => { if (active && page.rows[0]) return chooseTable(page.rows[0]); })
           .catch(error => { if (active) message.error(error instanceof Error ? error.message : String(error)); });
@@ -565,4 +565,3 @@ export function CatalogReviewsPage() {
        {title:'数据标准',dataIndex:'dataStandardId',width:160,render:value=>text(standards.find(item=>text(item.id)===text(value))?.name)||text(value)||'—'},
      ]}/>;
  }
- 

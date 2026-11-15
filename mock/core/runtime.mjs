@@ -682,8 +682,8 @@ export class ChengtianMockRuntime {
       assert(body.mode === "count", 501, "首阶段仅提供导航购物车计数");
       return { total: 0 };
     }
-    if (key === "POST /sym/org/getOrgTree")
-      return organizationTree(this.database.organizations);
+    if (key === "POST /sym/org/tree" || key === "POST /sym/org/getOrgTree")
+      return organizationTree(this.database.organizations, body.parentId || "ROOT");
     if (key === "POST /sym/component/manage") {
       assert(
         ["list", "runtimeBatch"].includes(query.action),

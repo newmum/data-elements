@@ -9,7 +9,7 @@
   "lock": null,
   "createBy": null,
   "updateBy": null,
-  "path": "/pageOrg",
+  "path": "/page",
   "method": "GET",
   "parameters": [
     {
@@ -49,18 +49,11 @@
   "responseBodyDefinition": null
 }
 ================================
-// 接口：07.部门兼容分页
-// 路由：GET /sym/org/pageOrg
-// 业务说明：按现有组织权限范围查询本地机构，返回旧部门页面需要的分页字段结构。
-import org.ssssssss.script.parsing.ast.statement.Return
-import cn.dev33.satoken.stp.StpUtil;
-import cn.hutool.core.util.NumberUtil;
 import "@post:/sym/user/me" as me;
-import log;
 import tenantRuntime;
 import tableSort;
-import '@/common/configData' as configData
 
+// 按当前会话的有效组织根读取部门，保留历史分页与选项结果。
 var tenantId=tenantRuntime.id();
 if(tenantId==null){exit 401,'当前租户无效';}
 var sortColumn=tableSort.field(param,{name:'name',updateTime:'update_time',updatedTime:'update_time',sortNum:'sort_num'},'sortNum');
@@ -80,9 +73,9 @@ var parent = db.table("rm_org_t").where()
 // 构建查询条件
 var result = db.table("rm_org_t").where().eq("tenant_id",tenantId).eq("deleted", 0)
 
-if (parent){
-    result = result.like('serial_number', parent.serialNumber + '%');
-}
+if (parent == null || !parent.serialNumber) { exit 403, '会话根机构无效'; }
+
+result = result.like('serial_number', parent.serialNumber + '%');
 
 var idList = []
 // 根据ID列表查询

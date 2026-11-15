@@ -209,7 +209,7 @@ const handleAction = (type: string, row?: any) => {
       break;
     case "申请撤回":
       $common.handle({
-        url: "/sym/approval/operate/handle",
+        url: "/sym/approval/handle",
         info: `是否撤回该申请【${row.applyName}】`,
         action: "撤回",
         data: {
@@ -249,7 +249,7 @@ const fetchList = async () => {
     const targetStatus = segMap[state.seg] ?? undefined;
 
     // 接口返回的数据
-    const { total, list } = await $common.post("/sym/approval/query/applyPage", {
+    const { total, list } = await $common.post("/sym/approval/applications", {
       pageNum: state.pageNo,
       pageSize: state.pageSize,
       sortField: "updatedTime",

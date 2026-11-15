@@ -9,7 +9,7 @@
   "lock": null,
   "createBy": null,
   "updateBy": null,
-  "path": "/element/meatDeleteById",
+  "path": "/delete",
   "method": "POST",
   "parameters": [],
   "options": [],
@@ -22,10 +22,10 @@
   "responseBodyDefinition": null
 }
 ================================
-// 接口：05.数据元删除
-// 路由：POST /dwm/standard/element/meatDeleteById
-// 业务说明：根据id删除数数据标准数据元；使用请求参数 tid；涉及 da_metadata_t 等业务表。
 import log
+
+// POST /dwm/standard/delete 数据元删除
+// 根据id删除数数据标准数据元；使用请求参数 tid；涉及 da_metadata_t 等业务表。
 
 /**
  * 根据id删除数数据标准数据元

@@ -35,7 +35,7 @@ class ServiceOrchestrationOpenMagicTest {
             data.db.setSqlInterceptors(List.of(counter));
         }
         Object open(String id,boolean dryRun)throws Exception {
-            String source=Files.readString(Path.of("../magic/api/05.数据服务/01.服务编排/18.打开服务编排.ms"));
+            String source=Files.readString(Path.of("../magic/api/05.数据服务/07.网关资产/03.打开服务编排.ms"));
             source=source.substring(source.indexOf("================================")+32).replaceAll("(?m)^import (?!cn\\.hutool\\.)[^\\r\\n]*\\r?\\n","");
             return MagicScript.create(source,null).execute(new MagicScriptContext(new LinkedHashMap<>(Map.of("db",data.db,"tenantRuntime",scope,"dataScope",scope,"body",Map.of("apiId",id,"dryRun",dryRun,"tenantId","tenant-b","orgId","org-b","flowId","forged-flow")))));
         }

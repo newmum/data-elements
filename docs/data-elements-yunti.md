@@ -13,7 +13,7 @@
 ## 工程概览与使用
 
 本工程仅保留 React 可视化编排前端，后端由 `data-elements-parent` 提供。
-共享 Magic 资源以根目录 `magic/api/05.数据服务/01.服务编排` 的当前源码为准。
+共享 Magic 资源以根目录 `magic/api/05.数据服务` 下服务编排、网关资产和网关分组的当前源码为准。
 前端声明的接口不能作为后端已实现、已发布的依据。
 
 
@@ -23,7 +23,7 @@
 
 - 前端：React 19、TypeScript、Vite、Ant Design、AntV X6。
 - 唯一后端：`data-elements`，默认地址 `http://127.0.0.1:8088`。
-- 管理接口：`/dws/flowserve/**`。
+- 画布管理接口位于 `/dws/flowserve`，主平台通过 `POST /dws/gateway/open` 打开编排。
 - 已发布服务：`/dws/flowserve/published/**`。
 - 运行时管理适配：`/api/v1/runtime/**`。
 - Magic 在线编辑器：`/api/web/`。
@@ -52,7 +52,7 @@ pnpm dev
 
 #### 打开编排与页面状态
 
-点击服务列表的“编排”时，主平台先确认云梯应用地址，再调用 `POST /dws/flowserve/gateway/orchestration/open`，请求只需 `apiId`。服务ID与流程ID分别处理，不能在没有流程关联时直接把服务ID当作已存在的流程打开。接口从当前认证租户读取服务，按既有 ALL／ORG／OWNER 范围逐ID核验；锁定服务行后复用原流程，只有尚未关联流程的服务才初始化“API触发器 → 响应”草稿并绑定。重复打开复用同一草稿；损坏或已删除的原关联返回明确错误，不能自动覆盖。`dryRun=true`只预检，不创建草稿。没有结构变更，也不批量给列表创建流程。
+点击服务列表的“编排”时，主平台先确认云梯应用地址，再调用 `POST /dws/gateway/open`，请求只需 `apiId`。服务ID与流程ID分别处理，不能在没有流程关联时直接把服务ID当作已存在的流程打开。接口从当前认证租户读取服务，按既有 ALL／ORG／OWNER 范围逐ID核验；锁定服务行后复用原流程，只有尚未关联流程的服务才初始化“API触发器 → 响应”草稿并绑定。重复打开复用同一草稿；损坏或已删除的原关联返回明确错误，不能自动覆盖。`dryRun=true`只预检，不创建草稿。没有结构变更，也不批量给列表创建流程。
 
 主平台从地址检查开始只显示一套“请求 → 编排 → 响应”加载画面，iframe在加载时保留布局但暂不展示；会话就绪消息不会提前关闭遮罩。云梯在图形装载并完成首次适配后发送 `YUNTI_EDITOR_READY`，主平台核对当前iframe来源、origin和本次 `entryId` 后一次切换到画布。`YUNTI_EDITOR_ERROR`采用同样校验，旧打开尝试的迟到消息不改变当前页面。会话初始化、路由懒加载、独立打开及路由错误使用同风格状态组件。
 
@@ -63,7 +63,9 @@ pnpm dev
 Vite 会将 `/dws`、`/api` 和 `/magic` 代理到 `http://127.0.0.1:8088`。
 嵌入画布通过主平台初始化的 `token` 请求头访问后端；主平台未勾选“记住密码”时也支持会话登录。
 
-Magic API 直接提供画布初始化的 `GET /dws/flowserve/flows/{id}` 和 `GET /dws/flowserve/runtime-nodes`，并保留对应 `HEAD`。详情按当前租户查询已保存流程，通过关联服务的 `flow_id` 或历史 `tid` 应用服务列表相同的全部、部门或本人数据范围。运行节点按默认状态、名称和标识排序，一条 SQL 读取有界窗口，超过 100 项时返回现有错误。节点响应仅提供部署令牌是否已设置。两个入口保留既有业务信封，编排草稿保存、试运行、发布、版本和下线仍由下述 Magic 接口处理。
+Magic API 直接提供画布初始化的 `GET /dws/flowserve/detail?id=<流程ID>` 和 `GET /dws/flowserve/nodes`，并保留对应 `HEAD`。详情按当前租户查询已保存流程，通过关联服务的 `flow_id` 或历史 `tid` 应用服务列表相同的全部、部门或本人数据范围。运行节点按默认状态、名称和标识排序，一条 SQL 读取有界窗口，超过 100 项时返回现有错误。节点响应仅提供部署令牌是否已设置。两个入口保留既有业务信封。
+
+草稿保存用 `PUT /dws/flowserve/draft`，调试、发布和下线使用 `POST` 的 `/debug`、`/publish` 和 `/offline`，版本读取用 `GET /versions`。这些入口均以 `/dws/flowserve` 为前缀并接收查询参数 `id`。画布按 `POST /dws/flowserve/services` 分页查询可选服务。兼容入口按原方法转发，旧流程路径的 ID 优先于同名查询参数。
 
 <a id="http-service-orchestration"></a>
 

@@ -9,7 +9,7 @@
   "lock": null,
   "createBy": null,
   "updateBy": null,
-  "path": "/getOrgTree",
+  "path": "/tree",
   "method": "POST",
   "parameters": [],
   "options": [],
@@ -689,16 +689,18 @@
   }
 }
 ================================
-// 接口：10.组织机构树查询
-// 路由：POST /sym/org/getOrgTree
-// 业务说明：机构树查询：仅返回当前根机构下的有效子树；不包含虚拟“全部机构”节点；使用请求参数 parentId；涉及 rm_org_t 等业务表。
-// 机构树查询：仅返回当前根机构下的有效子树；不包含虚拟“全部机构”节点。
 import "@post:/sym/user/me" as me
+import tenantRuntime
 
+// 读取当前租户的有效组织子树，响应不包含虚拟根。
 var rootId = body?.parentId || orgRootId || me().orgRootId || 'ROOT';
-var rows = db.table('rm_org_t').where().eq('deleted', 0).orderBy('sort_num').select();
+var tenantId = tenantRuntime.id()
+if (!tenantId) { exit 401, '当前租户无效' }
+var rows = db.table('rm_org_t').where().eq('tenant_id', tenantId).eq('deleted', 0)
+    .orderBy('sort_num').orderBy('id', 'asc').page(10001, 0);
+if (rows.total > 10000) { exit 413, '组织树超过10000项'; }
 var nodes = {};
-for (row in rows) {
+for (row in rows.list) {
     var node = {};
     node.putAll(row);
     node.value = node.id;

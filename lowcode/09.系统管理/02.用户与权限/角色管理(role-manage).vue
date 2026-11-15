@@ -288,7 +288,7 @@ const handleStatusClick = async (row: any) => {
   const targetStatus = row.status === 0 ? 1 : 0;
   row._statusLoading = true;
   try {
-    await $common.post("/sym/role/saveOrUpdate", {
+    await $common.post("/sym/role/save", {
       id: row.id,
       roleName: row.name,
       codeNum: row.codeNum,
@@ -392,7 +392,7 @@ const handleSave = async () => {
     }
 
     // 3. 调用保存接口
-    const savedRole = await $common.post("/sym/role/saveOrUpdate", payload);
+    const savedRole = await $common.post("/sym/role/save", payload);
     const savedRoleData = savedRole?.data || savedRole || {};
     const roleId = `${savedRoleData.id || currentRoleId.value || ""}`;
     if (!roleId) {
@@ -402,7 +402,7 @@ const handleSave = async () => {
     // 角色信息和用户关联保存成功后，仅在用户查看过权限页签时保存勾选结果。
     // 未查看权限页签的编辑不应覆盖既有的角色权限。
     if (permissionsLoaded.value) {
-      await $common.post("/sym/auth/saveRoleResource", {
+      await $common.post("/sym/auth/save", {
         roleId,
         resourceIds: selectedResourceIds.value,
       });
@@ -461,7 +461,7 @@ const loadRolePermissions = async () => {
     permissionTreeData.value = buildPermissionTree(Array.isArray(menuData) ? menuData : menuData.list || []);
 
     if (currentRoleId.value) {
-      const selectedResponse = await $common.post("/sym/auth/getRoleResource", {
+      const selectedResponse = await $common.post("/sym/auth/detail", {
         roleId: currentRoleId.value,
       });
       const selectedData = selectedResponse?.data || selectedResponse || {};
