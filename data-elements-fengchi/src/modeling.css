@@ -84,3 +84,14 @@
 .modeling-operator-collapse .model-ant-collapse-header{padding-inline:0!important}
 .modeling-operator-list{width:100%;min-width:0}
 .modeling-palette-item.model-ant-btn{max-width:100%;box-sizing:border-box}
+
+/* Bound the code editor to the panel so long JSON scrolls on both axes. */
+.modeling-script{min-height:0;box-sizing:border-box}
+.modeling-script>.modeling-code-editor{display:flex;min-height:0;min-width:0}
+.modeling-script>.modeling-code-editor>div{height:100%;width:100%;min-height:0;min-width:0}
+.modeling-script .cm-editor{height:100%;max-height:100%}
+.modeling-script .cm-scroller{overflow:auto!important;min-height:0}
+
+.modeling-script-status{display:flex;align-items:center;gap:12px;flex-wrap:wrap;flex:none;padding-bottom:10px;font-size:12px}.modeling-script-status span{color:var(--model-muted)}.modeling-script-status button{margin-left:auto}.modeling-script-diagnostics{flex:none;max-height:120px;overflow:auto;font-size:12px;margin-bottom:8px;color:var(--model-muted)}.modeling-script-diagnostics summary{cursor:pointer}.modeling-script-diagnostics ul{margin:6px 0;padding-left:20px}
+
+.modeling-start-layer{position:absolute;left:0;top:0;transform-origin:top left;pointer-events:none}.modeling-start-node{position:absolute;left:40px;top:16px;width:72px;height:72px;border-radius:50%;border:1px solid var(--border-soft,#cdd4dc);background:var(--model-bg);color:inherit;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;pointer-events:auto;z-index:2;box-shadow:0 2px 6px #0000000a}.modeling-start-node .anticon{font-size:20px}.modeling-control-edges{position:absolute;inset:0;width:100%;height:100%;overflow:visible}.modeling-control-edges path{fill:none;stroke:#a4adb7;stroke-width:1;stroke-dasharray:4 5}.modeling-run-notice{padding:4px 12px;font-size:11px;border-bottom:1px solid var(--border-soft,#ddd)}.is-local-running .modeling-node{animation:local-run-pulse 1s ease-in-out infinite}.is-local-running .modeling-edges path{stroke-dasharray:6 4;animation:local-run-flow .7s linear infinite}@keyframes local-run-pulse{50%{box-shadow:0 0 0 3px #6d9ab522}}@keyframes local-run-flow{to{stroke-dashoffset:-20}}@media(prefers-reduced-motion:reduce){.is-local-running .modeling-node,.is-local-running .modeling-edges path{animation:none}}
