@@ -12,7 +12,7 @@ import org.ssssssss.script.MagicScript;
 class ReconciliationMagicSyntaxTest {
     @TestFactory
     List<DynamicTest> compileEditableReconciliationInterfaces() throws Exception {
-        var scripts = CanonicalMagicSources.under("api/03.数据接入/03.数据对账");
+        var scripts = CanonicalMagicSources.under("api/03.数据接入/04.数据对账");
         assertFalse(scripts.isEmpty(), "Current Magic resource tree is missing");
         return scripts.stream().map(script -> DynamicTest.dynamicTest(
                 script.relativePath() + " [" + script.metadataId() + "]",

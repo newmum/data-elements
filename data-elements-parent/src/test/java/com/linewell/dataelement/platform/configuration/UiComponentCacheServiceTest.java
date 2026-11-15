@@ -198,7 +198,7 @@ class UiComponentCacheServiceTest {
     }
 
     private MagicScript componentApi() throws IOException {
-        Path path = Path.of("magic/api/09.系统管理/10.页面组件/01.页面组件管理.ms");
+        Path path = Path.of("magic/api/07.系统管理/08.组件管理/01.页面组件管理.ms");
         if (!Files.isRegularFile(path)) {
             path = Path.of("..").resolve(path);
         }

@@ -74,7 +74,7 @@ import org.ssssssss.script.runtime.function.MagicScriptLambdaFunction;
 
 class NifiMappingAssetReadMagicTest {
     private static final String COMMON = "function/01.通用函数/";
-    private static final String API = "api/14.NiFi流程接口/01.接口/";
+    private static final String API = "api/10.NiFi流程接口/01.接口/";
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final Timestamp CREATED = Timestamp.from(Instant.parse("2025-01-02T00:00:00Z"));
 
@@ -727,26 +727,26 @@ class NifiMappingAssetReadMagicTest {
             when(lockResponse.next()).thenReturn(true);
             when(lockResponse.getInt(1)).thenAnswer(call -> lockAvailable.get() ? 1 : 0);
             globals.put("mutation", new NifiMutationAspect(lockDataSource));
-            function("nifiDecodeCanvas", "56.NiFi解码保存画布.ms", "e06d4eb123494419e67f70f2fc03bceb", "row");
-            function("nifiFindCanvas", "61.NiFi读取租户画布.ms", "nifi_pipeline_find_v1", "flowId", "tenantId");
-            function("nifiPipelineReadHttp", "42.NiFi流程只读接口响应.ms", "nifi_pipeline_read_http_v1", "action");
-            function("nifiLifecycleBody", "68.NiFi读取生命周期请求体.ms", "nifi_lifecycle_body_v1",
+            function("nifiDecodeCanvas", "43.NiFi解码保存画布.ms", "e06d4eb123494419e67f70f2fc03bceb", "row");
+            function("nifiFindCanvas", "48.NiFi读取租户画布.ms", "nifi_pipeline_find_v1", "flowId", "tenantId");
+            function("nifiPipelineReadHttp", "29.NiFi流程只读接口响应.ms", "nifi_pipeline_read_http_v1", "action");
+            function("nifiLifecycleBody", "55.NiFi读取生命周期请求体.ms", "nifi_lifecycle_body_v1",
                     "input", "type", "oldType", "requiredSignature");
-            function("nifiMappingReadHttp", "74.NiFi映射读取响应.ms", "nifi_mapping_read_http_v1", "action");
-            function("nifiMappingPlanScope", "75.NiFi映射计划范围.ms", "nifi_mapping_plan_scope_v1", "pipelineId", "tenantId");
-            function("nifiReadMappingTemplate", "76.NiFi读取映射模板.ms", "nifi_mapping_template_read_v1", "templateId", "tenantId");
-            function("nifiMappingPlans", "77.NiFi映射计划历史.ms", "nifi_mapping_plans_v1");
-            function("nifiMappingPlanDetail", "78.NiFi映射计划版本.ms", "nifi_mapping_plan_v1", "planId");
-            function("nifiMappingTemplates", "79.NiFi映射模板版本.ms", "nifi_mapping_templates_v1");
-            function("nifiMappingTemplateDetail", "80.NiFi映射模板详情.ms", "nifi_mapping_template_v1", "templateId");
-            function("nifiMappingRetention", "81.NiFi映射版本保留策略.ms", "nifi_mapping_retention_v1");
-            function("nifiMappingDictionaryTables", "82.NiFi字典候选表.ms", "nifi_mapping_dict_tables_v1");
-            function("nifiMappingDictionaryColumns", "83.NiFi字典候选字段.ms", "nifi_mapping_dict_cols_v1");
-            function("nifiSaveMappingVersion", "84.NiFi追加映射资源版本.ms", "nifi_mapping_save_version_v1",
+            function("nifiMappingReadHttp", "61.NiFi映射读取响应.ms", "nifi_mapping_read_http_v1", "action");
+            function("nifiMappingPlanScope", "62.NiFi映射计划范围.ms", "nifi_mapping_plan_scope_v1", "pipelineId", "tenantId");
+            function("nifiReadMappingTemplate", "63.NiFi读取映射模板.ms", "nifi_mapping_template_read_v1", "templateId", "tenantId");
+            function("nifiMappingPlans", "64.NiFi映射计划历史.ms", "nifi_mapping_plans_v1");
+            function("nifiMappingPlanDetail", "65.NiFi映射计划版本.ms", "nifi_mapping_plan_v1", "planId");
+            function("nifiMappingTemplates", "66.NiFi映射模板版本.ms", "nifi_mapping_templates_v1");
+            function("nifiMappingTemplateDetail", "67.NiFi映射模板详情.ms", "nifi_mapping_template_v1", "templateId");
+            function("nifiMappingRetention", "68.NiFi映射版本保留策略.ms", "nifi_mapping_retention_v1");
+            function("nifiMappingDictionaryTables", "69.NiFi字典候选表.ms", "nifi_mapping_dict_tables_v1");
+            function("nifiMappingDictionaryColumns", "70.NiFi字典候选字段.ms", "nifi_mapping_dict_cols_v1");
+            function("nifiSaveMappingVersion", "71.NiFi追加映射资源版本.ms", "nifi_mapping_save_version_v1",
                     "kind", "key", "definition", "content");
-            function("nifiReadMappingPlans", "85.NiFi批量读取映射计划.ms", "nifi_mapping_plan_read_v1",
+            function("nifiReadMappingPlans", "72.NiFi批量读取映射计划.ms", "nifi_mapping_plan_read_v1",
                     "pipelineId", "tenantId", "ids");
-            function("nifiFieldMappingCapabilities", "86.NiFi字段映射能力.ms", "nifi_field_map_capabilities_v1");
+            function("nifiFieldMappingCapabilities", "73.NiFi字段映射能力.ms", "nifi_field_map_capabilities_v1");
             route("capabilities", "77.查询字段映射能力.ms", "nifi_field_map_caps_get_v1");
             route("capabilitiesHead", "78.核验字段映射能力.ms", "nifi_field_map_caps_head_v1");
             route("validateRules", "79.校验字段映射.ms", "nifi_field_map_validate_v1");

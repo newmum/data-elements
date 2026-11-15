@@ -1,0 +1,7 @@
+{
+  "id": "haitong-operations-api",
+  "name": "05.运维与推送密钥",
+  "type": "api",
+  "parentId": "0",
+  "path": "/internal"
+}

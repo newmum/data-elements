@@ -1,0 +1,7 @@
+{
+  "id": "c7d9e5d5ed7758789a2e287201555325",
+  "name": "03.消息验证",
+  "parentId": "haitong-validation-api",
+  "path": "/messages",
+  "type": "api"
+}

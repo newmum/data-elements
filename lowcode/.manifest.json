@@ -535,6 +535,26 @@
       "baseSha256": "76d91aa287ba43178b2ca5bd838960184a6a304332a11c2219bd4a6e88030d19"
     },
     {
+      "id": "2087460000000000001",
+      "parentId": "08204573bcdb4283b7a88e57aefdd0ea",
+      "name": "03.资产中心",
+      "displayName": "03.资产中心",
+      "type": "0",
+      "sortOrder": 3,
+      "path": "02.数据盘点/03.资产中心",
+      "baseSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "id": "2087460000000000002",
+      "parentId": "2087460000000000001",
+      "name": "asset-center",
+      "displayName": "3.1 资产中心",
+      "type": "1",
+      "sortOrder": 1,
+      "path": "02.数据盘点/03.资产中心/3.1 资产中心(asset-center).vue",
+      "baseSha256": "c07574e71fc4544c98da64d1c8daa1854d40e34fa71a569dc46e28f73f4e2fc5"
+    },
+    {
       "id": "2006253181124284416",
       "parentId": "0",
       "name": "03.数据接入",
@@ -1063,6 +1083,46 @@
       "sortOrder": 4,
       "path": "06.数据服务/02.数据超市/超市详情(market-detail).vue",
       "baseSha256": "6d266a7cbf1f3880780ff1f0525ef4e1e65ca9ab9e42ef3ba1a40473058a5a43"
+    },
+    {
+      "id": "2087000000000000001",
+      "parentId": "2014605325493669888",
+      "name": "03.运行监控",
+      "displayName": null,
+      "type": "0",
+      "sortOrder": 3,
+      "path": "06.数据服务/03.运行监控",
+      "baseSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "id": "2087000000000000002",
+      "parentId": "2087000000000000001",
+      "name": "ops-monitor",
+      "displayName": "运行监控",
+      "type": "1",
+      "sortOrder": 1,
+      "path": "06.数据服务/03.运行监控/运行监控(ops-monitor).vue",
+      "baseSha256": "ca87db12065463cf3c6bf7a4abddf809779f4b4ae6e7a8a94a9ac9a7466358c1"
+    },
+    {
+      "id": "2087000000000000005",
+      "parentId": "2014605325493669888",
+      "name": "06.定时器",
+      "displayName": null,
+      "type": "0",
+      "sortOrder": 6,
+      "path": "06.数据服务/06.定时器",
+      "baseSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "id": "2087000000000000006",
+      "parentId": "2087000000000000005",
+      "name": "timer-manage",
+      "displayName": "定时器管理",
+      "type": "1",
+      "sortOrder": 1,
+      "path": "06.数据服务/06.定时器/定时器管理(timer-manage).vue",
+      "baseSha256": "5eebc3dba033bdc4fc3b6ceb74571a634024c4ad85ef7d1813ade945b266195d"
     },
     {
       "id": "2014615745029804032",

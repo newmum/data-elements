@@ -1,0 +1,7 @@
+{
+  "id": "f60fbc37cec250dcae3796beae651b2e",
+  "name": "02.推送消息状态",
+  "parentId": "haitong-push-operations-04",
+  "path": "/message-status",
+  "type": "api"
+}

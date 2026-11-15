@@ -610,10 +610,10 @@ class AccessTaskChainMagicTest {
 
     private static final class Fixture {
         private static final String COMMON = "function/01.通用函数/";
-        private static final String API = "api/14.NiFi流程接口/01.接口/";
-        private static final MagicScript QUERY = script(COMMON + "37.NiFi接入任务链路读取.ms");
-        private static final MagicScript CHAIN = script(COMMON + "38.NiFi接入任务链路.ms");
-        private static final MagicScript HTTP = script(COMMON + "41.NiFi任务链路接口响应.ms");
+        private static final String API = "api/10.NiFi流程接口/01.接口/";
+        private static final MagicScript QUERY = script(COMMON + "24.NiFi接入任务链路读取.ms");
+        private static final MagicScript CHAIN = script(COMMON + "25.NiFi接入任务链路.ms");
+        private static final MagicScript HTTP = script(COMMON + "28.NiFi任务链路接口响应.ms");
         private static final MagicScript TASK = script(API + "10.按任务查询接入链路.ms");
         private static final MagicScript PIPELINE = script(API + "11.按流程查询接入链路.ms");
         private static final MagicScript NATIVE = script(API + "12.查询任务链路原生入口.ms");

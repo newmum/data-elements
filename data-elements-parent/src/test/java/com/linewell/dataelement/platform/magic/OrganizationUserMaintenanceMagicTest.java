@@ -41,6 +41,7 @@ class OrganizationUserMaintenanceMagicTest {
     public static class Fixture {
         final JdbcTemplate jdbc; final SQLModule db; final Accounts accounts=new Accounts(this);
         int reads; final List<String> queries=new ArrayList<>();
+        boolean failAudit;
         Fixture() throws Exception {
             var ds=new DriverManagerDataSource("jdbc:h2:mem:maintenance_"+UUID.randomUUID()+";MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1");
             jdbc=new JdbcTemplate(ds);
@@ -77,8 +78,12 @@ class OrganizationUserMaintenanceMagicTest {
         Object run(String id,Map<String,Object> body,Map<String,Object> extra) throws Exception {
             String source=CanonicalMagicSources.byId(id).replaceAll("(?m)^import[^\\r\\n]*[\\r\\n]+","").replace("StpUtil.getLoginId()","'operator'");
             var input=new HashMap<String,Object>();input.put("body",body);input.put("db",db);input.put("actor","operator");input.put("tenantRuntime",new Tenant());input.put("tenantAccounts",accounts);input.put("identityRuntime",new Identity());input.put("tableSort",new Sorter());input.put("users",this);input.putAll(extra);
-            String prelude="import cn.hutool.core.util.IdUtil;\nimport cn.hutool.crypto.SmUtil;\nimport cn.hutool.json.JSONUtil;\nimport com.linewell.dataelement.utils.PwdRuleUtil;\nvar auditOperation=(a,b,c,d,e)=>true;\nvar localUsers=(operation,payload)=>users.users(operation,payload);\n";
+            String prelude="import cn.hutool.core.util.IdUtil;\nimport cn.hutool.crypto.SmUtil;\nimport cn.hutool.json.JSONUtil;\nimport com.linewell.dataelement.utils.PwdRuleUtil;\nvar auditOperation=(a,b,c,d,e)=>users.audit();\nvar localUsers=(operation,payload)=>users.users(operation,payload);\n";
             return MagicScript.create(prelude+source,null).execute(new MagicScriptContext(input));
+        }
+        public boolean audit() {
+            if (failAudit) throw new IllegalStateException("validation audit failure");
+            return true;
         }
         void user(String id,String tenant,String org){
             jdbc.update("insert into rm_user_t(id,tenant_id,real_name,user_name,phone,password,status,deleted,gender,app_file_id,office_address,date_birth) values(?,?,?,?,?,'preserved-hash',0,0,'1','avatar','办公地址',date '1990-01-02')",id,tenant,"验证用户",id,"13800000000");
@@ -225,10 +230,44 @@ class OrganizationUserMaintenanceMagicTest {
             for(int i=0;i<count;i++){String id="r-"+i;ids.add(id);f.jdbc.update("insert into rm_role_t(id,tenant_id,app_id,name,deleted,status) values(?,'tenant-a','app-a',?,0,0)",id,id);}
             f.jdbc.update("insert into rm_role_t(id,tenant_id,app_id,name,deleted,status) values('other-app','tenant-a','app-b','其他应用角色',0,0),('foreign-role','tenant-b','app-a','外租户角色',0,0)");
             f.jdbc.update("insert into rm_user_role_rela_t(id,tenant_id,user_id,role_id) values('existing','tenant-a','member','other-app')");
-            f.reads=0;result(f.run("ga_local_roles_01",Map.of(),Map.of("payload",Map.of("userId","member","roleIds",ids))));assertEquals(2,f.reads);
+            f.reads=0;result(f.run("user_role_save_01",Map.of("userId","member","roleIds",ids)));assertEquals(2,f.reads);
             assertEquals(count+1,f.jdbc.queryForObject("select count(*) from rm_user_role_rela_t where user_id='member'",Integer.class));
-            var invalid=new ArrayList<>(ids);invalid.set(count-1,"foreign-role");exit(400,f.run("ga_local_roles_01",Map.of(),Map.of("payload",Map.of("userId","member","roleIds",invalid))));
+            var invalid=new ArrayList<>(ids);invalid.set(count-1,"foreign-role");exit(400,f.run("user_role_save_01",Map.of("userId","member","roleIds",invalid)));
             assertEquals(count+1,f.jdbc.queryForObject("select count(*) from rm_user_role_rela_t where user_id='member'",Integer.class));
+        }
+    }
+
+    @Test
+    void roleMenuReplacementValidatesTheBatchAndRollsBackOnAuditFailure() throws Exception {
+        String endpoint = "e4445190b9a543c89d23b3a6adacffc5";
+        for (int size : List.of(20, 100)) {
+            var fixture = new Fixture();
+            fixture.jdbc.execute("create table rm_menu_t(id varchar(40), tenant_id varchar(40), app_id varchar(40), deleted int)");
+            fixture.jdbc.execute("""
+                    create table rm_role_menu_rela_t(id varchar(40), tenant_id varchar(40), role_id varchar(40),
+                    app_resource_id varchar(40), extend_id varchar(40))
+                    """);
+            fixture.jdbc.update("""
+                    insert into rm_role_t(id,tenant_id,app_id,name,deleted,status)
+                    values('role','tenant-a','app-a','验证角色',0,0)
+                    """);
+            fixture.jdbc.update("insert into rm_menu_t values('foreign-menu','tenant-b','app-a',0)");
+            var menus = new ArrayList<String>();
+            for (int index = 0; index < size; index++) {
+                String id = "menu-" + index;
+                fixture.jdbc.update("insert into rm_menu_t values(?,'tenant-a','app-a',0)", id);
+                menus.add(id);
+            }
+            var request = Map.<String, Object>of("roleId", "role", "resourceIds", menus);
+            fixture.reads = 0;
+            assertEquals(size, result(fixture.run(endpoint, request)).get("count"));
+            assertEquals(2, fixture.reads);
+            var invalid = new ArrayList<>(menus);
+            invalid.set(size - 1, "foreign-menu");
+            exit(400, fixture.run(endpoint, Map.of("roleId", "role", "resourceIds", invalid)));
+            fixture.failAudit = true;
+            assertThrows(Exception.class, () -> fixture.run(endpoint, Map.of("roleId", "role", "resourceIds", List.of(menus.getFirst()))));
+            assertEquals(size, fixture.jdbc.queryForObject("select count(*) from rm_role_menu_rela_t where role_id='role'", Integer.class));
         }
     }
 }

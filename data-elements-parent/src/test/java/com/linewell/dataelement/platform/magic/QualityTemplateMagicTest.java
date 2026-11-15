@@ -4,7 +4,6 @@ import com.linewell.dataelement.utils.StructuredValues;
 import com.linewell.dataelement.platform.tenant.domain.TenantContext;
 
 import static org.assertj.core.api.Assertions.*;
-import java.nio.file.*;
 import java.util.*;
 import org.junit.jupiter.api.Test;
 import org.ssssssss.script.*;
@@ -14,6 +13,14 @@ import com.linewell.dataelement.platform.magic.TableSortMagicModule;
 import com.linewell.dataelement.feature.dataquality.infrastructure.jdbc.QualitySqlTemplate;
 
 class QualityTemplateMagicTest {
+    private static final String TEMPLATE_PAGE = "quality_sql_template_page_v1";
+    private static final String TEMPLATE_SAVE = "quality_sql_template_save_v1";
+    private static final String TEMPLATE_DELETE = "quality_sql_template_delete_v1";
+    private static final String TASK_SAVE = "a1000000000000000000000000000004";
+    private static final String QUALITY_RULES = "7220cd17e6c24858a617d3e6f2d4ea42";
+    private static final String FIELD_OPTIONS = "a1000000000000000000000000000014";
+    private static final List<String> LEGACY_RULE_WRITES = List.of(
+            "dd4214943e5341c482a59821a64245eb", "f15e72e40a2c41f4af8620ceb68a393b");
     public static class Scope {
         boolean denied;
         public String id(){return "ga";}
@@ -44,9 +51,8 @@ class QualityTemplateMagicTest {
             for(int i=0;i<100;i++)f.jdbc.update("insert into db_table_column_t(tid,tenant_id,table_id,column_name,is_del) values(?,'ga',?,'name',0)","column-"+i,"table-"+i);
             f.db.setSqlInterceptors(List.of(counter));
         }
-        Object run(String name,Map<String,Object> body) throws Exception {
-            String all=Files.readString(Path.of("../magic/api/05.数据治理/02.质量规则/"+name+".ms"));
-            String script=all.substring(all.indexOf("================================")+32).replaceAll("(?m)^import [^\\r\\n]*\\r?\\n","");
+        Object run(String metadataId,Map<String,Object> body) throws Exception {
+            String script=CanonicalMagicSources.byId(metadataId).replaceAll("(?m)^import [^\\r\\n]*\\r?\\n","");
             Map<String,Object> bindings=new LinkedHashMap<>();bindings.put("body",body);bindings.put("db",f.db);bindings.put("tenantRuntime",scope);bindings.put("dataScope",scope);
             bindings.put("qualitySql",new QualitySqlTemplate());bindings.put("jsons",new JsonModule());bindings.put("IdUtil",new Ids());bindings.put("StpUtil",new Actor());bindings.put("tableSort",new TableSortMagicModule());bindings.put("dataQuality",task);
             bindings.put("log",new Log());
@@ -54,19 +60,19 @@ class QualityTemplateMagicTest {
             counter.reads=0;
             return TenantContext.call(scope.id(), () -> MagicScript.create(script,null).execute(new MagicScriptContext(bindings)));
         }
-        String save() throws Exception {return String.valueOf(((Map<?,?>)run("23.保存SQL模板",new LinkedHashMap<>(Map.of("ruleName","参数模板","ruleCode","DQ_SQL","dimension","ACCURACY","sqlTemplate","${column}<#{min}","values",Map.of("min",0))))).get("tid"));}
+        String save() throws Exception {return String.valueOf(((Map<?,?>)run(TEMPLATE_SAVE,new LinkedHashMap<>(Map.of("ruleName","参数模板","ruleCode","DQ_SQL","dimension","ACCURACY","sqlTemplate","${column}<#{min}","values",Map.of("min",0))))).get("tid"));}
     }
     @Test void savesPagedTemplatesWithoutUnscopedUpdateOrDelete() throws Exception {
         var f=new Fixture();String id=f.save();
         for(int i=1;i<100;i++)f.f.jdbc.update("insert into data_gov_quality_rule(tid,tenant_id,is_del,scope_of_application,rule_name,rule_code,check_dimension,check_logic) values(?,'ga',0,'QUALITY_SQL_TEMPLATE_V1',?,'CODE','ACCURACY','{}')","template-"+i,"模板-"+i);
         assertThat(id).hasSize(32);
         for(int count:List.of(20,100)) {
-            var page=new com.fasterxml.jackson.databind.ObjectMapper().convertValue(f.run("22.SQL模板分页",Map.of("size",count)),Map.class);
+            var page=new com.fasterxml.jackson.databind.ObjectMapper().convertValue(f.run(TEMPLATE_PAGE,Map.of("size",count)),Map.class);
             assertThat(((List<?>)page.get("list"))).hasSize(count);assertThat(f.counter.reads).isEqualTo(2);
             System.out.println("quality templates page size="+count+", SQL="+f.counter.reads);
         }
         f.f.jdbc.update("update data_gov_quality_rule set tenant_id='foreign' where tid=?",id);
-        assertThat(f.run("24.删除SQL模板",Map.of("tid",id))).isInstanceOf(ExitValue.class);
+        assertThat(f.run(TEMPLATE_DELETE,Map.of("tid",id))).isInstanceOf(ExitValue.class);
         assertThat(f.f.jdbc.queryForObject("select is_del from data_gov_quality_rule where tid=?",Integer.class,id)).isZero();
     }
     @Test void taskCopiesAuthoritativeTemplateWithOneReadAndRejectsForeignIds() throws Exception {
@@ -74,13 +80,13 @@ class QualityTemplateMagicTest {
         for(int count:List.of(20,64)) {
             var rules=new ArrayList<Map<String,Object>>();
             for(int i=0;i<count;i++)rules.add(new LinkedHashMap<>(Map.of("ruleType","SQL_TEMPLATE","parameters",new LinkedHashMap<>(Map.of("templateId",id,"sqlTemplate","tampered","values",Map.of("min",0))))));
-            var result=f.run("04.保存任务",new LinkedHashMap<>(Map.of("taskName","模板任务","datasourceId","db","rules",rules)));
+            var result=f.run(TASK_SAVE,new LinkedHashMap<>(Map.of("taskName","模板任务","datasourceId","db","rules",rules)));
             assertThat(result).isInstanceOf(Map.class);assertThat(f.counter.reads).isEqualTo(2);
             var parameters=(Map<?,?>)(StructuredValues.objectRows(f.task.saved.get("rules"))).getFirst().get("parameters");
             assertThat(parameters.get("sqlTemplate")).isEqualTo("${column}<#{min}");
         }
         f.f.jdbc.update("update data_gov_quality_rule set tenant_id='foreign' where tid=?",id);
-        assertThat(f.run("04.保存任务",Map.of("taskName","拒绝","datasourceId","db","rules",List.of(Map.of("ruleType","SQL_TEMPLATE","parameters",Map.of("templateId",id)))))).isInstanceOf(ExitValue.class);
+        assertThat(f.run(TASK_SAVE,Map.of("taskName","拒绝","datasourceId","db","rules",List.of(Map.of("ruleType","SQL_TEMPLATE","parameters",Map.of("templateId",id)))))).isInstanceOf(ExitValue.class);
     }
 
     @Test void templatePageRetainsTheWireContractAndFiltersBeforeStableSorting() throws Exception {
@@ -100,7 +106,7 @@ class QualityTemplateMagicTest {
                 """);
         var filters = new LinkedHashMap<String, Object>(Map.of("keyword", "find", "dimension", "ACCURACY",
                 "sortField", "updated_time", "sortDir", "asc", "tenantId", "foreign"));
-        var page = StructuredValues.objectMap(f.run("22.SQL模板分页", filters));
+        var page = StructuredValues.objectMap(f.run(TEMPLATE_PAGE, filters));
         assertThat(page).containsOnlyKeys("total", "list").containsEntry("total", 3L);
         var rows = StructuredValues.objectRows(page.get("list"));
         assertThat(rows).extracting(row -> row.get("tid")).containsExactly("a", "b", "c");
@@ -109,31 +115,35 @@ class QualityTemplateMagicTest {
         assertThat(f.counter.reads).isEqualTo(2);
 
         filters.put("page", 2);
-        assertThat(StructuredValues.objectMap(f.run("22.SQL模板分页", filters)))
+        assertThat(StructuredValues.objectMap(f.run(TEMPLATE_PAGE, filters)))
                 .containsEntry("total", 3L).containsEntry("list", List.of());
         assertThat(f.counter.reads).isOne();
         filters.put("keyword", "absent");
-        assertThat(StructuredValues.objectMap(f.run("22.SQL模板分页", filters)))
+        assertThat(StructuredValues.objectMap(f.run(TEMPLATE_PAGE, filters)))
                 .containsEntry("total", 0L).containsEntry("list", null);
         assertThat(f.counter.reads).isOne();
     }
     @Test void legacyEditorsCannotBypassTemplateOrTenantBoundaries() throws Exception {
         var f=new Fixture();String id=f.save();
-        for(String route:List.of("05.质量规则保存修改","06.质量规则删除"))assertThat(f.run(route,Map.of("tid",id))).isInstanceOf(ExitValue.class);
-        assertThat((List<?>)f.run("02.质量规则列表",Map.of())).isEmpty();
+        for (String metadataId : LEGACY_RULE_WRITES) {
+            assertThat(f.run(metadataId, Map.of("tid", id))).isInstanceOf(ExitValue.class);
+        }
+        assertThat((List<?>)f.run(QUALITY_RULES,Map.of())).isEmpty();
         f.f.jdbc.update("update data_gov_quality_rule set tenant_id='foreign' where tid=?",id);
-        for(String route:List.of("05.质量规则保存修改","06.质量规则删除"))assertThat(f.run(route,Map.of("tid",id))).isInstanceOf(ExitValue.class);
+        for (String metadataId : LEGACY_RULE_WRITES) {
+            assertThat(f.run(metadataId, Map.of("tid", id))).isInstanceOf(ExitValue.class);
+        }
     }
     @Test void groupedColumnReadsRemainBoundedAndAuthorizeEachId() throws Exception {
         var f=new Fixture();
         for(int count:List.of(20,100)) {
             int reads=0;
             for(int offset=0;offset<count;offset+=50){var ids=new ArrayList<String>();for(int i=offset;i<Math.min(count,offset+50);i++)ids.add("table-"+i);
-                var result=(Map<?,?>)f.run("15.字段选项",Map.of("tableIds",ids));assertThat(result).hasSize(ids.size());reads+=f.counter.reads;}
+                var result=(Map<?,?>)f.run(FIELD_OPTIONS,Map.of("tableIds",ids));assertThat(result).hasSize(ids.size());reads+=f.counter.reads;}
             assertThat(reads).isEqualTo(count==20?2:4);
             System.out.println("quality columns items="+count+", SQL="+reads+", bounded batches="+(count==20?1:2));
         }
-        assertThat(f.run("15.字段选项",Map.of("tableIds",List.of("table-0","foreign")))).isInstanceOf(ExitValue.class);
-        f.scope.denied=true;assertThat(f.run("15.字段选项",Map.of("tableIds",List.of("table-0")))).isInstanceOf(ExitValue.class);
+        assertThat(f.run(FIELD_OPTIONS,Map.of("tableIds",List.of("table-0","foreign")))).isInstanceOf(ExitValue.class);
+        f.scope.denied=true;assertThat(f.run(FIELD_OPTIONS,Map.of("tableIds",List.of("table-0")))).isInstanceOf(ExitValue.class);
     }
 }

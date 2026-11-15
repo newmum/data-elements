@@ -9,7 +9,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 /**
- * Authentication adapter only. Credential lifecycle SQL is maintained in Magic.
+ * Database access for authentication and row locking during credential changes.
  */
 @Component
 public class PushCredentialStore {
@@ -29,5 +29,11 @@ public class PushCredentialStore {
         return new Secrets.Identity(String.valueOf(rows.getFirst().get("client_id")), false, PUSH_CHANNELS, Set.of());
     }
 
-
+    public boolean lockEnabledClient(String clientId) {
+        return !jdbc.query("""
+                select client_id from ht_push_api_client
+                 where client_id=? and is_enable=1 and is_del=0
+                 for update
+                """, (row, index) -> row.getString(1), clientId).isEmpty();
+    }
 }

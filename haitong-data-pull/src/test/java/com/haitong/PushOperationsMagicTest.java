@@ -11,22 +11,41 @@ import static org.junit.jupiter.api.Assertions.*;
 class PushOperationsMagicTest {
     @Test void allBusinessRoutesAreOwnedByMagicAndScriptsCompile() throws Exception {
         Path root=Path.of("../magic/haitong");
-        var json=new com.haitong.core.Json();var ids=new HashSet<String>();var routes=new HashSet<String>();var groups=new HashMap<String,String>();
+        var json=new com.haitong.core.Json();var ids=new HashSet<String>();var routes=new HashSet<String>();
+        var groups=new HashMap<String,Map<String,Object>>();
         try(var paths=Files.walk(root)){for(Path path:paths.filter(p->p.endsWith("group.json")).toList()){
-            var meta=json.object(Files.readAllBytes(path));groups.put(meta.get("id").toString(),meta.get("path").toString());
+            var meta=json.object(Files.readAllBytes(path));
+            assertNull(groups.put(meta.get("id").toString(),meta),path.toString());
         }}
         int migrated=0;
+        int leafRoutes=0;
         try(var paths=Files.walk(root)){for(Path path:paths.filter(p->p.toString().endsWith(".ms")).toList()){
             var parts=Files.readString(path,StandardCharsets.UTF_8).split("================================",2);
             var meta=json.object(parts[0].getBytes(StandardCharsets.UTF_8));assertTrue(ids.add(meta.get("id").toString()),path.toString());
             assertDoesNotThrow(()->MagicScript.create(parts[1],null).compile(),path.toString());
             if(meta.containsKey("method")){
-                String route=meta.get("method")+" "+groups.get(meta.get("groupId"))+meta.get("path");assertTrue(routes.add(route),route);
+                var leaf=groups.get(meta.get("groupId"));
+                var parent=groups.get(leaf.get("parentId"));
+                assertEquals("0",parent.get("parentId"),path.toString());
+                for(var group:List.of(parent,leaf)){
+                    assertEquals("api",group.get("type"));
+                    assertTrue(group.get("path").toString().matches("/[A-Za-z0-9_-]+"),path.toString());
+                }
+                String suffix=meta.get("path").toString();
+                if("/".equals(suffix) && meta.get("properties") instanceof Map<?,?> properties
+                        && Boolean.TRUE.equals(properties.get("leafRoute"))){
+                    suffix="";
+                    leafRoutes++;
+                }
+                String route=meta.get("method")+" "+parent.get("path")+leaf.get("path")+suffix;
+                assertTrue(routes.add(route),route);
                 if(route.contains(" /api/v1/")||route.contains(" /internal/"))migrated++;
             }
         }}
         // The seven unified data-push file routes extend the 37 legacy mappings.
         assertEquals(44,migrated);
+        assertEquals(63,routes.size());
+        assertEquals(7,leafRoutes);
         assertTrue(routes.containsAll(Set.of(
             "PUT /api/v1/data-push", "PUT /api/v1/data-push/single",
             "POST /api/v1/data-push/uploads", "PUT /api/v1/data-push/uploads/{id}/parts/{part}",

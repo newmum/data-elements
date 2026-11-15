@@ -1,0 +1,7 @@
+{
+  "id": "6e5dec3be50857c4a4c77672cffeab22",
+  "name": "02.单点登录",
+  "parentId": "90ef9a3f03244c9b97aa655b8c59b0b6",
+  "path": "/ssoLogin",
+  "type": "api"
+}

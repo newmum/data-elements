@@ -194,7 +194,7 @@ class NifiPipelineTemplateMagicTest {
 
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final String COMMON = "function/01.通用函数/";
-    private static final String API = "api/14.NiFi流程接口/01.接口/";
+    private static final String API = "api/10.NiFi流程接口/01.接口/";
 
     private static class Fixture {
         final JdbcTemplate jdbc;
@@ -262,14 +262,14 @@ class NifiPipelineTemplateMagicTest {
             });
             bindings.putAll(Map.of("db", db, "tableRead", TaskRuntimeMagicFixture.structuredReads(jdbc, structuredReads::add), "tenantRuntime",
                     new TenantMagicModule(null), "mapper", JSON, "metadataExplorer", explorer, "dataScope", scope));
-            register("respond", "nifi_pipe_list_response_v1", "48.NiFi流程列表HTTP响应.ms", "action");
-            register("readAssets", "nifi_canvas_template_assets_v1", "50.NiFi画布模板资产.ms", "assetIds");
-            register("fieldMappings", "nifi_canvas_template_mapping_v1", "51.NiFi模板字段映射.ms", "sourceColumns", "targetColumns");
-            register("sourceNode", "nifi_canvas_template_source_v1", "52.NiFi模板来源节点.ms", "datasource", "tableAsset", "columns", "sourceTableName");
-            register("hiveConnection", "nifi_canvas_template_hive_v1", "53.NiFi模板Hive连接.ms", "datasource", "config", "rawType", "isSink");
-            register("targetNode", "nifi_canvas_template_sink_v1", "54.NiFi模板目标节点.ms", "datasource", "tableAsset", "columns", "explicitTableName");
-            register("apiTemplate", "d410778b200d4fcca1d3f6da2a68fbd3", "36.NiFi画布API来源模板.ms", "datasource", "tableName");
-            register("readSavedCanvas", "71a48eec67605a2d5da8ce93b2cc02cb", "55.NiFi目录关联画布.ms", "catalogId");
+            register("respond", "nifi_pipe_list_response_v1", "35.NiFi流程列表HTTP响应.ms", "action");
+            register("readAssets", "nifi_canvas_template_assets_v1", "37.NiFi画布模板资产.ms", "assetIds");
+            register("fieldMappings", "nifi_canvas_template_mapping_v1", "38.NiFi模板字段映射.ms", "sourceColumns", "targetColumns");
+            register("sourceNode", "nifi_canvas_template_source_v1", "39.NiFi模板来源节点.ms", "datasource", "tableAsset", "columns", "sourceTableName");
+            register("hiveConnection", "nifi_canvas_template_hive_v1", "40.NiFi模板Hive连接.ms", "datasource", "config", "rawType", "isSink");
+            register("targetNode", "nifi_canvas_template_sink_v1", "41.NiFi模板目标节点.ms", "datasource", "tableAsset", "columns", "explicitTableName");
+            register("apiTemplate", "d410778b200d4fcca1d3f6da2a68fbd3", "23.NiFi画布API来源模板.ms", "datasource", "tableName");
+            register("readSavedCanvas", "71a48eec67605a2d5da8ce93b2cc02cb", "42.NiFi目录关联画布.ms", "catalogId");
             bindings.put("readCatalog", (MagicScriptLambdaFunction) (context, args) -> "catalog".equals(((Map<?, ?>) args[0]).get("id"))
                     ? Map.of("tid", "catalog", "catalogName", "验证目录", "sourceTableId", "source-table", "targetTableId", "target-table") : null);
         }

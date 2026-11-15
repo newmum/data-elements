@@ -154,21 +154,27 @@ export function logoutPlatformSession(): Promise<void> {
   return loggingOut;
 }
 
-let syncEpoch = 0;
+let latestSync: Promise<void> | undefined;
 
 /** Keep the original NiFi request client in step with the platform session. */
 export async function syncNifiPlatformSession(): Promise<void> {
   // Embedded integrations keep their existing INIT/SET_TOKEN contract.
   if (window.parent !== window) return;
-  const epoch = ++syncEpoch;
-  try {
-    const token = await getPlatformSessionToken();
-    if (epoch === syncEpoch) setBridgeToken(token || null);
-  } catch (error) {
-    // A failed refresh must not leave a previous tenant's credential active.
-    if (epoch === syncEpoch) setBridgeToken(null);
-    throw error;
-  }
+  const request: Promise<void> = getPlatformSessionToken().then(
+    token => {
+      // A page-level caller may arrive while the shell is refreshing the session.
+      // Wait for the current refresh before it decides whether to redirect to login.
+      if (latestSync !== request) return latestSync;
+      setBridgeToken(token || null);
+    },
+    error => {
+      if (latestSync !== request) return latestSync;
+      setBridgeToken(null);
+      throw error;
+    },
+  );
+  latestSync = request;
+  return request;
 }
 
 export function startPlatformSessionSync(): () => void {

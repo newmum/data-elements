@@ -10,10 +10,13 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.ssssssss.magicapi.core.annotation.MagicModule;
@@ -29,7 +32,7 @@ import com.linewell.dataelement.platform.tenant.domain.TenantContext;
 /**
  * 云梯流程发布与调试的框架适配器。
  *
- * <p>流程、版本和发布记录由 06.数据服务下的 Magic 接口维护；这里只处理 Magic
+ * <p>流程、版本和发布记录由数据服务下的 Magic 接口维护；这里只处理 Magic
  * 动态路由注册以及远程运行节点通信。</p>
  */
 @Component
@@ -37,6 +40,11 @@ import com.linewell.dataelement.platform.tenant.domain.TenantContext;
 public class FlowServeRuntimeAdapter {
     public static final String ROOT_GROUP_ID = "5d290a9b3bca3b2dd9ffd715dc47ce56";
     public static final String PUBLISHED_GROUP_ID = "e5ce028f1797312d57c628b66ffcf657";
+
+    private static final String FLOW_SERVE_PATH = "/dws/flowserve";
+    private static final String PUBLISHED_PATH = "/published";
+    private static final String PUBLIC_PREFIX = FLOW_SERVE_PATH + PUBLISHED_PATH;
+    private static final Pattern NUMBERED_NAME = Pattern.compile("^([0-9]+)\\.");
 
     private final ObjectMapper mapper;
     private final MagicResourceService resourceService;
@@ -73,7 +81,7 @@ public class FlowServeRuntimeAdapter {
                 "debug_" + UUID.randomUUID().toString().replace("-", ""),
                 text(flow, "name", "流程调试"),
                 method,
-                path,
+                apiPath(publishedGroupPath(), path),
                 text(flow, "description", ""),
                 script);
         api.setGroupId(PUBLISHED_GROUP_ID);
@@ -81,7 +89,7 @@ public class FlowServeRuntimeAdapter {
         long started = System.currentTimeMillis();
         try {
             Map<String, Object> parameters = exampleParameters(trigger);
-            String fullPath = "/dws/flowserve/published" + path;
+            String fullPath = PUBLIC_PREFIX + path;
             Object response = magicApiService.execute(method, fullPath, parameters);
             long elapsed = System.currentTimeMillis() - started;
             List<Map<String, Object>> trace = new ArrayList<>();
@@ -124,11 +132,7 @@ public class FlowServeRuntimeAdapter {
                     path,
                     text(flow, "description", ""),
                     script);
-            api.setGroupId(PUBLISHED_GROUP_ID);
-            ensurePublishedGroup();
-            resourceService.saveFile(api);
-            resourceService.refresh();
-            registry.register(api);
+            savePublishedApi(api);
         } else {
             deployRemote(resourceId, flow, script, node, method, path);
         }
@@ -137,7 +141,7 @@ public class FlowServeRuntimeAdapter {
                 "resourceId", resourceId,
                 "method", method,
                 "path", path,
-                "url", baseUrl + "/dws/flowserve/published" + path,
+                "url", baseUrl + PUBLIC_PREFIX + path,
                 "runtimeNodeId", text(node, "id", "local_magic_api"));
     }
 
@@ -146,15 +150,7 @@ public class FlowServeRuntimeAdapter {
         Map<String, Object> node = asMap(rawRuntimeNode);
         boolean local = node.isEmpty() || booleanValue(node.get("localNode"), true);
         if (local) {
-            ApiInfo api = new ApiInfo();
-            api.setId(resourceId);
-            registry.unregister(api);
-            try {
-                resourceService.delete(resourceId);
-                resourceService.refresh();
-            } catch (Exception ignored) {
-                // 动态路由注销已生效，历史资源清理失败不应使下线操作失效。
-            }
+            deletePublishedApi(resourceId);
             return true;
         }
         String managementUrl = text(node, "managementUrl", text(node, "baseUrl", ""));
@@ -219,11 +215,7 @@ public class FlowServeRuntimeAdapter {
                 normalizePath(text(request, "path", "/" + resourceId)),
                 text(request, "description", ""),
                 text(request, "script", ""));
-        api.setGroupId(PUBLISHED_GROUP_ID);
-        ensurePublishedGroup();
-        resourceService.saveFile(api);
-        resourceService.refresh();
-        registry.register(api);
+        savePublishedApi(api);
     }
 
     public void undeployFromRequest(String resourceId) {
@@ -264,20 +256,109 @@ public class FlowServeRuntimeAdapter {
     }
 
     private void ensurePublishedGroup() {
-        Group group = resourceService.getGroup(PUBLISHED_GROUP_ID);
-        if (group == null) {
-            group = new Group();
-            group.setId(PUBLISHED_GROUP_ID);
-            group.setCreateTime(System.currentTimeMillis());
-            group.setCreateBy("flowserve");
+        if (resourceService.getGroup(PUBLISHED_GROUP_ID) != null) {
+            return;
         }
+        // 尚未归组的旧运行节点仍可在原服务编排组下创建发布目录。
+        if (resourceService.getGroup(ROOT_GROUP_ID) == null
+                || !FLOW_SERVE_PATH.equals(groupPath(ROOT_GROUP_ID))) {
+            throw new IllegalStateException("缺少 Magic 服务编排发布分组");
+        }
+        Group group = new Group();
+        group.setId(PUBLISHED_GROUP_ID);
+        group.setCreateTime(System.currentTimeMillis());
+        group.setCreateBy("flowserve");
         group.setName("07.已发布服务");
         group.setType("api");
         group.setParentId(ROOT_GROUP_ID);
-        group.setPath("/published");
+        group.setPath(PUBLISHED_PATH);
         group.setUpdateTime(System.currentTimeMillis());
         group.setUpdateBy("flowserve");
-        resourceService.saveGroup(group);
+        if (!resourceService.saveGroup(group)) {
+            throw new IllegalStateException("保存 Magic 发布分组失败");
+        }
+    }
+
+    private String publishedGroupPath() {
+        String path = groupPath(PUBLISHED_GROUP_ID);
+        if (!FLOW_SERVE_PATH.equals(path) && !PUBLIC_PREFIX.equals(path)) {
+            throw new IllegalStateException("Magic 发布分组路径无效：" + path);
+        }
+        return path;
+    }
+
+    private String groupPath(String groupId) {
+        return normalizePath(resourceService.getGroupPath(groupId)).replaceAll("/+", "/").replaceAll("/$", "");
+    }
+
+    private String apiPath(String groupPath, String path) {
+        return FLOW_SERVE_PATH.equals(groupPath) ? PUBLISHED_PATH + path : path;
+    }
+
+    private synchronized void savePublishedApi(ApiInfo api) {
+        ensurePublishedGroup();
+        String groupPath = publishedGroupPath();
+        api.setGroupId(PUBLISHED_GROUP_ID);
+        api.setPath(apiPath(groupPath, api.getPath()));
+        if (FLOW_SERVE_PATH.equals(groupPath)) {
+            ApiInfo existing = resourceService.file(api.getId());
+            int number = existing == null
+                    ? resourceService.<ApiInfo>listFiles(PUBLISHED_GROUP_ID).stream()
+                            .mapToInt(this::nameNumber).max().orElse(0) + 1
+                    : nameNumber(existing);
+            api.setName(numberedName(number, api.getName()));
+        }
+        saveApi(api);
+        resourceService.refresh();
+        registry.register(api);
+    }
+
+    private synchronized void deletePublishedApi(String resourceId) {
+        ApiInfo api = resourceService.file(resourceId);
+        if (api == null) {
+            return;
+        }
+        String groupPath = publishedGroupPath();
+        if (!PUBLISHED_GROUP_ID.equals(api.getGroupId())
+                || (FLOW_SERVE_PATH.equals(groupPath) && !api.getPath().startsWith(PUBLISHED_PATH + "/"))) {
+            throw new IllegalArgumentException("资源不属于 Magic 已发布服务：" + resourceId);
+        }
+        if (!resourceService.delete(resourceId)) {
+            throw new IllegalStateException("删除 Magic 发布资源失败：" + resourceId);
+        }
+        registry.unregister(api);
+        if (FLOW_SERVE_PATH.equals(groupPath)) {
+            closeNameGap(nameNumber(api));
+        }
+        resourceService.refresh();
+    }
+
+    private void closeNameGap(int removedNumber) {
+        // 用最后一条动态接口填补空号，保持静态接口的名称和顺序。
+        resourceService.<ApiInfo>listFiles(PUBLISHED_GROUP_ID).stream()
+                .filter(api -> api.getPath().startsWith(PUBLISHED_PATH + "/"))
+                .max(Comparator.comparingInt(this::nameNumber))
+                .filter(api -> nameNumber(api) > removedNumber)
+                .ifPresent(api -> {
+                    ApiInfo renamed = api.copy();
+                    renamed.setName(numberedName(removedNumber, NUMBERED_NAME.matcher(api.getName()).replaceFirst("")));
+                    saveApi(renamed);
+                });
+    }
+
+    private void saveApi(ApiInfo api) {
+        if (!resourceService.saveFile(api)) {
+            throw new IllegalStateException("保存 Magic 发布资源失败：" + api.getId());
+        }
+    }
+
+    private int nameNumber(ApiInfo api) {
+        var number = NUMBERED_NAME.matcher(api.getName());
+        return number.find() ? Integer.parseInt(number.group(1)) : 0;
+    }
+
+    private String numberedName(int number, String name) {
+        return String.format(Locale.ROOT, "%02d.%s", number, name);
     }
 
     private ApiInfo api(

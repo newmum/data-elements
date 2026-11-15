@@ -1,0 +1,7 @@
+{
+  "id": "caaa69b653495cb8ab2d6a5dacffb8d8",
+  "name": "02.附件传输验证",
+  "parentId": "haitong-validation-api",
+  "path": "/attachments",
+  "type": "api"
+}

@@ -137,7 +137,7 @@ NiFi 与业务接口使用数据平台的登录会话。独立打开海通时，
 
 登录重定向会清除回跳地址外层查询和 Hash 中的认证参数，保留业务参数。会话存储中的防重复跳转标记只保存时间戳。
 
-嵌入消息只接受实际父窗口，且来源必须为海通同源、数据中台来源，或部署时显式配置的 `VITE_NIFI_EMBED_ORIGINS` / `iframe-allowed-origins`。本机开发未自定义源平台地址时，数据中台入口 `http://localhost:3000` 和 `http://127.0.0.1:3000` 均可传入当前会话。独立页面忽略外部窗口发来的 NiFi Token 消息。
+嵌入消息只接受实际父窗口，且来源必须为海通同源、数据中台来源，或部署时显式配置的 `VITE_NIFI_EMBED_ORIGINS` / `iframe-allowed-origins`。本机开发未自定义源平台地址时，数据中台入口 `http://localhost:3000` 和 `http://127.0.0.1:3000` 均可传入当前会话。独立页面忽略外部窗口发来的 NiFi Token 消息。在独立入口打开 NiFi 流程列表时，页面和外壳的并发同步以最近一次会话结果为准，再决定是否跳转到平台登录页。
 
 本地开发代理见 `vite.config.ts`：`/nifi/api`、`/nifi-api`、`/nifi-ui` 代理到 `http://localhost:8088`，`/dev-api` 也转向同一服务并去掉前缀。NiFi API 默认基址是 `/nifi/api`，可用 `VITE_APP_BASE_API` 覆盖。生产构建的 `.env.production` 使用 `/prod-api/nifi/api`；部署网关需要把该路径及原生 NiFi 页面路径正确代理到现有后端，并提供页面同源访问。前端请求携带当前 token，租户及资源权限由后端校验。仅启动前端不会使后端接口可用。
 
@@ -1581,16 +1581,16 @@ LIVE_BATCH在两次执行间被外部修改时不能强求旧结果，测试需�
 | [画布编辑器](../data-elements-haitong/src/nifi/panels/FieldMappingEditor.tsx:120) | 10个UI函数、条件配置、模板/预览/编译入口；1851附近为合成样例 |
 | [ODS模板工具](../data-elements-haitong/src/nifi/utils/fieldMapping.ts:24) | 系统主键生成模板，与编辑器另一模板存在差异 |
 | [映射服务](../data-elements-parent/src/main/java/com/linewell/dataelement/integration/nifi/canvas/mapping/FieldMappingService.java:763) | 编译分支、函数白名单、预览实现和全局策略差距；1536附近为51函数名单 |
-| [映射接口](../magic/api/14.NiFi流程接口/01.接口/77.查询字段映射能力.ms) | 原 `/nifi/api/field-mapping` 的能力、校验、预览、推荐、编译、旧规则转换和兼容字典模板 |
+| [映射接口](../magic/api/10.NiFi流程接口/01.接口/77.查询字段映射能力.ms) | 原 `/nifi/api/field-mapping` 的能力、校验、预览、推荐、编译、旧规则转换和兼容字典模板 |
 | [NiFi发布编译](../data-elements-parent/src/main/java/com/linewell/dataelement/integration/nifi/canvas/compile/DslCompiler.java:1866) | 单值/多值展开链、组件数量；2797附近为来源下推边界 |
 | [多值运行脚本](../data-elements-parent/src/main/resources/nifi/multi-value-translation.groovy:43) | 100记录、500键、重复键与部分命中语义 |
 | [多值脚本测试](../data-elements-parent/src/test/java/com/linewell/dataelement/integration/nifi/canvas/compile/RecordLookupScriptTest.java:25) | 20/100/201记录与元数据/查询次数断言；本次未执行 |
 | [部署拓扑测试](../data-elements-parent/src/test/java/com/linewell/dataelement/integration/nifi/canvas/compile/DslCompilerLookupDeploymentTest.java:29) | 多值链无SplitRecord、混合链和同连接合并；本次未执行 |
 | [登记治理组件](<D:/Sourcecode/data-elements/lowcode/01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource)/03.登记数据表(register-dbTable-catalog).vue:1576>) | 统一格式、字典/枚举、强制对标、附加条件 |
 | [真实接入申请](<D:/Sourcecode/data-elements/lowcode/03.数据接入/2.3.1 数据汇聚(data-convergence)/接入申请(access-apply).vue:1205>) | 模板、目标/字段限制、DDL和物化提交 |
-| [任务生成Magic](../magic/api/03.数据接入/13.按来源表补齐接入任务.ms:715) | 日期规则、枚举fallback、字典条件、任务/DSL/映射初建及级联 |
-| [目标物化Magic](../magic/api/03.数据接入/02.数据接入物化建表.ms:501) | fieldTransformBindings及目标列落位 |
-| [模板Magic](../magic/api/03.数据接入/11.根据表或目录获取建表申请模板.ms:357) | 译名列、系统字段、来源类型和显式清空 |
+| [任务生成Magic](../magic/api/03.数据接入/15.接入任务补齐/01.按来源表补齐接入任务.ms:715) | 日期规则、枚举fallback、字典条件、任务/DSL/映射初建及级联 |
+| [目标物化Magic](../magic/api/03.数据接入/03.物化建表申请/01.数据接入物化建表.ms:501) | fieldTransformBindings及目标列落位 |
+| [模板Magic](../magic/api/03.数据接入/13.建表申请模板/01.根据表或目录获取建表申请模板.ms:357) | 译名列、系统字段、来源类型和显式清空 |
 | [部署规则Binder](../data-elements-parent/src/main/java/com/linewell/dataelement/integration/nifi/canvas/mapping/AccessTaskFieldMappingBinder.java:62) | 补齐旧映射、默认策略和按目标列恢复的边界 |
 | [画布保存](../data-elements-parent/src/main/java/com/linewell/dataelement/integration/nifi/canvas/controller/PipelineController.java:478) | DSL保存与版本控制，不等同映射投影统一事务已完成 |
 | [现有部署生命周期](../data-elements-parent/src/main/java/com/linewell/dataelement/integration/nifi/canvas/controller/PipelineRunController.java:567) | 旧组清理后重编译，需升级状态保存/恢复 |
@@ -1640,7 +1640,7 @@ LIVE_BATCH在两次执行间被外部修改时不能强求旧结果，测试需�
 | 外部码表 | 登记数据源/表/列批量授权，保留 schema、复合键、静态过滤、空标签和重复键策略；按字典和依赖阶段合并编码；拆分顺序和重复值保留 | `RegisteredDictionaryCatalog.java`、`BatchDictionaryReader.java` |
 | 正式服务 | capabilities、validate、compile、preview 复用同一个内核；编译返回 ENGINE_PLAN，转换 query 为 null；正式服务不可用时拒绝假预览成功 | 共享 Magic 字段映射接口、`UnifiedMappingService.java` |
 | 画布编辑 | 旧配置明确升级为 2.0；规则表格、服务端草稿排序/分页、批量启停、来源字段选取、目标逻辑类型/长度/精度、步骤排序、常用策略控件及高级类型化 JSON；手工样本最多 100 行 | `FieldMappingEditor.tsx`、`UnifiedFieldMappingEditor.tsx` |
-| 数据接入 | 新生成映射采用 JAVA_RECORD，并将目标物理类型及非空要求纳入规则；登记枚举、字典条件、日期标准和 ODS 系统表达式仍通过原生成链承接 | `magic/api/03.数据接入/13.按来源表补齐接入任务.ms` |
+| 数据接入 | 新生成映射采用 JAVA_RECORD，并将目标物理类型及非空要求纳入规则；登记枚举、字典条件、日期标准和 ODS 系统表达式仍通过原生成链承接 | `magic/api/03.数据接入/15.接入任务补齐/01.按来源表补齐接入任务.ms` |
 | 配置投影 | 画布 2.0 为权威配置；映射表以 pipelineId/nodeId/ruleId 标识完整投影或摘要，批量预取后写入；移除节点会清理其投影，旧 Binder 不回填覆盖 2.0 规则 | `MappingProjectionService.java`、`AccessTaskFieldMappingBinder.java` |
 | NiFi 运行 | 一个主要 Processor，独立批量字典 Controller Service，Reader/Writer 类型传递，512 行/8 MiB 窗口，同一 Session 提交，failure/invalid 保留、有界 retry | `data-elements-parent/mapping-extension/` |
 | 多节点及重放 | 计划摘要按处理器 ID 分隔，支持串联；输入身份和执行时钟保存在属性中，重试与复制属性的重放采用相同生成上下文 | `HaitongTransformRecord.java` |
@@ -2949,7 +2949,7 @@ Magic 接口和低代码只从根 `magic/`、`lowcode/` 的当前可维护源逐
 
 领取先暂选队首，再在事务内锁定作业和相关来源表的主键，随后重查队列和租约。候选变化时结束本次事务并重新选取，最多三次。同一租户、同一来源表在十分钟内有有效租约时返回忙碌，不同来源的作业可独立领取。回收失联项时清除旧令牌。完成回报校验当前租约和真实任务关联，成功回报只有在令牌和任务都相同时才可幂等重放。
 
-本设计遵循[前后端批量查询与分页规范](data-elements.md#batch-pagination)。单项入口以[当前可维护脚本](../magic/api/03.数据接入/13.按来源表补齐接入任务.ms)及实际运行版本为准。实施前按[本地资源版本管理](data-elements.md#resource-versioning)只读比较资源身份、内容及远端并发变化。
+本设计遵循[前后端批量查询与分页规范](data-elements.md#batch-pagination)。单项入口以[当前可维护脚本](../magic/api/03.数据接入/15.接入任务补齐/01.按来源表补齐接入任务.ms)及实际运行版本为准。实施前按[本地资源版本管理](data-elements.md#resource-versioning)只读比较资源身份、内容及远端并发变化。
 
 
 <a id="guide-a328d01d--为什么不能包装现有单表接口"></a>

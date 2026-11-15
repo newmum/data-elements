@@ -599,7 +599,7 @@ The frontend uses `@form-create/element-ui` to render configurable business form
 - The form-configuration page is the released low-code component named `form-config`, available at `/setting/form-config`. It lists, edits, previews, creates, renames, and soft-deletes form definitions for the active environment.
 - Dynamic form definitions are stored in **each selected tenant's business database**, in `sym_form`; they are not stored in `baseline.ui_component_t`, `baseline.api_file_t`, or another control-plane table. Resolve and record the active tenant/database before inspecting or changing a form.
 - `sym_form` fields are: `tid`, `form_name`, `form_json`, `form_config`, `env`, `created_time`, `updated_time`, `is_del`, and `tenant_id`. `form_json` and `env` are required; deletion is logical (`is_del=1`). The delivered schema has no physical uniqueness key for `(form_name, env)`, so preserve the application's duplicate check and audit for duplicates when directly repairing data.
-- All form read/write/delete requests use `POST /sym/form?action=get|save|delete`. The Magic resource is `/magic-api/api/09.系统管理/12.动态表单/01.动态表单配置.ms`; it delegates to the backend `tenantForm` Magic module.
+- All form read/write/delete requests use `POST /sym/form?action=get|save|delete`. The Magic resource is `/magic-api/api/07.系统管理/09.动态表单/01.动态表单配置.ms`; it delegates to the backend `tenantForm` Magic module.
 - The backend module `TenantFormMagicModule` obtains the database only from `TenantContext.requireTenantId()` and `TenantDataSourceRegistry.dataSourceForTenant(...)`. Never add a request `tenantId`, route/query tenant value, form record's historic `tenant_id`, or browser-selected value as an alternate source of business-data ownership. A missing tenant context must fail closed.
 - `tenant_id` is recorded from the active server-side tenant when a row is inserted. Do not let the client choose it. Preserve the current tenant's data-source routing even if the physical schema also contains `tenant_id`.
 
@@ -761,17 +761,19 @@ Use the released `my-db` page at `/register/register-sjkb/list` as the default v
 - 业务目录从 `api/`、`function/` 或 `task/` 下面起算，最多三层。例如 `02.数据盘点/02.数据库表/01.元数据管理` 为三层。每套独立 Magic 部署先选定统一的 API 叶分组深度，两层能表达业务分类时用两层，需要第三层时所有 API 落在第三层。同一部署的 API 都放在该深度的叶分组。父分组只放子分组，叶分组只放接口和自己的 `group.json`。共享平台与独立海通分别制定目标树和迁移计划。
 - 同级分组、接口、函数和任务各自从 `01.` 连续编号，同一序列无缺号、重号或未编号资源。移动、退役或新增后核对所涉同级序列。文件和分组名称与在线编辑器的显示名称一致。
 - 每个实际分组的 `group.json.path` 必须是非空的单个有效 URL 段。上级与本级叠加形成路由前缀，剩余业务段由 API 自己的 `path` 定义。禁止空路径、单独的 `/`、多段分组路径及仅为补齐深度创建的空壳分组。
-- 编号和文件名只控制显示顺序。先计算旧、新的完整 HTTP 方法、路由和函数导入标识，优先用目标叶分组的有效前缀保持公共地址及资源 ID。确需改址时，在同批更新实际请求方、Magic 导入、Java 调用、低代码源码及编译产物、配置、任务、Mock 契约及已知外部回调，演练恢复并验证新旧入口的切换。现行 Magic 2.2.2 的空 API 路径及尾斜杠不能用来消除路由段，短路由须通过真实 HTTP 对照确认迁移契约。
+- 编号和文件名只控制显示顺序。先计算旧、新的完整 HTTP 方法、路由和函数导入标识，优先用目标叶分组的有效前缀保持公共地址及资源 ID。确需改址时，在同批更新实际请求方、Magic 导入、Java 调用、低代码源码及编译产物、配置、任务、Mock 契约及已知外部回调，演练恢复并验证新旧入口的切换。
+- 原版 Magic 2.2.2 会拒绝空 API 路径，并将 API 的 `/` 注册为带尾斜杠的地址。共享平台和独立海通在资源注册时支持显式叶组根入口。仅当现有公共地址等于叶组完整前缀且无尾斜杠时，将该 API 的 `path` 设为 `/` 并写入 `properties.leafRoute: true`。将支持此标记的运行包与选定资源同批发布，用编辑器回读和真实 HTTP 前后对照确认原地址、方法和鉴权。
 - Direct database moves must preserve the complete resource tree:
   - Every group has one `group.json`.
   - Every physical folder has one active directory row ending in `/` with `file_content='this is directory'`.
   - This applies to `api`, `function`, and `task`. Missing function/task directory rows can leave scripts visible in the database while cold-start imports fail with `找不到函数`.
 - After folder or numbering changes, verify cold-start `MagicApiRuntimeProbe` once a backend restart has been authorized. Check `rootFunctionDirs`, `rootTaskDirs`, and `missingFileGroups=[]`.
+- 重写资源元数据时保留 `================================` 分隔线两侧原有的换行格式。混用 LF 和 CRLF 可能使目录和 API 元数据仍可读取，但脚本正文未加载。目录发布前用当前 Magic 版本冷加载并逐条回读受影响的脚本正文。
 - Before deleting an interface, cross-check low-code source and compiled code, the four frontend `src` trees, Magic imports, Java callers, scheduled tasks, and known external callbacks. Repair referenced empty or broken interfaces.
 - Apply the [Magic API and Java responsibilities](#magic-first-data-access) to NiFi and cloud-gateway integration. Java may provide technical adapters for signing, token exchange, and HTTP/TLS.
 - Shared inventory aggregations such as `/dst/statistics/common` belong in the dedicated `02.数据盘点/04.盘点统计` group. Do not move a shared endpoint into one page domain merely because one caller is being debugged; verify every low-code caller first.
-- Personal-center Magic resources belong under `01.平台门户/07.个人中心`; their nested public route is `/portal/account`.
-- Data-application Magic resources belong under `07.数据应用` and use `/das` as the public root. Do not retain `/workshop` calls in low-code source/compiled JS or any frontend project.
+- 个人中心 Magic 资源位于 `01.系统门户/05.个人中心`，公共前缀为 `/portal/account`。
+- Data-application Magic resources belong under `06.数据应用` and use `/das` as the public root. Do not retain `/workshop` calls in low-code source/compiled JS or any frontend project.
 
 
 <a id="lowcode-magic--magic-api-readability-and-documentation"></a>
@@ -792,7 +794,7 @@ Use the released `my-db` page at `/register/register-sjkb/list` as the default v
 
 ### Magic API Metadata Management
 
-- The Magic API folder `/magic-api/api/02.数据盘点/02.数据库表/01.元数据管理/` is the target home for metadata operations that were formerly implemented in Java. Do not assume an interface is unused just because the current script is empty, `null`, or only calls `MetadataAssetService`.
+- The Magic API folder `/magic-api/api/02.数据盘点/02.数据库表/` contains metadata operations that were formerly implemented in Java. Do not assume an interface is unused just because the current script is empty, `null`, or only calls `MetadataAssetService`.
 - For 06 metadata interfaces, classify each file before deleting or rewriting:
   - **Useful and implemented**: keep, verify with an authenticated HTTP request, and preserve route compatibility.
   - **Useful but only a Java wrapper/empty shell**: implement the Magic script instead of deleting it.
@@ -821,7 +823,7 @@ Use the released `my-db` page at `/register/register-sjkb/list` as the default v
   - Registration steps after the first data-source step show only Previous/Next; they must not auto-save or auto-submit.
 - The standalone approval center remains available independently of asset registration:
   - Keep the Warm-Flow dependencies, `com.linewell.dataelement.flow` runtime package, approval controller/service, flow suggestions, and flow relation infrastructure.
-  - Its Magic tree is `/magic-api/api/09.系统管理/08.审批中心/`; public routes start with `/sym/approval`.
+  - 审批中心位于 `/magic-api/api/07.系统管理/07.审批中心/`，公共路由前缀为 `/sym/approval`。
   - Warm-Flow completion uses the current `/sym/approval/callback/finshHandle` Magic contract. Permission resolution uses `ApprovalPrincipalService`; unused legacy permission/query wrappers are not restored.
   - Do not reconnect `register-db`, `register-dbTable`, catalog registration, or registration completion to automatic approval submission.
   - Associate current approval operations through the authoritative `data_apply_form_t` / `res_catalog_publish_request` business ID and Warm-Flow `flow_instance.business_id`, not a second asset-order relation table. Load the business record with an explicit current-tenant predicate, resolve applicant/organization and display information in one bounded query, and check initiator ownership or current-tenant organization membership. The subscription and publication approval types must match their actual business records; asset registration must not be reconnected to the retired `checkIn` / `assetUpdate` path. Keep current subscription, publication, task handling and callback contracts.
@@ -1233,7 +1235,7 @@ SFTP 验证来源为演示服务器端口 22 下的独立模拟文件目录 `/ho
 
 具备行业操作或接口日志读取权限时，`capabilities` 返回 `requestParameters`。`parameterKeyword` 是单个完整字符串字面，最长 200 个 UTF-16 单位；缺失、`null`、空字符串不加条件，其他类型及超长值拒绝。不拆词、不剥离两端空格，纯空格也过滤；`%/_/!` 和正则符号无特殊含义，按大小写不敏感的字面包含匹配。旧 `parameterName + parameterValue` 成对白名单精确匹配仍兼容，与新参数及普通 `keyword` 同传时全部按 AND 组合；敏感原文先拒绝，不能先掩码再命中旧索引，已脱敏的合法值仍可按旧契约匹配，此旁路修正已有测试并纳入本机发布。新词仅搜索同一安全快照的“路径=安全叶值”投影，不搜索原始正文、脱敏占位符、状态或说明，也不为 `LEGACY` 伪造新索引；IDAAS 及其他日志类别不开放此新筛选。
 
-业务条件在[日志参数关键词条件 Magic 函数](../magic/function/01.通用函数/31.日志参数关键词条件.ms)（ID `log_parameter_condition_v1`，`/common/log-parameter-keyword-condition`）校验类别、类型及长度，返回结构化 `contains` 谓词，不查库、不接收客户端权限范围。Java 提供可信上下文、采集／脱敏／冻结、方言绑定、查询执行与文件处理；[查询服务](../data-elements-parent/src/main/java/com/linewell/dataelement/feature/logmanagement/LogQueryService.java)先限定租户、角色及部门范围，再 AND 附加条件，旧成对参数兼容校验仍在 Java。现有查询、导出等 Java 业务仍属待迁移范围，不能因本批技术能力扩大保留范围或 IDAAS 身份域。
+业务条件在[日志参数关键词条件 Magic 函数](../magic/function/01.通用函数/19.日志参数关键词条件.ms)（ID `log_parameter_condition_v1`，`/common/log-parameter-keyword-condition`）校验类别、类型及长度，返回结构化 `contains` 谓词，不查库、不接收客户端权限范围。Java 提供可信上下文、采集／脱敏／冻结、方言绑定、查询执行与文件处理；[查询服务](../data-elements-parent/src/main/java/com/linewell/dataelement/feature/logmanagement/LogQueryService.java)先限定租户、角色及部门范围，再 AND 附加条件，旧成对参数兼容校验仍在 Java。现有查询、导出等 Java 业务仍属待迁移范围，不能因本批技术能力扩大保留范围或 IDAAS 身份域。
 
 计数、分页、统计及在线导出在数据库筛选阶段复用相同选择条件；默认最近 7 天、最大 90 天，起点包含、终点排除。每条读取 SQL 配置 15 秒超时，不是 HTTP／整个导出任务总时限或性能达标证明。20/100 行均为一次列表请求、两条事件 SQL，身份／角色范围解析另有固定开销；列表／批量摘要仅含采集状态，不带快照、旧参数详情或检索投影，详情按用户主动操作读取。导出另冻结截止条件并重校权限，条件一致不等于并发下行数相同或事务级强快照。
 
@@ -1959,11 +1961,11 @@ token、password 等历史列应先确认写入点、读取点、备份与外部
 | platform/tenant/api/TenantAccountsMagicModule.java | 本地登录的会话属性、独立 token 及租户绑定 |
 | platform/tenant/api/PlatformSessionMagicModule.java | 平台独立 Sa Token 命名空间 |
 | magic/function/09.租户账号/01.租户本地登录.ms | 当前成功登录写表及 token 字段写入 |
-| magic/api/01.系统门户/04.系统登出.ms | 当前退出实际逻辑与历史分支 |
+| magic/api/01.系统门户/03.系统登出/01.系统登出.ms | 当前退出实际逻辑与历史分支 |
 | magic/function/13.统一身份管理/03.记录脱敏审计.ms | 中央审计字段与当前 trace 生成方式 |
 | magic/function/13.统一身份管理/09.接口访问与审计封装.ms | API 包装、最终结果及补充更新方式 |
-| magic/api/13.统一身份管理/10.审计查询/01.分页查询审计记录.ms | 当前查询、人员关联与分页排序 |
-| magic/api/13.统一身份管理/01.认证会话/01.登录管理控制台.ms | 当前密码认证、MFA 与成功事件时序 |
+| magic/api/09.统一身份管理/10.审计查询/01.分页查询审计记录.ms | 当前查询、人员关联与分页排序 |
+| magic/api/09.统一身份管理/01.认证会话/01.登录管理控制台.ms | 当前密码认证、MFA 与成功事件时序 |
 | shared/error 与 platform/web/error | 当前错误编号、错误返回及诊断接入 |
 | feature/diagnostics/DiagnosticStore.java | Redis 用户及租户隔离的临时排错会话 |
 | src/main/resources/logback.xml | 文件阈值、滚动、容量与保留配置 |

@@ -1,0 +1,7 @@
+{
+  "id": "9310c3b9b222506b84a54ce10f0061ec",
+  "name": "01.FTP 连通性探查",
+  "parentId": "haitong-ftp-diagnostics-03",
+  "path": "/probe",
+  "type": "api"
+}

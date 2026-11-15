@@ -1,0 +1,7 @@
+{
+  "id": "6ef773c5e66e568eaf1b3133138f208e",
+  "name": "11.查询目标信息",
+  "parentId": "1f4028f20aaa4f379b5e37a343b99fa9",
+  "path": "/queryTargetTableInfo",
+  "type": "api"
+}

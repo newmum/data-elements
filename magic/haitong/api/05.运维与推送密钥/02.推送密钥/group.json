@@ -1,0 +1,7 @@
+{
+  "id": "haitong-credential-api",
+  "name": "02.推送密钥",
+  "type": "api",
+  "parentId": "haitong-operations-api",
+  "path": "/push-credentials"
+}

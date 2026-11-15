@@ -1,0 +1,7 @@
+{
+  "id": "1c19b24e44f15fc08284bd4eca5225e6",
+  "name": "01.推送链路验证",
+  "parentId": "haitong-validation-api",
+  "path": "/push",
+  "type": "api"
+}

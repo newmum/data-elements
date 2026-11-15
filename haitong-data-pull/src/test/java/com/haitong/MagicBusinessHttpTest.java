@@ -120,6 +120,10 @@ class MagicBusinessHttpTest {
         mvc.perform(post("/api/v1/data-push").header("X-Standalone-Registry-Key","magic-sync-0123456789abcdef0123456789").contentType("application/json").content(json.bytes(Map.of("deliveryType","REGISTRY_SYNC","registryAction","STATUS","tableRefs",Collections.nCopies(1001,Map.of("datasourceId","validation-status-20-0","tableName","demo")))))).andExpect(status().isPayloadTooLarge());
     }
     @Test void magicOwnsNativeContractsAndAuthentication()throws Exception{
+        mvc.perform(get("/gateway/config-check")).andExpect(status().isUnauthorized());
+        mvc.perform(get("/gateway/config-check").header("X-Admin-Key",ADMIN)).andExpect(status().isOk());
+        mvc.perform(post("/push-operations/message-status").header("X-Admin-Key",ADMIN).contentType("application/json").content("{}"))
+            .andExpect(status().isUnprocessableEntity()).andExpect(jsonPath("$.code").value("INVALID_BODY"));
         mvc.perform(get("/internal/v1/overview")).andExpect(status().isUnauthorized());
         mvc.perform(get("/internal/v1/overview").header("X-Admin-Key",ADMIN)).andExpect(status().isOk()).andExpect(jsonPath("$.deliveryCounts").exists());
         mvc.perform(get("/internal/v1/deliveries").header("X-Admin-Key",ADMIN)).andExpect(status().isOk()).andExpect(content().json("[]"));
@@ -128,6 +132,11 @@ class MagicBusinessHttpTest {
         mvc.perform(post("/api/v1/data-push").header("X-Api-Key",CLIENT).header("Idempotency-Key","missing-route").contentType("application/json").content("{\"deliveryType\":\"other\"}")).andExpect(status().isUnprocessableEntity());
         mvc.perform(post("/internal/push-credentials/issue").header("X-Admin-Key",ADMIN).contentType("application/json").content("{\"clientId\":\"push-magic-test\"}")).andExpect(status().isOk()).andExpect(jsonPath("$.data.revealed").value(true));
         mvc.perform(post("/internal/push-credentials/issue").header("X-Admin-Key",ADMIN).contentType("application/json").content("{\"clientId\":\"push-magic-test\"}")).andExpect(status().isOk()).andExpect(jsonPath("$.data.revealed").value(false));
+        mvc.perform(post("/internal/push-credentials/issue").header("X-Admin-Key", ADMIN)
+                .contentType("application/json").content("{\"clientId\":\"invalid\"}"))
+                .andExpect(status().isBadRequest()).andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
+                .andExpect(jsonPath("$.message").value("clientId必须为数据源推送调用方编号"));
     }
     @Test void invalidSnapshotAndDatabaseFailureAreAtomic()throws Exception{
         var source=Map.of("datasourceId","magic-rollback","datasourceName","synthetic","clientIds",List.of("default"),"tables",List.of());

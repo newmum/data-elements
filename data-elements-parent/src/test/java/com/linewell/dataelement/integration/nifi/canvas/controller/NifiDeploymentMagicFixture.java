@@ -33,23 +33,29 @@ import static org.mockito.Mockito.when;
 
 final class NifiDeploymentMagicFixture {
     private static final String COMMON = "function/01.通用函数/";
-    private static final String API = "api/14.NiFi流程接口/01.接口/";
+    private static final String API = "api/10.NiFi流程接口/01.接口/";
     private static final String TENANT = "deployment-validation";
     private final PipelineRepository repository;
     private final PipelineTaskLifecycleSynchronizer tasks;
     private final Map<String, Object> bindings = new LinkedHashMap<>();
-    private final MagicScript deploy = script(COMMON + "69.NiFi部署画布.ms", "nifi_canvas_deploy_v1");
-    private final MagicScript bind = script(COMMON + "67.NiFi部署候选绑定.ms", "nifi_candidate_bind_v1");
-    private final MagicScript respond = script(COMMON + "66.NiFi生命周期错误响应.ms", "nifi_lifecycle_response_v1");
+    private final MagicScript deploy = script(COMMON + "56.NiFi部署画布.ms", "nifi_canvas_deploy_v1");
+    private final MagicScript bind = script(COMMON + "54.NiFi部署候选绑定.ms", "nifi_candidate_bind_v1");
+    private final MagicScript respond = script(COMMON + "53.NiFi生命周期错误响应.ms", "nifi_lifecycle_response_v1");
     private final MagicScript activate = script(API + "48.切换候选流程.ms", "nifi_candidate_activate_post_v1");
-    private final MagicScript start = script(COMMON + "71.NiFi启动流程.ms", "nifi_start_canvas_v1");
-    private final MagicScript stop = script(COMMON + "72.NiFi停止流程.ms", "nifi_stop_canvas_v1");
+    private final MagicScript start = script(COMMON + "58.NiFi启动流程.ms", "nifi_start_canvas_v1");
+    private final MagicScript stop = script(COMMON + "59.NiFi停止流程.ms", "nifi_stop_canvas_v1");
     private final MagicScript undeploy = script(API + "51.卸载流程.ms", "nifi_pipeline_undeploy_post_v1");
-    private final MagicScript oneShot = script(COMMON + "70.NiFi一次性来源处理器.ms", "nifi_one_shot_sources_v1");
+    private final MagicScript oneShot = script(COMMON + "57.NiFi一次性来源处理器.ms", "nifi_one_shot_sources_v1");
 
     NifiDeploymentMagicFixture(PipelineRepository repository, DslCompiler compiler, NifiClient nifi,
             ErrorService errors, PipelineTaskLifecycleSynchronizer tasks, PipelineGroupOrganizer groups,
             TargetTableCleanupService cleanup) {
+        this(repository, compiler, nifi, errors, tasks, groups, cleanup, false);
+    }
+
+    NifiDeploymentMagicFixture(PipelineRepository repository, DslCompiler compiler, NifiClient nifi,
+            ErrorService errors, PipelineTaskLifecycleSynchronizer tasks, PipelineGroupOrganizer groups,
+            TargetTableCleanupService cleanup, boolean nativeScope) {
         this.repository = repository;
         this.tasks = tasks;
         bindings.putAll(Map.of("compiler", compiler, "nifi", nifi, "errorStore", errors, "tasks", tasks,
@@ -62,11 +68,17 @@ final class NifiDeploymentMagicFixture {
         bindings.put("transactions", transactions);
         bindings.put("mappingVersions", bindings.get("versions"));
         bindings.put("mutation", new Lock());
-        bindings.put("statusResolver", mock(PipelineRuntimeStatusResolver.class));
+        bindings.put("statusResolver", nativeScope ? new PipelineRuntimeStatusResolver(nifi) : mock(PipelineRuntimeStatusResolver.class));
         bindings.put("organizer", groups);
         bindings.put("tableRead", new TaskGroups());
-        bindings.put("groupScope", (MagicScriptLambdaFunction) (ctx, args) -> ((List<?>) args[0]).stream()
-                .map(target -> Map.of("id", ((Map<?, ?>) target).get("id"), "parentId", "")).toList());
+        if (nativeScope) {
+            var deletionScope = script(COMMON + "46.NiFi删除校验原生组.ms", "40fabd244d0a1e4572f9e8803b25be8d");
+            bindings.put("groupScope", (MagicScriptLambdaFunction) (ctx, args) -> evaluate(deletionScope,
+                    Map.of("targets", args[0], "rootId", args[1], "owner", args[2])));
+        } else {
+            bindings.put("groupScope", (MagicScriptLambdaFunction) (ctx, args) -> ((List<?>) args[0]).stream()
+                    .map(target -> Map.of("id", ((Map<?, ?>) target).get("id"), "parentId", "")).toList());
+        }
         bindings.put("findCanvas", (MagicScriptLambdaFunction) (ctx, args) -> repository.findById((String) args[0]).orElse(null));
         bindings.put("syncTask", (MagicScriptLambdaFunction) (ctx, args) -> {
             tasks.syncState((String) args[0], (String) args[1], args[2]);

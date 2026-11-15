@@ -1,0 +1,7 @@
+{
+  "id": "971cf899e6ef5239a6c5186225822aa8",
+  "name": "01.网关配置检查",
+  "parentId": "haitong-ztgw-02",
+  "path": "/config-check",
+  "type": "api"
+}

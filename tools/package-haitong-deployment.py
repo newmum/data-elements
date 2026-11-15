@@ -38,7 +38,7 @@ MAGIC_IDS = {
     "portal_login_01", "ga_local_login_01", "bced293de53e4b348940f99b1b5bdf9f",
 }
 MAGIC_PATHS = {
-    "api/01.系统门户/04.系统登出.ms",
+    "api/01.系统门户/03.系统登出/01.系统登出.ms",
     "function/13.统一身份管理/21.接收端账号安全校验.ms",
 }
 

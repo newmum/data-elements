@@ -115,8 +115,8 @@ Java 保留通用 HTTP 安全与字节流适配、数据库连接与方言、认
 
 ```powershell
 python tools/resource-sync.py status --project haitong-data-pull --kind magic
-python tools/resource-sync.py plan --project haitong-data-pull --file "magic/haitong/function/01.海通业务/06.数据推送编排.ms"
-python tools/resource-sync.py publish --project haitong-data-pull --file "magic/haitong/function/01.海通业务/06.数据推送编排.ms" --apply
+python tools/resource-sync.py plan --project haitong-data-pull --file "magic/haitong/function/01.海通业务/05.数据推送编排.ms"
+python tools/resource-sync.py publish --project haitong-data-pull --file "magic/haitong/function/01.海通业务/05.数据推送编排.ms" --apply
 ```
 
 首次接管使用 `pull --project haitong-data-pull` 只读核对并登记当前基准，不覆盖本地源。发布前比较资源 ID、路径及基准摘要，备份到仓库外私有目录；编辑器保存后核对运行脚本和数据库正文。分组元数据通过有条件更新保存后要求冷加载，不能将持久化成功当作运行已刷新。日常脚本发布不需要重启；新增 Java、依赖或目录变更须重新打包部署并回读。此迁移没有增加或修改数据库结构。
@@ -145,7 +145,7 @@ python tools/resource-sync.py publish --project haitong-data-pull --file "magic/
 
 | 现有基础 | 源码中已具备的行为 | 本设计要补充的部分 |
 | --- | --- | --- |
-| [Magic 数据接收入口](../magic/haitong/api/05.数据接收入口) | `POST /api/v1/files/{channel}` 接收 multipart，`GET /api/v1/files/{id}` 查询状态；依通道授权 | 数据源、文件集合、规范版本、业务元数据、分片及续传；旧通道入口不能绕过新登记权限 |
+| [Magic 数据接收入口](../magic/haitong/api/04.数据接收与附件/01.接收和附件接口) | `POST /api/v1/files/{channel}` 接收 multipart，`GET /api/v1/files/{id}` 查询状态；依通道授权 | 数据源、文件集合、规范版本、业务元数据、分片及续传；旧通道入口不能绕过新登记权限 |
 | [PayloadFiles](../haitong-data-pull/src/main/java/com/haitong/core/PayloadFiles.java) | 64KiB 缓冲流式写本地持久卷、计算 SHA-256、同步文件并原子改名 | 存储适配器、分片会话、多实例可访问的持久化位置、存储对象与数据库之间的恢复 |
 | [FileService](../haitong-data-pull/src/main/java/com/haitong/core/FileService.java) | JSONL、CSV 与 BINARY；BINARY 只保存文件引用；文件处理 `runOne()` 串行，接收容量检查会 `Files.walk` 全工作目录 | 受控并发文件处理、配额账本、异步整文件校验和隔离检查，去掉每次上传的目录遍历 |
 | [DeliveryWorker](../haitong-data-pull/src/main/java/com/haitong/core/DeliveryWorker.java) | 已按协议建立可配置线程池，带租约、续租、重试及不确定结果处理 | 同一协议内进一步区分大文件和表批次的资源预算；文件目标的就绪条件及远端异步复制状态 |
@@ -214,7 +214,7 @@ flowchart LR
 
 源数据管理平台第一步模板可声明字段关联附件、大小上限和格式；第五步在表数据推送接口旁统一展示非结构化上传地址、规范及字段附件限制，已移除独立照片文档页签。先上传附件并校验就绪，业务表的关联字段保存返回的fileId。平台字段限制已纳入登记规范版本，但文件集合仍须在推送服务配置相应大小、格式、目标及调用方权限；现有表配置同步不会自动维护FILE集合，页面接入说明不代表节点已启用文件功能。
 
-以下接口已在根目录 `magic/haitong/api/08.附件传输/` 定义，统一使用 `X-Api-Key`。初始化、业务提交和回执各自需要 `Idempotency-Key`，仅提供 `uploadId` 不代表有权访问。创建会话时按服务端集合确定租户、目标、内容格式和规范快照，快照不含连接凭据。
+以下接口定义在仓库根目录的 [接收和附件接口](../magic/haitong/api/04.数据接收与附件/01.接收和附件接口)，统一使用 `X-Api-Key`。初始化、业务提交和回执各自需要 `Idempotency-Key`，仅提供 `uploadId` 不代表有权访问。创建会话时按服务端集合确定租户、目标、内容格式和规范快照，快照不含连接凭据。
 
 平台结构化与非结构化页面的标题统一为“数据推送接口规范”，已发布时显示“已发布接口规范”；这项展示统一不改变下表的路径、方法或正文。非结构化顶部同样展示 Idempotency-Key：初始化与业务提交分别使用稳定的键，同一操作重试保持不变；分片 PUT 以 uploadId、片号和实际摘要核对重复请求，complete 根据会话状态幂等，GET 查询无需额外幂等键。
 
@@ -2247,7 +2247,7 @@ token: <当前平台登录会话>
 
 单次处理一个完整数据源快照，最多 100 张已完成登记表、10000 个字段、序列化后 1MiB。超限时拒绝整个请求，避免海通将截断的配置误判为删除。20/100 张表的执行测试均为预检 2 次业务 SQL 读取，正式同步 10 次（含前置检查）及 1 次海通请求。字段在表循环外批量预取。正式同步更新平台的规范发布状态，平台与海通分别提交各自的事务。海通恢复后可重试同一数据源，重试更新既有镜像并维持表和字段唯一性。
 
-本机已通过真实登录会话及真实 MySQL 验证：1 数据源、1 表、14 字段、1 调用方授权；字段名/类型/顺序逐项匹配，重复调用保持镜像记录数量和业务凭据数量不变。未登录、无权数据源及注入 tenantId 的请求均被拒绝。 全量同步已在本机实际页面与 MySQL 验证3个数据源、7张表、331字段及3条调用方授权，另1个未完成登记的源明确跳过；重复同步约3.4秒，镜像和业务凭据数量均不增加。可维护源为根 `magic/api/02.数据盘点/02.数据库表/08.同步推送登记配置.ms`，已发布到控制库 `baseline` 并完成运行刷新/回读。
+本机已通过真实登录会话及真实 MySQL 验证：1 数据源、1 表、14 字段、1 调用方授权；字段名/类型/顺序逐项匹配，重复调用保持镜像记录数量和业务凭据数量不变。未登录、无权数据源及注入 tenantId 的请求均被拒绝。 全量同步已在本机实际页面与 MySQL 验证3个数据源、7张表、331字段及3条调用方授权，另1个未完成登记的源明确跳过；重复同步约3.4秒，镜像和业务凭据数量均不增加。可维护源为根 `magic/api/02.数据盘点/02.数据库表/33.同步推送登记配置.ms`，已发布到控制库 `baseline` 并完成运行刷新/回读。
 
 平台使用 `data-element.push-registry.relay-base-url`、`standalone-sync-key` 与海通 `relay.standalone-registry.sync-enabled/sync-key` 配对配置。本机开发示例使用 `http://127.0.0.1:18083`。实际投递前核对运行时监听和默认配置，选定节点时使用节点记录中的地址。连接和密钥配置保存在受限部署配置中。
 

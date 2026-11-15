@@ -9,6 +9,8 @@ import org.ssssssss.script.runtime.ExitValue;
 
 /** 用真实Magic解析和SQL验证登记申请、任务动作及20/100项固定批量读取。 */
 class RegistrationAccessMagicTest {
+    private static final String APPLY = "db987ffe0e004d8dba6565f42dcf9458";
+    private static final String CONTROL = "33cd261177224b5f9ddb886d5df1b1e4";
     static final Path ROOT = Path.of("..").toAbsolutePath().normalize();
     static String source(String relative) throws Exception {
         String all = Files.readString(ROOT.resolve("magic").resolve(relative));
@@ -34,8 +36,9 @@ class RegistrationAccessMagicTest {
         }
         Object execute(String resource, Map<String,Object> body, TaskRuntimeMagicFixture runtime) throws Exception {
             bindings.put("taskRuntime",runtime.module);bindings.put("body",body);
-            String summary = source("function/01.通用函数/16.登记表接入状态汇总.ms");
-            String api = resource.equals("summary") ? "return registrationAccessSummary(body)" : source("api/03.数据接入/"+resource+".ms");
+            String summary = source("function/01.通用函数/04.登记表接入状态汇总.ms");
+            String api = resource.equals("summary") ? "return registrationAccessSummary(body)"
+                    : CanonicalMagicSources.byId(resource).replaceAll("(?m)^import [^\\r\\n]*\\r?\\n", "");
             return MagicScript.create("var registrationAccessSummary = payload => {\n"+summary+"\n};\n"+api,null).execute(new MagicScriptContext(bindings));
         }
         void task(String status) {
@@ -91,11 +94,11 @@ class RegistrationAccessMagicTest {
     @Test void applyIsIdempotentDryRunDoesNotWriteAndExistingTaskDoesNotReapply() throws Exception {
         var f=new Fixture(1);
         try(var runtime=new TaskRuntimeMagicFixture("ga")) {
-            f.execute("21.提交登记表接入申请",Map.of("datasourceId","db","tableId","s0","dryRun",true),runtime);
+            f.execute(APPLY,Map.of("datasourceId","db","tableId","s0","dryRun",true),runtime);
             assertThat(f.f.jdbc.queryForObject("select access_request_status from db_table_t where tid='s0'",Integer.class)).isZero();
-            f.execute("21.提交登记表接入申请",Map.of("datasourceId","db","tableId","s0"),runtime);
+            f.execute(APPLY,Map.of("datasourceId","db","tableId","s0"),runtime);
             var time=f.f.jdbc.queryForObject("select access_requested_at from db_table_t where tid='s0'",java.sql.Timestamp.class);
-            var result=(Map<?,?>)f.execute("21.提交登记表接入申请",Map.of("datasourceId","db","tableId","s0"),runtime);
+            var result=(Map<?,?>)f.execute(APPLY,Map.of("datasourceId","db","tableId","s0"),runtime);
             assertThat(f.f.jdbc.queryForObject("select access_requested_at from db_table_t where tid='s0'",java.sql.Timestamp.class)).isEqualTo(time);
             assertThat(((Map<?,?>)((List<?>)result.get("list")).getFirst()).get("accessStatus")).isEqualTo("2");
             f.task("SAVED");
@@ -115,7 +118,7 @@ class RegistrationAccessMagicTest {
     @Test void applicationPromotesDraftSourceUsingTheActualRegistrationRule() throws Exception {
         var f=new Fixture(1);f.bindings.put("metadataAsset",f.f.metadata);
         try(var runtime=new TaskRuntimeMagicFixture("ga")) {
-            var result=(Map<?,?>)f.execute("21.提交登记表接入申请",Map.of("datasourceId","db","tableId","s0"),runtime);
+            var result=(Map<?,?>)f.execute(APPLY,Map.of("datasourceId","db","tableId","s0"),runtime);
             assertThat(result.get("datasourceAssetStatus")).isEqualTo(1);
             assertThat(f.f.status()).isEqualTo(1);
             assertThat(f.f.jdbc.queryForObject("select asset_status from db_table_t where tid='s0'",Integer.class)).isEqualTo(1);
@@ -124,7 +127,7 @@ class RegistrationAccessMagicTest {
     @Test void applicationAndActualSourceSummaryRollBackTogetherOnFailure() throws Exception {
         var f=new Fixture(1);f.bindings.put("metadataAsset",new CompletionFailure(f.f.metadata));
         try(var runtime=new TaskRuntimeMagicFixture("ga")) {
-            assertThatThrownBy(() -> f.execute("21.提交登记表接入申请",Map.of("datasourceId","db","tableId","s0"),runtime)).isInstanceOf(RuntimeException.class);
+            assertThatThrownBy(() -> f.execute(APPLY,Map.of("datasourceId","db","tableId","s0"),runtime)).isInstanceOf(RuntimeException.class);
             assertThat(f.f.status()).isZero();
             assertThat(f.f.jdbc.queryForObject("select access_request_status from db_table_t where tid='s0'",Integer.class)).isZero();
         }
@@ -166,10 +169,10 @@ class RegistrationAccessMagicTest {
         try(var runtime=new TaskRuntimeMagicFixture("ga",response)) {
             var lifecycle=new Lifecycle();lifecycle.bind(f.bindings);
             var valid=Map.<String,Object>of("datasourceId","db","tableId","s0","taskId","task","action","start");
-            assertThat(f.execute("22.登记表接入任务启停",valid,runtime)).isInstanceOf(Map.class);assertThat(lifecycle.starts).isEqualTo(1);
-            assertThat(f.execute("22.登记表接入任务启停",Map.of("datasourceId","db","tableId","s0","taskId","other-task","action","start"),runtime)).isInstanceOf(ExitValue.class);
+            assertThat(f.execute(CONTROL,valid,runtime)).isInstanceOf(Map.class);assertThat(lifecycle.starts).isEqualTo(1);
+            assertThat(f.execute(CONTROL,Map.of("datasourceId","db","tableId","s0","taskId","other-task","action","start"),runtime)).isInstanceOf(ExitValue.class);
             f.f.jdbc.update("update nifi_pipeline_t set status='SAVED'");
-            assertThat(f.execute("22.登记表接入任务启停",valid,runtime)).isInstanceOf(Map.class);assertThat(lifecycle.starts).isEqualTo(2);
+            assertThat(f.execute(CONTROL,valid,runtime)).isInstanceOf(Map.class);assertThat(lifecycle.starts).isEqualTo(2);
         }
     }
     @Test void undeployedTaskDryRunDoesNotExecuteThenDeploysBeforeStarting() throws Exception {
@@ -178,10 +181,10 @@ class RegistrationAccessMagicTest {
         try(var runtime=new TaskRuntimeMagicFixture("ga")) {
             var lifecycle=new Lifecycle();var deployment=new Deployment();lifecycle.bind(f.bindings);f.bindings.put("deployPipeline",deployment.invoke());
             var valid=new HashMap<String,Object>(Map.of("datasourceId","db","tableId","s0","taskId","task","action","start"));valid.put("dryRun",true);
-            assertThat(((Map<?,?>)f.execute("22.登记表接入任务启停",valid,runtime)).get("deploymentRequired")).isEqualTo(true);
+            assertThat(((Map<?,?>)f.execute(CONTROL,valid,runtime)).get("deploymentRequired")).isEqualTo(true);
             assertThat(lifecycle.starts).isZero();assertThat(deployment.calls).isZero();valid.remove("dryRun");
             lifecycle.results.add(deploymentRequired());
-            assertThat(((Map<?,?>)f.execute("22.登记表接入任务启停",valid,runtime)).get("deploymentPerformed")).isEqualTo(true);
+            assertThat(((Map<?,?>)f.execute(CONTROL,valid,runtime)).get("deploymentPerformed")).isEqualTo(true);
             assertThat(deployment.calls).isEqualTo(1);assertThat(lifecycle.starts).isEqualTo(2);
         }
     }
@@ -192,7 +195,7 @@ class RegistrationAccessMagicTest {
                 var lifecycle=new Lifecycle();var deployment=new Deployment();lifecycle.bind(f.bindings);f.bindings.put("deployPipeline",deployment.invoke());
                 lifecycle.results.add(cleanup?Map.of("accepted",false,"status",409,"body",Map.of("error","cleanup-confirmation-required")):deploymentRequired());
                 deployment.result=org.springframework.http.ResponseEntity.unprocessableEntity().body(Map.of("message","来源配置不完整"));
-                assertThat(f.execute("22.登记表接入任务启停",Map.of("datasourceId","db","tableId","s0","taskId","task","action","start"),runtime)).isInstanceOf(ExitValue.class);
+                assertThat(f.execute(CONTROL,Map.of("datasourceId","db","tableId","s0","taskId","task","action","start"),runtime)).isInstanceOf(ExitValue.class);
                 assertThat(lifecycle.starts).isEqualTo(1);assertThat(deployment.calls).isEqualTo(cleanup?0:1);
             }
         }
@@ -203,7 +206,7 @@ class RegistrationAccessMagicTest {
             if(status.equals("MISSING_RECORD"))f.f.jdbc.update("delete from nifi_pipeline_t");
             try(var runtime=new TaskRuntimeMagicFixture("ga")) {
                 var lifecycle=new Lifecycle();var deployment=new Deployment();lifecycle.bind(f.bindings);f.bindings.put("deployPipeline",deployment.invoke());
-                assertThat(f.execute("22.登记表接入任务启停",Map.of("datasourceId","db","tableId","s0","taskId","task","action","start"),runtime)).isInstanceOf(ExitValue.class);
+                assertThat(f.execute(CONTROL,Map.of("datasourceId","db","tableId","s0","taskId","task","action","start"),runtime)).isInstanceOf(ExitValue.class);
                 assertThat(lifecycle.starts).isZero();assertThat(deployment.calls).isZero();
             }
         }

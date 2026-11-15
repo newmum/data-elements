@@ -18,6 +18,8 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.ssssssss.magicapi.datasource.model.MagicDynamicDataSource;
 import org.ssssssss.magicapi.modules.db.ColumnMapperAdapter;
 import org.ssssssss.magicapi.modules.db.SQLModule;
+import org.ssssssss.magicapi.modules.db.dialect.DialectAdapter;
+import org.ssssssss.magicapi.modules.db.dialect.MySQLDialect;
 import org.ssssssss.magicapi.modules.db.provider.CamelColumnMapperProvider;
 import org.ssssssss.magicapi.modules.db.provider.DefaultColumnMapperProvider;
 import org.ssssssss.script.MagicScript;
@@ -43,6 +45,14 @@ class TenantLocalLoginInputTest {
         sources.setDefault(source);
         db = new SQLModule(sources);
         db.setDataSourceNode(sources.getDataSource());
+        var dialects = new DialectAdapter();
+        dialects.add(new MySQLDialect() {
+            @Override
+            public boolean match(String url) {
+                return url.contains(":h2:");
+            }
+        });
+        db.setDialectAdapter(dialects);
         var columns = new ColumnMapperAdapter();
         columns.add(new DefaultColumnMapperProvider());
         columns.add(new CamelColumnMapperProvider());
@@ -117,13 +127,13 @@ class TenantLocalLoginInputTest {
     }
 
     private Object run(Object account, Object password, String tenant) throws Exception {
-        String script = CanonicalMagicSources.byId("ga_local_login_01")
-                .replaceAll("(?m)^import (db|identityRuntime|tenantAccounts|auditEvents);\\r?\\n", "")
-                .replaceAll("(?m)^import '@/[^\\r\\n]+;\\r?\\n", "");
+        String script = CanonicalMagicSources.byId("portal_login_01")
+                .replaceAll("(?m)^import (db|identityRuntime|tenantAccounts|auditEvents)\\R", "")
+                .replaceAll("(?m)^import '@/[^\\r\\n]+\\R", "");
         var payload = new LinkedHashMap<String, Object>();
         payload.put("account", account); payload.put("password", password);
         payload.put("tenantId", tenant); payload.put("appId", "app-a");
-        var context = Map.<String,Object>of("payload", payload, "db", db,
+        var context = Map.<String,Object>of("body", payload, "db", db,
                 "identityRuntime", new Runtime(), "tenantAccounts", accounts, "receiver", receiver,"auditEvents",audit);
         return MagicScript.create("var sourceCheck=id=>receiver.check(id);\n" + script, null)
                 .execute(new MagicScriptContext(context));

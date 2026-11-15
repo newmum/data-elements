@@ -1079,7 +1079,7 @@ class DataAggTaskEnsureBatchMagicTest {
         var tableRead = TaskRuntimeMagicFixture.structuredReads(f.jdbc, ignored -> {});
         inputs.put("tableRead", tableRead);
         TaskRuntimeMagicFixture.bindTableFamily(inputs);
-        var classifier = MagicScript.create(CanonicalMagicSources.byPath("function/01.通用函数/20.ODS来源库分类.ms",
+        var classifier = MagicScript.create(CanonicalMagicSources.byPath("function/01.通用函数/08.ODS来源库分类.ms",
                 "d2138de2de28456aa57d9ade2305eed7").replaceAll("(?m)^import [^\\r\\n]+\\R", ""), null);
         inputs.put("odsSourceClassifier", (Function<Object[], Object>) arguments -> classifier.execute(
                 new MagicScriptContext(Map.of("tableRead", tableRead, "tenantRuntime", f.scope))));
@@ -1247,14 +1247,13 @@ class DataAggTaskEnsureBatchMagicTest {
             // The adjacent materialization test reuses this fixture and provides its own comment column.
             jdbc.execute("alter table db_table_t add column if not exists table_comment varchar(300)");
             String script = CanonicalMagicSources.byId(SOURCE_ID)
-                    .replaceAll("(?m)^import (jsons|metadataAsset|targetTableSchema|'@/common/nifiApiSource' as nifiApiSource|tenantRuntime|dataScope|tableRead|tableWrite|com\\.linewell\\.dataelement\\.metautil\\.structured\\.StructuredSourceProbeService as structuredFileProbe)\\r?\\n", "");
+                    .replaceAll("(?m)^import (jsons|metadataAsset|targetTableSchema|tenantRuntime|dataScope|tableRead|tableWrite|com\\.linewell\\.dataelement\\.metautil\\.structured\\.StructuredSourceProbeService as structuredFileProbe)\\r?\\n", "");
             Map<String, Object> inputs = new LinkedHashMap<>();
             inputs.put("db", db);
             inputs.put("body", body);
             inputs.put("tenantRuntime", scope);
             inputs.put("dataScope", scope);
             inputs.put("jsons", new JsonModule());
-            inputs.put("nifiApiSource", ApiPullMagicFixture.nifiSource());
             inputs.put("structuredFileProbe", fileProbe);
             inputs.put("tableRead", TaskRuntimeMagicFixture.structuredReads(jdbc, sql -> {
                 assertTrue(TransactionSynchronizationManager.hasResource(jdbc.getDataSource()),
