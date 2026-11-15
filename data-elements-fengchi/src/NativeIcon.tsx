@@ -2,7 +2,7 @@ import { useId, type ReactNode } from 'react';
 import ConnectionIcon from './ConnectionIcon';
 // Non-connection artwork restored from published version 2 (e9af2c0).
 
-export type NativeIconName = 'connection' | 'new-query' | 'table' | 'view' | 'function' | 'query' | 'export' | 'refresh' | 'history' | 'database' | 'folder' | 'user' | 'backup' | 'automation' | 'model' | 'bi' | 'server';
+export type NativeIconName = 'connection' | 'new-query' | 'table' | 'view' | 'function' | 'query' | 'export' | 'refresh' | 'history' | 'database' | 'folder' | 'user' | 'backup' | 'automation' | 'model' | 'bi' | 'server' | 'return';
 export interface NativeIconProps { name: NativeIconName; size?: number; className?: string }
 
 /** Original, scalable desktop-style artwork, with independent SVG paint servers. */
@@ -21,6 +21,7 @@ export default function NativeIcon({ name, size = 32, className }: NativeIconPro
     case 'table': art = table; break;
     case 'view': art = <g transform="translate(0 -1)">{table}<g fill={paint('blue')} stroke="#236b9e" strokeWidth=".8"><path d="M9 19l2-6h4l1 6m2 0 1-6h4l2 6"/><rect x="11" y="19" width="12" height="4" rx="2"/><circle cx="10" cy="23" r="5.5"/><circle cx="24" cy="23" r="5.5"/></g><g fill="#bcf0ff" stroke="#194f82" strokeWidth="1.2"><circle cx="10" cy="23" r="3.6"/><circle cx="24" cy="23" r="3.6"/></g><path d="m8 21 3-1m11 1 3-1" stroke="white" strokeWidth="1.3" strokeLinecap="round"/></g>; break;
     case 'function': art = <g fill={paint('blue')} stroke="#2574b2" strokeWidth=".4"><path d="M20 4c-1.1-.6-2.2-.9-3.7-.9-4.2 0-5.7 3.6-6.5 8.9H6.5L6 15h3.3L7.7 25c-.4 2.4-1.1 3.5-2.5 3.5-.6 0-1.3-.2-1.9-.5L2.5 31c1 .4 2 .6 3.1.6 4.3 0 6-3.3 6.8-8.2l1.4-8.4h4l.5-3h-4l.5-3c.4-2.3 1.1-3.6 2.7-3.6.7 0 1.2.2 1.8.5z"/><path d="m19 16 2.3 5.4L17 28h3.7l2.6-4.3L25 28h4l-3.4-6.7 4.4-5.3h-3.7l-2.4 3.2L22.8 16z"/></g>; break;
+    case 'return': art = <g strokeLinecap="round" strokeLinejoin="round"><path d="M4 25v-6.5C4 12.7 7.7 9 13.5 9H20V4l10 9-10 9v-5h-6.5C9.2 17 6.5 19.4 4 25Z" fill={paint('blue')} stroke="#347da7" strokeWidth=".8"/><path d="M6 17.5c.4-4.1 3.2-6.5 7.8-6.5H22V8.5l5 4.5" fill="none" stroke="#e5f6ff" strokeWidth="1.1" strokeOpacity=".85"/></g>; break;
     case 'export': art = <g>{sheet(3, 4)}<path d="M16 17h7V11l8 9-8 9v-6h-7z" fill={paint('green')} stroke="#4b8c3f" strokeWidth=".8"/><path d="M17 18.5h7v-4" fill="none" stroke="#dbf5c7"/></g>; break;
     case 'refresh': art = <g fill={paint('green')} stroke="#4c923d" strokeWidth=".6"><path d="M26 8l3-4v12H17l4-4a8 8 0 0 0-14 5H2A13 13 0 0 1 26 8z"/><path d="m6 24-3 4V16h12l-4 4a8 8 0 0 0 14-5h5A13 13 0 0 1 6 24z"/></g>; break;
     case 'history': art = <g><circle cx="17" cy="16" r="12" fill={paint('paper')} stroke="#899da9" strokeWidth="2"/><path d="M17 8v9l6 3" fill="none" stroke="#527e99" strokeWidth="2" strokeLinecap="round"/><path d="M7 8H2V3" fill="none" stroke="#4b99c6" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"/><path d="m2 8 5-5" stroke="#4b99c6" strokeWidth="2"/></g>; break;

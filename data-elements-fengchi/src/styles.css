@@ -97,3 +97,5 @@
 @container(max-width:650px){.data-toolbar{position:static;left:auto;height:32px;min-height:32px}.data-search{flex:1;width:auto}.status-filter{display:none}.record-form-heading,.record-form-field{grid-template-columns:135px minmax(0,1fr)}.record-form-hint{display:none}}
 
 .shared-fengchi-workspace > .ant-spin-container { height: 100%; }
+
+.main-toolbar>.metadata-return-button{margin-left:auto;flex-shrink:0}
