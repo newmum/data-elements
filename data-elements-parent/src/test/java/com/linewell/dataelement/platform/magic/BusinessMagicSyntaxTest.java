@@ -40,7 +40,7 @@ class BusinessMagicSyntaxTest {
         for (var script : sources) {
             String source = script.source();
             if (inAnyGroup(script, IDENTITY_GROUPS) || inAnyGroup(script, BUSINESS_GROUPS)
-                    || source.contains("tableSort") || source.contains("metadataDiffView")) {
+                    || source.contains("tableSort")) {
                 scripts.put(script.relativePath(), script);
             }
         }

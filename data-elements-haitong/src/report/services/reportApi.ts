@@ -172,7 +172,7 @@ async function loadDatasourceTables(sources: DepartmentDatasource[]): Promise<Ar
     const batch = sources.slice(start, start + 200);
     const requested = new Set(batch.map(source => source.id));
     const loadPage = (pageNum: number) => loadStage('读取已登记数据表', platformApi<{ list: SourceTable[]; total: number }>(
-      '/db/source/dept',
+      '/dst/db/dept',
       { method: 'POST', body: { mode: 'reportTables', datasourceIds: batch.map(source => source.id), pageNum, pageSize: 100 } },
     ));
     const append = (page: { list: SourceTable[]; total: number }) => {
@@ -204,7 +204,7 @@ async function loadDatasourceTables(sources: DepartmentDatasource[]): Promise<Ar
 async function loadDepartmentReportDatasources(): Promise<DepartmentDatasource[]> {
   const result = await loadStage(
     '读取当前部门数据源',
-    platformApi<SourceTable[] | RegisteredTablePage>('/db/source/dept', { method: 'POST', body: { mode: 'summary' } }),
+    platformApi<SourceTable[] | RegisteredTablePage>('/dst/db/dept', { method: 'POST', body: { mode: 'summary' } }),
   );
   const summaries = readRows(result);
   // The department endpoint already projects `accessMode`.  An old source
@@ -235,7 +235,7 @@ async function loadTableGovernanceFields(datasourceId: string, tableName: string
   });
   const result = await loadStage(
     '读取登记字段治理配置',
-    platformApi<RegisteredTablePage>(`/db/schema/tables?${query.toString()}`),
+    platformApi<RegisteredTablePage>(`/dst/db/tables?${query.toString()}`),
   );
   const record = readRows(result).find(row => normalizeName(text(row.tableName, row.table_name, row.tableNameEn)) === normalizeName(tableName));
   return record ? governanceFields(record) : [];
@@ -417,7 +417,7 @@ export async function loadReportContext(preferredDatasourceId = ''): Promise<Rep
 export async function loadReportTableFields(table: ReportTable): Promise<ReportTableField[]> {
   const query = new URLSearchParams({ tid: table.id, dbId: table.datasourceId, tableName: table.name });
   const [result, savedGovernanceFields] = await Promise.all([
-    loadStage('读取登记字段', platformApi<SourceTable[] | RegisteredTablePage>(`/db/field/list?${query.toString()}`)),
+    loadStage('读取登记字段', platformApi<SourceTable[] | RegisteredTablePage>(`/dst/db/fields?${query.toString()}`)),
     table.governanceFields.length
       ? Promise.resolve(table.governanceFields)
       : loadTableGovernanceFields(table.datasourceId, table.name),

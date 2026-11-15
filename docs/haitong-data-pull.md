@@ -73,6 +73,8 @@ Magic 编辑器登录、`/internal/**` 运维及签发、`REGISTRY_SYNC` 服务�
 
 唯一可维护源码位于 [`magic/haitong/`](../magic/haitong)，独立索引为该目录 `.manifest.json`。Maven 将它打包到 JAR 的 `magic-api-bootstrap/`；该目录只是类路径资源名称，工程内不再维护第二份脚本。运行源仍是独立 MySQL `haitong.ht_magic_api_file`，不会写入共享控制库 `baseline.api_file_t`。启动只补缺失目录和资源，不覆盖编辑器已有内容。
 
+编辑器分组和接口用中文显示名称，文件传输诊断、历史推送与普通文件兼容入口沿用其既有 HTTP 地址。在 18083 冷启动后，已逐项回读所选目录与脚本，并核对 63 条方法和路由及 10 项真实 HTTP 响应。
+
 | 编辑器分组 | 方法/路径数量 | 职责 |
 | --- | ---: | --- |
 | 05.数据接收入口 | 9 | 统一推送、FTP/Kafka/日志兼容入口、通道接收、消息状态、文件批量导入与操作执行 |

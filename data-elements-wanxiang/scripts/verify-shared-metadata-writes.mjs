@@ -18,7 +18,7 @@ const baselineCounts=counts(before),fixtures={relations:[]},checks=[],limitation
 const folder=join(tmpdir(),'wx-metadata-check-'+key);await mkdir(folder);await writeFile(join(folder,'before-counts.json'),JSON.stringify({tenant:context.tid,counts:baselineCounts}));
 const record=async()=>writeFile(join(folder,'fixtures.json'),JSON.stringify(fixtures,null,2));
 try{
- const source=await call('/db/source/save',{tid:'',assetType:'db',propList:{dbName:prefix,dbType:'mysql',orgId:user.orgId,storageDomain:'政务外网',assetDesc:'Disposable metadata interface fixture; no physical connection',accessMode:'explore',dataAccessMode:'explore',showConnect:0,preserveSourceOrg:true,assetStatus:2}});fixtures.source=source.tid;assert(fixtures.source);await record();
+ const source=await call('/dst/db/srcsave',{tid:'',assetType:'db',propList:{dbName:prefix,dbType:'mysql',orgId:user.orgId,storageDomain:'政务外网',assetDesc:'Disposable metadata interface fixture; no physical connection',accessMode:'explore',dataAccessMode:'explore',showConnect:0,preserveSourceOrg:true,assetStatus:2}});fixtures.source=source.tid;assert(fixtures.source);await record();
  const seed=async(name,field)=>{const result=await call('/data/save',{db_table_t:[{datasourceId:fixtures.source,tableName:name,tableNameEn:name,tableNameCn:name,tableComment:'临时接口验证表',tableType:'数据表',businessType:'业务表',dataSourceType:'mysql',fieldCount:1,annotated:0,assetStatus:2,flowStatus:2}],db_table_column_t:[{tableId:'#db_table_t.tid',columnName:field,columnComment:'临时测试字段',dataType:'int',columnType:'int',nullable:0,primaryKey:field==='id'?1:0,ordinalPosition:1}]});return {table:result.find(r=>r.table==='db_table_t')?.tid,column:result.find(r=>r.table==='db_table_column_t')?.tid};};
  fixtures.a=await seed('wx_orders_'+key,'customer_id');fixtures.b=await seed('wx_customers_'+key,'id');assert(fixtures.a.table&&fixtures.a.column&&fixtures.b.table&&fixtures.b.column);await record();checks.push('dedicated-source-table-field-fixtures');
  const task=await call('/dst/database/metadata/tables/collection/status?dbId='+fixtures.source);assert.equal(task.exists,false);checks.push('collection-status-empty-task');
@@ -41,7 +41,7 @@ try{
  const errors=[];
  for(const id of fixtures.relations)try{assert.equal(await call('/dwm/metadata-governance/relations/delete',{tid:id}),true);}catch(e){errors.push('relation '+id+': '+e.message);}
  if(fixtures.catalog)try{const detail=await envelope('/dst/catalog/detail',{tid:fixtures.catalog});if([0,200].includes(detail.code??0)&&detail.data?.tid)await call('/dst/catalog/delete',{tid:fixtures.catalog});}catch(e){errors.push('catalog '+fixtures.catalog+': '+e.message);}
- if(fixtures.source)try{await call('/db/source/delete',{tid:fixtures.source,dryRun:true});await call('/db/source/delete',{tid:fixtures.source});}catch(e){errors.push('source '+fixtures.source+': '+e.message);}
+ if(fixtures.source)try{await call('/dst/db/srcdel',{tid:fixtures.source,dryRun:true});await call('/dst/db/srcdel',{tid:fixtures.source});}catch(e){errors.push('source '+fixtures.source+': '+e.message);}
  await writeFile(join(folder,'cleanup.json'),JSON.stringify({errors},null,2));if(errors.length)throw Error('Fixture cleanup needs attention: '+errors.join('; '));
 }
 assert.deepEqual(counts(await call('/dwm/metadata-governance/catalog',{})),baselineCounts);checks.push('all-test-records-cleaned-business-counts-preserved');

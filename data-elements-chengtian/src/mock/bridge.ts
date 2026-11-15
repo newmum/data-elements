@@ -5,11 +5,11 @@ import "@/utils/platformSessionChannel";
 const allowed = new Set([
   "GET /portal/sso/session",
   "POST /sym/org/getOrgTree",
-  "POST /db/source/stats",
-  "POST /db/source/detail",
-  "GET /db/schema/tables",
-  "GET /db/field/list",
-  "POST /db/row/preview",
+  "POST /dst/db/stats",
+  "POST /dst/db/srcdetail",
+  "GET /dst/db/tables",
+  "GET /dst/db/fields",
+  "POST /dst/db/preview",
 ]);
 
 /** 仅向配置中的风驰父窗口提供只读接口；会话和模拟数据始终留在元数据平台同源存储。 */

@@ -32,7 +32,7 @@
       "type": "1",
       "sortOrder": 1,
       "path": "01.系统门户/01.数据源管理/01.工作台(my-workbench).vue",
-      "baseSha256": "e556c5d1d57e1cd55af5296987d7f3dc410017fa01b0ae91da7ec2317bff9b27"
+      "baseSha256": "f74147c7aadc3d7aa5b6f4e635790aa165ef9828143a4ddd7ba6cb4c32f8d6b9"
     },
     {
       "id": "deptdatasourceui00000000000001",
@@ -42,7 +42,7 @@
       "type": "1",
       "sortOrder": 2,
       "path": "01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource).vue",
-      "baseSha256": "e9a7a17b9340686309d39c76624bd2b960893fbd4d94d3e7fb946afbf063fa13"
+      "baseSha256": "8cf38ed17ae0377f83bfc6356113034aaf18c39c0357c7eae68df8ffa9b3c033"
     },
     {
       "id": "2016435561264910336",
@@ -52,7 +52,7 @@
       "type": "1",
       "sortOrder": 1,
       "path": "01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource)/01.登记数据源(register-db).vue",
-      "baseSha256": "183e1860c87b0ff9729b4c38e157372b7d8f4d8d4f08ddf2b333cc45631ddc66"
+      "baseSha256": "70b7993692a4d97c32914c94824907ffe3ecadedb2bdbdc5f2c91c4c8001f4a6"
     },
     {
       "id": "2074806689771094016",
@@ -62,7 +62,7 @@
       "type": "1",
       "sortOrder": 2,
       "path": "01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource)/02.探查数据表(register-dbTable).vue",
-      "baseSha256": "e0c72397eeb2f60201b42449c2396a298a26acf7b064c525d7585442e6363c52"
+      "baseSha256": "cb35b16079a3df6df02c789b8b412d97b9b50a84d8479bfb1608dd7c55e3ca0b"
     },
     {
       "id": "2074806944084328448",
@@ -72,7 +72,7 @@
       "type": "1",
       "sortOrder": 3,
       "path": "01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource)/03.登记数据表(register-dbTable-catalog).vue",
-      "baseSha256": "d5d45c685a965a0855fe772d5384cb1b1b9f991dadc7ecdca01091b694e30061"
+      "baseSha256": "bf881e09458ebc8edf10712803430c327794dcb1f69cb8e54592b05dacf236da"
     },
     {
       "id": "2075055310869430272",
@@ -82,7 +82,7 @@
       "type": "1",
       "sortOrder": 4,
       "path": "01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource)/04.登记内容审查(register-confirm).vue",
-      "baseSha256": "c1fa257507473410515c488c6dd3270d748708f5a5ae867fbaa9a059dfc408e7"
+      "baseSha256": "8c6cf9dcf5762ebd6fa8fb04caf3fcd43719fc8e6395e8cdd9d6df49970ae0d6"
     },
     {
       "id": "2008087014782078976",
@@ -92,7 +92,7 @@
       "type": "1",
       "sortOrder": 5,
       "path": "01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource)/05.数据源详情库表信息(db-table).vue",
-      "baseSha256": "c7627f28f9f83b30e77e136343e6ca462807d59b26724e46bf763f286d86b4ef"
+      "baseSha256": "910c92c724be5fbd8d84b59be75168c65ae14ddf782c7e7ab98fc4fab75107a7"
     },
     {
       "id": "2001578680197386240",
@@ -162,7 +162,7 @@
       "type": "1",
       "sortOrder": 2,
       "path": "02.数据盘点/01.数据登记/2.2.2 数据探查(my-db).vue",
-      "baseSha256": "13585298ae604376c7cf8770661db711063b64a8f614b4877c647eadbaaf5cac"
+      "baseSha256": "7e2310b48ddbf5fadc9a6a58ad04b07f5e3dc6041b35d89b8d7e560e4ec6424f"
     },
     {
       "id": "2004515843704688640",
@@ -222,7 +222,7 @@
       "type": "1",
       "sortOrder": 1,
       "path": "02.数据盘点/02.登记流程组件/登记组件(register-modal)/0. 登记完成页(register-finish).vue",
-      "baseSha256": "75a78388b5f7872f4133ddeab8605e1a22f2996ff63c93128db17557462a51d4"
+      "baseSha256": "07ba22fba56ef340fbfb8c831ab5c8d6314abdfc288f1f713912709bde7c7784"
     },
     {
       "id": "2004510336608702464",
@@ -242,7 +242,7 @@
       "type": "1",
       "sortOrder": 3,
       "path": "02.数据盘点/02.登记流程组件/登记组件(register-modal)/3. 登记目录(register-catalog).vue",
-      "baseSha256": "324d26431cf1d0e6cece7fd64ad367f3ab57a3dcda3c9f555729ae1bb1517b8c"
+      "baseSha256": "a2384ebf84d92cba4d7085c4e43343619b4b6ff8f67ec7beed6df1ae7a1c31e3"
     },
     {
       "id": "2016026573025120256",
@@ -332,7 +332,7 @@
       "type": "1",
       "sortOrder": 3,
       "path": "02.数据盘点/02.登记流程组件/详情页面(detail-page).vue",
-      "baseSha256": "59e565e6d140655efab816e6ffb88b2c69d72327444c2fb822914321198693da"
+      "baseSha256": "5da50f92d59070389670611f72b4ac1192591bf0514407385b0ee17242d73328"
     },
     {
       "id": "2018596040552812544",
@@ -352,7 +352,7 @@
       "type": "1",
       "sortOrder": 2,
       "path": "02.数据盘点/02.登记流程组件/详情页面(detail-page)/1. 资产【app%7Cdb%7Ctable%7Ccategory】详情(base-detail).vue",
-      "baseSha256": "afa978d399520fadeb350656e72bb6d97599937f7d2d8796910a4a852511e369"
+      "baseSha256": "0b110595cc1b4cea82e41d562126cfb42a27b2597e9ccb4d9362de15bdc6bf77"
     },
     {
       "id": "2063240154598391808",
@@ -442,7 +442,7 @@
       "type": "1",
       "sortOrder": 12,
       "path": "02.数据盘点/02.登记流程组件/详情页面(detail-page)/表4-数据预览(table-preview).vue",
-      "baseSha256": "8937f655b7c38879124d6875ee275f378b7d82b1882dbdf1a0003e781565c251"
+      "baseSha256": "4a478a2b1022b462b69b4935a82bc03cc0b250cc4f4af3a3165b40dc1b13d2dc"
     },
     {
       "id": "2008427924812271616",
@@ -462,7 +462,7 @@
       "type": "1",
       "sortOrder": 14,
       "path": "02.数据盘点/02.登记流程组件/详情页面(detail-page)/资源目录2-挂接资源(catalog-rela).vue",
-      "baseSha256": "b7790edc704dded3ed027303e4df440df724e86810410db6f7bab952ee993826"
+      "baseSha256": "60a02a1ad60dc3f7caaca608695bcbcc76340fc1f6d15fa29252fc9f4682ea19"
     },
     {
       "id": "2008469508677242880",
@@ -472,7 +472,7 @@
       "type": "1",
       "sortOrder": 15,
       "path": "02.数据盘点/02.登记流程组件/详情页面(detail-page)/资源目录3-关联表资源(catalog-rela-table).vue",
-      "baseSha256": "ef1e659356ccfd97c84f8c7a394fdbcbe104dcd42be4c9447355f5c5f58246b8"
+      "baseSha256": "166d61be490aa4d777485744d263c4204f6a366f8354d9775b6fd244b374b6a1"
     },
     {
       "id": "2008470019165982720",
@@ -482,7 +482,7 @@
       "type": "1",
       "sortOrder": 16,
       "path": "02.数据盘点/02.登记流程组件/详情页面(detail-page)/资源目录4-汇聚情况(catalog-collect).vue",
-      "baseSha256": "b92f5cf91c0a59b536328b3d88d6883585d01de02f8213ccd5219c594848fd18"
+      "baseSha256": "1f7d8333bbe43aef487d7f60a4f1416bab1eafbed4bb1e93854d92aff45fbd51"
     },
     {
       "id": "2018613696492277760",
@@ -552,7 +552,7 @@
       "type": "1",
       "sortOrder": 1,
       "path": "02.数据盘点/03.资产中心/3.1 资产中心(asset-center).vue",
-      "baseSha256": "c07574e71fc4544c98da64d1c8daa1854d40e34fa71a569dc46e28f73f4e2fc5"
+      "baseSha256": "de518fbc9dad862a70c22a9d1fd31ca94dbde9ff4cba548efe203dd17001c993"
     },
     {
       "id": "2006253181124284416",
@@ -612,7 +612,7 @@
       "type": "1",
       "sortOrder": 1,
       "path": "03.数据接入/2.3.1 数据汇聚(data-convergence)/ddl弹窗(ddl-dialog).vue",
-      "baseSha256": "f464ad147dbb0fe94d79ec8935ea0e16adce68eefdc4e358376e2c0df79c2aba"
+      "baseSha256": "fe8f6cb6b77a6fb1842459aa0896757d3385de351aceb859f2fb4564c9186e36"
     },
     {
       "id": "2053033792551608320",
@@ -632,7 +632,7 @@
       "type": "1",
       "sortOrder": 3,
       "path": "03.数据接入/2.3.1 数据汇聚(data-convergence)/接入申请(access-apply).vue",
-      "baseSha256": "7bfbee464cbdc8c0d7c736566c0540c9ac047964438d66745370dffe408d1238"
+      "baseSha256": "5c695e2125770e69ee80bd5a26dafc8e9143466db401a4e6a0c4dfe15a9f8dad"
     },
     {
       "id": "2016463450651824128",
@@ -682,7 +682,7 @@
       "type": "1",
       "sortOrder": 4,
       "path": "03.数据接入/2.3.1 数据汇聚(data-convergence)/数据接入弹窗(access-modal)/数据库表配置(database-config).vue",
-      "baseSha256": "01686b7ee21630d4ccccab0e8cd9f5b0dc0cddfb313625483958675dd3894694"
+      "baseSha256": "c6e6b49ea0c24c2ef3da8c8d0314aa308c7d5f8c7c28a214aff119ca2c967285"
     },
     {
       "id": "2016798577084928000",
@@ -772,7 +772,7 @@
       "type": "1",
       "sortOrder": 2,
       "path": "05.数据治理/2.5.1 数据中心(data-warehouse)/数源层详情(dst-detail).vue",
-      "baseSha256": "5efb07b84575efbede654552c9c2c5704f7f0831446df5d31942cac824c57c21"
+      "baseSha256": "22a840e4941b3df21f4e842d39d227afa3fef7ffb65419cf7460837960cf7342"
     },
     {
       "id": "2015613030412914688",
@@ -1332,7 +1332,7 @@
       "type": "1",
       "sortOrder": 1,
       "path": "09.系统管理/02.用户与权限/NiFi 节点配置(nifi-node-config).vue",
-      "baseSha256": "84eb2bfdd6cb0b173f44ee89f72bfa15dd26100452369cf4002609ca2e3a8eb6"
+      "baseSha256": "5699f1632c1588096221ebdd9202b08f09e7908e43f03c2b322f447cf83d79ec"
     },
     {
       "id": "178716197774800001",

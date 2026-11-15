@@ -21,7 +21,7 @@ export function useResourceTable<T extends {id:string}>(source:T[], table?:Resou
  useEffect(()=>{
   if(!table)return;const controller=new AbortController();setLoading(true);setError(undefined);
   const request=JSON.parse(input);
-  resourcePost<{keys?:string[];list?:T[];statistics?:Record<string,Record<string,number|null>>;total:number}>('/dwm/center/resource-command',
+  resourcePost<{keys?:string[];list?:T[];statistics?:Record<string,Record<string,number|null>>;total:number}>('/dwm/center/command',
    {kind:'table',method:'GET',body:request},{signal:controller.signal}).then(result=>{
     if(!Number.isSafeInteger(result.total)||result.total<0)throw new Error('资源表格返回的总数无效');
     if(Array.isArray(result.list)) {

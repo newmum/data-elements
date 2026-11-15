@@ -1,6 +1,5 @@
 package com.linewell.dataelement.metautil.service;
 
-import com.linewell.dataelement.integration.nifi.canvas.controller.ConnectionTestController;
 import com.linewell.dataelement.metautil.model.dto.DataSourceConfig;
 import com.linewell.dataelement.metautil.model.enums.DatabaseType;
 import com.linewell.dataelement.metautil.jdbc.JdbcDriverPropertyResolver;
@@ -12,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.ssssssss.magicapi.core.service.MagicAPIService;
 
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -33,7 +33,7 @@ public class DataSourceConnectionTestService {
     private static final int ENDPOINT_CONNECT_TIMEOUT_MILLIS = 10_000;
 
     private final MetadataExplorerService metadataExplorerService;
-    private final ConnectionTestController connectionTestController;
+    private final MagicAPIService magicApi;
     private final StructuredSourceProbeService structuredSourceProbeService;
 
     public Map<String, Object> test(Map<String, Object> source) {
@@ -56,8 +56,8 @@ public class DataSourceConnectionTestService {
                 return structuredSourceProbeService.testAndProbe(source);
             }
             if (!blank(first(source, "manifestKey"))) {
-                return normalizeControllerResult(
-                        connectionTestController.test(source),
+                return normalizeProbeResult(
+                        probe(source),
                         product,
                         startedAt
                 );
@@ -71,8 +71,8 @@ public class DataSourceConnectionTestService {
 
             Map<String, Object> adapterRequest = buildAdapterRequest(sourceType, source);
             if (adapterRequest != null) {
-                return normalizeControllerResult(
-                        connectionTestController.test(adapterRequest),
+                return normalizeProbeResult(
+                        probe(adapterRequest),
                         product,
                         startedAt
                 );
@@ -317,12 +317,19 @@ public class DataSourceConnectionTestService {
         return blank(value) ? null : Boolean.parseBoolean(value);
     }
 
-    private Map<String, Object> normalizeControllerResult(
-            ResponseEntity<?> response,
+    private Object probe(Map<String, Object> input) {
+        Object result = magicApi.call("POST", "/nifi/api/connection-test", Map.of("body", input));
+        if (result instanceof Map<?, ?> map && map.containsKey("data")) {
+            result = map.get("data");
+        }
+        return result instanceof ResponseEntity<?> response ? response.getBody() : result;
+    }
+
+    private Map<String, Object> normalizeProbeResult(
+            Object body,
             String product,
             long startedAt
     ) {
-        Object body = response == null ? null : response.getBody();
         if (!(body instanceof Map<?, ?> source)) {
             throw new IllegalStateException("连接适配器未返回有效结果");
         }

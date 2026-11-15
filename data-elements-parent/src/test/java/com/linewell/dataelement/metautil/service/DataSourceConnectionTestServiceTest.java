@@ -3,39 +3,46 @@ package com.linewell.dataelement.metautil.service;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyMap;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.linewell.dataelement.integration.nifi.canvas.controller.ConnectionTestController;
 import com.linewell.dataelement.metautil.model.dto.DataSourceConfig;
 import com.linewell.dataelement.metautil.structured.StructuredSourceProbeService;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.http.ResponseEntity;
+import org.ssssssss.magicapi.core.service.MagicAPIService;
 
 class DataSourceConnectionTestServiceTest {
 
     @Test void explicitOpenHiveWinsOverStaleMrsProfile() {
-        var metadata=mock(MetadataExplorerService.class);var controller=mock(ConnectionTestController.class);
+        var metadata=mock(MetadataExplorerService.class);var magic=mock(MagicAPIService.class);
         var probe=mock(StructuredSourceProbeService.class);
         when(metadata.testConnection(any())).thenReturn(true);
-        var service=new DataSourceConnectionTestService(metadata,controller,probe);
+        var service=new DataSourceConnectionTestService(metadata,magic,probe);
         var result=service.test(Map.of("dbType","hive","hiveConnectionMode","open-source","hiveProfile","default",
                 "host","validation.invalid","database","business"));
         assertTrue((Boolean)result.get("connected"));
-        verify(metadata).testConnection(any());org.mockito.Mockito.verifyNoInteractions(controller);
+        verify(metadata).testConnection(any());org.mockito.Mockito.verifyNoInteractions(magic);
     }
 
     @Test
     void elasticsearchConnectionUsesRegisteredEndpointAndPort() {
-        var controller=mock(ConnectionTestController.class);
+        var magic=mock(MagicAPIService.class);
         var probe=mock(StructuredSourceProbeService.class);
-        org.mockito.Mockito.doReturn(org.springframework.http.ResponseEntity.ok(Map.of("success",true))).when(controller).test(any());
-        var service=new DataSourceConnectionTestService(mock(MetadataExplorerService.class),controller,probe);
-        service.test(Map.of("dbType","es","host","127.0.0.1","port",9200,"jdbcURL","http://127.0.0.1:19200"));
-        ArgumentCaptor<Map<String, Object>> request=ArgumentCaptor.captor();verify(controller).test(request.capture());
-        assertEquals("http://127.0.0.1:19200",((Map<?,?>)request.getValue().get("config")).get("nodes"));
+        when(magic.call(eq("POST"),eq("/nifi/api/connection-test"),anyMap()))
+                .thenReturn(Map.of("code",0,"data",ResponseEntity.ok(Map.of("success",true))));
+        var service=new DataSourceConnectionTestService(mock(MetadataExplorerService.class),magic,probe);
+        var result=service.test(Map.of("dbType","es","host","127.0.0.1","port",9200,"jdbcURL","http://127.0.0.1:19200"));
+        assertTrue((Boolean)result.get("connected"));
+        ArgumentCaptor<Map<String, Object>> request=ArgumentCaptor.captor();
+        verify(magic).call(eq("POST"),eq("/nifi/api/connection-test"),request.capture());
+        var body=(Map<?,?>)request.getValue().get("body");
+        assertEquals("http://127.0.0.1:19200",((Map<?,?>)body.get("config")).get("nodes"));
     }
 
     @Test
@@ -47,7 +54,7 @@ class DataSourceConnectionTestServiceTest {
 
         DataSourceConnectionTestService service = new DataSourceConnectionTestService(
                 metadataExplorerService,
-                mock(ConnectionTestController.class),
+                mock(MagicAPIService.class),
                 structuredSourceProbeService);
 
         Map<String, Object> result = service.test(Map.of(

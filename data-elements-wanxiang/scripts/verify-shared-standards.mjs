@@ -41,7 +41,7 @@ try{
  await publish(fixtures.element,0);meta=await call('/dwm/standard/element/metaSaveOrUpdate',{...metaBody,tid:fixtures.element,valueDomainId:fixtures.code,bizDef:'下线修改后再次审批',exampleValue:'WX-000002'});assert.equal(Number(meta.publishStatus),0);assert.equal(meta.exampleValue,'WX-000002');await publish(fixtures.element,1);checks.push('offline-edit-reapprove');
  assert.ok(new RegExp((await readElement(fixtures.element)).formatPattern).test('WX-000002'));assert.equal(new RegExp(metaBody.formatPattern).test('bad'),false);checks.push('encoding-shares-real-format-pattern');
  const props={dbName:name+'字段绑定测试',dbType:'mysql',orgId:user.orgId,storageDomain:'政务外网',assetDesc:'Disposable standard binding fixture; no physical source access',accessMode:'explore',dataAccessMode:'explore',showConnect:0,preserveSourceOrg:true,assetStatus:2};
- const source=await call('/db/source/save',{tid:'',assetType:'db',deferIndexRefresh:true,propList:props});fixtures.source=source.tid;assert.ok(fixtures.source);
+ const source=await call('/dst/db/srcsave',{tid:'',assetType:'db',deferIndexRefresh:true,propList:props});fixtures.source=source.tid;assert.ok(fixtures.source);
  const tableName='wx_standard_fixture_'+key;
  // Seed only our disposable tenant-scoped field fixture; offline import is outside this module.
  const seeded=await call('/data/save',{
@@ -52,7 +52,7 @@ try{
  fixtures.column=seeded.find(r=>r.table==='db_table_column_t')?.tid;
  assert.ok(fixtures.table&&fixtures.column);checks.push('disposable-tenant-field-fixture');
  let landing=await call('/dwm/standard/landing/list',{});const entity=landing.entities.find(e=>e.name===tableName),field=entity?.fields.find(f=>f.name==='standard_code');assert.ok(entity&&field);fixtures.table=entity.id;fixtures.column=field.id;
- const beforeTables=await call('/db/schema/tables?dbId='+fixtures.source+'&includeGovernance=false');
+ const beforeTables=await call('/dst/db/tables?dbId='+fixtures.source+'&includeGovernance=false');
  const binding={tableId:fixtures.table,columnId:fixtures.column,standardId:fixtures.element,expectedStandardId:null};
  assert.equal((await call('/dwm/standard/landing/save',{...binding,dryRun:true})).valid,true);checks.push('binding-safe-preview');
  await call('/dwm/standard/landing/save',binding);landing=await call('/dwm/standard/landing/list',{});assert.equal(landing.items.find(i=>i.field_id===fixtures.column).target_id,fixtures.element);checks.push('bind-authoritative-field-standard');
@@ -60,13 +60,13 @@ try{
  await publish(fixtures.element,0);landing=await call('/dwm/standard/landing/list',{});assert.equal(landing.items.find(i=>i.field_id===fixtures.column).status,'STALE');checks.push('offline-standard-reference-marked-unavailable');
  await call('/dwm/standard/landing/save',{...binding,standardId:null,expectedStandardId:fixtures.element});
  await rejected('/dwm/standard/landing/save',binding,409);checks.push('unpublished-standard-cannot-bind');
- const afterTables=await call('/db/schema/tables?dbId='+fixtures.source+'&includeGovernance=false');
+ const afterTables=await call('/dst/db/tables?dbId='+fixtures.source+'&includeGovernance=false');
  const pickTable=rows=>{const row=rows.find(r=>r.tid===fixtures.table);return [row?.annotated,row?.businessType,row?.catalogId,row?.tableComment,row?.flowStatus,row?.assetStatus];};assert.deepEqual(pickTable(afterTables),pickTable(beforeTables));
  landing=await call('/dwm/standard/landing/list',{});assert.equal(landing.items.find(i=>i.field_id===fixtures.column).target_id,null);assert.equal(landing.entities.find(e=>e.id===fixtures.table).fields[0].displayName,'原始标准编码注释');checks.push('unbind-preserves-comments-registration-and-catalog');
 }finally{
  // Exact IDs are only populated after creating our own fixtures; never infer cleanup targets.
  const cleanupErrors=[];
- if(fixtures.source)try{await call('/db/source/delete',{tid:fixtures.source,dryRun:true});await call('/db/source/delete',{tid:fixtures.source});checks.push('remove-own-source-and-field-fixture');}catch(e){cleanupErrors.push('source: '+e.message);}
+ if(fixtures.source)try{await call('/dst/db/srcdel',{tid:fixtures.source,dryRun:true});await call('/dst/db/srcdel',{tid:fixtures.source});checks.push('remove-own-source-and-field-fixture');}catch(e){cleanupErrors.push('source: '+e.message);}
  if(fixtures.element)try{await publish(fixtures.element,0);await call('/dwm/standard/element/meatDeleteById',{tid:fixtures.element});checks.push('remove-own-element-fixture');}catch(e){cleanupErrors.push('element: '+e.message);}
  if(fixtures.code)try{await call('/dwm/standard/code/saveOrUpdate',{...codeBody,tid:fixtures.code,status:0});await call('/dwm/standard/code/deleteById',{tid:fixtures.code});checks.push('remove-own-code-fixture');}catch(e){cleanupErrors.push('code: '+e.message);}
  if(cleanupErrors.length)throw new Error('Fixture cleanup needs attention: '+cleanupErrors.join('; '));

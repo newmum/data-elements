@@ -538,10 +538,6 @@ Useful URLs:
 
 Common metadata interfaces:
 
-- `POST /dst/db/scan`
-  - Re-explore registered database tables and return differences: added, deleted, modified, unchanged.
-  - Legacy difference-comparison contract; source detail no longer calls it on entry.
-  - `diffViewOnly=true` only calculates the difference view. The regular flow can repair or flag existing dictionary associations and update `db_table_t.field_governance_config` when needed. It performs no Elasticsearch writes or new asset registration.
 - `GET /dst/db/tables`
   - 登记第二步和数据源详情共用已保存表快照。`paged=true` 默认返回已标注快照，详情用 `allSnapshots=true` 包含未标注快照，并用 `includeGovernance=false` 省略四项治理大字段。
   - 历史 `annotatedOnly=true` 在登记目录分页、待处理和普通分页模式之后匹配。HTTP 参数沿用 Boolean 解析，`true` 进入已标注分支，`1` 在实机按默认数组处理。已标注分支只读取当前租户一个有效数据源的已标注快照，一次有序读取完整数组。数据库先按表名小写分组，以字段数、更新时间和表 ID 选代表行，保留各方言的原生空值顺序。MagicScript 再按去首尾空白和小写后的表名去重，并保留已有描述、目录名称及治理字段的返回规则。
@@ -549,7 +545,8 @@ Common metadata interfaces:
   - `paged=true` 的列表排序空值末尾，同值按表 ID 降序。接口读取平台登记快照，采用批量读取并在数据库中分页。
   - 登记目录抽屉使用 `catalogPaged=true`。仅识别当前租户未删除的目录关联，先以关联、标注、更新时间、字段数和表 ID 选定同名代表行，再按登记状态、业务类型或名称筛选。`pendingTotal` 和 `registeredTotal` 取名称及类型筛选前的统计，列表仍按表名、表 ID 升序分页。采集报告中的缺失表仅在未标注且无有效目录关联时排除。分类优先级、筛选和字段映射在 MagicScript 中维护，查询组件处理关联、排序和数据库方言。
 - `POST /dst/database/metadata/tables/collection/start` and `GET /dst/database/metadata/tables/collection/status`
-  - Shared registration/source-detail background collection, started only by an explicit probe action. Source detail may read an existing job status without starting one.
+  - 登记页和数据源详情共用后台采集。用户主动探查时启动采集，打开详情时可只读取现有任务状态。
+  - 当前采集差异由 `GET /dst/database/metadata/tables/collection/changes` 分页读取，新增候选由 `GET /dst/database/metadata/tables/collection/additions` 分页读取。保存后的表快照供登记页和数据源详情查询。
 - `POST /dst/db/tbldel`
   - Explicitly remove a selected table asset snapshot and related platform registration metadata.
   - Deletes metadata snapshots only, not the physical database table.
@@ -785,7 +782,7 @@ Use the released `my-db` page at `/register/register-sjkb/list` as the default v
 
 #### Magic 脚本可读性与注释规范
 
-- 接口、函数和任务使用明确的中文显示名称。编号、物理路径和运行标识遵循 [Magic API 目录组织](#lowcode-magic--magic-api-organization)。调整名称或排序时保留接口方法、路由、函数导入路径、元数据 ID 和分组身份。
+- 分组、接口、函数和任务使用中文显示名称，编号使用阿拉伯数字。显示名用业务含义描述，编排生成的发布入口根据登记的服务名生成中文标题。运行地址和函数导入使用各自的技术标识。编号、物理路径和运行标识遵循 [Magic API 目录组织](#lowcode-magic--magic-api-organization)。仅调整显示名称或排序时保留接口方法、路由、函数导入路径、元数据 ID 和分组身份。
 - Magic 编辑器的 `description` 说明实际业务、主要输入与校验、认证和租户或应用范围、写入或下游影响、返回结果及有意义的错误。共享函数也写明用途和参数。兼容入口尚未实现的能力应如实标注。
 - 所有 `import` 集中放在脚本最前面。最后一个 `import` 之后，第一段写中文资源说明，再开始可执行代码。接口写明请求方法、完整路由、用途、主要参数和返回结果。函数或任务写明实际导入路径或执行入口、输入及用途。有权限、事务、外部调用或写入时，说明边界和副作用。没有导入的脚本从该说明开始。
 - 在关键代码上方就近写中文行注释，解释为何采用该做法。租户与角色范围、分页前后顺序、去重优先级、批量读取、状态流转、事务、异常和外部副作用都应按实际逻辑说明。普通赋值、方法名已经能表达的操作无需复述。业务变化后同步改资源说明和行注释。

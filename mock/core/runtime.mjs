@@ -706,10 +706,10 @@ export class ChengtianMockRuntime {
           (!body.env || row.env === body.env),
       );
     }
-    if (key === "POST /db/source/stats")
+    if (key === "POST /dst/db/stats")
       return this.statistics(body);
-    if (key === "POST /db/source/page") return this.sourcePage(body);
-    if (key === "POST /db/source/dept") {
+    if (key === "POST /dst/db/srcpage") return this.sourcePage(body);
+    if (key === "POST /dst/db/dept") {
       assert(
         ["cards", "choices", "tables", "summary"].includes(body.mode),
         501,
@@ -718,9 +718,9 @@ export class ChengtianMockRuntime {
       if (body.mode === "tables") return this.tables(body);
       return this.sourcePage(body);
     }
-    if (key === "POST /db/source/detail") return this.sourceDetail(body.tid);
-    if (key === "POST /db/source/save") return this.saveSource(body);
-    if (key === "POST /db/source/delete") {
+    if (key === "POST /dst/db/srcdetail") return this.sourceDetail(body.tid);
+    if (key === "POST /dst/db/srcsave") return this.saveSource(body);
+    if (key === "POST /dst/db/srcdel") {
       const database = clone(this.database),
         rows = requireSources(database, this.session, body.tid);
       rows.forEach((row) => {
@@ -733,13 +733,13 @@ export class ChengtianMockRuntime {
       requireSources(this.database, this.session, body.tid);
       return { tid: body.tid, refreshed: true };
     }
-    if (key === "GET /db/schema/info") return this.metadataSummary(query, false);
-    if (key === "GET /db/schema/refresh") return this.metadataSummary(query, true);
-    if (key === "GET /db/schema/tables") {
+    if (key === "GET /dst/db/info") return this.metadataSummary(query, false);
+    if (key === "GET /dst/db/refresh") return this.metadataSummary(query, true);
+    if (key === "GET /dst/db/tables") {
       const result = this.tables(query);
       return query.paged || query.catalogPaged ? result : result.list;
     }
-    if (key === "GET /db/field/list") {
+    if (key === "GET /dst/db/fields") {
       const table = requireTable(
         this.database,
         this.session,
@@ -749,8 +749,8 @@ export class ChengtianMockRuntime {
     }
     if (
       [
-        "POST /db/row/preview",
-        "POST /db/row/sample",
+        "POST /dst/db/preview",
+        "POST /dst/db/sample",
       ].includes(key)
     ) {
       const tableId =
@@ -763,7 +763,7 @@ export class ChengtianMockRuntime {
       const table = requireTable(this.database, this.session, tableId);
       return previewTable(
         table,
-        key === "POST /db/row/sample"
+        key === "POST /dst/db/sample"
           ? { ...body, pageNo: 1, pageSize: body.sampleSize || 20 }
           : body,
       );

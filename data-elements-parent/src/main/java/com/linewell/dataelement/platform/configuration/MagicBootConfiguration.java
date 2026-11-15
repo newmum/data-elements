@@ -89,7 +89,7 @@ public class MagicBootConfiguration {
     /** Keep a bounded view of JSON consumed by Magic so scripts can preserve typed request errors. */
     @Bean
     public OncePerRequestFilter magicNifiJsonRequestCache() {
-        Pattern requests = Pattern.compile("/nifi/(life/(deploy|activate)|node/attrs)");
+        Pattern requests = Pattern.compile("/nifi/(life/(deploy|activate)|node/attrs|api/(connection-test|columns-probe|tables-probe))");
         return new OncePerRequestFilter() {
             @Override
             protected boolean shouldNotFilter(HttpServletRequest request) {

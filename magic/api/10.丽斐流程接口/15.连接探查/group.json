@@ -1,0 +1,10 @@
+{
+  "properties": {},
+  "id": "nifi_connection_probe_group_v1",
+  "name": "15.连接探查",
+  "type": "api",
+  "parentId": "1c9e694656894c3d8b859d78c7158165",
+  "path": "/api",
+  "paths": [],
+  "options": []
+}

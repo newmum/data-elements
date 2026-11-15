@@ -78,9 +78,9 @@ test('cards settle without waiting for the organization tree and never request o
   assert.equal(h.state.treeLoading, true);
   assert.deepEqual(h.state.list, [row]);
   assert.deepEqual(h.calls.map(({ url, body }) => [url, body.mode]), [
-    ['/db/source/dept', 'cards'],
+    ['/dst/db/dept', 'cards'],
     ['/sym/org/getOrgTree', undefined],
-    ['/db/source/stats', 'facets'],
+    ['/dst/db/stats', 'facets'],
   ]);
 
   tree.resolve([]);
@@ -131,7 +131,7 @@ test('expanding a card loads one scoped table page and reuses the pending reques
 
   assert.equal(h.calls.length, 1);
   assert.deepEqual(h.calls[0], {
-    url: '/db/source/dept',
+    url: '/dst/db/dept',
     body: { mode: 'tables', datasourceId: 'db1', pageNum: 1, pageSize: 10 },
   });
 

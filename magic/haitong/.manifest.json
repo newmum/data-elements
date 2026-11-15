@@ -44,22 +44,22 @@
       "baseSha256": "24eb7463ddd7a00cf55bd4abe81789abcdb0c8b6fb03d5e907fb4371c2497b63"
     },
     {
-      "path": "magic/haitong/api/02.FTP诊断/01.FTP 连通性探查/01.FTP连接与写入测试.ms",
+      "path": "magic/haitong/api/02.文件传输诊断/01.文件传输连通性探查/01.测试文件传输与写入.ms",
       "id": "haitong-ftp-diagnostics-probe-01",
-      "databasePath": "/magic-api/api/02.FTP诊断/01.FTP 连通性探查/01.FTP连接与写入测试.ms",
-      "baseSha256": "3d9a55f7db37cef634bf965dc05ecadf46443f88e0a8f000e6ada68fcb85d5d8"
+      "databasePath": "/magic-api/api/02.文件传输诊断/01.文件传输连通性探查/01.测试文件传输与写入.ms",
+      "baseSha256": "809fdf0747a73a5d1c0d6c79c23bc5f97b74e401bfe1a8dd28e2e01cda8cf3cb"
     },
     {
-      "path": "magic/haitong/api/02.FTP诊断/01.FTP 连通性探查/group.json",
+      "path": "magic/haitong/api/02.文件传输诊断/01.文件传输连通性探查/group.json",
       "id": "9310c3b9b222506b84a54ce10f0061ec",
-      "databasePath": "/magic-api/api/02.FTP诊断/01.FTP 连通性探查/group.json",
-      "baseSha256": "483f2cdbe71efbf915a2e2e77989b7238e73a3602ae91f4030dc6fdaebba3309"
+      "databasePath": "/magic-api/api/02.文件传输诊断/01.文件传输连通性探查/group.json",
+      "baseSha256": "25832fb6ed132f5fcd8571c34186d3ef303ca2d526cd28061087aae8abf617dd"
     },
     {
-      "path": "magic/haitong/api/02.FTP诊断/group.json",
+      "path": "magic/haitong/api/02.文件传输诊断/group.json",
       "id": "haitong-ftp-diagnostics-03",
-      "databasePath": "/magic-api/api/02.FTP诊断/group.json",
-      "baseSha256": "9e19e36e085ef3d9941aa5337d63667987192a1555f07f6685b992d92bbe51a2"
+      "databasePath": "/magic-api/api/02.文件传输诊断/group.json",
+      "baseSha256": "31dee919f1cbb6a53410385fabea485ea4c9782d8ffea313bbcfe04e45bff1a0"
     },
     {
       "path": "magic/haitong/api/03.数据推送调试/01.调试数据推送/01.统一数据推送.ms",
@@ -110,16 +110,16 @@
       "baseSha256": "7d5b48d463a8ea5dd796599548902bf53278b84e1a3ba3a60d461d4962a0b68a"
     },
     {
-      "path": "magic/haitong/api/04.数据接收与附件/01.接收和附件接口/02.历史FTP推送.ms",
+      "path": "magic/haitong/api/04.数据接收与附件/01.接收和附件接口/02.兼容文件传输推送.ms",
       "id": "haitong-public-2",
-      "databasePath": "/magic-api/api/04.数据接收与附件/01.接收和附件接口/02.历史FTP推送.ms",
-      "baseSha256": "6dacd8af700c886020ea2930b5dca18248a333fc87736757b526ca01b725d4c7"
+      "databasePath": "/magic-api/api/04.数据接收与附件/01.接收和附件接口/02.兼容文件传输推送.ms",
+      "baseSha256": "968684c7f83e95f861d1259471891d3eccdf403ebd79ceaeb23647de296b06e9"
     },
     {
-      "path": "magic/haitong/api/04.数据接收与附件/01.接收和附件接口/03.历史Kafka推送.ms",
+      "path": "magic/haitong/api/04.数据接收与附件/01.接收和附件接口/03.兼容消息队列推送.ms",
       "id": "haitong-public-3",
-      "databasePath": "/magic-api/api/04.数据接收与附件/01.接收和附件接口/03.历史Kafka推送.ms",
-      "baseSha256": "8bf1ae2f891706a5beec6003fd50fc25745252a3e5e42c4cc45b9d796cba3fd2"
+      "databasePath": "/magic-api/api/04.数据接收与附件/01.接收和附件接口/03.兼容消息队列推送.ms",
+      "baseSha256": "a046345b757511562c6b342daaa997a787640612344a406007090ac69e125e7b"
     },
     {
       "path": "magic/haitong/api/04.数据接收与附件/01.接收和附件接口/04.历史日志推送.ms",
@@ -146,10 +146,10 @@
       "baseSha256": "f3565025abb61121081b5c525c0d6206d3670e0fa4428412cb843961508857c5"
     },
     {
-      "path": "magic/haitong/api/04.数据接收与附件/01.接收和附件接口/08.文件single别名.ms",
+      "path": "magic/haitong/api/04.数据接收与附件/01.接收和附件接口/08.兼容普通文件推送.ms",
       "id": "haitong-file-push-single-alias",
-      "databasePath": "/magic-api/api/04.数据接收与附件/01.接收和附件接口/08.文件single别名.ms",
-      "baseSha256": "480c1aea0fc221be5d5c45561f49dbbc7da202dd3719b103df48228846c44d1b"
+      "databasePath": "/magic-api/api/04.数据接收与附件/01.接收和附件接口/08.兼容普通文件推送.ms",
+      "baseSha256": "aeee003c0457c7be111133a10c952d7ed8a1c10bc990f567a1b8f09ca40a468c"
     },
     {
       "path": "magic/haitong/api/04.数据接收与附件/01.接收和附件接口/09.初始化文件推送.ms",
@@ -332,10 +332,10 @@
       "baseSha256": "4a841244ba27b1831e19c19f1804b7448947c54b98ad4cc2445fe2da99d668d6"
     },
     {
-      "path": "magic/haitong/api/05.运维与推送密钥/01.运行管理/08.主动FTP扫描.ms",
+      "path": "magic/haitong/api/05.运维与推送密钥/01.运行管理/08.主动扫描传输目录.ms",
       "id": "haitong-internal-8",
-      "databasePath": "/magic-api/api/05.运维与推送密钥/01.运行管理/08.主动FTP扫描.ms",
-      "baseSha256": "bc0cf07e38907d29fdc60e11724f77acd34d140a61c7a6f5177d9880c6d07dc2"
+      "databasePath": "/magic-api/api/05.运维与推送密钥/01.运行管理/08.主动扫描传输目录.ms",
+      "baseSha256": "5d499d0e681809ea94250180dae2a7805ee67934ab29fd7592c275614b10f530"
     },
     {
       "path": "magic/haitong/api/05.运维与推送密钥/01.运行管理/09.协议连接检测.ms",

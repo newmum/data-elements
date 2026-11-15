@@ -93,7 +93,7 @@
         "kind": "magic",
         "id": "fa5e60254452443a8d512df21c6eed53",
         "file": "magic/api/07.系统管理/10.字典查询/01.数据字典查询.ms",
-        "reviewedSha256": "0445daed491f09859d150fa793ab3bac7e71b7626ebc493b4ab20b8402fb0b01"
+        "reviewedSha256": "e2868ef1f29ac0b2c8e4a190ecda761482f4da37ef5c32f01a0303a966dc99c1"
       },
       "request": {
         "type": "object"
@@ -152,12 +152,12 @@
       "review": "首阶段按现行澄天调用方与真实实现核对；仅覆盖数据源闭环。内部重构且契约不变时，可保留模拟实现，完成回归后更新本项审阅摘要和说明。 第 78 批调整目录，保留原地址和方法。"
     },
     {
-      "operation": "POST /db/source/stats",
+      "operation": "POST /dst/db/stats",
       "source": {
         "kind": "magic",
         "id": "datapd_database_tree_statistics_01",
-        "file": "magic/api/11.数据库资源/01.数据源/09.数据源组织业务系统统计.ms",
-        "reviewedSha256": "3ddc618611d6402bc36c8348d1dcbe55d49110e0de02dd8a17e6cfe0f0f053dd"
+        "file": "magic/api/02.数据盘点/02.数据库资源/09.数据源组织业务系统统计.ms",
+        "reviewedSha256": "2533953b21366dcf90d3c64ede4e2a3b03f17d5a8cfe0ff6a72068f4145527fb"
       },
       "request": {
         "type": "object"
@@ -165,15 +165,15 @@
       "response": {
         "type": "any"
       },
-      "review": "按接入方式统计数据源，离线 API 抓取归入 API 分类。 第 79 批调整目录，保留原地址和方法。"
+      "review": "按接入方式统计数据源，离线 API 抓取归入 API 分类。 第 79 批调整目录，保留原地址和方法。 第 89 批切换到数据盘点短路径，参数、响应及数据范围沿用原契约。"
     },
     {
-      "operation": "POST /db/source/page",
+      "operation": "POST /dst/db/srcpage",
       "source": {
         "kind": "magic",
         "id": "datapd_database_page_01",
-        "file": "magic/api/11.数据库资源/01.数据源/03.数据源分页查询.ms",
-        "reviewedSha256": "e99b18bcb791fe654f95ba9a269ea837d984af9b27a5306b0ec48767ec3b1ac5"
+        "file": "magic/api/02.数据盘点/02.数据库资源/03.数据源分页查询.ms",
+        "reviewedSha256": "6c23027f2decd2dd6a91a9808440da66b76f982c190554c6ceb5eca7d9cbb90f"
       },
       "request": {
         "type": "object"
@@ -211,15 +211,15 @@
           }
         }
       },
-      "review": "首阶段按现行澄天调用方与真实实现核对；仅覆盖数据源闭环。内部重构且契约不变时，可保留模拟实现，完成回归后更新本项审阅摘要和说明。 第 79 批调整目录，保留原地址和方法。"
+      "review": "首阶段按现行澄天调用方与真实实现核对；仅覆盖数据源闭环。内部重构且契约不变时，可保留模拟实现，完成回归后更新本项审阅摘要和说明。 第 79 批调整目录，保留原地址和方法。 第 89 批切换到数据盘点短路径，参数、响应及数据范围沿用原契约。"
     },
     {
-      "operation": "POST /db/source/dept",
+      "operation": "POST /dst/db/dept",
       "source": {
         "kind": "magic",
         "id": "datapd_dept_datasources_01",
-        "file": "magic/api/11.数据库资源/01.数据源/08.本部门数据源清单.ms",
-        "reviewedSha256": "4b4e923733963e937421fabcc0693d8c3d85dad9063eb49a1820e13b1754f733"
+        "file": "magic/api/02.数据盘点/02.数据库资源/08.本部门数据源清单.ms",
+        "reviewedSha256": "8c36a0b239aa17dc92299f7e1762b5bf6178e0978e13a146a4d1406ff12818dc"
       },
       "request": {
         "type": "object"
@@ -257,15 +257,15 @@
           }
         }
       },
-      "review": "分页分类筛选与统计保持一致，API 抓取不受连接状态影响。 第 79 批调整目录，保留原地址和方法。"
+      "review": "分页分类筛选与统计保持一致，API 抓取不受连接状态影响。 第 79 批调整目录，保留原地址和方法。 第 89 批切换到数据盘点短路径，参数、响应及数据范围沿用原契约。"
     },
     {
-      "operation": "POST /db/source/detail",
+      "operation": "POST /dst/db/srcdetail",
       "source": {
         "kind": "magic",
         "id": "datapd_database_detail_01",
-        "file": "magic/api/11.数据库资源/01.数据源/05.数据源详情.ms",
-        "reviewedSha256": "10e7fd56707f1f19e3003646bfe24628b8681625e37c588e0dea06d8bddb6d4c"
+        "file": "magic/api/02.数据盘点/02.数据库资源/05.数据源详情.ms",
+        "reviewedSha256": "02dccb8739b1e0c3c83db05d410a14036f3710209493cd6c03aed0d9abfc2451"
       },
       "request": {
         "type": "object"
@@ -281,15 +281,15 @@
           "createdBy"
         ]
       },
-      "review": "首阶段按现行澄天调用方与真实实现核对；仅覆盖数据源闭环。内部重构且契约不变时，可保留模拟实现，完成回归后更新本项审阅摘要和说明。 第 79 批调整目录，保留原地址和方法。"
+      "review": "首阶段按现行澄天调用方与真实实现核对；仅覆盖数据源闭环。内部重构且契约不变时，可保留模拟实现，完成回归后更新本项审阅摘要和说明。 第 79 批调整目录，保留原地址和方法。 第 89 批切换到数据盘点短路径，参数、响应及数据范围沿用原契约。"
     },
     {
-      "operation": "POST /db/source/save",
+      "operation": "POST /dst/db/srcsave",
       "source": {
         "kind": "magic",
         "id": "datapd_save_update_datasource_01",
-        "file": "magic/api/11.数据库资源/01.数据源/06.保存数据源.ms",
-        "reviewedSha256": "adc4730eba3d9f2afffc74b9e08c8896c67602a4afd102bb9b661ffb2b7b973d"
+        "file": "magic/api/02.数据盘点/02.数据库资源/06.保存数据源.ms",
+        "reviewedSha256": "7fae91c4de6b180dffdc92640e54784bbe9ce9b4bd53eff4c62701ac29d90efc"
       },
       "request": {
         "type": "object"
@@ -300,15 +300,15 @@
           "tid"
         ]
       },
-      "review": "普通保存返回数据源标识，离线 API 抓取保留 API 定义及接入方式。普通预检无写入并且不排队同步索引，延期参数兼容 true、1 和字符串 1。结束登记的只读预检、范围复核、提交冲突及整份配置保存覆盖实际接口和 Mock 场景。详见 implementationNotes.dataSourceSaveOrUpdate。 第 79 批调整目录，保留原地址和方法。"
+      "review": "普通保存返回数据源标识，离线 API 抓取保留 API 定义及接入方式。普通预检无写入并且不排队同步索引，延期参数兼容 true、1 和字符串 1。结束登记的只读预检、范围复核、提交冲突及整份配置保存覆盖实际接口和 Mock 场景。详见 implementationNotes.dataSourceSaveOrUpdate。 第 79 批调整目录，保留原地址和方法。 第 89 批切换到数据盘点短路径，参数、响应及数据范围沿用原契约。"
     },
     {
-      "operation": "POST /db/source/delete",
+      "operation": "POST /dst/db/srcdel",
       "source": {
         "kind": "magic",
         "id": "datapd_database_delete_01",
-        "file": "magic/api/11.数据库资源/01.数据源/07.删除数据源.ms",
-        "reviewedSha256": "1cc7516f96f79a48d407de5ed5c57f2d7e51d8f2cb08e93c34d5e6a5d37bf2e5"
+        "file": "magic/api/02.数据盘点/02.数据库资源/07.删除数据源.ms",
+        "reviewedSha256": "6c98c35a43b90011c9930a9f2d071755b750182065b7b7eaec28985b146e962f"
       },
       "request": {
         "type": "object"
@@ -316,14 +316,14 @@
       "response": {
         "type": "any"
       },
-      "review": "首阶段按现行澄天调用方与真实实现核对；仅覆盖数据源闭环。内部重构且契约不变时，可保留模拟实现，完成回归后更新本项审阅摘要和说明。 第 79 批调整目录，保留原地址和方法。"
+      "review": "首阶段按现行澄天调用方与真实实现核对；仅覆盖数据源闭环。内部重构且契约不变时，可保留模拟实现，完成回归后更新本项审阅摘要和说明。 第 79 批调整目录，保留原地址和方法。 第 89 批切换到数据盘点短路径，参数、响应及数据范围沿用原契约。"
     },
     {
       "operation": "POST /dst/maintenance/refresh",
       "source": {
         "kind": "magic",
         "id": "datapd_asset_refresh_01",
-        "file": "magic/api/02.数据盘点/04.盘点维护/01.刷新单个资产索引.ms",
+        "file": "magic/api/02.数据盘点/05.盘点维护/01.刷新单个资产索引.ms",
         "reviewedSha256": "909134a7ae378b8ea32f8eea2d82aaaac9e298472d445812cfe6964cd23cd003"
       },
       "request": {
@@ -335,12 +335,12 @@
       "review": "首阶段按现行澄天调用方与真实实现核对；仅覆盖数据源闭环。内部重构且契约不变时，可保留模拟实现，完成回归后更新本项审阅摘要和说明。 第 83 批切换到系统入口的新路径，当前会话、鉴权和业务响应契约保持原语义。"
     },
     {
-      "operation": "GET /db/schema/info",
+      "operation": "GET /dst/db/info",
       "source": {
         "kind": "magic",
         "id": "metadata_db_info_01",
-        "file": "magic/api/11.数据库资源/02.数据库结构/02.查询数据库元信息.ms",
-        "reviewedSha256": "d5e769cde63b69fff4d35cfc4a649f9628e123bb3787558a166bbae900fe6f75"
+        "file": "magic/api/02.数据盘点/02.数据库资源/12.查询数据库元信息.ms",
+        "reviewedSha256": "b306ae939b467d90b5c4ca8b2b966965da076bff434cd9a81a6d1c3450dda9a1"
       },
       "request": {
         "type": "object"
@@ -348,15 +348,15 @@
       "response": {
         "type": "any"
       },
-      "review": "独立探查验证当前租户的有效来源及表关联，可读取同租户其他所有人的有效对象。Mock 以场景数据返回同形概览。 第 79 批调整目录，保留原地址和方法。"
+      "review": "独立探查验证当前租户的有效来源及表关联，可读取同租户其他所有人的有效对象。Mock 以场景数据返回同形概览。 第 79 批调整目录，保留原地址和方法。 第 89 批切换到数据盘点短路径，参数、响应及数据范围沿用原契约。"
     },
     {
-      "operation": "GET /db/schema/refresh",
+      "operation": "GET /dst/db/refresh",
       "source": {
         "kind": "magic",
         "id": "metadata_refresh_db_info_01",
-        "file": "magic/api/11.数据库资源/02.数据库结构/03.刷新数据库元信息.ms",
-        "reviewedSha256": "0f4ba20567883d825851b1025e1fa1063522cde0db44f8745a9c5e31543ad85b"
+        "file": "magic/api/02.数据盘点/02.数据库资源/13.刷新数据库元信息.ms",
+        "reviewedSha256": "13a1c40fdb7f197a0862fdc10929bfb33d66ff7d35e5dc722dc491cbe1f5c6e3"
       },
       "request": {
         "type": "object"
@@ -364,15 +364,15 @@
       "response": {
         "type": "any"
       },
-      "review": "按父数据源 ALL/ORG/OWNER 权限校验。支持单表概览、仅探查 dryRun 和正式持久化，保留概览别名及 400/403/404。Mock 使用虚构状态验证该契约。 第 79 批调整目录，保留原地址和方法。"
+      "review": "按父数据源 ALL/ORG/OWNER 权限校验。支持单表概览、仅探查 dryRun 和正式持久化，保留概览别名及 400/403/404。Mock 使用虚构状态验证该契约。 第 79 批调整目录，保留原地址和方法。 第 89 批切换到数据盘点短路径，参数、响应及数据范围沿用原契约。"
     },
     {
-      "operation": "GET /db/schema/tables",
+      "operation": "GET /dst/db/tables",
       "source": {
         "kind": "magic",
         "id": "52e398a9f2fc429da79048b9ea719b37",
-        "file": "magic/api/11.数据库资源/02.数据库结构/01.获取表列表.ms",
-        "reviewedSha256": "bb2299d3832fe43fbd3667d171f9e79c67549ae3a441e2f1d362c53e8cc5d05d"
+        "file": "magic/api/02.数据盘点/02.数据库资源/11.获取表列表.ms",
+        "reviewedSha256": "8e0b1fe6082e7b1aa2ea4e74c7c54708dfe9e65af773a67f4acffd7029bcdcae"
       },
       "request": {
         "type": "object"
@@ -380,7 +380,7 @@
       "response": {
         "type": "any"
       },
-      "review": "登记目录分页及历史 annotatedOnly 数组使用结构化数据库查询。现用澄天和风驰调用的默认数组及快照分页契约保持一致，模拟继续覆盖数据源闭环。真实目录关联、分类、两类计数及历史数组的排序、去重和租户隔离由真实接口与脚本回归覆盖。 第 79 批调整目录，保留原地址和方法。"
+      "review": "登记目录分页及历史 annotatedOnly 数组使用结构化数据库查询。现用澄天和风驰调用的默认数组及快照分页契约保持一致，模拟继续覆盖数据源闭环。真实目录关联、分类、两类计数及历史数组的排序、去重和租户隔离由真实接口与脚本回归覆盖。 第 79 批调整目录，保留原地址和方法。 第 89 批切换到数据盘点短路径，参数、响应及数据范围沿用原契约。"
     },
     {
       "operation": "POST /dst/application/register-options",
@@ -551,12 +551,12 @@
       "review": "导航通过 mode=count 查询当前租户购物车计数，Mock 场景返回零。第 88 批迁至 /dws/cart/page，保留请求、计数与原有覆盖范围。"
     },
     {
-      "operation": "GET /db/field/list",
+      "operation": "GET /dst/db/fields",
       "source": {
         "kind": "magic",
         "id": "a9dc328184b7410781b389f67fad1233",
-        "file": "magic/api/11.数据库资源/04.字段/01.获取字段列表.ms",
-        "reviewedSha256": "683cb4c24a131108e49d6cefef65366341d481424a368998a260ffa023628573"
+        "file": "magic/api/02.数据盘点/02.数据库资源/23.获取字段列表.ms",
+        "reviewedSha256": "047a20b0323ddaafc4d36cf97d0bebf84ed380109bcf512380f5397e610c3467"
       },
       "request": {
         "type": "object"
@@ -564,15 +564,15 @@
       "response": {
         "type": "any"
       },
-      "review": "元数据平台与风驰共用已授权表 ID、字段快照和分页预览；只读桥复用这些既有契约，不另造业务 API。 第 79 批调整目录，保留原地址和方法。"
+      "review": "元数据平台与风驰共用已授权表 ID、字段快照和分页预览；只读桥复用这些既有契约，不另造业务 API。 第 79 批调整目录，保留原地址和方法。 第 89 批切换到数据盘点短路径，参数、响应及数据范围沿用原契约。"
     },
     {
-      "operation": "POST /db/row/preview",
+      "operation": "POST /dst/db/preview",
       "source": {
         "kind": "magic",
         "id": "bc30a3edb1f04bceaeee373ed5952d4a",
-        "file": "magic/api/11.数据库资源/05.数据行/02.数据表预览.ms",
-        "reviewedSha256": "b7dd24b3aa73a4011e43356da05870745f7dba19defd09dc6c78305cfc1b70a2"
+        "file": "magic/api/02.数据盘点/02.数据库资源/27.数据表预览.ms",
+        "reviewedSha256": "adcf8ef2b58d5200237a88422934454926acc96254b0341ca96540aaf888c46e"
       },
       "request": {
         "type": "object"
@@ -580,15 +580,15 @@
       "response": {
         "type": "any"
       },
-      "review": "元数据平台与风驰共用已授权表 ID、字段快照和分页预览。真实 MongoDB 预览的免认证连接可省略用户名和密码。当前 Mock 覆盖 MySQL、PostgreSQL、Oracle、金仓和达梦场景，按既有请求、响应、分页和权限契约验证。 第 79 批调整目录，保留原地址和方法。"
+      "review": "元数据平台与风驰共用已授权表 ID、字段快照和分页预览。真实 MongoDB 预览的免认证连接可省略用户名和密码。当前 Mock 覆盖 MySQL、PostgreSQL、Oracle、金仓和达梦场景，按既有请求、响应、分页和权限契约验证。 第 79 批调整目录，保留原地址和方法。 第 89 批切换到数据盘点短路径，参数、响应及数据范围沿用原契约。"
     },
     {
-      "operation": "POST /db/row/sample",
+      "operation": "POST /dst/db/sample",
       "source": {
         "kind": "magic",
         "id": "06ee6f0e37e44762be967dbd2d764780",
-        "file": "magic/api/11.数据库资源/05.数据行/01.数据库表抽样.ms",
-        "reviewedSha256": "96a6b85b6ed2898d17b8438d072f6e6c6965dfddee49ed7a5730dcc04bf60614"
+        "file": "magic/api/02.数据盘点/02.数据库资源/26.数据库表抽样.ms",
+        "reviewedSha256": "78ebf789d065c1f588f590a42d7245480ff5e5e56273ac8675c97e094dc5d0e2"
       },
       "request": {
         "type": "object"
@@ -596,7 +596,7 @@
       "response": {
         "type": "any"
       },
-      "review": "元数据平台与风驰共用已授权表 ID、字段快照和分页预览；只读桥复用这些既有契约，不另造业务 API。 第 79 批调整目录，保留原地址和方法。"
+      "review": "元数据平台与风驰共用已授权表 ID、字段快照和分页预览；只读桥复用这些既有契约，不另造业务 API。 第 79 批调整目录，保留原地址和方法。 第 89 批切换到数据盘点短路径，参数、响应及数据范围沿用原契约。"
     },
     {
       "operation": "GET /sym/logs/capabilities",
@@ -729,13 +729,13 @@
   ],
   "dependencies": [
     {
-      "operations": ["POST /db/source/save"],
+      "operations": ["POST /dst/db/srcsave"],
       "source": {
         "kind": "magic-function",
-        "file": "magic/function/01.通用函数/21.API拉取定义校验.ms",
+        "file": "magic/function/01.通用函数/21.接口拉取定义校验.ms",
         "id": "cd24c84c195a4320865914afd5dd4896",
         "path": "/common/apiPullDefinitionError",
-        "reviewedSha256": "0fd247d1fb40e9df1f753dd2e09ac9a429e9227534f8caf102af0ee936ea0f0d"
+        "reviewedSha256": "8399d94551e212ad92df50e9999382f56978123aebc636332ec682d62d2b6104"
       },
       "review": "真实保存与 API 拉取同步共用 Magic 定义校验。保存沿用统一 400 提示和现行 dryRun 响应。Mock 保留场景中的 API 定义及接入方式，真实地址、逻辑表名、凭据边界与异常优先级由实际脚本回归覆盖。"
     },

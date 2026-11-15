@@ -1254,7 +1254,7 @@ class ResourceTablePagingTest {
         }
         private String gatewaySource() throws Exception {
             String source=CanonicalMagicSources.byId(RESOURCE_COMMAND);
-            return source.replaceAll("(?m)^import (tenantRuntime|dataScope|tableSort|tableRead|'[^\\r\\n]+)[^\\r\\n]*\\r?\\n", "");
+            return source.replaceAll("(?m)^import (tenantRuntime|dataScope|tableSort|tableRead|metadataAsset|'[^\\r\\n]+)[^\\r\\n]*\\r?\\n", "");
         }
         Map<String,Object> execute(String source,Map<String,Object> extra) throws Exception {
             return StructuredValues.objectMap(executeValue(source, extra));

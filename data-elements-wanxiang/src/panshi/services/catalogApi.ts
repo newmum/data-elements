@@ -93,7 +93,7 @@ export const centerTableColumns = (tableId: string) => resourceGet<CenterColumn[
   '/dwm/metadata-governance/tables/columns', { tableId }, { timeoutMs: 30000 },
 );
 
-export const directoryDetail = (tid: string) => resourcePost<DirectoryDetail>('/dwm/center/resource-command', {
+export const directoryDetail = (tid: string) => resourcePost<DirectoryDetail>('/dwm/center/command', {
   kind: 'catalogs', method: 'GET', action: 'directory-detail', id: tid,
 });
 export const directoryItems = (tid: string) => resourcePost<DirectoryItem[]>('/dst/catalog/catalog-items/list', { tid });

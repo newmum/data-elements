@@ -168,7 +168,7 @@ export async function readSharedCatalog(client: MockMetadataClient) {
           datasources: Array<{ value: string; label: string; dbType: string }>;
         }>
       >;
-    }>("POST", "/db/source/stats", { mode: "tree" }),
+    }>("POST", "/dst/db/stats", { mode: "tree" }),
   ]);
   const sources = Object.entries(statistics.orgApps).flatMap(([orgId, apps]) =>
     apps.flatMap((app) =>
@@ -194,13 +194,13 @@ export async function readSharedWorkspace(
   const [catalog, detail] = await Promise.all([
     client.request<SharedTable[]>(
       "GET",
-      "/db/schema/tables",
+      "/dst/db/tables",
       {},
       { dbId: id, pageSize: 100 },
     ),
     client.request<{ database: string; dbName?: string }>(
       "POST",
-      "/db/source/detail",
+      "/dst/db/srcdetail",
       {
         tid: id,
       },
@@ -244,7 +244,7 @@ export async function readSharedWorkspace(
       if (!fields.has(name)) {
         const rows = await client.request<Field[]>(
           "GET",
-          "/db/field/list",
+          "/dst/db/fields",
           {},
           { tid: target.tid, snapshotOnly: true },
         );
@@ -294,7 +294,7 @@ export async function readSharedWorkspace(
         conditions.push({ field: "name", type: "like", value: `%${keyword}%` });
       const preview = await client.request<Preview>(
         "POST",
-        "/db/row/preview",
+        "/dst/db/preview",
         {
           tableId: target.tid,
           pageNo: page,

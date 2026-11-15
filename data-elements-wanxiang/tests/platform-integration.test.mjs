@@ -15,7 +15,7 @@ test('connection-test driver errors are actionable Chinese messages without raw 
  assert.match(ds.connectionFailureMessage('Access denied for user reader@host'),/账号或密码/);
  assert.match(ds.connectionFailureMessage('ORA-12514: listener does not currently know of service requested'),/服务名/);
  assert.match(ds.connectionFailureMessage('connect timed out'),/连接测试超时/);
- assert.match(ds.connectionFailureMessage(new shared.PlatformApiError('/db/source/test','请求超时，请稍后重试',undefined,true)),/后端尚未返回结果/);
+ assert.match(ds.connectionFailureMessage(new shared.PlatformApiError('/dst/db/srctest','请求超时，请稍后重试',undefined,true)),/后端尚未返回结果/);
  assert.match(ds.connectionFailureMessage('Failed to fetch'),/后端服务暂时无法访问/);
  assert.equal(ds.connectionFailureMessage('数据库连接失败，请检查地址、端口、防火墙、网络和数据库监听服务。'),'数据库连接失败，请检查地址、端口、防火墙、网络和数据库监听服务。');
  assert.doesNotMatch(ds.connectionFailureMessage('org.postgresql.util.PSQLException: fatal unexpected server exception'),/org\.|PSQLException|fatal/i);
@@ -55,21 +55,21 @@ test('backend auth and mutation errors do not fall back to local seeds',async()=
  globalThis.fetch=async(url,init)=>{calls.push({url,init});const path=String(url);let data;
  if(path.endsWith('/sym/user/me'))data={id:'real-user',realName:'真实账号',orgName:'真实部门',roles:['admin']};
  else if(path.endsWith('/portal/sso/session'))data={tid:'tenant-from-session',name:'真实租户'};
- else if(path.endsWith('/db/source/page'))data={list:[savedSource],total:1};
- else if(path.endsWith('/db/source/save')){
+ else if(path.endsWith('/dst/db/srcpage'))data={list:[savedSource],total:1};
+ else if(path.endsWith('/dst/db/srcsave')){
   savedSource={...source,tid:'saved-source',dbName:JSON.parse(init.body).propList.dbName};
   data={tid:savedSource.tid,indexRefreshPending:true};
  }
  else if(path.endsWith('/maintenance/refresh'))data={refreshed:false};
- else if(path.endsWith('/db/source/test'))data={connected:false,error:'连接被拒绝'};
+ else if(path.endsWith('/dst/db/srctest'))data={connected:false,error:'连接被拒绝'};
  else throw new Error('offline');
  return new Response(JSON.stringify({code:0,data}));};
  try{
   assert.equal(ds.canManageSources(),false);const session=await auth.loadSession();assert.equal(session.name,'真实账号');assert.equal(ds.canManageSources(),true);
-  assert.equal((await ds.listSources())[0].id,'canonical-source');assert.equal(calls.filter(c=>c.url.endsWith('/db/source/page')).length,1);
+  assert.equal((await ds.listSources())[0].id,'canonical-source');assert.equal(calls.filter(c=>c.url.endsWith('/dst/db/srcpage')).length,1);
   assert.ok(calls.every(({init})=>init.headers['X-Audit-Route']==='/governance/metadata/sources'));
   await ds.saveSource({name:'保存测试',engine:'MYSQL',orgId:'org-1',connection:{host:'db.local',port:3306,database:'business',username:'reader'}});
-  const saved=JSON.parse(calls.find(c=>c.url.endsWith('/db/source/save')).init.body);assert.equal(saved.deferIndexRefresh,true);assert.equal(saved.assetType,'db');assert.equal(saved.propList.preserveSourceOrg,true);assert.equal('tenantId' in saved,false);
+  const saved=JSON.parse(calls.find(c=>c.url.endsWith('/dst/db/srcsave')).init.body);assert.equal(saved.deferIndexRefresh,true);assert.equal(saved.assetType,'db');assert.equal(saved.propList.preserveSourceOrg,true);assert.equal('tenantId' in saved,false);
   assert.equal(calls.some(c=>c.url.includes('/maintenance/refresh')),false);
   await assert.rejects(ds.sharedSourceApi.refreshIndex('saved-source'),/索引接口未确认同步成功/);
   assert.deepEqual((await ds.sourcesPage({pageNum:1,pageSize:20})).list.map(({id,name})=>({id,name})),[{id:'saved-source',name:'保存测试'}]);

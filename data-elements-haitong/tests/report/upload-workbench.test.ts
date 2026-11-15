@@ -61,12 +61,12 @@ test('changing source uses one request without reloading user, tenant or candida
  for(const count of [20,100])await t.test(String(count),async child=>{
   const calls=contextFixture(child,count),context=await loadUploadContext('source-0');calls.length=0;
   const previousFetch=globalThis.fetch;globalThis.fetch=async(input,init)=>{
-   const path=String(input);if(path.endsWith('/db/report/register')){
-    calls.push('/db/report/register');assert.equal(JSON.parse(String(init?.body)).dbId,'source-'+(count-1));
+   const path=String(input);if(path.endsWith('/dst/db/register')){
+    calls.push('/dst/db/register');assert.equal(JSON.parse(String(init?.body)).dbId,'source-'+(count-1));
     return new Response(JSON.stringify({code:0,data:{revision:'selected',files:[],tables:[],receipts:[]}}));
    }return previousFetch(input,init);
   };
   const loaded=await createReportSourceLoader().load('source-'+(count-1),context.sources);assert.equal(loaded?.manifest.revision,'selected');
-  assert.deepEqual(calls,['/db/report/register']);
+  assert.deepEqual(calls,['/dst/db/register']);
  });
 });

@@ -22,7 +22,7 @@ function contextFixture(t: TestContext, sourceCount: number, options: { foreignR
     requests.push(path);
     if (path === '/sym/user/me') return reply({ tid: 'current-user', realName: '测试用户' });
     if (path === '/portal/sso/session') return reply(options.missingTenant ? {} : { tid: 'current-tenant', name: '当前租户' });
-    assert.equal(path, '/db/source/dept');
+    assert.equal(path, '/dst/db/dept');
     const body = JSON.parse(String(init?.body)) as { mode: string; datasourceIds: string[] };
     if (body.mode === 'summary') return reply({ list: ids.map(tid => ({ tid, dbName: tid, accessMode: 'upload' })) });
     assert.equal(body.mode, 'reportTables');
@@ -51,7 +51,7 @@ test('20 和 100 个可见数据源均为 5 次上下文请求，不按行补查
     assert.equal(context.user.userId, 'current-user');
     assert.equal(context.tenant.tenantId, 'current-tenant');
     assert.equal(requests.length, 5);
-    assert.equal(requests.filter(path => path === '/db/source/dept').length, 3);
+    assert.equal(requests.filter(path => path === '/dst/db/dept').length, 3);
   });
 });
 
@@ -63,7 +63,7 @@ test('批量结果夹带未请求数据源时拒绝整批，不展示越权表',
 test('当前租户身份缺失时拒绝加载清单，不能落入空租户缓存', async t => {
   const requests = contextFixture(t, 20, { missingTenant: true });
   await assert.rejects(loadReportContext(), /租户信息不完整/);
-  assert.equal(requests.filter(path => path === '/db/source/dept').length, 0);
+  assert.equal(requests.filter(path => path === '/dst/db/dept').length, 0);
 });
 
 test('上报工作台按数据源分组和分页读取表，而不是逐个数据源查询', async () => {
@@ -94,7 +94,7 @@ test('上报工作台按数据源分组和分页读取表，而不是逐个数�
       const path = new URL(String(input), 'http://report.test').pathname.replace(/^\/(?:prod|dev)-api/, '');
       if (path === '/sym/user/me') return reply({ userId: 'test-user' });
       if (path === '/portal/sso/session') return reply({ tenantId: 'test-tenant' });
-      if (path !== '/db/source/dept') throw new Error(`Unexpected request: ${path}`);
+      if (path !== '/dst/db/dept') throw new Error(`Unexpected request: ${path}`);
       const body = JSON.parse(String(options?.body ?? '{}')) as {
         mode: string; datasourceIds?: string[]; pageNum?: number; pageSize?: number;
       };

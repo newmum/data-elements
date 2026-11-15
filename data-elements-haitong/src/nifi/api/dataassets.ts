@@ -242,7 +242,7 @@ export async function fetchDatabaseDetail(id: string): Promise<DbDictItem | null
   const revision = getSessionRevision();
   const token = getBridgeToken();
   const { data } = await axios.post<unknown>(
-    `${dataassetsBase}/db/source/detail`,
+    `${dataassetsBase}/dst/db/srcdetail`,
     { tid: id },
     {
       headers: authHeaders(token),
@@ -274,7 +274,7 @@ async function fetchDatabasePageList(token: string | null, revision: number): Pr
 
 async function fetchDatabasePage(pageNo: number, pageSize: number, token: string | null, revision: number): Promise<{ list: unknown[]; total?: number }> {
   const { data } = await axios.post<unknown>(
-    `${dataassetsBase}/db/source/page`,
+    `${dataassetsBase}/dst/db/srcpage`,
     { pageNo, pageSize },
     {
       headers: authHeaders(token),
@@ -554,7 +554,7 @@ export async function generateTargetTableDdl(
 ): Promise<string> {
   const revision = getSessionRevision();
   const headers = authHeaders();
-  const { data } = await axios.post(`${dataassetsBase}/db/schema/ddl`, {
+  const { data } = await axios.post(`${dataassetsBase}/dst/db/ddl`, {
     canvas: true,
     sourceDatabaseType,
     propList: { dbId, tableName },
@@ -579,7 +579,7 @@ export async function generateTargetTableDdl(
 export async function materializeTargetTable(dbId: string, ddl: string): Promise<MaterializeTableResult> {
   const revision = getSessionRevision();
   const headers = authHeaders();
-  const { data } = await axios.post(`${dataassetsBase}/db/schema/create`,
+  const { data } = await axios.post(`${dataassetsBase}/dst/db/create`,
     { dbId, ddl, canvas: true }, { headers, timeout: requestTimeout });
   assertCurrentSession(revision);
   const result = unwrapResponse<Partial<MaterializeTableResult> | null>(data);

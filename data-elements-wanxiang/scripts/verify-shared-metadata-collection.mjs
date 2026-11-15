@@ -22,11 +22,11 @@ let sourceId='',failure='',tableCount=0,columnCount=0;
 const props={dbName:name,dbType:'mysql',orgId:user.orgId,storageDomain:'政务外网',assetDesc:'Disposable system-metadata collection verification',accessMode:'explore',dataAccessMode:'explore',showConnect:1,preserveSourceOrg:true,assetStatus:2,host:process.env.METADATA_PHYSICAL_HOST,port:Number(process.env.METADATA_PHYSICAL_PORT||3306),database:'information_schema',username:process.env.METADATA_PHYSICAL_USER,password:process.env.METADATA_PHYSICAL_PASSWORD};
 async function collect(mode){let job=await call('/dst/database/metadata/tables/collection/start',{dbId:sourceId,mode});assert(job.jobId,'The collection must return a real job ID');for(let i=0;i<90&&!['FAILED','SUCCEEDED','CANCELLED'].includes(job.status);i++){await new Promise(r=>setTimeout(r,1000));job=await call('/dst/database/metadata/tables/collection/status?dbId='+sourceId+'&jobId='+job.jobId);}assert.equal(job.status,'SUCCEEDED','Physical collection: '+String(job.error||job.status));assert.equal(Number(job.progressPercent),100);return job;}
 try{
- sourceId=(await call('/db/source/save',{assetType:'db',deferIndexRefresh:true,propList:props})).tid;assert(sourceId);await record({sourceId,tenant:tenant.tid,before:count(before)});
- assert.equal((await call('/db/source/test',{tid:sourceId})).connected,true);
+ sourceId=(await call('/dst/db/srcsave',{assetType:'db',deferIndexRefresh:true,propList:props})).tid;assert(sourceId);await record({sourceId,tenant:tenant.tid,before:count(before)});
+ assert.equal((await call('/dst/db/srctest',{tid:sourceId})).connected,true);
  const initial=await collect('INITIAL');assert(Number(initial.persistedCount)>0);
  let catalog=await call('/dwm/metadata-governance/catalog',{});const tables=catalog.tables.filter(t=>String(t.datasource_id??t.datasourceId)===sourceId);assert(tables.length>0);tableCount=tables.length;
- await call('/db/field/collect',{tableId:tables[0].tid});
+ await call('/dst/db/collect',{tableId:tables[0].tid});
  catalog=await call('/dwm/metadata-governance/catalog',{});const tableIds=new Set(tables.map(t=>String(t.tid)));columnCount=catalog.columns.filter(c=>tableIds.has(String(c.table_id??c.tableId))).length;assert(columnCount>0,'Collected fields must be visible in the shared snapshot');
  await collect('REFRESH');catalog=await call('/dwm/metadata-governance/catalog',{});assert.equal(catalog.tables.filter(t=>String(t.datasource_id??t.datasourceId)===sourceId).length,tableCount,'Recollection must not duplicate source tables');
  console.log(JSON.stringify({tenant:tenant.name,connection:true,initialCollection:true,fieldCollection:true,recollection:true,tableCount,columnCount,verification:folder}));
@@ -34,9 +34,9 @@ try{
 finally{
  if(sourceId){
   // showConnect=0 deliberately clears the saved connection including the test password.
-  await call('/db/source/save',{tid:sourceId,assetType:'db',deferIndexRefresh:true,propList:{dbName:name,dbType:'mysql',orgId:user.orgId,storageDomain:'政务外网',accessMode:'explore',dataAccessMode:'explore',showConnect:0,preserveSourceOrg:true}});
-  const detail=await call('/db/source/detail',{tid:sourceId});assert(!detail.password&&!detail.jdbcURL&&!detail.host,'Temporary connection must be removed before soft deletion');
-  await call('/db/source/delete',{tid:sourceId,dryRun:true});await call('/db/source/delete',{tid:sourceId});
+  await call('/dst/db/srcsave',{tid:sourceId,assetType:'db',deferIndexRefresh:true,propList:{dbName:name,dbType:'mysql',orgId:user.orgId,storageDomain:'政务外网',accessMode:'explore',dataAccessMode:'explore',showConnect:0,preserveSourceOrg:true}});
+  const detail=await call('/dst/db/srcdetail',{tid:sourceId});assert(!detail.password&&!detail.jdbcURL&&!detail.host,'Temporary connection must be removed before soft deletion');
+  await call('/dst/db/srcdel',{tid:sourceId,dryRun:true});await call('/dst/db/srcdel',{tid:sourceId});
  }
  const after=await call('/dwm/metadata-governance/catalog',{});assert.deepEqual(count(after),count(before));await record({sourceId,tenant:tenant.tid,before:count(before),after:count(after),tableCount,columnCount,failure,cleaned:true});console.log('Physical collection fixtures and credentials cleared; pre-existing metadata preserved.');
 }

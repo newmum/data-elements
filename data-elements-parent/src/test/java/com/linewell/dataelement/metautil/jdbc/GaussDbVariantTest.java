@@ -4,7 +4,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import com.linewell.dataelement.metautil.model.dto.DataSourceConfig;
 import com.linewell.dataelement.metautil.model.enums.DatabaseType;
 import com.linewell.dataelement.integration.nifi.canvas.compile.RegisteredDatasourceType;
-import com.linewell.dataelement.integration.nifi.canvas.controller.ConnectionTestController;
+import com.linewell.dataelement.integration.nifi.canvas.probe.NifiConnectionProbe;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -57,7 +57,7 @@ class GaussDbVariantTest {
         assertTrue(config.buildJdbcUrl().startsWith("jdbc:"+protocol+"://validation.invalid:"+port+"/business"));
         assertEquals(product.equals("mysql")?DatabaseType.MYSQL:DatabaseType.GAUSSDB,config.getEffectiveDatabaseType());
         assertEquals(config.buildJdbcUrl(),RegisteredDatasourceType.jdbcUrl("gaussdb",values,Map.of()));
-        Object probe=ReflectionTestUtils.invokeMethod(new ConnectionTestController(null,null,null),"resolve","source.gaussdb",values);
+        Object probe=ReflectionTestUtils.invokeMethod(new NifiConnectionProbe(null,null),"resolve","source.gaussdb",values);
         assertEquals(driver,ReflectionTestUtils.getField(probe,"driverClass"));
         assertEquals(config.buildJdbcUrl(),ReflectionTestUtils.getField(probe,"url"));
     }

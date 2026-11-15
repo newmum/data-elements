@@ -15,7 +15,7 @@ import org.ssssssss.script.runtime.ExitValue;
 class ElasticsearchRegistrationMagicTest {
     private static final List<String> IDS = List.of(
             "datapd_save_update_datasource_01", "metadata_columns_collect_24", "bc30a3edb1f04bceaeee373ed5952d4a",
-            "metadata_tables_reexplore_diff_01", "a9dc328184b7410781b389f67fad1233", "metadata_db_info_01",
+            "a9dc328184b7410781b389f67fad1233", "metadata_db_info_01",
             "06ee6f0e37e44762be967dbd2d764780");
 
     @TestFactory List<DynamicTest> compileRegistrationScripts() throws Exception {
