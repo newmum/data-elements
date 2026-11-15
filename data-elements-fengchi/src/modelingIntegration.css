@@ -1,2 +1,4 @@
 .modeling-overlay{position:fixed;inset:0;z-index:50;display:flex;flex-direction:column;background:var(--bg,#f6f8fb);color:var(--text,#273444);min-height:0}
 .workspace-loading{display:grid;place-items:center;flex:1;min-height:64px;color:var(--muted,#667786)}
+
+.model-catalog-workbench{flex:1;min-height:0;overflow:auto;flex-direction:column}.model-catalog-workbench>section{box-sizing:border-box;width:100%}

@@ -8,8 +8,8 @@ describe('model workspace integration',()=>{
  it('places a single model entry after views and keeps the existing workspace',()=>{
   expect(source).toContain("'视图',openViews)}{tool(<BranchesOutlined");
   expect(source.match(/'模型',/g)).toHaveLength(1);
-  expect(source).toContain('<ModelingWorkspace tables={tables} shared={Boolean(workspace)} onClose={()=>setModelingOpen(false)}/>');
-  expect(source).toContain("display:modelingOpen?'flex':'none'");
+  expect(source).toContain('catalogTarget={modelCatalogTarget}');
+  expect(source).toContain("display:modelingOpen&&modelingImmersive?'flex':'none'");
  });
 });
 
@@ -38,7 +38,7 @@ describe('local file modeling boundaries',()=>{
 describe('configuration-only modeling boundary',()=>{
  it('allows editing future execution nodes without enabling execution',()=>{
   expect(editor).toContain("selectedOperator?.execution==='configuration'");
-  expect(editor).toContain('disabled={!node||configurationOnly}');
+  expect(editor).toContain("validateExecution(nodes,executionSettings).filter(i=>i.level==='error')");
   expect(editor).toContain('仅配置：尚未接入执行器');
   expect(editor).toContain('Input.TextArea');
   expect(editor).toContain("['csvInput','jsonInput','xmlInput','excelInput','parquetInput'].includes(node.kind)&&<Form.Item label=\"本地文件");
@@ -73,4 +73,14 @@ describe('operator library refinement',()=>{it('uses collapsible categories and 
 
 describe('compact modeling workspace',()=>{it('keeps equal default panels and inline preview status',()=>{expect(editor).toContain('[paletteWidth,setPaletteWidth]=useState(250),[propertiesWidth,setPropertiesWidth]=useState(250)');expect(editor).toContain('<strong>属性配置</strong>');expect(editor).toContain('modeling-collapsed-rail');expect(editor).toContain('modeling-preview-tab-status');expect(editor).toContain("scroll={{x:'max-content'}}");expect(editor).not.toContain("y:Math.max(70,previewHeight-130)");});});
 
-describe('modeling task entry',()=>{it('opens the isolated mock task panel without replacing the canvas',()=>{expect(editor).toContain('aria-label="任务配置"');expect(editor).toContain('open={executionOpen}');expect(editor).toContain('<ModelingExecutionPanel nodes={nodes} tables={effectiveTables}/>');expect(editor).toContain('forceRender');});});
+describe('modeling task entry',()=>{it('opens the isolated mock task panel without replacing the canvas',()=>{expect(editor).toContain('aria-label="开始：配置任务"');expect(editor).toContain('open={executionOpen}');expect(editor).toContain('<ModelingExecutionPanel nodes={nodes} tables={effectiveTables} settings={executionSettings} onSettingsChange={setExecutionSettings}/>');expect(editor).toContain('forceRender');});});
+
+describe("inline model catalog",()=>{it("ports only the catalog into the original workbench and retains the editor",()=>{expect(source).toContain('className="model-catalog-workbench"');expect(editor).toContain('createPortal(<ModelingCatalog');expect(editor).toContain('props.catalogTarget');expect(editor).toContain('关闭画布，返回模型列表');expect(editor).toContain('d.sourceId===props.sourceId')})});
+
+describe('catalog matches original table workbench',()=>{it('inherits the workbench Ant prefix rather than the isolated canvas prefix',()=>{expect(editor).toContain('<ConfigProvider prefixCls="ant"><div');expect(editor).toContain('<ConfigProvider prefixCls="model-ant" componentSize="middle"');});});
+
+describe("single model return action",()=>{it("keeps the close action and mounted editors without a duplicate list button",()=>{expect(editor).not.toContain(">模型列表</Button>");expect(editor).toContain('aria-label="关闭画布，返回模型列表"');expect(editor).toContain('onClose={()=>{setCatalog(true);refresh()}}');expect(editor).toContain("opened.map(doc=>");})});
+
+describe('preview only bottom panel',()=>{it('removes node information and retains preview and JSON export',()=>{expect(editor).not.toContain("label:'节点信息'");expect(editor).toContain("label:'数据预览'");expect(editor).toContain('>导出 JSON</Button>');})});
+
+describe('local run control',()=>{it('separates control edges, locks editing and supports reduced motion',()=>{expect(editor).toContain('modeling-control-edges');expect(editor).toContain('inert={localRunning}');expect(editor).toContain('runToken.current!==token');expect(editor).toContain('validateExecution(nodes,executionSettings)');expect(editor).not.toContain('>调试单次</Button>');})});

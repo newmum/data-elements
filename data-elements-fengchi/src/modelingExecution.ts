@@ -1,7 +1,8 @@
 import {isConfigurationOnly,previewModel,type ModelNode} from './modeling';
 import {modelInputCapacity,modelHasOutput} from './modelingInteractions';
 import type {TableDef} from './data';
-export type ExecutionSettings={engine:'flink'|'spark';mode:'batch'|'stream'};
+export type ExecutionSettings={engine:'flink'|'spark';mode:'batch'|'stream';scheduleEnabled?:boolean;intervalMinutes?:number;runImmediately?:boolean};
+export function normalizeExecutionSettings(settings:ExecutionSettings):Required<ExecutionSettings>{return {...settings,scheduleEnabled:settings.scheduleEnabled??false,intervalMinutes:settings.intervalMinutes??60,runImmediately:settings.runImmediately??false}}
 export type ExecutionIssue={level:'error'|'warning';message:string;nodeId?:string};
 const streaming=new Set(['kafkaInput','cdcInput','fileWatcher','slidingWindow','tumblingWindow','sessionWindow','eventTimeWindow']);
 const bounded=new Set(['sort','rank','percentile','pivot','crossJoin','fuzzy','excelInput','excelOutput']);
@@ -28,15 +29,15 @@ export function validateExecution(nodes:ModelNode[],settings:ExecutionSettings):
 export type MockRun={state:'queued'|'running'|'succeeded'|'failed'|'cancelled';attempt:number;settings:ExecutionSettings;nodes:ModelNode[];log:string[];rows?:number;error?:string;backfill?:string};
 export function createMockRun(nodes:ModelNode[],settings:ExecutionSettings,backfill?:string):MockRun{
  const errors=validateExecution(nodes,settings).filter(i=>i.level==='error');if(errors.length)throw new Error(errors.map(i=>i.message).join('；'));
- return {state:'queued',attempt:1,settings:{...settings},nodes:structuredClone(nodes),log:['模拟任务已创建，等待手动推进；未向引擎提交。'],backfill};
+ return {state:'queued',attempt:1,settings:{...settings},nodes:structuredClone(nodes),log:['本地调试已创建；未向引擎提交。'],backfill};
 }
 export function advanceMockRun(run:MockRun,tables:Record<string,TableDef>,fail=false):MockRun{
- if(run.state==='queued')return {...run,state:'running',log:[...run.log,'进入模拟运行阶段，尚未计算数据。']};if(run.state!=='running')return run;
- try{if(fail)throw new Error('用户触发的模拟故障');let rows=0;for(const n of run.nodes.filter(n=>!modelHasOutput(n.kind))){rows+=previewModel(run.nodes,n.id,tables).rows.length}return {...run,state:'succeeded',rows,error:undefined,log:[...run.log,`浏览器快照预览完成：输出合计 ${rows} 行；非引擎执行成功。`]}}
- catch(e){const error=e instanceof Error?e.message:'模拟失败';return {...run,state:'failed',error,log:[...run.log,`模拟失败：${error}`]}}
+ if(run.state==='queued')return {...run,state:'running',log:[...run.log,'进入本地计算阶段。']};if(run.state!=='running')return run;
+ try{if(fail)throw new Error('用户触发的测试故障');let rows=0;for(const n of run.nodes.filter(n=>!modelHasOutput(n.kind))){rows+=previewModel(run.nodes,n.id,tables).rows.length}return {...run,state:'succeeded',rows,error:undefined,log:[...run.log,`浏览器快照预览完成：输出合计 ${rows} 行；非引擎执行成功。`]}}
+ catch(e){const error=e instanceof Error?e.message:'模拟失败';return {...run,state:'failed',error,log:[...run.log,`本地计算失败：${error}`]}}
 }
-export function retryMockRun(run:MockRun):MockRun{if(run.state!=='failed')throw new Error('仅失败任务可重试');if(run.attempt>=3)throw new Error('最多尝试 3 次，请修复模型后新建模拟任务');return {...run,state:'queued',attempt:run.attempt+1,error:undefined,rows:undefined,log:[...run.log,'手动重试已排队；没有后台自动重试。']}}
-export function cancelMockRun(run:MockRun):MockRun{if(!['queued','running'].includes(run.state))return run;return {...run,state:'cancelled',log:[...run.log,'模拟任务已取消。']}}
+export function retryMockRun(run:MockRun):MockRun{if(run.state!=='failed')throw new Error('仅失败任务可重试');if(run.attempt>=3)throw new Error('最多尝试 3 次，请修复模型后重新调试');return {...run,state:'queued',attempt:run.attempt+1,error:undefined,rows:undefined,log:[...run.log,'手动重试已排队；没有后台自动重试。']}}
+export function cancelMockRun(run:MockRun):MockRun{if(!['queued','running'].includes(run.state))return run;return {...run,state:'cancelled',log:[...run.log,'本地调试已取消。']}}
 /** Strict ISO minute/second precision, explicit timezone, and actual calendar dates. */
 export function validScheduleTime(value:string):boolean {
  const m=/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?(Z|([+-])(\d{2}):(\d{2}))$/.exec(value);
