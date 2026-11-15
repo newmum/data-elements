@@ -486,7 +486,7 @@ const partitionPayload = (key: string) => {
 const probePartitions = async (targets: any[]) => {
   const identity = JSON.stringify([String(props.id), targets.map((target: any) => target.dbId)]);
   if (partitionProbeIdentity === identity) return;
-  const response = await $common.post("/db/schema/ddl", {
+  const response = await $common.post("/dst/db/ddl", {
     canvas: true, partitionProbe: true, sourceTableId: formData.value.sourceTableId || props.id,
     targetDbIds: targets.map((target: any) => target.dbId),
   }, { _hiddenErrorMsg: true });
@@ -1654,7 +1654,7 @@ const regenerateDdl = async (input: any, targetKeys?: string[]) => {
     const targets = changed.map((target: any) => {
       return { propList: target.propList, tableItems: targetTableItems(input.tableItems, target.propList.dbType), partitionPlan: partitionPayload(target.key), sourceConstraints: sourceConstraints.value };
     });
-    const response = targets.length ? await $common.post("/db/schema/ddl", {
+    const response = targets.length ? await $common.post("/dst/db/ddl", {
       batchGenerate: true,
       canvas: true,
       targets,
@@ -1924,7 +1924,7 @@ const handleSave = async () => {
         partitionPlan: payload.partitionPlan,
         tableItems: payload.tableItems,
       }));
-      const response = await $common.post("/db/schema/create", {
+      const response = await $common.post("/dst/db/create", {
         canvas: true,
         validateOnly: true,
         batchValidateOnly: true,
@@ -2017,7 +2017,7 @@ const handleSave = async () => {
             ddl:payload.ddl, partitionPlan:payload.partitionPlan, tableItems:payload.tableItems };
         });
         const checkReuseTargets = async (preview: boolean) => {
-          const response = await $common.post('/db/schema/create', {
+          const response = await $common.post('/dst/db/create', {
             canvas:true, validateOnly:true, batchReuseValidation:true, partitionPreviewOnly:preview, targets,
           }, { _hiddenErrorMsg:true }, 120 * 1000);
           return response?.data || response || {};
@@ -2065,7 +2065,7 @@ const handleSave = async () => {
             materializationProgress.value.detail = `正在补齐并核验 ${check.database}.${check.tableName} 的 Hive 分区`;
             try {
               targetChangesPossible = true;
-              const response = await $common.post('/db/schema/create', {
+              const response = await $common.post('/dst/db/create', {
                 ...target, canvas:true, reuseExistingOnly:true, repairHivePartitions:true,
                 expectedHiveDatabase:check.database, expectedHiveTable:check.tableName,
                 expectedHiveLocation:check.tableLocation, expectedMissingPartitions:check.missing,

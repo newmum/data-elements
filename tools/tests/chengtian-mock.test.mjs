@@ -93,8 +93,8 @@ test("元数据探查保持独立读范围，刷新按父源角色校验并仅�
   const table = runtime.database.tables.find((row) => row.datasourceId === own.tid && row.tenantId === tenant);
   const sourceBefore = structuredClone(own);
   const tableBefore = structuredClone(table);
-  const probe = "/db/schema/info";
-  const refresh = "/db/schema/refresh";
+  const probe = "/dst/db/info";
+  const refresh = "/dst/db/refresh";
   const get = (path, query) => request(runtime, path, {}, query, "GET");
 
   assert.equal((await get(probe, { tid: other.tid })).status, 200);
@@ -137,7 +137,7 @@ for (const code of Object.keys(scenarios)) {
       const before = runtime.requests.length;
       const result = await request(
         runtime,
-        "/db/source/dept",
+        "/dst/db/dept",
         { mode: "cards", pageNum: 1, pageSize: size },
       );
       assert.equal(runtime.requests.length - before, 1);
@@ -162,21 +162,21 @@ for (const role of ["admin", "department", "registrar"]) {
   test(`${role}：分页、统计、详情和写入使用相同数据范围`, async () => {
     const { runtime } = setup(role);
     const page = (
-      await request(runtime, "/db/source/page", { pageSize: 100 })
+      await request(runtime, "/dst/db/srcpage", { pageSize: 100 })
     ).body.data;
     assert.equal(page.total, role === "admin" ? 120 : 40);
     const facets = (
-      await request(runtime, "/db/source/stats", { mode: "facets" })
+      await request(runtime, "/dst/db/stats", { mode: "facets" })
     ).body.data;
     assert.equal(facets.total, page.total);
     const allowed = page.list[0];
     assert.equal(
-      (await request(runtime, "/db/source/detail", { tid: allowed.tid }))
+      (await request(runtime, "/dst/db/srcdetail", { tid: allowed.tid }))
         .status,
       200,
     );
     const narrowed = (
-      await request(runtime, "/db/source/page", {
+      await request(runtime, "/dst/db/srcpage", {
         pageSize: 100,
         tenantId: tenantConfiguration("broadcasting").tenant.tid,
         orgIds: ["police-org-1"],
@@ -192,13 +192,13 @@ for (const role of ["admin", "department", "registrar"]) {
           : row.createdBy !== runtime.session.userId,
       );
       assert.equal(
-        (await request(runtime, "/db/source/detail", { tid: forbidden.tid }))
+        (await request(runtime, "/dst/db/srcdetail", { tid: forbidden.tid }))
           .status,
         404,
       );
       assert.equal(
         (
-          await request(runtime, "/db/source/save", {
+          await request(runtime, "/dst/db/srcsave", {
             tid: forbidden.tid,
             propList: { dbName: "无权修改" },
           })
@@ -207,7 +207,7 @@ for (const role of ["admin", "department", "registrar"]) {
       );
       assert.equal(
         (
-          await request(runtime, "/db/source/delete", {
+          await request(runtime, "/dst/db/srcdel", {
             tid: [allowed.tid, forbidden.tid],
           })
         ).status,
@@ -220,7 +220,7 @@ for (const role of ["admin", "department", "registrar"]) {
     }
     assert.equal(
       (
-        await request(runtime, "/db/source/detail", {
+        await request(runtime, "/dst/db/srcdetail", {
           tid: "broadcasting-source-001",
         })
       ).status,
@@ -232,7 +232,7 @@ for (const role of ["admin", "department", "registrar"]) {
 test("编辑保存、分页与详情回读一致，刷新后保留，且不覆盖租户和创建人", async () => {
   const { runtime, storage, sessionStorage } = setup("registrar");
   const id = runtime.database.sources[0].tid;
-  const result = await request(runtime, "/db/source/save", {
+  const result = await request(runtime, "/dst/db/srcsave", {
     tid: id,
     tenantId: "other",
     propList: {
@@ -249,13 +249,13 @@ test("编辑保存、分页与详情回读一致，刷新后保留，且不覆�
     storage,
     sessionStorage,
   });
-  const detail = (await request(second, "/db/source/detail", { tid: id }))
+  const detail = (await request(second, "/dst/db/srcdetail", { tid: id }))
     .body.data;
   assert.equal(detail.dbName, "编辑后的场景库");
   assert.equal(detail.tenantId, tenantConfiguration("police").tenant.tid);
   assert.equal(detail.createdBy, "police-user-0");
   const page = (
-    await request(second, "/db/source/page", { keyword: "编辑后的场景库" })
+    await request(second, "/dst/db/srcpage", { keyword: "编辑后的场景库" })
   ).body.data;
   assert.equal(page.total, 1);
   assert.equal(page.list[0].tid, id);
@@ -269,7 +269,7 @@ test("本地存储失败不提交内存修改，dryRun 不持久化", async () =
     [true, { dbName: "预检名称" }],
     [undefined, { dbName: "预检名称", dryRun: true }],
   ]) {
-    const preview = await request(runtime, "/db/source/save", {
+    const preview = await request(runtime, "/dst/db/srcsave", {
       tid: id, dryRun, propList, deferIndexRefresh: true,
     });
     assert.equal(preview.status, 200);
@@ -278,7 +278,7 @@ test("本地存储失败不提交内存修改，dryRun 不持久化", async () =
     assert.equal(runtime.database.sources[0].dbName, original);
   }
   const existingCount = runtime.database.sources.length;
-  const newPreview = await request(runtime, "/db/source/save", {
+  const newPreview = await request(runtime, "/dst/db/srcsave", {
     propList: { dbName: "拟新增来源", dryRun: true }, deferIndexRefresh: "1",
   });
   assert.equal(newPreview.status, 200);
@@ -290,7 +290,7 @@ test("本地存储失败不提交内存修改，dryRun 不持久化", async () =
   };
   assert.equal(
     (
-      await request(runtime, "/db/source/save", {
+      await request(runtime, "/dst/db/srcsave", {
         tid: id,
         propList: { dbName: "不应提交" },
       })
@@ -304,7 +304,7 @@ test("数据源保存复用索引延期参数，并拒绝覆盖已提交的场�
   const { runtime, storage } = setup();
   const id = runtime.database.sources[0].tid;
   for (const flag of [true, 1, "1", false]) {
-    const saved = await request(runtime, "/db/source/save", {
+    const saved = await request(runtime, "/dst/db/srcsave", {
       tid: id, deferIndexRefresh: flag, propList: { dbName: "已保存名称" },
     });
     assert.equal(saved.status, 200);
@@ -320,7 +320,7 @@ test("数据源保存复用索引延期参数，并拒绝覆盖已提交的场�
     if (name === key && ++reads === 3) storage.setItem(key, JSON.stringify(newer));
     return getItem(name);
   };
-  const conflict = await request(runtime, "/db/source/save", {
+  const conflict = await request(runtime, "/dst/db/srcsave", {
     tid: id, propList: { dbName: "不应覆盖" },
   });
   assert.equal(conflict.status, 409);
@@ -333,7 +333,7 @@ test("普通结束登记按有效同源表统计，并只保存登记状态", as
   const tables = runtime.database.tables.filter((row) => row.datasourceId === source.tid);
   const registered = tables.filter((row) => row.assetStatus === 2).length;
   runtime.persist(runtime.database);
-  const path = "/db/source/save";
+  const path = "/dst/db/srcsave";
   const payload = { tid: source.tid, propList: { completeOnly: true, dbName: "不应修改" } };
   const preview = await request(runtime, path, { ...payload, dryRun: true });
   assert.deepEqual(preview.body.data, {
@@ -352,10 +352,10 @@ test("已登记数据源关闭连接时，预检和正式保存都返回待登�
   const { runtime } = setup();
   const source = runtime.database.sources.find((row) => row.assetStatus === 2 && row.showConnect === 1);
   const payload = { tid: source.tid, propList: { showConnect: 0 } };
-  const preview = await request(runtime, "/db/source/save", { ...payload, dryRun: true });
+  const preview = await request(runtime, "/dst/db/srcsave", { ...payload, dryRun: true });
   assert.equal(preview.body.data.assetStatus, 0);
   assert.equal(runtime.database.sources.find((row) => row.tid === source.tid).assetStatus, 2);
-  const saved = await request(runtime, "/db/source/save", payload);
+  const saved = await request(runtime, "/dst/db/srcsave", payload);
   assert.equal(saved.body.data.assetStatus, 0);
   assert.equal(runtime.database.sources.find((row) => row.tid === source.tid).flowStatus, 0);
 });
@@ -374,12 +374,12 @@ for (const role of ["admin", "department", "registrar"]) {
     ];
     runtime.persist(runtime.database);
     const payload = { tid: source.tid, propList: { completeOnly: true, dbName: "不应覆盖配置" } };
-    const preview = await request(runtime, "/db/source/save", { ...payload, dryRun: true });
+    const preview = await request(runtime, "/dst/db/srcsave", { ...payload, dryRun: true });
     assert.deepEqual(preview.body.data, {
       tid: source.tid, assetStatus: 2, completionEligible: true, tableReviewReady: true,
       serviceCount: 1, tableCount: 0, registeredTableCount: 0, pendingTableCount: 0,
     });
-    const legacyPreview = await request(runtime, "/db/source/save", {
+    const legacyPreview = await request(runtime, "/dst/db/srcsave", {
       tid: source.tid, propList: { asset_status: 2, dryRun: true },
     });
     assert.deepEqual(legacyPreview.body.data, preview.body.data);
@@ -393,14 +393,14 @@ for (const role of ["admin", "department", "registrar"]) {
       if (name === key && ++reads === 3) storage.setItem(key, JSON.stringify(withoutWitness));
       return getItem(name);
     };
-    const conflict = await request(runtime, "/db/source/save", payload);
+    const conflict = await request(runtime, "/dst/db/srcsave", payload);
     assert.equal(conflict.status, 409);
     assert.equal(conflict.body.message, "服务清单已变化，请重新确认后结束登记");
     assert.equal(JSON.parse(getItem(key)).sources[0].assetStatus, source.assetStatus);
     storage.getItem = getItem;
-    assert.equal((await request(runtime, "/db/source/save", payload)).status, 400);
+    assert.equal((await request(runtime, "/dst/db/srcsave", payload)).status, 400);
     storage.setItem(key, original);
-    const finished = await request(runtime, "/db/source/save", payload);
+    const finished = await request(runtime, "/dst/db/srcsave", payload);
     assert.equal(finished.status, 200);
     assert.equal(finished.body.data.assetStatus, 2);
     assert.equal(finished.body.data.indexSync, "status-patch");
@@ -411,16 +411,16 @@ for (const role of ["admin", "department", "registrar"]) {
 test("分页边界、排序和缺少身份均明确失败", async () => {
   const { runtime } = setup();
   assert.equal(
-    (await request(runtime, "/db/source/page", { pageSize: 101 })).status,
+    (await request(runtime, "/dst/db/srcpage", { pageSize: 101 })).status,
     400,
   );
   assert.equal(
-    (await request(runtime, "/db/source/page", { sortField: "password" }))
+    (await request(runtime, "/dst/db/srcpage", { sortField: "password" }))
       .status,
     400,
   );
   const empty = (
-    await request(runtime, "/db/source/page", {
+    await request(runtime, "/dst/db/srcpage", {
       keyword: "不存在的场景数据",
     })
   ).body.data;
@@ -438,7 +438,7 @@ test("分页边界、排序和缺少身份均明确失败", async () => {
     (
       await runtime.handle({
         method: "POST",
-        path: "/db/source/page",
+        path: "/dst/db/srcpage",
         token: "real-session",
       })
     ).status,
@@ -449,14 +449,14 @@ test("分页边界、排序和缺少身份均明确失败", async () => {
 test("数据探查的 conditions 契约与卡片筛选一致", async () => {
   const { runtime } = setup();
   const cards = (
-    await request(runtime, "/db/source/dept", {
+    await request(runtime, "/dst/db/dept", {
       mode: "cards",
       keyword: "预警",
       pageSize: 100,
     })
   ).body.data;
   const table = (
-    await request(runtime, "/db/source/page", {
+    await request(runtime, "/dst/db/srcpage", {
       conditions: [
         { field: "assetType", value: "db", type: "match" },
         { field: "keyword", value: "预警", type: "match" },
@@ -498,7 +498,7 @@ test("租户切换后旧租户对象不可访问，源数据不串场景", async
     200,
   );
   assert.equal(
-    (await request(runtime, "/db/source/detail", { tid: id })).status,
+    (await request(runtime, "/dst/db/srcdetail", { tid: id })).status,
     404,
   );
   assert.equal(runtime.database.tenantId, tenantConfiguration("broadcasting").tenant.tid);
@@ -565,27 +565,27 @@ test("两套工作区回读同一份持久场景，不缓存另一份数据源",
   const {runtime,storage,sessionStorage}=setup();
   const peer=new ChengtianMockRuntime({storage,sessionStorage});
   const tid=runtime.database.sources[0].tid;
-  await request(peer,"/db/source/detail",{tid});
-  await request(runtime,"/db/source/save",{tid,propList:{dbName:"共享数据源名称"}});
-  assert.equal((await request(peer,"/db/source/detail",{tid})).body.data.dbName,"共享数据源名称");
+  await request(peer,"/dst/db/srcdetail",{tid});
+  await request(runtime,"/dst/db/srcsave",{tid,propList:{dbName:"共享数据源名称"}});
+  assert.equal((await request(peer,"/dst/db/srcdetail",{tid})).body.data.dbName,"共享数据源名称");
 });
 
 test("20/100 行表预览各一次请求，结构与预览共用字段，视图来自同一基础表", async () => {
   const {runtime}=setup();const source=runtime.database.sources[0];
   const table=runtime.database.tables.find(row=>row.datasourceId===source.tid&&row.objectType==="TABLE");
-  const fields=(await request(runtime,"/db/field/list",{}, {tid:table.tid},"GET")).body.data;
+  const fields=(await request(runtime,"/dst/db/fields",{}, {tid:table.tid},"GET")).body.data;
   for (const size of [20,100]) {
     const before=runtime.requests.length;
-    const response=await request(runtime,"/db/row/preview",{tableId:table.tid,pageSize:size});
+    const response=await request(runtime,"/dst/db/preview",{tableId:table.tid,pageSize:size});
     assert.equal(runtime.requests.length-before,1);
     assert.equal(response.body.data.rows.length,size);
     assert.deepEqual(response.body.data.columns,fields.map(row=>row.columnName));
     assert.equal(response.body.data.total,table.recordCount);
   }
   const view=runtime.database.tables.find(row=>row.datasourceId===source.tid&&row.objectType==="VIEW");
-  const viewData=(await request(runtime,"/db/row/preview",{tableId:view.tid,pageSize:100})).body.data;
+  const viewData=(await request(runtime,"/dst/db/preview",{tableId:view.tid,pageSize:100})).body.data;
   assert.deepEqual(viewData.rows,tableRows(table).filter(row=>row.status==="active"));
-  const sample=(await request(runtime,"/db/row/sample",{dbId:source.tid,tableName:table.tableName,sampleSize:10})).body.data;
+  const sample=(await request(runtime,"/dst/db/sample",{dbId:source.tid,tableName:table.tableName,sampleSize:10})).body.data;
   assert.equal(sample.rows.length,10);
 });
 
@@ -594,10 +594,10 @@ test("字段与预览按每个表关联的数据源校验租户和角色范围",
     const {runtime}=setup(role);
     const outside=runtime.database.sources.find(row=>role==="department"?row.orgId!==runtime.session.orgId:row.createdBy!==runtime.session.userId);
     const table=runtime.database.tables.find(row=>row.datasourceId===outside.tid);
-    assert.equal((await request(runtime,"/db/field/list",{},{tid:table.tid},"GET")).status,404);
-    assert.equal((await request(runtime,"/db/row/preview",{tableId:table.tid,tenantId:outside.tenantId})).status,404);
+    assert.equal((await request(runtime,"/dst/db/fields",{},{tid:table.tid},"GET")).status,404);
+    assert.equal((await request(runtime,"/dst/db/preview",{tableId:table.tid,tenantId:outside.tenantId})).status,404);
     const foreign=createScenario("broadcasting").tables[0];
-    assert.equal((await request(runtime,"/db/row/preview",{tableId:foreign.tid})).status,404);
+    assert.equal((await request(runtime,"/dst/db/preview",{tableId:foreign.tid})).status,404);
   }
 });
 
@@ -610,14 +610,14 @@ test("模拟响应遵守已登记的分页、详情及登录结构", async () =>
   );
   const { runtime } = setup();
   for (const [operation, body] of [
-    ["POST /db/source/page", { pageSize: 20 }],
+    ["POST /dst/db/srcpage", { pageSize: 20 }],
     [
-      "POST /db/source/dept",
+      "POST /dst/db/dept",
       { mode: "cards", pageSize: 20 },
     ],
-    ["POST /db/source/detail", { tid: runtime.database.sources[0].tid }],
+    ["POST /dst/db/srcdetail", { tid: runtime.database.sources[0].tid }],
     [
-      "POST /db/source/save",
+      "POST /dst/db/srcsave",
       {
         tid: runtime.database.sources[0].tid,
         propList: { dbName: "结构校验" },

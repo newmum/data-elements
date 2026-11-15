@@ -203,7 +203,7 @@ const getTableCols = async (catalog: Record<string, any>) => {
       sourceTable?.tableNameEn,
   };
   try {
-    return (await $common.get("/db/field/list", params)) || [];
+    return (await $common.get("/dst/db/fields", params)) || [];
   } catch (error: any) {
     $message.warning(error?.message || "数据表字段加载失败");
     return [];

@@ -94,5 +94,5 @@ const releaseOlder=release;release=false;response={columns:['new_field'],columnL
 await context.actual.fetchData({pageNo:1,pageSize:20,sortField:'id',sortDir:'asc'});
 response={columns:['old_field'],columnLabels:{},total:240};releaseOlder();await older;
 assert.equal(context.state.previewCols[0].prop,'new_field');assert.equal(context.state.pageNo,1);assert.equal(context.state.loading,false);
-assert.ok(!source.includes('/db/field/list'), 'No separate metadata read per page');
+assert.ok(!source.includes('/dst/db/fields'), 'No separate metadata read per page');
 console.log('PASS: Chinese/English headers; one request for 20/100 rows; count-free Hive previous/next, size retention, last page, sorting, errors and stale same/cross-table responses');

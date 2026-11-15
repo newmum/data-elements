@@ -262,7 +262,7 @@ const updateDbData = async () => {
 
 // 更新表数据_by数据库ID
 const updateTableDataById = (dbId: string, type: "source" | "target") => {
-  $common.get("/db/schema/tables?dbId=" + dbId).then((res: any) => {
+  $common.get("/dst/db/tables?dbId=" + dbId).then((res: any) => {
     const options = res.map((item: any) => ({
       label: item.tableName,
       value: item.id,
@@ -277,7 +277,7 @@ const updateTableDataById = (dbId: string, type: "source" | "target") => {
 
 // 更新字段数据_by表ID
 const updateFieldsById = (tableId: string, type: "source" | "target") => {
-  $common.get("/db/field/list?tid=" + tableId).then((res: any) => {
+  $common.get("/dst/db/fields?tid=" + tableId).then((res: any) => {
     // 字段选项 - 用于表单下拉框
     const fieldOptions = res || [];
     const options = fieldOptions.map((item: any) => ({
@@ -358,7 +358,7 @@ const testConnection = async (id: string) => {
       ElMessage.error("请选择数据库");
       return;
     }
-    const res = await $common.post("/db/source/test", {
+    const res = await $common.post("/dst/db/srctest", {
       tid: id,
     });
     const data = res.data || res;

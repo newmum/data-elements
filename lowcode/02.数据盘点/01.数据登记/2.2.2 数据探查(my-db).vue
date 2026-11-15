@@ -684,7 +684,7 @@ const statisticsPayload = () => ({
 /** 刷新 ES 分面统计，不访问数据源主表或数据表。 */
 const loadTreeStatistics = async () => {
   const result = (await $common.post(
-    "/db/source/stats",
+    "/dst/db/stats",
     statisticsPayload()
   )) || {};
   treeStatistics.value = {
@@ -714,7 +714,7 @@ const handleAction = (type, row) => {
       state.leftLoading = true;
       Promise.all([
         $common.post("/sym/org/getOrgTree", { parentId: $user.orgRootId }),
-        $common.post("/db/source/stats", statisticsPayload()),
+        $common.post("/dst/db/stats", statisticsPayload()),
       ])
         .then(([data, countRes]) => {
           orgTreeSource.value = data || [];
@@ -812,7 +812,7 @@ const handleAction = (type, row) => {
       break;
     case "删除":
       $common.handle({
-        url: "/db/source/delete",
+        url: "/dst/db/srcdel",
         info: `是否删除该数据【${row.dbName}】`,
         data: { tid: row.tid },
         done: () => {
@@ -884,7 +884,7 @@ const fetchData = async ({ pageNo: pageNum, pageSize, sortField, sortDir }) => {
       });
     }
   }
-  const { list = [], total } = await $common.post("/db/source/page", {
+  const { list = [], total } = await $common.post("/dst/db/srcpage", {
     sortField: sortField || "updatedTime",
     sortDir: sortDir || "desc",
     pageNum,
@@ -1215,7 +1215,7 @@ const fetchCatalogPage = async ({ pageNo, pageSize,sortField,sortDir }) => {
   tableState.selection = [];
   gridRef.value?.$table?.clearSelection?.();
   try {
-    const result = await $common.get("/db/schema/tables", {
+    const result = await $common.get("/dst/db/tables", {
       dbId, catalogPaged: 1, pageNo, pageSize,sortField,sortDir, includeGovernance: false,
       catalogStatus: segment === "已登记" ? "registered" : "pending",
       tableNames: tableState.filters.tableName || "",
@@ -1361,7 +1361,7 @@ const ensureTableAssets = async (tables) => {
   const missing = (tables || []).filter((row) => !row.tid && !row.tableId);
   if (!missing.length) return tables;
 
-  const result = await $common.post("/db/table/mark", {
+  const result = await $common.post("/dst/db/mark", {
     dbId: tableState.db.tid,
     datasourceId: tableState.db.tid,
     annotated: 0,

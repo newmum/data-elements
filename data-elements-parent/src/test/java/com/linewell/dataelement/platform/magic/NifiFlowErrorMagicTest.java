@@ -48,9 +48,9 @@ import org.ssssssss.script.MagicScriptContext;
 import org.ssssssss.script.runtime.function.MagicScriptLambdaFunction;
 
 class NifiFlowErrorMagicTest {
-    private static final String ROOT = "api/10.NiFi流程接口/";
+    private static final String ROOT = "api/10.丽斐流程接口/";
     private static final String PIPELINES = ROOT;
-    private static final String HELPER = "function/01.通用函数/31.NiFi流程错误接口响应.ms";
+    private static final String HELPER = "function/01.通用函数/31.丽斐流程错误接口响应.ms";
     private static final String DSL = "{\"version\":1,\"nodes\":[],\"edges\":[]}";
     private static final String TENANT = "tenant-a";
     private static final ObjectMapper JSON = new ObjectMapper();

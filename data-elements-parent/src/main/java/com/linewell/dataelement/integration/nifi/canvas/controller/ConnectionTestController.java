@@ -458,7 +458,7 @@ public class ConnectionTestController {
         // UnsupportedOperationException.
         Map<String, Object> magicContext = new LinkedHashMap<>();
         magicContext.put("body", request);
-        Object raw = magicApiService.call("POST", "/db/source/hive", magicContext);
+        Object raw = magicApiService.call("POST", "/dst/db/hive", magicContext);
         Map<String, Object> response = asMap(unwrapMagicData(raw));
         if (response == null) {
             return ResponseEntity.ok(Map.of("success", false, "error", "华为 MRS Hive 元数据网关返回格式异常"));

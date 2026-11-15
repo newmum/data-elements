@@ -38,10 +38,10 @@ class ApiReferencesTest(unittest.TestCase):
 
     def test_regex_quotes_do_not_hide_real_vue_request(self):
         resource = {'id': 'structured', 'file': 'magic/api/columns.ms', 'method': 'POST',
-                    'route': '/db/field/read', 'section': 'api', 'script': ''}
+                    'route': '/dst/db/fieldread', 'section': 'api', 'script': ''}
         document = {'label': 'lowcode/register.vue', 'text': '''<script setup>
 const pattern = /["']/;
-request("/db/field/read");
+request("/dst/db/fieldread");
 </script>'''}
         with patch.object(audit, 'inventory', return_value=[resource]), patch.object(audit, 'corpus', return_value=[document]):
             report = audit.audit()

@@ -86,7 +86,7 @@ for(const count of [20,100]) {
   const f=fixture();f.state.respond=async()=>({tid:'source'});
   f.api.openStage({name:'登记字典表',step:2});await f.api.enterRegistration({id:'source'});
   assert.equal(f.registrations[0].registerData.currentStep,2);
-  assert.equal(f.requests.length,1);assert.equal(f.requests[0].route,'/db/source/detail');
+  assert.equal(f.requests.length,1);assert.equal(f.requests[0].route,'/dst/db/srcdetail');
   f.api.openList('未登记表',{kind:'tables',step:3});
   await f.api.enterRegistration({datasourceId:'source',annotated:0,businessType:'业务表'});assert.equal(f.registrations[1].registerData.currentStep,1);
   await f.api.enterRegistration({datasourceId:'source',annotated:1,businessType:'字典表'});assert.equal(f.registrations[2].registerData.currentStep,2);

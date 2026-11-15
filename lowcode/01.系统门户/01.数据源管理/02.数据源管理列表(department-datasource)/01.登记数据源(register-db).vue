@@ -4153,7 +4153,7 @@ const readWebServiceWsdl = async (item) => {
   apiPullReadingWsdlItemId.value = item.clientId;
   try {
     const headers = item.headerInputMode === "json" ? JSON.parse(item.requestHeadersJson || "{}") : obj(item.requestHeaders, "请求头");
-    const result = await $common.post("/db/source/test", { dbType: "api", apiProtocol: "SOAP", apiProbeAction: "wsdl", apiWsdlUrl: item.apiWsdlUrl, apiHeaders: JSON.stringify(headers), apiTimeoutSeconds: 30, ...apiPullTestAuthPayload(item) }, {}, 120000);
+    const result = await $common.post("/dst/db/srctest", { dbType: "api", apiProtocol: "SOAP", apiProbeAction: "wsdl", apiWsdlUrl: item.apiWsdlUrl, apiHeaders: JSON.stringify(headers), apiTimeoutSeconds: 30, ...apiPullTestAuthPayload(item) }, {}, 120000);
     if (!result.success || !result.metadataOnly || !Array.isArray(result.operations)) throw Error(result.error || result.message || "WSDL解析失败");
     item.apiWsdlOperations = result.operations;
     item.apiWsdlOperation = "";
@@ -4233,7 +4233,7 @@ const testApiPullItem = async (item, index) => {
       ...apiPullTestAuthPayload(item),
     };
     let res = await $common.post(
-      "/db/source/test",
+      "/dst/db/srctest",
       probePayload,
       {},
       120000,
@@ -4262,7 +4262,7 @@ const testApiPullItem = async (item, index) => {
         if (!marker.test(preview)) continue;
         try {
           const candidateRes = await $common.post(
-            "/db/source/test",
+            "/dst/db/srctest",
             {
               ...probePayload,
               apiCollectionPaths: JSON.stringify([candidatePath]),
@@ -4709,7 +4709,7 @@ const loadAccessibleDatasources = async (page = 1, keyword = datasourceList.keyw
     dbs.value = dbs.value.filter((item) => item.isDraft || item.did === currentDid.value);
   }
   try {
-    const result = await $common.postSilently("/db/source/dept", {
+    const result = await $common.postSilently("/dst/db/dept", {
       mode: "choices", pageNum: page, pageSize: DATASOURCE_LIST_PAGE_SIZE, keyword,
     });
     if (sequence !== datasourceListSequence) return;
@@ -5778,8 +5778,8 @@ const testLink = async () => {
       : connectionData;
     const res = await $common.post(
       useServerManagedMrs
-        ? "/db/source/hive"
-        : "/db/source/test",
+        ? "/dst/db/hive"
+        : "/dst/db/srctest",
       testRequest,
       {},
       120 * 1000,
@@ -5883,7 +5883,7 @@ const buildConnectionStatus = () => {
   );
 };
 const saveApi = (data) => {
-  return $common.post("/db/source/save", {
+  return $common.post("/dst/db/srcsave", {
     // A missing detail is a stale list projection, not an editable datasource.
     // Persist it as a new record in the authenticated tenant.
     tid: currentDb.value.detailMissing ? "" : currentDb.value.tid,
@@ -5968,7 +5968,7 @@ async function loadFileRegistrationRows(force = false) {
   if (state.dirty || state.loading || (state.loaded && !force)) return;
   state.loading=true;state.error="";
   try {
-    const result=await $common.post("/db/file/snapshot",{dbId:sourceId,action:"read"});
+    const result=await $common.post("/dst/db/file",{dbId:sourceId,action:"read"});
     if (String(currentDid.value)!==key || state.dirty) return;
     const payload=result?.data || result || {};
     state.rows=(payload.list || []).map(row=>({...row,id:row.tableId}));state.loaded=true;
@@ -5979,7 +5979,7 @@ async function loadFileRegistrationRows(force = false) {
 async function saveFileRegistrationRows(sourceId) {
   const state=fileRegistrationState.value;
   if (!state.rows.length) throw new Error("请先上传已填写的文件登记模板");
-  const result=await $common.post("/db/file/snapshot",{dbId:sourceId,action:"save",files:state.rows});
+  const result=await $common.post("/dst/db/file",{dbId:sourceId,action:"save",files:state.rows});
   const payload=result?.data || result || {};
   const saved={rows:(payload.list || []).map(row=>({...row,id:row.tableId})),fileName:state.fileName,loaded:true,dirty:false,loading:false,error:""};
   fileRegistrationBySource[String(currentDid.value)]=saved;
@@ -6026,7 +6026,7 @@ const persistImportedMetadataSnapshot = async (dbId, imported) => {
   )
     return null;
   const result = await $common.post(
-    "/db/schema/import",
+    "/dst/db/import",
     buildImportSnapshotPayload(dbId, imported),
     {},
     120 * 1000,
@@ -6156,7 +6156,7 @@ const loadMetadataImportResult = async (dbId) => {
   try {
     // 上报模板的导入结果在进入第二步标注前，db_table_t.annotated 仍为 0。
     // 不能使用 paged=true：该分页视图只返回已标注表，会把刚导入的快照误判成空结果。
-    const result = await $common.get("/db/schema/tables", { dbId });
+    const result = await $common.get("/dst/db/tables", { dbId });
     const rows = Array.isArray(result)
       ? result
       : result?.rows || result?.list || [];
@@ -6190,14 +6190,14 @@ const refreshSavedDatasourceMetadata = async (tid, formData) => {
     !relationalSourceTypes.includes(sourceType.value)
   ) return { metadata: {}, warning: false };
   try {
-    const metadata = await $common.getSilently("/db/schema/refresh", { tid });
+    const metadata = await $common.getSilently("/dst/db/refresh", { tid });
     return { metadata: metadata || {}, warning: false };
   } catch {
     return { metadata: {}, warning: true };
   }
 };
 const detailApi = (tid, silent = false) => {
-  return $common.post("/db/source/detail", {
+  return $common.post("/dst/db/srcdetail", {
     tid,
     silent,
   });
@@ -6240,7 +6240,7 @@ async function fetchReportFileHistory({pageNo=1,pageSize=20,sortField,sortDir}={
   const version=reportHistoryVersion;
   const current=()=>version===reportHistoryVersion&&dbId===reportHistorySourceId.value&&accessMode.value==='upload';
   try {
-    const result=await $common.post('/db/report/register',{action:'history',dbId,pageNo,pageSize,sortField,sortDir});
+    const result=await $common.post('/dst/db/register',{action:'history',dbId,pageNo,pageSize,sortField,sortDir});
     if(!current())return {list:[],total:0};
     reportHistory.total=Number(result?.total)||0;reportHistory.error='';return result;
   } catch(error) {if(!current())return {list:[],total:0};reportHistory.error='failed';throw error;}

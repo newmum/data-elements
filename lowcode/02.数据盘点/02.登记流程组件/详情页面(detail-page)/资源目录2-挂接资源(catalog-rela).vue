@@ -665,7 +665,7 @@ const loadTableFields = async () => {
 
   try {
     // 调用获取表字段的接口
-    const fieldRes = await $common.get("/db/field/list", {
+    const fieldRes = await $common.get("/dst/db/fields", {
       tid: state.tableInfo.tid,
     });
     // 将字段信息存储到状态中

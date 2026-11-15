@@ -68,7 +68,7 @@ class ConnectionTestControllerHiveTest {
         assertThat(((Map<?, ?>) columns.getLast()).get("columnName")).isEqualTo("field_81");
         @SuppressWarnings("unchecked")
         ArgumentCaptor<Map<String, Object>> context = ArgumentCaptor.captor();
-        verify(magic).call(eq("POST"), eq("/db/source/hive"), context.capture());
+        verify(magic).call(eq("POST"), eq("/dst/db/hive"), context.capture());
         assertThat(StructuredValues.objectMap(context.getValue().get("body")))
                 .containsEntry("action", "columns").containsEntry("contract", "gateway")
                 .containsEntry("database", "analytics").containsEntry("table", "EVENT_LOG");

@@ -19,7 +19,7 @@ class BusinessMagicSyntaxTest {
     private static final List<String> IDENTITY_GROUPS = List.of("api/07.系统管理", TENANT_ACCOUNTS,
             "api/09.统一身份管理", "function/13.统一身份管理");
     private static final List<String> BUSINESS_GROUPS = List.of(
-            "api/01.系统门户", "api/11.数据库资源", "api/07.系统管理/07.审批中心",
+            "api/01.系统门户", "api/02.数据盘点/02.数据库资源", "api/07.系统管理/07.审批中心",
             "api/07.系统管理/05.权限管理", "api/03.数据接入");
     private static final List<String> MULTI_VALUE_IDS = List.of(
             "e3320ec899a24426adf5f77e2dab36f9", "ods_data_agg_task_ensure_01");

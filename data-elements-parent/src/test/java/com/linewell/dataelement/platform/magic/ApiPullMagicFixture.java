@@ -13,7 +13,7 @@ final class ApiPullMagicFixture {
 
     static MagicScriptLambdaFunction definitionError() throws IOException {
         var script = MagicScript.create(CanonicalMagicSources.byPath(
-                "function/01.通用函数/21.API拉取定义校验.ms", "cd24c84c195a4320865914afd5dd4896"), null);
+                "function/01.通用函数/21.接口拉取定义校验.ms", "cd24c84c195a4320865914afd5dd4896"), null);
         return (runtime, args) -> script.execute(
                 new MagicScriptContext(Collections.singletonMap("definitions", args[0])));
     }

@@ -1079,7 +1079,7 @@ class DataAggTaskEnsureBatchMagicTest {
         var tableRead = TaskRuntimeMagicFixture.structuredReads(f.jdbc, ignored -> {});
         inputs.put("tableRead", tableRead);
         TaskRuntimeMagicFixture.bindTableFamily(inputs);
-        var classifier = MagicScript.create(CanonicalMagicSources.byPath("function/01.通用函数/08.ODS来源库分类.ms",
+        var classifier = MagicScript.create(CanonicalMagicSources.byPath("function/01.通用函数/08.接入来源库分类.ms",
                 "d2138de2de28456aa57d9ade2305eed7").replaceAll("(?m)^import [^\\r\\n]+\\R", ""), null);
         inputs.put("odsSourceClassifier", (Function<Object[], Object>) arguments -> classifier.execute(
                 new MagicScriptContext(Map.of("tableRead", tableRead, "tenantRuntime", f.scope))));

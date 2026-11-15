@@ -105,7 +105,7 @@ const fetchData = async ({ pageNo, pageSize,sortField,sortDir }) => {
     }
 
     const res = await $common.post(
-      "/db/row/preview",
+      "/dst/db/preview",
       {
         tableId,
         pageNo: page.pageNo,

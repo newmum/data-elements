@@ -88,7 +88,7 @@ watch(
 
       const tableItems = Array.isArray(props.tableFields) ? props.tableFields : [];
 
-      const res = await $common.post("/db/schema/ddl", {
+      const res = await $common.post("/dst/db/ddl", {
         propList,
         tableItems,
       });

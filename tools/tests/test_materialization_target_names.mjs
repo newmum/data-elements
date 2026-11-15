@@ -103,16 +103,16 @@ function fixture(size = 2) {
         return { data: { list, options: list.length ? [{ value: body.taskCategory === 'distribution' ? 'dept-1' : 'ODS', children: list }] : [] } };
       }
       if (route === '/ods/node/options') return {};
-      if (route === '/db/field/collect') return { data: columns };
+      if (route === '/dst/db/collect') return { data: columns };
       if (route === '/ods/job/fill') return {data:{sourcePreflight:true,valid:true,sideEffectsApplied:false,sourceTableId:body.tableId}};
-      if (route === '/db/schema/ddl' && body.partitionProbe) return {data:{source:{status:'unsupported'},targetSupport:{}}};
+      if (route === '/dst/db/ddl' && body.partitionProbe) return {data:{source:{status:'unsupported'},targetSupport:{}}};
       if (route === '/ods/target/template' || route === '/ods/target/detail') return { data: {
         propList: { sourceTableName: context.sourceTableName.value, tableName: 'ODS_SAVED_CUSTOM', dbId: [['ODS', 'db-0']],
           sourceFileConfig: context.ftpTemplate || null,
           sourceAccessMode: context.sourceMode, sourceAccessModeCode: context.sourceModeCode },
         tableItems: columns,
       } };
-      if (route === '/db/schema/ddl') return { data: { batchGenerate: true,
+      if (route === '/dst/db/ddl') return { data: { batchGenerate: true,
         results: body.targets.map(target => ({
           dbId: target.propList.dbId, requestedTableName: target.propList.tableName,
           tableName: context.renameResponse ? 'WRONG_NAME' : target.propList.tableName,
@@ -130,7 +130,7 @@ function fixture(size = 2) {
             targetDatabaseType: datasource[target.targetDbId].dbType })),
         } };
       }
-      if (route === '/db/schema/create') {
+      if (route === '/dst/db/create') {
         if (body.repairHivePartitions) {
           if (context.repairFails) throw new Error('无法补齐分区');
           context.repairedPartition = true;
@@ -276,8 +276,8 @@ multi.form.tableName = 'ODS_User_CONFIRMED';
 multi.actual.syncTargetTableNameInput(multi.form.tableName);
 await multi.actual.handleSave();
 assert.equal(multi.notices.filter(n => n.key === 'error').length, 0, JSON.stringify(multi.notices));
-const generated = multi.calls.find(c => c.route === '/db/schema/ddl' && c.body.batchGenerate).body.targets;
-const validated = multi.calls.find(c => c.route === '/db/schema/create').body.targets;
+const generated = multi.calls.find(c => c.route === '/dst/db/ddl' && c.body.batchGenerate).body.targets;
+const validated = multi.calls.find(c => c.route === '/dst/db/create').body.targets;
 const saveRequests = multi.calls.filter(c => c.route === '/ods/target/create' && !c.body.dryRun);
 assert.equal(saveRequests.length, 1);
 const saved = saveRequests[0].body.targets;
@@ -322,7 +322,7 @@ const reuseSubmissions = existingHive.calls.filter(c => c.route === '/ods/target
 assert.equal(reuseSubmissions.length, 1);
 assert.ok(reuseSubmissions[0].body.targets.every(target => target.reuseExistingTable === true));
 assert.equal(existingHive.calls.filter(c => c.route === '/ods/job/reset' && !c.body.dryRun).length, 0);
-assert.equal(existingHive.calls.filter(c=>c.route==='/db/schema/create' && c.body.batchReuseValidation).length,1);
+assert.equal(existingHive.calls.filter(c=>c.route==='/dst/db/create' && c.body.batchReuseValidation).length,1);
 assert.equal(existingHive.calls.find(c=>c.route==='user-confirm').canReuse,true,'Physical table without registration can be adopted');
 assert.equal(existingHive.emitted.length, 1);
 assert.ok(existingHive.notices.some(notice => notice.key === 'info' && notice.message.includes('沿用现有文本类型')));
@@ -563,7 +563,7 @@ for (const fields of [20, 100]) {
   await f.actual.handleSave();
   assert.deepEqual(f.emitted.at(-1)[1].sourceFileConfig, f.context.ftpTemplate);
   assert.equal(f.calls.filter(c => c.route === '/ods/target/template').length, 1);
-  assert.equal(f.calls.filter(c => c.route === '/db/field/collect').length, 0);
+  assert.equal(f.calls.filter(c => c.route === '/dst/db/collect').length, 0);
   ftpRequestCounts.push({ fields, initialRequests: before, saveRequests: f.calls.length - before });
 }
 assert.equal(ftpRequestCounts[0].saveRequests, ftpRequestCounts[1].saveRequests);

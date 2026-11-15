@@ -120,7 +120,7 @@
 // 接口：01.数据字典查询
 // 路由：GET /sym/dict
 // 业务说明：数据字典查询（GET /sym/dict），只读接口。code=db 从 db_datasource_t 的 Elasticsearch 查询投影读取数据源，code=app 从应用系统投影读取并按当前登录部门过滤，code=catalog 读取目录资产；其他编码读取 sym_dict_t。请求示例：code=db；涉及 sym_application_t 等业务表。
-import "@post:/db/source/list" as databaseList;
+import "@post:/dst/db/srclist" as databaseList;
 import "@post:/dst/catalog/list" as assetList;
 import "@post:/sym/org/getOrgTree" as ssoOrg;
 import "@post:/sym/getDict" as getDict;

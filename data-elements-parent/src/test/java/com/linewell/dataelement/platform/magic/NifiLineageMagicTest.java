@@ -41,7 +41,7 @@ import org.ssssssss.script.MagicScript;
 import org.ssssssss.script.MagicScriptContext;
 
 class NifiLineageMagicTest {
-    private static final String ROUTE = "api/10.NiFi流程接口/08.节点运行/01.查询节点血缘.ms";
+    private static final String ROUTE = "api/10.丽斐流程接口/08.节点运行/01.查询节点血缘.ms";
     private static final String RESOURCE_ID = "0a119f2475974554a8b3547dd70febf0";
     private static final String DSL = "{\"version\":1,\"nodes\":[],\"edges\":[]}";
     private static final String MAPPING = """

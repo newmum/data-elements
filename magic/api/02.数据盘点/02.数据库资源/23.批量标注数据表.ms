@@ -1,0 +1,524 @@
+{
+  "properties": {},
+  "id": "db_table_batch_annotate_01",
+  "script": null,
+  "groupId": "datapd_database_group_01",
+  "name": "23.批量标注数据表",
+  "createTime": null,
+  "updateTime": 1787153759223,
+  "lock": null,
+  "createBy": null,
+  "updateBy": null,
+  "path": "/mark",
+  "method": "POST",
+  "parameters": [],
+  "options": [],
+  "requestBody": "{\n  \"dbId\": \"4b5d9992d89744b9b514f8905dc27998\",\n  \"annotated\": 1,\n  \"dryRun\": true,\n  \"refreshDatasource\": false,\n  \"tables\": [\n    {\n      \"tid\": \"076de72a58024af2aad48c5261df440e\",\n      \"propList\": {\n        \"tableName\": \"police_case_record\",\n        \"tableNameCn\": \"公安案件登记业务表\",\n        \"tableComment\": \"公安案件登记业务表\",\n        \"tableType\": \"数据表\",\n        \"businessType\": \"业务表\",\n        \"businessTypeReason\": \"人工批量标注业务类型\",\n        \"fieldCount\": 10,\n        \"recordCount\": 0\n      }\n    }\n  ]\n}",
+  "headers": [],
+  "paths": [],
+  "responseBody": null,
+  "description": "批量标注数据表（POST /dst/db/mark）。整批已有表通常预读一次，同名候选量较大时按表 ID 分窗读取。缺少可用同源显式 ID 且名称回退命中多条活动表时，返回 409 并拒绝整批。批量保存表及字段，使用一次 bulk 同步当前分片的 dataassets ES 投影。refreshDatasource=false 可延迟数据源统计刷新；dryRun=true 时仅校验和预览。使用请求参数 tables、rows、list、datasourceId、dbId、annotated、dryRun、refreshDatasource。",
+  "requestBodyDefinition": null,
+  "responseBodyDefinition": null
+}
+================================
+import cn.hutool.core.util.IdUtil
+import com.linewell.dataelement.elasticsearch.EsCommonService as esCommonService
+import jsons
+import log
+import metadataAsset
+import tableRead
+import tenantRuntime
+import '@post:/dst/maintenance/batchRefresh' as refreshAssetIndex
+
+// POST /dst/db/mark 批量标注数据表。
+/**
+ * 批量标注数据表（POST /dst/db/mark）。
+ * 接收当前租户内最多 100 张表，按显式 ID 优先、同数据源活动表名回退，返回标注结果和预读次数。
+ * 显式 ID 与数据源不匹配时拒绝整批，名称回退匹配到多条活动记录时返回冲突。
+ * dryRun 仅校验和预览。正式提交保存表及字段，并批量同步搜索投影，可由客户端延迟刷新数据源统计。
+ */
+
+var textOf = (value) => value == null ? null : value + ''
+var blank = (value) => value == null || textOf(value).trim() == ''
+var newId = () => IdUtil.getSnowflakeNextIdStr()
+var nowTime = () => new Date()
+var rowValue = (row, keys) => {
+    if (row == null) {
+        return null
+    }
+    for (key in keys) {
+        var value = row instanceof Map ? row.get(key) : row[key]
+        if (value != null) {
+            return value
+        }
+    }
+    return null
+}
+var normalizeKey = (value) => blank(value) ? '' : textOf(value).trim().toLowerCase()
+var requiresStandardName = (businessType) => {
+    var type = blank(businessType) ? '业务表' : textOf(businessType).trim()
+    return type == '字典表' || type == '业务表' || type == '日志表'
+}
+var syncGovernanceBusinessType = (existing, businessType) => {
+    var raw = rowValue(existing, ['fieldGovernanceConfig', 'field_governance_config'])
+    if (blank(raw) || blank(businessType)) {
+        return raw
+    }
+    try {
+        var config = jsons.toJSONObject(textOf(raw))
+        config.businessType = businessType
+        return jsons.toJSONStr(config)
+    } catch (e) {
+        log.warn('sync field_governance_config businessType failed, tableId: {}, error: {}', rowValue(existing, ['tid']), e.message)
+        return raw
+    }
+}
+
+// 解析请求体：tables/rows/list 兼容前端不同命名，annotated 默认按批量标注处理。
+var tableItems = body == null ? null : (body.tables == null ? (body.rows == null ? body.list : body.rows) : body.tables)
+if (tableItems == null || tableItems.size() == 0) {
+    exit 400, 'tables 不能为空'
+}
+if (tableItems.size() > 100) { exit 400, '单次最多标注 100 张表' }
+var requestDatasourceId = body == null ? null : (body.datasourceId == null ? body.dbId : body.datasourceId)
+var requestAnnotated = body == null || body.annotated == null ? 1 : body.annotated
+var annotatedFlag = textOf(requestAnnotated) == '0' ? 0 : 1
+var dryRun = body != null && body.dryRun == true
+var refreshDatasource = body == null || body.refreshDatasource != false
+var tenantId = tenantRuntime.id()
+if (blank(tenantId)) { exit 401, '缺少当前租户上下文' }
+
+// 先完成整批参数校验，避免第 N 条业务参数错误时前 N-1 条已经落库。
+var preparedItems = []
+for (item in tableItems) {
+    var props = rowValue(item, ['propList', 'props'])
+    if (props == null) {
+        props = item
+    }
+    var datasourceId = rowValue(props, ['datasourceId', 'dbId'])
+    if (blank(datasourceId)) {
+        datasourceId = requestDatasourceId
+    }
+    if (blank(datasourceId)) {
+        exit 400, 'datasourceId 不能为空'
+    }
+    var tableName = rowValue(props, ['tableName', 'tableNameEn', 'sourceTableName'])
+    if (blank(tableName)) {
+        exit 400, 'tableName 不能为空'
+    }
+    var tableComment = rowValue(props, ['tableComment', 'tableNameCn', 'catalogName'])
+    var businessType = rowValue(props, ['businessType', 'business_type'])
+    if (annotatedFlag == 1 && requiresStandardName(businessType)
+        && (blank(tableComment) || normalizeKey(tableComment) == normalizeKey(tableName))) {
+        exit 400, tableName + ' 请规范填写数据资源名称，不能留空或直接使用英文表名'
+    }
+    preparedItems.add({
+        item: item,
+        props: props,
+        datasourceId: datasourceId,
+        tableName: tableName,
+        tableComment: tableComment
+    })
+}
+
+// 整批预取来源、现有表和字段；循环中只读内存，不逐表或逐数据源补查。
+var batchSourceIds = []
+var requestedTableIds = []
+var requestedNamesBySource = {}
+for (prepared in preparedItems) {
+    var sourceId = textOf(prepared.datasourceId)
+    if (requestedNamesBySource[sourceId] == null) {
+        batchSourceIds.add(sourceId)
+        requestedNamesBySource[sourceId] = []
+    }
+    var requestedId = rowValue(prepared.item, ['tid', 'tableId', 'id'])
+    if (blank(requestedId)) { requestedId = rowValue(prepared.props, ['tid', 'tableId', 'id']) }
+    if (!blank(requestedId) && !requestedTableIds.contains(textOf(requestedId))) { requestedTableIds.add(textOf(requestedId)) }
+    var nameKey = normalizeKey(prepared.tableName)
+    var sourceNames = requestedNamesBySource[sourceId]
+    if (!sourceNames.contains(nameKey)) { sourceNames.add(nameKey) }
+}
+var sources = db.table('db_datasource_t').where().in('tid', batchSourceIds)
+    .eq('tenant_id', tenantId).eq('is_del', 0).select()
+var visibleSources = (sources)
+var visibleSourceIds = []
+for (source in visibleSources) { visibleSourceIds.add(textOf(rowValue(source, ['tid']))) }
+for (sourceId in batchSourceIds) {
+    if (!visibleSourceIds.contains(sourceId)) { exit 403, '数据源不存在或不在当前租户内' }
+}
+
+var existingColumn = (name, kind) => tableRead.column('existing_table', name, kind)
+var existingIdColumn = existingColumn('tid', 'TEXT')
+var existingSourceColumn = existingColumn('datasource_id', 'TEXT')
+var existingNameColumn = existingColumn('table_name', 'TEXT')
+var existingDeletedColumn = existingColumn('is_del', 'NUMBER')
+var normalizedNameColumn = tableRead.lower(existingNameColumn)
+var sourceNameMatches = []
+for (sourceId in batchSourceIds) {
+    sourceNameMatches.add(tableRead.all([
+        tableRead.equal(existingSourceColumn, sourceId),
+        tableRead.in(normalizedNameColumn, requestedNamesBySource[sourceId])
+    ]))
+}
+// 显式 ID 独立于来源和删除状态查询，才能识别错配并保留同源历史记录。
+var existingMatches = tableRead.any([
+    tableRead.in(existingIdColumn, requestedTableIds),
+    tableRead.all([tableRead.equal(existingDeletedColumn, 0), tableRead.any(sourceNameMatches)])
+])
+var existingProjection = {
+    tid: existingIdColumn,
+    datasource_id: existingSourceColumn,
+    table_name: existingNameColumn,
+    is_del: existingDeletedColumn,
+    table_name_cn: existingColumn('table_name_cn', 'TEXT'),
+    table_type: existingColumn('table_type', 'TEXT'),
+    business_type: existingColumn('business_type', 'TEXT'),
+    business_type_reason: existingColumn('business_type_reason', 'TEXT'),
+    record_count: existingColumn('record_count', 'NUMBER'),
+    field_count: existingColumn('field_count', 'NUMBER'),
+    storage_size: existingColumn('storage_size', 'TEXT'),
+    total_size_formatted: existingColumn('total_size_formatted', 'TEXT'),
+    total_size_bytes: existingColumn('total_size_bytes', 'NUMBER'),
+    org_id: existingColumn('org_id', 'TEXT'),
+    org_path: existingColumn('org_path', 'LOB'),
+    related_directory: existingColumn('related_directory', 'TEXT'),
+    data_source_type: existingColumn('data_source_type', 'TEXT'),
+    field_governance_config: existingColumn('field_governance_config', 'LOB')
+}
+var existingCache = {}
+var existingQueryCount = 0
+var requestedIdSource = {}
+for (sourceId in batchSourceIds) {
+    existingCache[sourceId] = {byId: {}, byName: {}, ambiguousNames: {}}
+}
+var lastExistingId = null
+var hasMoreExistingRows = true
+var existingWindowSize = 1000
+while (hasMoreExistingRows) {
+    // 常规批次只读一窗，历史同名较多时以唯一表 ID 续读，不截断候选。
+    var query = tableRead.from('db_table_t', 'existing_table', tenantId)
+    query.where(existingMatches)
+    if (lastExistingId != null) {
+        query.where(tableRead.greaterThan(existingIdColumn, lastExistingId))
+    }
+    var existingRows = query.rows(existingProjection, existingIdColumn, 'asc', existingWindowSize)
+    existingQueryCount++
+    for (existingRow in existingRows) {
+        var existingId = textOf(existingRow.tid)
+        var sourceKey = textOf(existingRow.datasource_id)
+        if (!visibleSourceIds.contains(sourceKey)) { exit 403, '数据表不在本批次获授权的数据源内' }
+        var maps = existingCache[sourceKey]
+        if (requestedTableIds.contains(existingId)) {
+            maps.byId[existingId] = existingRow
+            requestedIdSource[existingId] = sourceKey
+        }
+        // 数据库排序规则可能宽于 Magic 规范化，只缓存精确请求的名称键。
+        var nameKey = normalizeKey(existingRow.table_name)
+        if (textOf(existingRow.is_del) == '0' && requestedNamesBySource[sourceKey].contains(nameKey)) {
+            if (maps.byName[nameKey] == null) {
+                maps.byName[nameKey] = existingRow
+            } else if (textOf(maps.byName[nameKey].tid) != existingId) {
+                maps.ambiguousNames[nameKey] = true
+            }
+        }
+    }
+    hasMoreExistingRows = existingRows.size() == existingWindowSize
+    if (hasMoreExistingRows) {
+        lastExistingId = existingRows[existingRows.size() - 1].tid
+    }
+}
+var existingMapsOf = (datasourceId) => existingCache[textOf(datasourceId)]
+var resolvedTableIds = []
+var ambiguousTableName = null
+for (prepared in preparedItems) {
+    var requestedId = rowValue(prepared.item, ['tid', 'tableId', 'id'])
+    if (blank(requestedId)) { requestedId = rowValue(prepared.props, ['tid', 'tableId', 'id']) }
+    if (!blank(requestedId) && requestedIdSource[textOf(requestedId)] != null
+        && requestedIdSource[textOf(requestedId)] != textOf(prepared.datasourceId)) {
+        exit 403, '数据表与提交的数据源不匹配'
+    }
+    var maps = existingMapsOf(prepared.datasourceId)
+    var existing = blank(requestedId) ? null : maps.byId[textOf(requestedId)]
+    if (existing == null) {
+        var nameKey = normalizeKey(prepared.tableName)
+        if (maps.ambiguousNames[nameKey] == true) {
+            if (ambiguousTableName == null) { ambiguousTableName = prepared.tableName }
+            continue
+        }
+        existing = maps.byName[nameKey]
+    }
+    if (existing != null) {
+        var resolvedId = textOf(rowValue(existing, ['tid']))
+        if (!resolvedTableIds.contains(resolvedId)) { resolvedTableIds.add(resolvedId) }
+    }
+}
+// 保留跨来源 ID 错误优先级，整批校验后才读取旧字段或写入。
+if (ambiguousTableName != null) {
+    exit 409, ambiguousTableName + ' 匹配多条活动数据表，请指定表 ID'
+}
+var oldColumnsByTable = {}
+if (resolvedTableIds.size() > 0 && annotatedFlag == 1) {
+    var oldColumns = db.table('db_table_column_t').where().in('table_id', resolvedTableIds)
+        .eq('tenant_id', tenantId).eq('is_del', 0).select()
+    for (oldColumn in oldColumns) {
+        var parentId = textOf(rowValue(oldColumn, ['tableId', 'table_id']))
+        if (oldColumnsByTable[parentId] == null) { oldColumnsByTable[parentId] = {} }
+        oldColumnsByTable[parentId][normalizeKey(rowValue(oldColumn, ['columnName', 'column_name']))] = oldColumn
+    }
+}
+var saveColumns = (tableId, columns, tenantId) => {
+    if (columns == null || columns.size() == 0) {
+        return 0
+    }
+    var oldMap = oldColumnsByTable[textOf(tableId)]
+    if (oldMap == null) { oldMap = {} }
+    var ordinal = 0
+    var newRows = []
+    for (column in columns) {
+        ordinal = ordinal + 1
+        var columnName = rowValue(column, ['columnName', 'name'])
+        if (blank(columnName)) {
+            continue
+        }
+        var old = oldMap[normalizeKey(columnName)]
+        var columnId = old == null ? newId() : rowValue(old, ['tid'])
+        var values = {
+            tid: columnId,
+            table_id: tableId,
+            tenant_id: tenantId,
+            column_name: columnName,
+            column_comment: old == null ? rowValue(column, ['columnComment']) : rowValue(old, ['columnComment', 'column_comment']),
+            data_type: rowValue(column, ['dataType']),
+            column_type: rowValue(column, ['columnType', 'dataType']),
+            length: rowValue(column, ['length', 'columnLength']),
+            precision_length: rowValue(column, ['precision']),
+            scale: rowValue(column, ['scale']),
+            nullable: rowValue(column, ['nullable']) == false ? 0 : 1,
+            default_value: rowValue(column, ['defaultValue']),
+            primary_key: rowValue(column, ['primaryKey']) == true ? 1 : 0,
+            auto_increment: rowValue(column, ['autoIncrement']) == true ? 1 : 0,
+            is_unique: rowValue(column, ['unique']) == true ? 1 : 0,
+            indexed: rowValue(column, ['indexed']) == true ? 1 : 0,
+            ordinal_position: rowValue(column, ['ordinalPosition']) == null ? ordinal : rowValue(column, ['ordinalPosition']),
+            charset: rowValue(column, ['charset']),
+            collation: rowValue(column, ['collation']),
+            extra: rowValue(column, ['extra']),
+            is_del: 0,
+            updated_time: now
+        }
+        if (old == null) {
+            values.created_time = now
+            newRows.add(values)
+        } else {
+            db.table('db_table_column_t').primary('tid').update(values, true)
+        }
+    }
+    if (newRows.size() > 0) {
+        metadataAsset.batchInsertTableColumns(newRows)
+    }
+    return columns.size()
+}
+
+var resultRows = []
+var esIds = []
+var esDocs = []
+var affected = 0
+var now = nowTime()
+
+for (prepared in preparedItems) {
+    var item = prepared.item
+    var props = prepared.props
+    var datasourceId = prepared.datasourceId
+    var tableName = prepared.tableName
+    var tableComment = prepared.tableComment
+    var tableId = rowValue(item, ['tid', 'tableId', 'id'])
+    if (blank(tableId)) {
+        tableId = rowValue(props, ['tid', 'tableId', 'id'])
+    }
+
+    var existingMaps = existingMapsOf(datasourceId)
+    var existing = blank(tableId) ? null : existingMaps.byId[textOf(tableId)]
+    if (existing == null) {
+        existing = existingMaps.byName[normalizeKey(tableName)]
+    }
+    if (existing != null) {
+        tableId = rowValue(existing, ['tid'])
+    }
+    if (blank(tableId)) {
+        tableId = newId()
+    }
+
+    var valueOrExisting = (propKeys, existingKeys) => {
+        var value = rowValue(props, propKeys)
+        if (value == null && existing != null) {
+            value = rowValue(existing, existingKeys)
+        }
+        return value
+    }
+
+    // 组装 db_table_t 主表字段：保持与单表 saveOrUpdate 字段一致。
+    var values = {
+        tid: tableId,
+        datasource_id: datasourceId,
+        table_name: tableName,
+        table_name_en: tableName,
+        table_name_cn: valueOrExisting(['tableNameCn', 'tableComment', 'catalogName'], ['tableNameCn', 'table_name_cn']),
+        table_comment: tableComment,
+        table_type: valueOrExisting(['tableType'], ['tableType', 'table_type']),
+        business_type: valueOrExisting(['businessType'], ['businessType', 'business_type']),
+        business_type_reason: valueOrExisting(['businessTypeReason'], ['businessTypeReason', 'business_type_reason']),
+        annotated: annotatedFlag,
+        record_count: valueOrExisting(['recordCount'], ['recordCount', 'record_count']),
+        field_count: valueOrExisting(['fieldCount'], ['fieldCount', 'field_count']),
+        storage_size: valueOrExisting(['storageSize'], ['storageSize', 'storage_size']),
+        total_size_formatted: valueOrExisting(['totalSizeFormatted', 'storageSize'], ['totalSizeFormatted', 'total_size_formatted']),
+        total_size_bytes: valueOrExisting(['totalSizeBytes', 'totalSizeBytes_num'], ['totalSizeBytes', 'total_size_bytes']),
+        org_id: valueOrExisting(['orgId'], ['orgId', 'org_id']),
+        org_path: valueOrExisting(['orgPath'], ['orgPath', 'org_path']),
+        related_directory: valueOrExisting(['relatedDirectory'], ['relatedDirectory', 'related_directory']),
+        data_source_type: valueOrExisting(['dataSourceType'], ['dataSourceType', 'data_source_type']),
+        source_table_id: tableId,
+        source_table_name: tableName,
+        manage_unit: rowValue(props, ['manageUnit', 'orgId']),
+        asset_desc: rowValue(props, ['assetDesc', 'tableComment']),
+        field_governance_config: syncGovernanceBusinessType(existing, valueOrExisting(['businessType'], ['businessType', 'business_type'])),
+        tenant_id: tenantId,
+        asset_status: 0,
+        flow_status: 0,
+        flow_order_id: null,
+        is_del: 0,
+        updated_time: now
+    }
+
+    if (!dryRun) {
+        if (existing == null) {
+            values.created_time = now
+            values.reg_time = now
+            db.table('db_table_t').primary('tid').insert(values)
+        } else if (annotatedFlag == 0) {
+            // “暂不处理”仍属于用户已确认的分类决定：保留在未标注列表，
+            // 但必须持久化 business_type 和原因，返回上一步时不能再次被物理表名自动分类覆盖。
+            // 不重写字段快照，避免暂不处理动作覆盖后续步骤登记的字段配置。
+            db.table('db_table_t').primary('tid').update({
+                tid: tableId,
+                business_type: values.business_type,
+                business_type_reason: values.business_type_reason,
+                annotated: 0,
+                asset_status: 0,
+                flow_status: 0,
+                updated_time: now
+            }, true)
+        } else {
+            db.table('db_table_t').primary('tid').update(values, true)
+        }
+        affected = affected + 1
+        existingMaps.byId[textOf(tableId)] = values
+        existingMaps.byName[normalizeKey(tableName)] = values
+        if (annotatedFlag == 1) {
+            saveColumns(tableId, rowValue(props, ['columns']), values.tenant_id)
+        }
+
+        // 先收集轻量搜索文档，整批主表写完后统一调用一次 ES bulk。
+        var doc = {
+            tid: tableId,
+            id: tableId,
+            assetType: 'table',
+            dbId: datasourceId,
+            datasourceId: datasourceId,
+            tableName: tableName,
+            tableNameEn: tableName,
+            tableNameCn: values.table_name_cn,
+            tableComment: tableComment,
+            tableType: values.table_type,
+            businessType: values.business_type,
+            businessTypeReason: values.business_type_reason,
+            annotated: annotatedFlag,
+            recordCount: values.record_count,
+            fieldCount: values.field_count,
+            storageSize: values.storage_size,
+            orgId: values.org_id,
+            orgPath: values.org_path,
+            dataSourceType: values.data_source_type,
+            assetStatus: 0,
+            flowStatus: 0,
+            tenantId: tenantId,
+            updatedTime: textOf(now)
+        }
+        var excludedIndexProps = {
+            fieldGovernanceConfig: true,
+            dictionaryProfiles: true,
+            dictionaryProfile: true,
+            dictionaryCategories: true,
+            columns: true
+        }
+        for (key in props.keySet()) {
+            if (excludedIndexProps[key] == null) {
+                doc[key] = props[key]
+            }
+        }
+        esIds.add(textOf(tableId))
+        esDocs.add(doc)
+    }
+
+    resultRows.add({
+        tid: tableId,
+        id: tableId,
+        datasourceId: datasourceId,
+        dbId: datasourceId,
+        tableName: tableName,
+        tableNameEn: tableName,
+        tableNameCn: values.table_name_cn,
+        tableComment: tableComment,
+        tableType: values.table_type,
+        businessType: values.business_type,
+        businessTypeReason: values.business_type_reason,
+        annotated: annotatedFlag,
+        fieldCount: values.field_count,
+        recordCount: values.record_count
+    })
+}
+
+var esSynced = dryRun || esDocs.size() == 0
+var esError = null
+if (!dryRun && esDocs.size() > 0) {
+    try {
+        // 使用显式 ID 的 bulk index 作为 upsert：历史表可能尚未进入 ES，partial update
+        // 会因 _doc 不存在而失败。主表已先成功落库，投影同步必须能创建缺失文档。
+        // dataassets 同时承载 app/db/table/catalog 等多类文档，不能用单个表文档反推整个索引 mapping。
+        esCommonService.bulkSaveWithIds('dataassets', esIds, esDocs)
+        esSynced = true
+    } catch (e) {
+        esError = e.message
+        log.warn('批量标注同步数据表 ES 失败, count: {}, error: {}', esDocs.size(), e.message)
+    }
+}
+
+if (!dryRun) {
+    var statusSourceIds = []
+    for (statusRow in resultRows) {
+        var statusSourceId = textOf(statusRow.datasourceId)
+        if (!blank(statusSourceId) && !statusSourceIds.contains(statusSourceId)) { statusSourceIds.add(statusSourceId) }
+    }
+    metadataAsset.refreshRegistrationStatuses(statusSourceIds)
+}
+
+if (!dryRun && refreshDatasource) {
+    try {
+        body = { tids: batchSourceIds, assetType: ['db'], purgeStale: false }
+        refreshAssetIndex()
+    } catch (e) {
+        log.warn('sync datasource ES stats failed, count: {}, error: {}', batchSourceIds.size(), e.message)
+    }
+}
+
+return {
+    affected: affected,
+    total: tableItems.size(),
+    dryRun: dryRun,
+    existingQueryCount: existingQueryCount,
+    esSynced: esSynced,
+    esError: esError,
+    refreshDatasource: refreshDatasource,
+    rows: resultRows
+}

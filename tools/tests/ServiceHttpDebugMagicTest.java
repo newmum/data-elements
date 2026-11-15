@@ -40,8 +40,8 @@ public class ServiceHttpDebugMagicTest {
     }
 
     public static void main(String[] args) throws Exception {
-        String requestScript = script(FUNCTIONS.resolve("13.执行服务HTTP请求.ms"));
-        String previewScript = script(FUNCTIONS.resolve("14.脱敏服务HTTP结果.ms"));
+        String requestScript = script(FUNCTIONS.resolve("13.执行服务超文本请求.ms"));
+        String previewScript = script(FUNCTIONS.resolve("14.脱敏服务超文本结果.ms"));
         MagicScript.create(requestScript, null).compile();
         MagicScript.create(previewScript, null).compile();
         var calls = new AtomicInteger();

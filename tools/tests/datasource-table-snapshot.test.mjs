@@ -25,8 +25,8 @@ function fixture(count) {
     ElMessageBox:{confirm: async() => {if(!confirm)throw new Error('cancel');}},
     $message:Object.fromEntries(['success','info','error'].map(key => [key, message => notices.push({key,message})])),
     setTimeout:fn => {const id=++nextTimer;timers.set(id,fn);return id;}, clearTimeout:id => timers.delete(id),
-    $common:{get:async(route,body)=>{calls.push({route,body});if(route.endsWith('/collection/status'))return {status,progressPercent:45};if(route==='/db/schema/tables')return {rows,total:count,snapshotTotal:count,businessStats:{业务表:count}};if(route==='/db/field/list')return fields;throw new Error(route);},
-      post:async(route,body)=>{calls.push({route,body});if(route==='/db/source/detail')return source;if(route.endsWith('/collection/start')){status='RUNNING';return {status,jobId:'job'};}if(route==='/db/row/sample')return {columnNames:['id'],columnTypes:['bigint'],data:[{id:12}]};if(route==='/db/table/delete')return {deleted:true};throw new Error(route);}},
+    $common:{get:async(route,body)=>{calls.push({route,body});if(route.endsWith('/collection/status'))return {status,progressPercent:45};if(route==='/dst/db/tables')return {rows,total:count,snapshotTotal:count,businessStats:{业务表:count}};if(route==='/dst/db/fields')return fields;throw new Error(route);},
+      post:async(route,body)=>{calls.push({route,body});if(route==='/dst/db/srcdetail')return source;if(route.endsWith('/collection/start')){status='RUNNING';return {status,jobId:'job'};}if(route==='/dst/db/sample')return {columnNames:['id'],columnTypes:['bigint'],data:[{id:12}]};if(route==='/dst/db/tbldel')return {deleted:true};throw new Error(route);}},
   });
   vm.runInContext(`${script}\nthis.api={state,fetchData,tableRef,startCollection,openDbTableRegistration,openTablePreview,changePreviewMode,deleteTableSnapshot,initialize,stopPolling,readCollectionStatus};`, context);
   context.api.tableRef.value={refresh:()=>{refreshes++;}};
@@ -40,9 +40,9 @@ for(const count of [20,100]) {
   const f=fixture(count); await f.ready();
   const result=await f.context.api.fetchData({pageNo:1,pageSize:count});
   assert.equal(result.list.length,count); assert.equal(f.calls.length,3,'one source, one job status and one paged snapshot request');
-  assert.equal(f.calls.filter(c=>c.route==='/db/source/detail').length,1);
-  assert.ok(f.calls.every(c=>c.route!=='/db/schema/scan'&&!c.route.includes('nifi')&&!c.route.endsWith('/collection/start')));
-  const pageRead=f.calls.find(c=>c.route==='/db/schema/tables');
+  assert.equal(f.calls.filter(c=>c.route==='/dst/db/srcdetail').length,1);
+  assert.ok(f.calls.every(c=>c.route!=='/dst/db/scan'&&!c.route.includes('nifi')&&!c.route.endsWith('/collection/start')));
+  const pageRead=f.calls.find(c=>c.route==='/dst/db/tables');
   assert.equal(pageRead.body.allSnapshots,true);assert.equal(pageRead.body.includeGovernance,false);
   await f.context.api.fetchData({pageNo:2,pageSize:20});assert.equal(f.calls.length,4,'paging reads only the current snapshot page');
   await f.context.api.openDbTableRegistration();

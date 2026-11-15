@@ -159,7 +159,7 @@ class NifiCatalogTaskAssociationMagicTest {
                 table.column("updated_by", "must-not-overwrite");
             }));
             db.setSqlInterceptors(List.of());
-            String canonical = CanonicalMagicSources.byPath("function/01.通用函数/27.NiFi画布接入任务关联.ms",
+            String canonical = CanonicalMagicSources.byPath("function/01.通用函数/27.丽斐画布接入任务关联.ms",
                     "fbbbebbeee9346e1813e9b1bf635eb09");
             MagicScript.create(canonical, null).compile();
             var task = MagicScript.create(canonical.replaceAll("(?m)^import (tenantRuntime|tableRead|tableWrite)\\R", ""), null);

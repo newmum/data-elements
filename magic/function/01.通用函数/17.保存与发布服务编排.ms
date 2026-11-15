@@ -86,9 +86,14 @@ if (nodeId != 'local_magic_api' && (node == null || (node.localNode || node.loca
 }
 // 由服务端固定生成入口，草稿图和客户端脚本都不能改变认证边界。
 var route = '/services/'+ctx.service.tid
-var entry = {flowId:flowId,name:'HTTP服务_'+ctx.service.tid,description:'HTTP服务编排发布入口',
+var serviceName = text(ctx.service.serviceName || ctx.service.service_name)
+var displayName = serviceName.replaceAll('[^\\p{IsHan}]', '')
+if (displayName == '') { displayName = '超文本服务' }
+if (displayName.length() > 32) { displayName = displayName.substring(0,32) }
+var entry = {flowId:flowId,name:displayName+'发布入口',description:'超文本服务编排发布入口',
     nodes:[{type:'trigger',data:{method:plan.method,path:route,auth:{required:true}}}]}
 var script = "import '@/common/serviceFlowManage' as manage\n"
+    + "// 读取当前租户的已发布编排版本并处理请求。\n"
     + "return manage({action:'invoke',flowId:'"+flowId+"',body:body || parameter || {}})\n"
 var published = null
 db.transaction(()=>{

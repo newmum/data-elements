@@ -94,9 +94,9 @@ function useActualProxySummary({ scope, summaryRequests }) {
   };
 }
 
-const sourceDetail = "/db/source/detail";
+const sourceDetail = "/dst/db/srcdetail";
 const serviceList = "/dws/flowserve/gateway/api/list";
-const completionUrl = "/db/source/save";
+const completionUrl = "/dst/db/srcsave";
 const unfilteredQuery = { datasourceId: "source-a", pageNum: 1, pageSize: 1, keyword: "" };
 
 test("completion verifies actual services before saving even when the list has no visible matches", async () => {
@@ -204,7 +204,7 @@ test("proxy review loads only the authorized source detail and never requests ta
   vm.createContext(scope);
   vm.runInContext(`${declaration(review, "isProxyAccessSource")}\n${declaration(review, "refreshReviewSummary")}\nthis.refresh = refreshReviewSummary;`, scope);
   await scope.refresh("source-a", 1, true);
-  assert.deepEqual(requests, ["/db/source/detail"]);
+  assert.deepEqual(requests, ["/dst/db/srcdetail"]);
   assert.equal(scope.sourceDetail.value.tid, "source-a");
   assert.equal(scope.sourceDetailLoading.value, false);
   assert.equal(scope.tableListLoading.value, false);

@@ -246,7 +246,7 @@ const loadInitialDetail = (assetType: string, assetId: string) => {
     return $common.post("/dst/application/detail", { tid: assetId });
   }
   if (assetType === "db") {
-    return $common.post("/db/source/detail", { tid: assetId });
+    return $common.post("/dst/db/srcdetail", { tid: assetId });
   }
   if (assetType === "catalog" || assetType === "fileCatalog") {
     return $common.post("/dst/catalog/detail", { tid: assetId });

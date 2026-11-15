@@ -106,12 +106,12 @@ python tools/export-mock-config.py --with-structure --check
 | --- | --- | --- |
 | 当前租户 | `GET /portal/sso/session` | 当前模拟会话租户 |
 | 组织树 | `POST /sym/org/getOrgTree` | 实际机构层级 |
-| 组织下的数据源 | `POST /db/source/stats` | `mode=tree`，复用 `orgApps/datasources`，风驰展示时省去应用层 |
-| 数据源详情 | `POST /db/source/detail` | `tid`，复用数据源名称和数据库名 |
-| 表／视图目录 | `GET /db/schema/tables` | `dbId`，保留同一表 ID 和对象类型 |
-| 字段结构 | `GET /db/field/list` | `tid`、`snapshotOnly` |
-| 分页预览 | `POST /db/row/preview` | `tableId`、页码、每页行数、条件、排序 |
-| 元数据页面抽样 | `POST /db/row/sample` | 复用同一表和记录生成器，非桥开放操作 |
+| 组织下的数据源 | `POST /dst/db/stats` | `mode=tree`，复用 `orgApps/datasources`，风驰展示时省去应用层 |
+| 数据源详情 | `POST /dst/db/srcdetail` | `tid`，复用数据源名称和数据库名 |
+| 表／视图目录 | `GET /dst/db/tables` | `dbId`，保留同一表 ID 和对象类型 |
+| 字段结构 | `GET /dst/db/fields` | `tid`、`snapshotOnly` |
+| 分页预览 | `POST /dst/db/preview` | `tableId`、页码、每页行数、条件、排序 |
+| 元数据页面抽样 | `POST /dst/db/sample` | 复用同一表和记录生成器，非桥开放操作 |
 
 组织树与统计批量读取；用户选中一个数据源时读取一次目录和详情。首次打开一张表可读取一次字段，后续 20／100 行分页各只新增一次预览请求。不按目录项、表、列表行逐个补查，不用并发循环或缓存掩盖 N+1。
 
@@ -222,7 +222,7 @@ python tools/export-mock-config.py --with-structure --check
 - **传输与组件 fixture 已验证，Mock 整页未验证：**唯一公共拦截器调用 `parseMockBody(path,text)` 与 `mockResponse(result,HttpResponse)`，不增加页面分支。裸数组只允许既有四类 batch 路由，下载保留 raw 字节、HTTP 状态及响应头；普通结果仍 JSON。`transport.d.mts` 区分 JSON／raw，runtime 签名接受对象或数组。Node 实际 MSW 已验证数组、BOM／CSV／JSONL 字节及响应头。浏览器 fixture 使用唯一真实 SFC 的编译产物，覆盖共享、Element Plus、平台宿主的 1440／390 布局、查询、参数详情与复制，但接口由 fixture 注入，没有接入真实 Mock 应用壳、登录／路由及 MSW 全链路。真实 Mock 整页及浏览器下载尚未独立运行，不冒称全栈 E2E。
 - **真实日志已在本机 86 发布：**后端已授权换包重启，所选 31 个 class 字节与当前 Maven classes 全部相等；新增共享函数 `log_parameter_condition_v1`（`/common/log-parameter-keyword-condition`）、所选日志 Magic 和唯一日志组件已发布，两级缓存刷新、运行回读及函数脚本冷加载通过，所选资源无未发布差异。仍为 56 项 HTTP 加 1 项非 HTTP 函数依赖；查询／导出继续 `pending-magic`，不扩大 Java 技术保留或 IDAAS 参数范围。范围不含 14／生产；另有 9 条历史／并发差异及远端 44 个 Magic／3 个低代码新资源未覆盖。
 - **CSV／批量既有差异已闭合：**Java 与 Mock 均先清洗控制符，再防前导空白后的公式；CSV 历史时间只回退已归一化的 `created_time`，不二次偏移。空白 ID 参数错误及输入顺序也已对齐，不再列作遗留差异。JSONL 与新归档安全快照编码、旧归档字节／形状兼容有测试，未改旧归档文件；真实新快照归档尚未运行，不称 VERIFIED。Java 可按授权开放 archives／policies，Mock 仍明确 501，此能力差异继续保留。
-- `POST /db/source/save` 的普通预检保留保存响应，跳过持久化和索引同步。正式保存支持 `deferIndexRefresh` 的布尔 `true`、数字 `1` 和字符串 `1`。Mock 在场景快照提交前检查已观察的版本变化，存储失败时保留原快照。代理结束登记从同一场景的测试服务检查租户、来源和角色范围，普通结束登记按有效同源表统计。真实事务、数据库方言和并发锁由后端验证。Mock 场景尚未接入服务编排。
+- `POST /dst/db/srcsave` 的普通预检保留保存响应，跳过持久化和索引同步。正式保存支持 `deferIndexRefresh` 的布尔 `true`、数字 `1` 和字符串 `1`。Mock 在场景快照提交前检查已观察的版本变化，存储失败时保留原快照。代理结束登记从同一场景的测试服务检查租户、来源和角色范围，普通结束登记按有效同源表统计。真实事务、数据库方言和并发锁由后端验证。Mock 场景尚未接入服务编排。
 
 当前限定回归为共享页面、Mock 与澄天 **125/125**，IDAAS **117/117**（含无 `window` 请求头兼容）、日志／排版／紧凑布局浏览器 **34/34**、静态 UI **6397/6397**，海通 **142/142**；后端完整 **415 套／3304 项，跳过 7 项，失败及错误为 0**，四前端生产构建和澄天 Mock 构建通过。Mock 列表及批量 20／100 各一次请求、零 SQL 只说明模拟路径；真实列表 20／100 各一次请求由[真实页面／API／导出报告](../logs/audit-parameters/real-validation.json)确认，两条事件 SQL 与一次批量 SQL 由后端针对性测试确认，身份／范围解析另有固定开销。真实 API 保留嵌套、`false/0/null`、`businessCode`，敏感测试值详情无原值且搜索 0；同一显式筛选 CSV 摘要与 JSONL 安全快照各 1 条，当前请求按策略排除采集时明确为 `OMITTED`。[跨物理库隔离](../logs/audit-parameters/real-isolation.json)确认既存外租户详情及混 ID 整批拒绝，未写业务数据或授权；[所选资源](../logs/audit-parameters/resource-verification.json)与[三方言四库 124/124、24 列 DDL 及五库导出](../logs/audit-parameters/native-86/result.json)分别核验，不相互代替。
 

@@ -246,7 +246,7 @@ test('registration sidebar reads a lightweight server page and preserves the cur
     total: 1200, pageNum, list: [{ tid: 'source-current', dbName: '服务端旧名称' }, { tid: `source-${pageNum}` }],
   }));
   await f.loadAccessibleDatasources(45);
-  assert.deepEqual(f.requests, [{ url: '/db/source/dept',
+  assert.deepEqual(f.requests, [{ url: '/dst/db/dept',
     body: { mode: 'choices', pageNum: 45, pageSize: 24, keyword: '' } }]);
   assert.equal(f.datasourceList.total, 1200);
   assert.equal(f.datasourceList.page, 45);

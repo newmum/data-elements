@@ -133,7 +133,7 @@
       <el-pagination v-if="pushSyncRows.length > 20" v-model:current-page="pushSyncPage" :total="pushSyncRows.length" :page-size="20" layout="total, prev, pager, next" small class="push-sync-pagination" />
       <p v-if="pushSyncStage !== 'success' && pushSyncRows.length" class="push-sync-scope">本次同步清单中的全部有效配置，已同步的表也会更新。</p>
       <div v-if="pushSyncPreview?.skipped?.length" class="push-sync-skipped"><strong>未纳入同步：{{ pushSyncPreview.skipped.length }} 个数据源</strong><el-table :data="pushSyncSkippedPage" size="small" max-height="135"><el-table-column prop="datasourceName" label="数据源" min-width="190" /><el-table-column prop="reason" label="原因" min-width="280" /></el-table><el-pagination v-if="pushSyncPreview.skipped.length > 10" v-model:current-page="pushSkippedPage" :total="pushSyncPreview.skipped.length" :page-size="10" layout="prev, pager, next" small /></div>
-      <div class="push-sync-addresses"><div><span>平台发起</span><code>POST {{ pushSyncPreview?.requestPath || '/db/source/sync' }}</code></div><div><span>节点接收</span><code>POST {{ pushSyncPreview?.targetUrl || `${pushSyncNode?.baseUrl || ''}/api/v1/data-push` }}</code></div></div>
+      <div class="push-sync-addresses"><div><span>平台发起</span><code>POST {{ pushSyncPreview?.requestPath || '/dst/db/sync' }}</code></div><div><span>节点接收</span><code>POST {{ pushSyncPreview?.targetUrl || `${pushSyncNode?.baseUrl || ''}/api/v1/data-push` }}</code></div></div>
       <template #footer><el-button :disabled="Boolean(syncingNodeId)" @click="closePushSync">{{ pushSyncStage === 'success' ? '关闭' : '取消' }}</el-button><el-button v-if="pushSyncStage !== 'success'" :disabled="Boolean(syncingNodeId)" :loading="pushPreviewLoading" @click="previewPushSync">刷新清单</el-button><el-button v-if="pushSyncStage !== 'success'" type="primary" :disabled="!pushCanSync" :loading="Boolean(syncingNodeId)" @click="commitPushSync">确认同步</el-button></template>
     </el-dialog>
 
@@ -347,7 +347,7 @@ const previewPushSync = async () => {
   const version=++pushPreviewVersion;
   pushPreviewLoading.value=true;pushSyncError.value='';pushSyncPreview.value=null;pushSyncStage.value='preview';pushSyncPage.value=1;pushSkippedPage.value=1;
   try {
-    const response=await $common.post('/db/source/sync',{all:true,nodeId:node.id,preview:true});
+    const response=await $common.post('/dst/db/sync',{all:true,nodeId:node.id,preview:true});
     if(version!==pushPreviewVersion || !pushSyncVisible.value) return;
     const payload=response?.data || response || {};
     if(!payload.valid || !payload.dryRun || payload.nodeId!==node.id || !/^[a-f0-9]{64}$/.test(payload.planHash || '') || !Array.isArray(payload.rows)) throw new Error('同步清单未能确认，请刷新后重试');
@@ -365,7 +365,7 @@ const commitPushSync = async () => {
   const node=pushSyncNode.value,plan=pushSyncPreview.value;
   syncingNodeId.value=node.id;pushSyncError.value='';
   try{
-    const response=await $common.post('/db/source/sync',{all:true,nodeId:node.id,planHash:plan.planHash});
+    const response=await $common.post('/dst/db/sync',{all:true,nodeId:node.id,planHash:plan.planHash});
     const payload=response?.data || response || {};
     const planned=new Set(plan.rows.map(row=>`${row.datasourceId}:${row.tableId}`));
     const received=(payload.rows || []).map(row=>`${row.datasourceId}:${row.tableId}`);

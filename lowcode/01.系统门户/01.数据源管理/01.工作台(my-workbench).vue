@@ -2052,7 +2052,7 @@ async function enterRegistration(row: JsonRow) {
   openingSource.value = datasourceId;
   try {
     const source = payloadOf(
-      await $common.post("/db/source/detail", { tid: datasourceId }),
+      await $common.post("/dst/db/srcdetail", { tid: datasourceId }),
     );
     if (disposed || version !== requestVersion) return;
     if (!source.tid || source.found === false)

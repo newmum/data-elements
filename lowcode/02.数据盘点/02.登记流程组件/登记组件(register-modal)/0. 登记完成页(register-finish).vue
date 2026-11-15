@@ -266,11 +266,11 @@ async function loadResult() {
   }
   loading.value = true;
   loadError.value = "";
-  const detailUrl = { datasource: "/db/source/detail", application: "/dst/application/detail", catalog: "/dst/catalog/detail" }[finishType.value];
+  const detailUrl = { datasource: "/dst/db/srcdetail", application: "/dst/application/detail", catalog: "/dst/catalog/detail" }[finishType.value];
   const detailResult = await Promise.allSettled([$common.post(detailUrl, { tid: entityTid.value })]);
   if (detailResult[0].status === "fulfilled") entityDetail.value = detailResult[0].value || null;
   if (finishType.value === "datasource") {
-    const tableResult = await Promise.allSettled([$common.get("/db/schema/tables", { dbId: entityTid.value })]);
+    const tableResult = await Promise.allSettled([$common.get("/dst/db/tables", { dbId: entityTid.value })]);
     if (tableResult[0].status === "fulfilled") {
       const rows = Array.isArray(tableResult[0].value) ? tableResult[0].value : [];
     const unique = new Map();

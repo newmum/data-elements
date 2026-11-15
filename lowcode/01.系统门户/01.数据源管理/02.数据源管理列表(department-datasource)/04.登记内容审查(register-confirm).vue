@@ -931,7 +931,7 @@ async function refreshReviewSummary(tid, requestId, showLoading) {
   }
   try {
     if (isProxyAccessSource(sources.value[0])) {
-      const response = await requestWithTimeout(() => $common.post("/db/source/detail", { tid }), "数据源详情");
+      const response = await requestWithTimeout(() => $common.post("/dst/db/srcdetail", { tid }), "数据源详情");
       if (requestId !== sourceDetailRequestId || sourceTid.value !== tid) return;
       const detail = response?.data || response || {};
       if (detail.found === false || !detail.tid) throw new Error("数据源不存在或不在当前数据范围内");
@@ -943,8 +943,8 @@ async function refreshReviewSummary(tid, requestId, showLoading) {
     }
     if (isUnstructuredPushSource(sources.value[0])) {
       const [detailResult,fileResult]=await Promise.allSettled([
-        requestWithTimeout(()=>$common.post("/db/source/detail",{tid}),"数据源详情"),
-        requestWithTimeout(()=>$common.post("/db/file/snapshot",{dbId:tid,action:"read"}),"文件登记快照"),
+        requestWithTimeout(()=>$common.post("/dst/db/srcdetail",{tid}),"数据源详情"),
+        requestWithTimeout(()=>$common.post("/dst/db/file",{dbId:tid,action:"read"}),"文件登记快照"),
       ]);
       if (requestId!==sourceDetailRequestId || sourceTid.value!==tid) return;
       if (detailResult.status==="fulfilled") sourceDetail.value=detailResult.value;
@@ -957,10 +957,10 @@ async function refreshReviewSummary(tid, requestId, showLoading) {
       return;
     }
     const [detailResult, tableResult, physicalResult] = await Promise.allSettled([
-      requestWithTimeout(() => $common.post("/db/source/detail", { tid }), "数据源详情"),
+      requestWithTimeout(() => $common.post("/dst/db/srcdetail", { tid }), "数据源详情"),
       // 完整采集快照包含未标注表；登记完成以治理保存标记为准，不能以资产可用状态代替。
       requestWithTimeout(
-        () => $common.get("/db/schema/tables", { dbId: tid, includeGovernance: true }),
+        () => $common.get("/dst/db/tables", { dbId: tid, includeGovernance: true }),
         "数据表登记信息",
         30000,
       ),
@@ -2305,7 +2305,7 @@ function drainFieldLoadQueue() {
     try {
       const ids = [...new Set(batch.map(({ table }) => String(table?.tid || table?.id || table?.sourceTableId || "").trim()).filter(Boolean))];
       const response = ids.length
-        ? await $common.get("/db/field/list", { tid: ids.join(","), snapshotOnly: true })
+        ? await $common.get("/dst/db/fields", { tid: ids.join(","), snapshotOnly: true })
         : {};
       if (generation !== fieldLoadGeneration) return;
       const grouped = response?.data && !Array.isArray(response.data) ? response.data : response;
@@ -2510,7 +2510,7 @@ async function testConnection() {
       showConnect: true,
     };
     const res = await $common.post(
-      "/db/source/test",
+      "/dst/db/srctest",
       connectionData,
       {},
       120 * 1000
@@ -3707,7 +3707,7 @@ async function loadTablePreview(table) {
     }
     const structured = isStructuredPreviewSource();
     const result = await $common.postSilently(
-      structured ? "/db/row/read" : "/db/row/sample",
+      structured ? "/dst/db/rowread" : "/dst/db/sample",
       structured
         ? {
             dbId: sourceTid.value,
@@ -4171,8 +4171,8 @@ async function persistCompletion(items) {
     completeOnly: true,
   };
   const result = pushIsAttachmentMode.value
-    ? await $common.post("/db/file/snapshot",{dbId:completedSource.tid,action:"complete"})
-    : await $common.post("/db/source/save", {tid:completedSource.tid,propList});
+    ? await $common.post("/dst/db/file",{dbId:completedSource.tid,action:"complete"})
+    : await $common.post("/dst/db/srcsave", {tid:completedSource.tid,propList});
   completedSource.assetStatus = Number(result.assetStatus);
 }
 

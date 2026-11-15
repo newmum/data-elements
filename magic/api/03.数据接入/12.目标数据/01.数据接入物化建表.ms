@@ -34,8 +34,8 @@ import jsons
 import com.linewell.dataelement.dataassets.runtime.DataSourceConnectionPropertyResolver as connectionProperties
 import com.linewell.dataelement.shared.error.ErrorDetailSanitizer
 import com.linewell.dataelement.elasticsearch.EsCommonService as esCommonService
-import '@post:/db/schema/ddl' as getCreateTableDDL
-import '@post:/db/schema/create' as createTable
+import '@post:/dst/db/ddl' as getCreateTableDDL
+import '@post:/dst/db/create' as createTable
 
 // POST /ods/target/create 数据接入物化建表。
 // POST /ods/target/create：复用现有物理建表与登记逻辑；批量入口先完整验证，再顺序执行。

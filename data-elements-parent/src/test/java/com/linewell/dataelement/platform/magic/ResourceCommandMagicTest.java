@@ -168,7 +168,7 @@ class ResourceCommandMagicTest {
             db.setRowMapColumnMapper(value -> value);
             db.setNamedTableInterceptors(List.of());
             db.setSqlInterceptors(List.of());
-            String source = CanonicalMagicSources.byId("4049d07b6bcc53f2b88f544ff0f62d22")
+            String source = CanonicalMagicSources.byId("b6aaff9e31925977b94369d347e7c32a")
                     .replaceAll("(?m)^import (?!cn\\.hutool\\.)[^\\r\\n]*\\r?\\n", "");
             script = MagicScript.create("var sampleData = () => captureSample(body);\n" + source, null);
         }
@@ -198,12 +198,15 @@ class ResourceCommandMagicTest {
                 assertEquals(List.of("title", "mobile"), request.get("columns"));
                 return Map.of("rows", List.of(new LinkedHashMap<>(Map.of("title", "Validation", "mobile", "01000000000"))));
             };
+            var requestBody = new LinkedHashMap<>(input);
+            requestBody.put("kind", "resources");
+            requestBody.putIfAbsent("body", Map.of());
             var variables = Map.<String, Object>ofEntries(
                     Map.entry("db", db), Map.entry("tableRead", new StructuredTableReadMagicModule(jdbc)),
-                    Map.entry("input", input), Map.entry("body", Map.of()),
+                    Map.entry("body", requestBody),
                     Map.entry("tenantRuntime", session), Map.entry("StpUtil", session), Map.entry("metadataAsset", metadata),
-                    Map.entry("readModels", models), Map.entry("captureSample", sample),
-                    Map.entry("readPlanning", (Function<Object[], Object>) args -> Map.of("databases", List.of(Map.of("id", "domain-a", "state", "ACTIVE")))),
+                    Map.entry("modelRead", models), Map.entry("captureSample", sample),
+                    Map.entry("planningRead", (Function<Object[], Object>) args -> Map.of("databases", List.of(Map.of("id", "domain-a", "state", "ACTIVE")))),
                     Map.entry("technicalRead", (Function<Object[], Object>) args -> Map.of("sources", List.of(Map.of("id", "source-a")))));
             return TenantContext.call("tenant-a", () -> script.execute(new MagicScriptContext(variables)));
         }

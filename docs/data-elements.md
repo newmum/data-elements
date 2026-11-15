@@ -421,7 +421,7 @@ python -m unittest discover -s tools/tests
 - 业务优先关联根 `magic/`。仍在 Java 的业务记录为 `pending-magic`，后续按完整调用链迁入 Magic 并回归、发布后再删除 Java；框架或必要技术接口记录为 `technical-retained` 并说明具体理由。不创建空壳 Magic 转发以伪装迁移完成，不按 Java 类为 mock 建另一套业务接口。
 - mock 会话、广播通道、场景修改及详情缓存与真实模式隔离；种子只用于初始化，编辑保存写入专用浏览器状态，不能直接改写工程源码。恢复场景仅清理选定模拟数据。模拟租户与 ALL/ORG/OWNER 在筛选、分页、详情和每个批量 ID 上保持一致，请求参数只能缩小范围。20/100 行保持固定请求数；mock 不执行 SQL，不能用其零 SQL 冒充真实后端的查询数、事务、方言或权限验收。
 - 菜单和组织机构使用 `tools/export-mock-config.py --with-structure` 按当前真实租户绑定只读导出的白名单，保存于同一配置镜像；保留原 ID、父子关系、排序、隐藏状态和组件标识。数据库为空就保存空配置，不从其他租户补齐，不因 Mock 方便增加可见二级菜单。配置中的虚拟 ROOT 记录保留原始镜像，树接口按现行契约返回 ROOT 下的真实机构。
-- 风驰共享模式通过元数据平台同源只读桥消费现有 `/sym/org/getOrgTree`、`/db/source/stats`、元数据表目录、字段及分页预览契约。业务状态只由元数据平台同源存储维护；每次读取重新检查当前会话和数据源归属，不给风驰复制一份可维护数据或另设业务 API。桥只接受配置中的风驰 origin 与对应 iframe 父窗口，按 nonce 关联响应，限制操作白名单和载荷大小；不传递会话 token、角色或连接信息，不连接真实业务服务。首次读取一张表可另读一次字段，分页 20/100 行均只新增一次预览请求；目录只按用户操作展开，禁止按表或行自动补查。
+- 风驰共享模式通过元数据平台同源只读桥消费现有 `/sym/org/getOrgTree`、`/dst/db/stats`、元数据表目录、字段及分页预览契约。业务状态只由元数据平台同源存储维护；每次读取重新检查当前会话和数据源归属，不给风驰复制一份可维护数据或另设业务 API。桥只接受配置中的风驰 origin 与对应 iframe 父窗口，按 nonce 关联响应，限制操作白名单和载荷大小；不传递会话 token、角色或连接信息，不连接真实业务服务。首次读取一张表可另读一次字段，分页 20/100 行均只新增一次预览请求；目录只按用户操作展开，禁止按表或行自动补查。
 - 新增能力与实际覆盖范围更新各前端唯一主文档，执行记录、浏览器截图和构建结果放根 `logs/`。真实 Magic/低代码的修改仍按现行逐资源发布、刷新和回读规则处理；仅增加前端 mock 或在本地读取既有组件不需要向共享库写入模拟内容。
 
 <a id="batch-pagination"></a>
@@ -493,7 +493,7 @@ Magic 资源可先导出当前启用脚本，再用静态扫描寻找循环内�
 
 数仓基础层与服务层分别保留 `dwd-detail`、`dws-detail` 入口，共用详情页的分类树、表格和登记操作。基础层关键词匹配目录名或表名，服务层关键词匹配目录名。目录名按已登记目录名、中文表名、表注释回退。匹配可检索完整注释，注释用作排序键时取前 512 字符。两页使用各自的分层分页接口在服务端筛选、排序和分页。
 
-数源层详情与分层公共入口共用 `/db/table/page`。接口从当前认证租户的有效数据表和数据源中先选每个物理表的代表记录，再按调用方传入的来源、目录、组织、状态和关键词筛选。关键字按字面匹配，排序值相同时按记录 ID 排列，由数据库完成分页。目录排序取注释前 512 字符的回退键，表名显示排序按完整注释回退。旧 `/db/table/list` 保留原列表形状；各分层入口继续使用自己的筛选和回退规则。
+数源层详情与分层公共入口共用 `/dst/db/tblpage`。接口从当前认证租户的有效数据表和数据源中先选每个物理表的代表记录，再按调用方传入的来源、目录、组织、状态和关键词筛选。关键字按字面匹配，排序值相同时按记录 ID 排列，由数据库完成分页。目录排序取注释前 512 字符的回退键，表名显示排序按完整注释回退。旧 `/dst/db/tbllist` 保留原列表形状；各分层入口继续使用自己的筛选和回退规则。
 
 两层工具栏的「新建目录」使用侧栏同一个字典目录表单，新增时以当前选中的有效分类为父级。侧栏根节点的新增入口以根分类为父级。缺少有效父级时禁用新增，表单保存沿用 `/sym/dictSaveOrUpdate` 的租户上下文。
 
@@ -538,11 +538,11 @@ Useful URLs:
 
 Common metadata interfaces:
 
-- `POST /db/schema/scan`
+- `POST /dst/db/scan`
   - Re-explore registered database tables and return differences: added, deleted, modified, unchanged.
   - Legacy difference-comparison contract; source detail no longer calls it on entry.
   - `diffViewOnly=true` only calculates the difference view. The regular flow can repair or flag existing dictionary associations and update `db_table_t.field_governance_config` when needed. It performs no Elasticsearch writes or new asset registration.
-- `GET /db/schema/tables`
+- `GET /dst/db/tables`
   - 登记第二步和数据源详情共用已保存表快照。`paged=true` 默认返回已标注快照，详情用 `allSnapshots=true` 包含未标注快照，并用 `includeGovernance=false` 省略四项治理大字段。
   - 历史 `annotatedOnly=true` 在登记目录分页、待处理和普通分页模式之后匹配。HTTP 参数沿用 Boolean 解析，`true` 进入已标注分支，`1` 在实机按默认数组处理。已标注分支只读取当前租户一个有效数据源的已标注快照，一次有序读取完整数组。数据库先按表名小写分组，以字段数、更新时间和表 ID 选代表行，保留各方言的原生空值顺序。MagicScript 再按去首尾空白和小写后的表名去重，并保留已有描述、目录名称及治理字段的返回规则。
   - 先校验当前租户的有效数据源，再在数据库中按表名的小写值去重。优先选择标注状态更高、字段更多、更新时间更新的记录，同值按表 ID 降序。业务类型与标注统计取筛选前的去重结果，关键词和业务类型只筛选当前列表及其总数。
@@ -550,19 +550,19 @@ Common metadata interfaces:
   - 登记目录抽屉使用 `catalogPaged=true`。仅识别当前租户未删除的目录关联，先以关联、标注、更新时间、字段数和表 ID 选定同名代表行，再按登记状态、业务类型或名称筛选。`pendingTotal` 和 `registeredTotal` 取名称及类型筛选前的统计，列表仍按表名、表 ID 升序分页。采集报告中的缺失表仅在未标注且无有效目录关联时排除。分类优先级、筛选和字段映射在 MagicScript 中维护，查询组件处理关联、排序和数据库方言。
 - `POST /dst/database/metadata/tables/collection/start` and `GET /dst/database/metadata/tables/collection/status`
   - Shared registration/source-detail background collection, started only by an explicit probe action. Source detail may read an existing job status without starting one.
-- `POST /db/table/delete`
+- `POST /dst/db/tbldel`
   - Explicitly remove a selected table asset snapshot and related platform registration metadata.
   - Deletes metadata snapshots only, not the physical database table.
-- `POST /db/row/sample`
+- `POST /dst/db/sample`
   - Magic API sample-data endpoint used by preview dialogs; requires `tableId`.
-- `POST /db/source/test`
+- `POST /dst/db/srctest`
   - Data source connection test.
 - `POST /dst/application/save`
   - Save an application system directly to `sym_application_t` and `data_prop_t`.
-- `POST /db/source/save`
+- `POST /dst/db/srcsave`
   - 普通保存把所属应用和连接配置写入 `db_datasource_t.app_id`、`pool_cfg`。主记录和连接配置在同一事务提交，编辑时校验当前租户、有效状态和已读的 `updated_time`。并发变更返回 `409`，索引在主数据提交后同步。请求体或 `propList` 中的 `dryRun=true` 只校验和推导拟保存结果，不写库或排队同步索引。
   - 代理结束登记先按父源菜单范围核验数据源，再聚合当前租户、同一来源下符合 ALL、ORG 或 OWNER 范围的有效服务。完成登记的 `dryRun` 只返回预检。实际提交在同一条更新中复核数据源版本及可见服务是否仍存在，冲突返回 `409`，只有提交成功才同步索引。
-- `POST /db/source/sync`
+- `POST /dst/db/sync`
   - 按认证租户及有效节点、来源和表关联同步登记配置。服务器从登记主表生成数据源、应用系统、已完成登记表和字段快照，通过服务间密钥同步到独立海通。单源、批量清单和确认参数见 [澄天推送节点配置](data-elements-chengtian.md#节点配置)。`dryRun` 只读取平台登记配置。完整协议见 [海通推送服务](haitong-data-pull.md#platform-registry-sync)。
 - `POST /dst/database/assets/saveOrUpdate`
   - Compatibility endpoint for catalog assets. Data tables must use `/dst/database/table/*` and persist to `db_table_t` / `db_table_column_t`.
@@ -750,7 +750,7 @@ Use the released `my-db` page at `/register/register-sjkb/list` as the default v
 ### Magic API 目录组织
 
 - 现有对外路由按以下旧前缀盘点。路由改造按新的业务分组逐批切换，旧前缀作为实际调用和回退的核查基线。
-  - `/dst`: data inventory. Its direct children are `/application`, `/database`, and `/catalog`.
+  - `/dst`: data inventory. Its direct children are `/application`, `/db`, and `/catalog`.
   - `/ods`: data access, ETL, and NiFi orchestration.
   - `/dwm`: data governance.
   - `/dws`: data services and cloud-gateway operations.
@@ -771,10 +771,10 @@ Use the released `my-db` page at `/register/register-sjkb/list` as the default v
 - 重写资源元数据时保留 `================================` 分隔线两侧原有的换行格式。混用 LF 和 CRLF 可能使目录和 API 元数据仍可读取，但脚本正文未加载。目录发布前用当前 Magic 版本冷加载并逐条回读受影响的脚本正文。
 - Before deleting an interface, cross-check low-code source and compiled code, the four frontend `src` trees, Magic imports, Java callers, scheduled tasks, and known external callbacks. Repair referenced empty or broken interfaces.
 - Apply the [Magic API and Java responsibilities](#magic-first-data-access) to NiFi and cloud-gateway integration. Java may provide technical adapters for signing, token exchange, and HTTP/TLS.
-- Shared inventory aggregations such as `/dst/statistics/common` belong in the dedicated `02.数据盘点/04.盘点统计` group. Do not move a shared endpoint into one page domain merely because one caller is being debugged; verify every low-code caller first.
+- Shared inventory aggregations such as `/dst/statistics/common` belong in the dedicated `02.数据盘点/05.盘点统计` group. Do not move a shared endpoint into one page domain merely because one caller is being debugged; verify every low-code caller first.
 - 系统门户 Magic 资源位于 `01.系统门户`，门户首页为 `GET /portal/main/index`，本人改密为 `POST /portal/profile/password`。
 - `/portal/sso` 管理登录和会话。`POST /login` 和 `POST /logout` 分别登录和登出，`GET /ticket` 签发票据，`GET /redeem` 兑换票据或授权码。`GET /options` 和 `GET /settings` 提供登录选项与设置。`GET /session`、`GET /tenants` 和 `POST /switch` 校验已登录会话和租户成员关系。登录继续使用 SM3 入参。
-- 数据库资源 Magic API 位于 `11.数据库资源`，对外根路径为 `/db`。叶组分别是数据源 `/source`、数据库结构 `/schema`、登记表 `/table`、字段 `/field`、数据行 `/row`、文件 `/file` 和上报 `/report`。数据源卡片及展开表格用 `POST /db/source/dept` 的 `cards`、`tables` 模式，字段列表为 `GET /db/field/list`，分页预览为 `POST /db/row/preview`，上报登记为 `POST /db/report/register`。
+- 数据库资源 Magic API 位于 `02.数据盘点/02.数据库资源`，完整前缀为 `/dst/db`。两层叶目录内按数据源、库结构、登记表、字段、数据行、文件和上报顺序编号。数据源卡片及展开表格用 `POST /dst/db/dept` 的 `cards`、`tables` 模式，字段列表为 `GET /dst/db/fields`，分页预览为 `POST /dst/db/preview`，上报登记为 `POST /dst/db/register`。
 - 数据接入业务 Magic API 位于 `03.数据接入`，根路径为 `/ods`。任务分页为 `POST /ods/job/page`，多表编组分页为 `POST /ods/multi/page`，汇聚与分发分页分别为 `POST /ods/ingest/page` 和 `POST /ods/dist/page`，即时对账实例分页为 `POST /ods/recon/page`，ETL 分组树为 `GET /ods/job/groups`。完整叶组按同步节点、服务节点、接入任务、字段映射、任务监控、多表编组、接入登记、对账策略、对账执行、分发、汇聚、目标数据和 API 拉取组织。
 - 共享 NiFi 的 Magic 业务 API 位于 `10.NiFi流程接口`，根路径为 `/nifi`。流程设计与模板使用 `/flow`、`/canvas`，接入链路使用 `/chain`，运行状态、部署、流程组、节点及错误公告分别使用 `/run`、`/life`、`/group`、`/node`、`/event`。组件清单用 `/catalog`，字段映射按计划 `/plan`、模板 `/template`、字典 `/dict`、编辑规则 `/map`、运行版本 `/maprun` 组织。流程、组件或节点标识以查询参数传递，例如 `GET /nifi/flow/detail?id=<流程ID>`。
 - Data-application Magic resources belong under `06.数据应用` and use `/das` as the public root. Do not retain `/workshop` calls in low-code source/compiled JS or any frontend project.
@@ -799,7 +799,7 @@ Use the released `my-db` page at `/register/register-sjkb/list` as the default v
 
 ### Magic API Metadata Management
 
-- The Magic API folder `/magic-api/api/11.数据库资源/` contains metadata operations that were formerly implemented in Java. Do not assume an interface is unused just because the current script is empty, `null`, or only calls `MetadataAssetService`.
+- The Magic API folder `/magic-api/api/02.数据盘点/02.数据库资源/` contains metadata operations that were formerly implemented in Java. Do not assume an interface is unused just because the current script is empty, `null`, or only calls `MetadataAssetService`.
 - For 06 metadata interfaces, classify each file before deleting or rewriting:
   - **Useful and implemented**: keep, verify with an authenticated HTTP request, and preserve route compatibility.
   - **Useful but only a Java wrapper/empty shell**: implement the Magic script instead of deleting it.
@@ -856,7 +856,7 @@ Use the released `my-db` page at `/register/register-sjkb/list` as the default v
 - FTP 连续文件采样对小文件先有界读取尾部并消费传输完成响应，避免额外 ABOR 响应污染下一次读取；大文件仍有界采样。文件名存在 `event`、`event_log` 等前缀重叠时优先精确匹配物理文件名，再按工作表/嵌套数据集规则定位，不能因前缀相同误判歧义。
 - 数据抽取节点的 JDBC 驱动位置兼容 Linux 绝对目录以及 `DEFAULT=/默认目录;KINGBASE=/实际驱动.jar` 等按数据库类型的绝对路径映射，最多32项、4096字符。可通过 NiFi 参数上下文的资产上传能力部署已有官方驱动，并使用其返回的节点实际路径；这不改变其他数据库的默认目录，也不要求放宽服务器登录或证书配置。NiFi 2.9 的 ES/Kafka 组件按实际描述符设置客户端服务、认证、主题、输出格式及各自支持的超时单位。Kafka 消费节点使用持续轮询的 `0 sec` 调度周期，以完成分区分配、消息消费与心跳；缺失驱动、组件无效或投递失败都不能计为落库成功。
 - 库详情旧表单的 `procCount` 显示字段映射到现行 `procedureCount`；旧 `totalData` 概览项显示现行 `totalSize`，标题为“总占用空间”，不能加“条”后缀或把字节容量当作全库记录总数。展示适配不改写租户原始动态表单。
-- 数据表与数据源详情共用 `detail-page` / `base-detail`，分别使用当前租户 `sym_form` 的“表详情”与“库详情”。`GET /db/schema/refresh` 的 `tid` 为数据源 ID，按数据源管理的 ALL/ORG/OWNER 范围授权。可选 `tableId` 必须是当前租户、归属该数据源的有效登记表。刷新与 `dryRun=true` 都在外部探查前校验权限，预检仅返回探查结果。独立 `/db/schema/info` 仍按当前租户的有效来源和关联提供只读探查。正式刷新在短事务内锁定父源并复核权限、归属和已探查版本，资产已变化时返回冲突。主表提交后才更新搜索索引，索引失败可重试。
+- 数据表与数据源详情共用 `detail-page` / `base-detail`，分别使用当前租户 `sym_form` 的“表详情”与“库详情”。`GET /dst/db/refresh` 的 `tid` 为数据源 ID，按数据源管理的 ALL/ORG/OWNER 范围授权。可选 `tableId` 必须是当前租户、归属该数据源的有效登记表。刷新与 `dryRun=true` 都在外部探查前校验权限，预检仅返回探查结果。独立 `/dst/db/info` 仍按当前租户的有效来源和关联提供只读探查。正式刷新在短事务内锁定父源并复核权限、归属和已探查版本，资产已变化时返回冲突。主表提交后才更新搜索索引，索引失败可重试。
 - 表统计写入 `db_table_t.record_count/field_count/storage_size/total_size_bytes/total_size_formatted/ddl_create_time/ddl_update_time`，保留 `db_table_column_t` 字段治理设置。空值和零值按来源返回保留。刷新使用数据库时钟更新资产 `updated_time`，保留原更新人。详情所显示的“元数据更新时间”来自资产主表；重新读取详情以业务主表为准。页面展示刷新接口返回的拒绝原因。
 - OceanBase Oracle 的单表概览优先沿用明确的 schema 或物理表所有者；未设置时只从 `用户名@租户#集群` 中提取逻辑用户名作为所有者，登录后缀不属于 schema。探查结果可以返回 `所有者.表名`，只按当前指定所有者匹配，不能因去掉前缀而选中其他所有者的同名表。
 - 数据表详情预览表头固定为两行：中文名与英文名各自单行省略，悬停展示完整名称；没有中文名时首行显示 `—`。托管 MRS Hive 每页固定执行字段描述、总数统计和当前页查询，不逐行补查；空登记字段快照仍可由一次 `DESCRIBE` 获取物理字段。分页使用首屏 `LIMIT`、后续页 `ROW_NUMBER()`，空值用 `CASE` 排后，兼容不支持偏移 `LIMIT` 或 `NULLS LAST` 的旧版 Hive；相关版本边界见 [Hive SELECT 文档](https://hive.apache.org/docs/latest/language/languagemanual-select/) 和 [Hive ORDER BY 文档](https://hive.apache.org/docs/latest/language/languagemanual-sortby/)。错误提示区分字段读取、总数统计、字典分组与分页查询阶段，服务日志只记录表标识、阶段及异常类型，不输出连接凭据、过滤值或完整 SQL。
@@ -925,7 +925,7 @@ Use the released `my-db` page at `/register/register-sjkb/list` as the default v
   - Field structure view should show added fields in green, modified fields in yellow, deleted fields in gray/strikethrough.
 - For `db-table` deleted table rows:
   - Show deleted physical tables as gray/strikethrough table names.
-  - Operation must be a real Delete action with confirmation, then call `/db/table/delete`.
+  - Operation must be a real Delete action with confirmation, then call `/dst/db/tbldel`.
 
 <a id="resource-layout"></a>
 
@@ -949,6 +949,7 @@ Use the released `my-db` page at `/register/register-sjkb/list` as the default v
 - 按业务模块保存；同一模块不再同时建立“数据盘点”和“租户端”两个同路由前缀的根分组。现用数据库相关接口归数据盘点的数据库表分组。
 - 停用应用没有当前调用时清理其接口和空分组，不为保存旧代码建立空的新中心。
 - 兼容接口逐条核查真实页面、线上低代码编译内容、服务登记和已知外部调用。第 87 批确认服务构建使用现行网关分页后，退役 `POST /dataassets/manage/assets/page`。
+- 数据服务下的数据超市、购物车、资源申请和运行监控分别使用 `/dws/mall`、`/dws/cart`、`/dws/apply` 和 `/dws/monitor`。编排生成的发布入口另按服务登记、租户及已发布版本核对。
 - 按 [Magic API 目录组织](#lowcode-magic--magic-api-organization) 核对统一叶深度、连续编号以及完整入口的前后映射。批次计划标明只调整显示顺序、保持地址的移动、实际改址及其调用方。
 - 选定目录移动须同步资源和分组元数据、数据库物理路径、目录行与本地清单。先核对当前工具的真实能力，普通内容发布与新增登记各有独立用途。移动采用已验证的编辑器移动接口或带精确旧状态检查及回退的事务操作。发布后核对重复、断链、非空路径、运行路由和编辑器树，冷启动重新从持久化存储核验。
 

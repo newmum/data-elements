@@ -382,7 +382,7 @@ public class DataSourceConnectionTestService {
         result.put("errorCode", error.code());
         result.put("rawError", error.detail());
         result.put("traceId", error.traceId());
-        result.put("errorDetail", error.toMap("POST", "/db/source/test"));
+        result.put("errorDetail", error.toMap("POST", "/dst/db/srctest"));
         return result;
     }
 
