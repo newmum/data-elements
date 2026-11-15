@@ -41,7 +41,7 @@ describe('configuration-only modeling boundary',()=>{
   expect(editor).toContain('disabled={!node||configurationOnly}');
   expect(editor).toContain('仅配置：尚未接入执行器');
   expect(editor).toContain('Input.TextArea');
-  expect(editor).toContain("['csvInput','jsonInput','xmlInput','excelInput','parquetInput'].includes(node.kind)&&<label>本地文件");
+  expect(editor).toContain("['csvInput','jsonInput','xmlInput','excelInput','parquetInput'].includes(node.kind)&&<Form.Item label=\"本地文件");
  });
 });
 
@@ -58,3 +58,15 @@ describe('node configuration summaries',()=>{
  expect(modelNodeSummary(createModelNode('source','s',0),{},[])).toBe('来源：未配置');
  });
 });
+
+
+describe('metadata return toolbar entry',()=>{
+ it('keeps the existing target and places the right arrow return after AI',()=>{
+ expect(source).not.toContain('>返回元数据管理平台</Button>');
+ expect(source).toContain('<NativeIcon name="return"/>');
+ expect(source).toContain("'返回',()=>window.location.assign(metadataHome),'metadata-return-button'");
+ expect(source.indexOf("'metadata-return-button'")).toBeGreaterThan(source.indexOf("'智能问数',()=>setAiOpen"));
+ });
+});
+
+describe('operator library refinement',()=>{it('uses collapsible categories and Ant Design form controls',()=>{expect(editor).toContain('<Collapse className="modeling-operator-collapse"');expect(editor).toContain('<Form layout="vertical"');expect(editor).toContain('useState(250)');expect(editor).toContain("operatorSearch.trim()?operatorGroups");});});
