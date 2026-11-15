@@ -6,7 +6,7 @@ import PaneResizeHandle from './PaneResizeHandle';
 import {useMemo,useState} from 'react';
 import {Alert,Button,Empty,Form,Input,Modal,Table,Tag,Tree} from 'antd';
 import {PlusOutlined,SearchOutlined,DownOutlined,CloseOutlined,InfoCircleOutlined} from '@ant-design/icons';
-import type {ModelDocument} from './modelingCatalog';
+import type {ModelDocument} from './modelCatalogStore';
 export type ModelingCatalogProps={docs:ModelDocument[];sidebarTarget?:HTMLElement|null;inspector?:{open:boolean;width:number;max:number;onResize:(width:number)=>void;onClose:()=>void};sourceLabel?:string;onCreate:(value:{name:string;category:string})=>void|Promise<void>;onOpen:(id:string)=>void;onCategoryChange:(id:string,category:string)=>void|Promise<void>;onResumeDraft?:()=>void;onBack?:()=>void;error?:string;busy?:boolean};
 export default function ModelingCatalog({docs,sidebarTarget,inspector,onCreate,onOpen,onCategoryChange,onResumeDraft,error,busy=false}:ModelingCatalogProps){
  const [expandedCategories,setExpandedCategories]=useState<React.Key[]>(['__all']);

@@ -1,6 +1,6 @@
 import {describe,it,expect} from 'vitest';
 import {createModelNode} from '../src/modeling';
-import {saveModelDocument,loadModelDocument,listModelDocuments,changeModelCategory,type ModelStorage,type ModelDraft} from '../src/modelingCatalog';
+import {saveModelDocument,loadModelDocument,listModelDocuments,changeModelCategory,type ModelStorage,type ModelDraft} from '../src/modelCatalogStore';
 import component from '../src/ModelingCatalog.tsx?raw';
 function memory(){const values=new Map<string,string>();const store:ModelStorage={get length(){return values.size},key:i=>[...values.keys()][i]??null,getItem:k=>values.get(k)??null,setItem:(k,v)=>{values.set(k,v)}};return {store,values}}
 const draft=(id='one'):ModelDraft=>({id,name:'客户分析',category:'客户',nodes:[createModelNode('source','s',0)],executionSettings:{engine:'flink',mode:'batch'},importedTables:{}});

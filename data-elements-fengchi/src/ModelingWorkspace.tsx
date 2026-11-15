@@ -8,7 +8,7 @@ import {sourceObjects,sourceDatabase,changeSourceDatabase,selectSourceTable,sour
 import {createModelingDemo} from './modelingDemo';
 const multiDatabaseDemo=typeof window!=='undefined'&&new URLSearchParams(window.location.search).get('modelDemo')==='multi-db'?createModelingDemo():null;
 import ModelingCatalog from './ModelingCatalog';
-import {listModelDocuments,loadModelDocument,saveModelDocument,changeModelCategory,type ModelDocument,type ModelDraft} from './modelingCatalog';
+import {listModelDocuments,loadModelDocument,saveModelDocument,changeModelCategory,type ModelDocument,type ModelDraft} from './modelCatalogStore';
 import ModelingExecutionPanel from './ModelingExecutionPanel';
 import {generateModelSql,applyModelSqlDraft} from './modelingSql';
 import {validateExecution,type ExecutionSettings} from './modelingExecution';
