@@ -200,7 +200,7 @@ NiFi 流程本身不保存在 IndexedDB；本地工作区只保存可选的 `nif
 
 画布 API 可达检查 `GET /nifi/api/ping` 与 `HEAD /nifi/api/ping` 由 Magic 直接提供，沿用现有会话校验。GET 返回原始 `{"status":"ok"}`，用于确认画布 API 可用。它不读取数据库或访问 NiFi 节点。
 
-`GET /nifi/api/pipelines` 和 `GET /nifi/api/pipelines/runtime-list` 及其 HEAD 由 Magic 直接提供。两个兼容查询均保留完整数组，只执行一次当前租户的结构化查询。游标逐行读取画布和节点映射，略过保存内容损坏的流程，并将未记录更新时间的流程放在末尾。普通列表返回摘要。运行列表在关闭游标后，按需解析 NiFi 根组标识并读取一次递归快照，只有租户可见且已部署的流程才添加运行指标或对应错误。前端列表分页继续使用 `/nifi/api/pipelines/page`。
+`GET /nifi/api/pipelines` 和 `GET /nifi/api/pipelines/runtime-list` 及其 HEAD 由 Magic 直接提供。两个兼容查询均保留完整数组，只执行一次当前租户的结构化查询。游标逐行读取画布和节点映射，略过保存内容损坏的流程，并将未记录更新时间的流程放在末尾。普通列表返回摘要，海通工具栏的「打开流程」使用此入口。运行列表在关闭游标后，按需解析 NiFi 根组标识并读取一次递归快照，只有租户可见且已部署的流程才添加运行指标或对应错误。分页页面独立使用 `/nifi/api/pipelines/page`。
 
 打开已保存画布使用 Magic `GET /nifi/api/pipelines/{id}`，并提供对应 HEAD。Magic 按当前认证行业租户和路径 ID 执行一次结构化查询。返回原始画布 JSON，保持持久化 `designHash`、时间及实际来源节点，可见范围外或无法解析的流程返回空体 404。Hive 画布投影沿用现行规则。读取无写入、元数据探查或 NiFi 请求，同一路径的 POST 保存沿用原契约。
 
