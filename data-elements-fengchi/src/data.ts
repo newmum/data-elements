@@ -1,7 +1,7 @@
 export type Cell = string | number | null;
 export type Row = Record<string, Cell>;
 export type Column = { name: string; type: string; primary?: boolean; nullable?: boolean; default?: string; comment?: string };
-export type TableDef = { name: string; comment: string; columns: Column[]; rows: Row[] };
+export type TableDef = { mockSqlText?:string; source?:{databaseId:string;databaseLabel:string;objectLabel:string;kind:'table'|'view'}; name: string; comment: string; columns: Column[]; rows: Row[] };
 
 const id: Column = { name: 'id', type: 'int unsigned', primary: true, nullable: false, comment: '主键，自增' };
 const created: Column = { name: 'created_at', type: 'datetime', nullable: false, default: 'CURRENT_TIMESTAMP', comment: '创建时间' };

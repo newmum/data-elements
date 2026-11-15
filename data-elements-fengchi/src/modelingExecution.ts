@@ -14,7 +14,8 @@ export function validateExecution(nodes:ModelNode[],settings:ExecutionSettings):
  for(const n of nodes){const cap=modelInputCapacity(n.kind);if(n.inputs.length!==cap)error(`${n.name}需要 ${cap} 个输入，当前 ${n.inputs.length} 个`,n.id);if(new Set(n.inputs).size!==n.inputs.length)error(`${n.name}存在重复连线`,n.id);if(n.inputs.some(id=>!ids.has(id)))error(`${n.name}存在断开的前序节点`,n.id);
  if(n.inputs.some(id=>{const input=nodes.find(item=>item.id===id);return input&&!modelHasOutput(input.kind)}))error(`${n.name}不可将输出节点作为前序`,n.id);
  if(isConfigurationOnly(n.kind))error(`${n.name}仅配置，尚未接入执行器`,n.id);
- const optional=new Set(['value','replacement','separator','delimiter','prefix','defaultValue','group','responsePath','groupFields','keyFields','keyField']);
+ const optional=new Set(['mockSqlTable','manualSourceName','inputMode','value','replacement','separator','delimiter','prefix','defaultValue','group','responsePath','groupFields','keyFields','keyField']);
+ if(n.kind==='source'&&n.config.inputMode==='sql'){optional.add('table');if(!n.config.database?.trim())error(`${n.name}请选择数据库`,n.id);if(!n.config.sqlText?.trim())error(`${n.name}请填写 SQL`,n.id);if(!n.config.mockSqlTable)error(`${n.name}自定义 SQL 未接入执行器`,n.id)}
  for(const [key,value] of Object.entries(n.config)){if(!optional.has(key)&&!value.trim()&&!(key==='field'&&n.kind==='aggregate'&&n.config.operation==='count'))error(`${n.name}缺少配置：${key}`,n.id)}
  if(settings.mode==='batch'&&streaming.has(n.kind))error(`${n.name}需要实时模式（本原型规则）`,n.id);
  if(settings.mode==='stream'&&bounded.has(n.kind))error(`${n.name}依赖有限数据集，实时模式未建模（本原型规则）`,n.id);
