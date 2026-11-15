@@ -17,65 +17,90 @@
   "headers": [],
   "paths": [],
   "responseBody": "{\n  \"tid\": \"85368b91972c4a35b83b8fa73e34e740\",\n  \"assetType\": \"catalog\",\n  \"catalogName\": \"生成目录信息(sys_gen_info)\",\n  \"dbId\": \"38ef1b566eb4477ebfc07b4c0c8aa973\",\n  \"sourceTableId\": \"fb64c63470c14ee286a29fcea82a259c\"\n}",
-  "description": "分页读取 da_catalog_t 的目录登记及 da_prop_t 的扩展属性。传入 tid 时限定目录，供个人中心、数据超市和文件目录同步使用。",
+  "description": "按当前登录租户分页读取目录登记和当前页扩展属性，返回兼容字段的目录数组。可按 tid 查询，默认每页 1000 条，上限 1000 条。",
   "requestBodyDefinition": null,
   "responseBodyDefinition": null
 }
 ================================
-// POST /dst/catalog/list：按 pageNum、pageSize 分页读取目录，按可选的 tid 限定目录。
-// 从 da_catalog_t 读取目录登记，从 da_prop_t 读取扩展属性，返回调用方沿用的字段别名。
-// 供个人中心、数据超市浏览和文件目录同步调用，执行只读查询。
-var text = (value) => value == null ? '' : value + ''
-var blank = (value) => value == null || text(value).trim() == ''
-var sqlValue = (value) => "'" + text(value).replace("'", "''") + "'"
+import tableRead
+import tenantRuntime
 
-var pageNum = body == null || body.pageNum == null ? 1 : body.pageNum::int
-var pageSize = body == null || body.pageSize == null ? 1000 : body.pageSize::int
-var offset = pageNum <= 1 ? 0 : (pageNum - 1) * pageSize
-var tid = body == null ? null : body.tid
+// POST /dst/catalog/list 分页读取当前租户的目录登记和扩展属性。
+// 兼容目录字典和旧低代码调用的数组、字段别名及缺省页大小。传入 tid 时只选该目录。
+var tenantId = tenantRuntime.id()
+var pageNum = body?.pageNum == null ? 1 : body.pageNum::int
+var pageSize = body?.pageSize == null ? 1000 : body.pageSize::int
+if (pageSize < 0 || pageSize > 1000) {
+    exit 400, '目录列表每页最多 1000 条'
+}
+if (pageSize == 0) {
+    return []
+}
+var offset = pageNum <= 1 ? 0L : (pageNum::long - 1L) * pageSize
 
-var whereSql = " where ifnull(a.is_del, 0) = 0 "
-if (!blank(tid)) {
-    // 指定 tid 时用于数据超市浏览接口读取单条目录详情。
-    whereSql = whereSql + " and a.tid = " + sqlValue(tid)
+// 旧目录字典按当前认证租户读取。请求内的租户、部门和资产类型不能改变授权范围。
+var catalogQuery = db.lower().table('da_catalog_t').columns([
+    'tid', 'tenant_id', 'asset_status', 'flow_status', 'reg_time', 'created_time', 'updated_time'
+]).where().eq('tenant_id', tenantId)
+    .and(active => active.eq('is_del', 0).or().isNull('is_del'))
+var tid = body?.tid
+if (tid != null && (tid + '').trim() != '') {
+    catalogQuery.eq('tid', tid + '')
+}
+// 先在数据库按原先的双时间排序分页。同一时间使用目录主键稳定分页。
+var page = catalogQuery.orderBy('updated_time', 'desc').orderBy('created_time', 'desc')
+    .orderBy('tid', 'asc').page(pageSize, offset)
+var rows = page.list
+if (rows == null || rows.isEmpty()) {
+    return []
 }
 
-var propExpr = (name, alias) => {
-    return "(select p.prop_value from da_prop_t p where p.parent_id = a.tid and ifnull(p.is_del, 0) = 0 and p.prop_name = '" + name + "' limit 1) as " + alias
+var propertyNames = [
+    'catalogName', 'catalogNameEn', 'assetDesc', 'dbId', 'sourceTableId', 'sourceTableName',
+    'orgId', 'manageUnit', 'businessType', 'dataSourceType', 'timestampField', 'dictionaryTableFlag',
+    'dictionaryProfile', 'dictionaryProfiles', 'fieldGovernanceConfig'
+]
+var parent = tableRead.column('p', 'parent_id', 'TEXT')
+var property = tableRead.column('p', 'prop_name', 'TEXT')
+var propertyQuery = tableRead.from('da_prop_t', 'p', tenantId)
+propertyQuery.where(tableRead.in(parent, rows.map(row => row.tid)))
+propertyQuery.where(tableRead.in(property, propertyNames))
+propertyQuery.where(tableRead.equal(tableRead.coalesce([tableRead.column('p', 'is_del', 'NUMBER'), 0]), 0))
+// 一次取回当前页的属性。历史重复属性使用主键最小的一条，避免重复记录扩大响应。
+var ranked = propertyQuery.ranked('r', {
+    parent_id: parent,
+    prop_name: property,
+    prop_value: tableRead.column('p', 'prop_value', 'LOB')
+}, [parent, property], [tableRead.column('p', 'tid', 'TEXT')], ['asc'])
+var rankedParent = tableRead.column('r', 'parent_id', 'TEXT')
+var rankedName = tableRead.column('r', 'prop_name', 'TEXT')
+var properties = ranked.rankedRows({
+    parentId: rankedParent,
+    name: rankedName,
+    value: tableRead.column('r', 'prop_value', 'LOB')
+}, [rankedParent, rankedName], ['asc', 'asc'], true)
+var byCatalog = {}
+for (entry in properties) {
+    if (byCatalog[entry.parentId] == null) {
+        byCatalog[entry.parentId] = {}
+    }
+    byCatalog[entry.parentId][entry.name.toLowerCase()] = entry.value
 }
 
-var sql = "select " +
-    "a.tid as tid, a.tid as id, a.tenant_id as tenantId, 'catalog' as assetType, " +
-    "a.asset_status as assetStatus, a.flow_status as flowStatus, " +
-    "a.reg_time as regTime, a.created_time as createdTime, a.updated_time as updatedTime, " +
-    propExpr("catalogName", "catalogName") + ", " +
-    propExpr("catalogNameEn", "catalogNameEn") + ", " +
-    propExpr("assetDesc", "assetDesc") + ", " +
-    propExpr("dbId", "dbId") + ", " +
-    propExpr("sourceTableId", "sourceTableId") + ", " +
-    propExpr("sourceTableName", "sourceTableName") + ", " +
-    propExpr("orgId", "orgId") + ", " +
-    propExpr("manageUnit", "manageUnit") + ", " +
-    propExpr("businessType", "businessType") + ", " +
-    propExpr("dataSourceType", "dataSourceType") + ", " +
-    propExpr("timestampField", "timestampField") + ", " +
-    propExpr("dictionaryTableFlag", "dictionaryTableFlag") + ", " +
-    propExpr("dictionaryProfile", "dictionaryProfile") + ", " +
-    propExpr("dictionaryProfiles", "dictionaryProfiles") + ", " +
-    propExpr("fieldGovernanceConfig", "fieldGovernanceConfig") + " " +
-    "from da_catalog_t a " + whereSql +
-    " order by a.updated_time desc, a.created_time desc limit " + offset + ", " + pageSize
-
-var rows = db.select(sql)
-for (item in rows) {
-    // 旧调用方常按数据资产统一字段读取，这里补齐常用别名。
-    item.asset_type = item.assetType
-    item.asset_status = item.assetStatus
-    item.flow_status = item.flowStatus
-    item.created_time = item.createdTime
-    item.updated_time = item.updatedTime
-    item.reg_time = item.regTime
-    item.viewCount = item.viewCount == null ? 0 : item.viewCount
-}
-
-return rows
+return rows.map(row => {
+    // 保留运行时已对外返回的小写键和旧下划线键的空值。实际状态、时间由小写键承载。
+    var item = {
+        tid: row.tid, id: row.tid, tenantid: row.tenant_id, assettype: 'catalog',
+        assetstatus: row.asset_status, flowstatus: row.flow_status,
+        regtime: row.reg_time, createdtime: row.created_time, updatedtime: row.updated_time,
+        asset_type: null, asset_status: null, flow_status: null,
+        reg_time: null, created_time: null, updated_time: null,
+        viewCount: 0
+    }
+    var extensions = byCatalog[row.tid]
+    for (name in propertyNames) {
+        var alias = name.toLowerCase()
+        item[alias] = extensions == null ? null : extensions[alias]
+    }
+    return item
+})

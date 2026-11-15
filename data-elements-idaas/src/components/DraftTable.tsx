@@ -14,7 +14,7 @@ export function DraftTable<T extends {id:string}>({dataSource = [], columns, fie
         if(!enabled)return;
         let active=true;setLoading(true);setError('');
         const request=JSON.parse(serialized),wanted=new Set<string>(request.items.map((item:{id:string})=>item.id));
-        foundationApi.write<{keys:string[];total:number}>('/idaas/workspace/preview-order',request).then(result=>{
+        foundationApi.write<{keys:string[];total:number}>('/idaas/workspace/order',request).then(result=>{
             if(!Array.isArray(result.keys)||result.total!==wanted.size||result.keys.length>request.size||result.keys.some(id=>!wanted.has(id))||new Set(result.keys).size!==result.keys.length)throw new Error('授权预览排序范围不一致');
             if(active){setKeys(result.keys);setTotal(result.total);}
         }).catch(cause=>{if(active){setError(cause instanceof Error?cause.message:'授权预览排序失败');setKeys([]);setTotal(0);}}).finally(()=>{if(active)setLoading(false);});

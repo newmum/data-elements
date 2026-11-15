@@ -102,7 +102,7 @@ class ExistingTargetMaterializationMagicTest {
     }
 
     public static class Fixture {
-        final DataAggTaskEnsureBatchMagicTest.Fixture base=new DataAggTaskEnsureBatchMagicTest.Fixture(0);
+        final DataAggTaskEnsureBatchMagicTest.Fixture base=DataAggTaskEnsureBatchMagicTest.Fixture.forCreation(0);
         final JdbcTemplate jdbc=base.jdbc;
         final LockClient locks=new LockClient();
         final int fields;
@@ -110,9 +110,9 @@ class ExistingTargetMaterializationMagicTest {
         String selectedCatalogId;
         final List<Long> catalogCounters = new ArrayList<>();
         Fixture(int count) {
-            fields=count; base.prepareCreation();
+            fields=count;
             jdbc.execute("alter table nifi_pipeline_t alter column dsl_json clob");
-            add("db_table_t","table_comment varchar(300),table_type varchar(64),business_type varchar(64),record_count bigint,field_count int,storage_size varchar(64),total_size_bytes bigint,total_size_formatted varchar(64),related_directory varchar(128),org_id varchar(64),flow_status int,updated_time timestamp,reg_time timestamp,catalog_name varchar(300),source_table_name varchar(100)");
+            add("db_table_t","table_type varchar(64),business_type varchar(64),record_count bigint,field_count int,storage_size varchar(64),total_size_bytes bigint,total_size_formatted varchar(64),related_directory varchar(128),org_id varchar(64),flow_status int,updated_time timestamp,reg_time timestamp,catalog_name varchar(300),source_table_name varchar(100)");
             add("db_datasource_t","db_name varchar(64),org_id varchar(64),app_id varchar(64),show_connect int default 1");
             add("db_table_column_t","column_comment varchar(300),data_type varchar(64),column_type varchar(100),length bigint,precision_length int,scale int,nullable int,default_value varchar(64),primary_key int,auto_increment int,is_unique int,indexed int,charset varchar(64),collation varchar(64),extra varchar(64),source_table_column_id varchar(64),created_time timestamp,updated_time timestamp");
             add("da_prop_t","tid varchar(64),prop_type varchar(32),data_type varchar(64),created_time timestamp,updated_time timestamp");

@@ -46,7 +46,7 @@ test("the navbar requests only the count and ignores an earlier page response", 
   const refreshing = cart.refresh();
   assert.equal(calls.length, 1);
   assert.deepEqual(calls[0].config, {
-    url: "/dws/market/shoppingCardList",
+    url: "/dws/cart/page",
     method: "post",
     data: { mode: "count" },
   });

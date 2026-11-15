@@ -55,7 +55,7 @@ import org.ssssssss.script.runtime.function.MagicScriptLambdaFunction;
 
 class NifiPipelineWriteMagicTest {
     private static final String TENANT = "tenant-a";
-    private static final String API = "api/10.丽斐流程接口/";
+    private static final String API = "api/10.海通流程接口/";
     private static final String COMMON = "function/01.通用函数/";
     private final Map<String, Object> bindings = new LinkedHashMap<>();
     private final PipelineTaskLifecycleSynchronizer tasks = mock(PipelineTaskLifecycleSynchronizer.class);
@@ -131,13 +131,13 @@ class NifiPipelineWriteMagicTest {
                 Map.entry("tasks", tasks), Map.entry("projections", projections), Map.entry("dataScope", scope),
                 Map.entry("nifi", nifi), Map.entry("organizer", new PipelineGroupOrganizer(nifi, jdbc)), Map.entry("index", index),
                 Map.entry("transactionManager", manager), Map.entry("log", LoggerFactory.getLogger(getClass()))));
-        register("respond", "35.丽斐流程列表超文本响应.ms", "nifi_pipe_list_response_v1", "action");
-        register("existingCanvas", "42.丽斐目录关联画布.ms", "71a48eec67605a2d5da8ce93b2cc02cb", "catalogId");
-        register("decodeCanvas", "43.丽斐解码保存画布.ms", "e06d4eb123494419e67f70f2fc03bceb", "row");
-        register("writeCanvas", "44.丽斐持久化画布设计.ms", "3fce842fc70d1d259e9938d81f963e11", "submitted", "pipelineId", "tenantId", "verifyRevision");
-        register("withRequest", "45.丽斐画布写入请求.ms", "44856f9262b98c0fb011f77d4c78abf1", "bodySignature", "input", "action");
-        register("groupScope", "46.丽斐删除校验原生组.ms", "40fabd244d0a1e4572f9e8803b25be8d", "targets", "rootId", "owner");
-        register("withAuthorizedGroups", "47.丽斐删除原生组响应.ms", "ec36858da4464ae3a44f14db2cc44f23",
+        register("respond", "35.海通流程列表超文本响应.ms", "nifi_pipe_list_response_v1", "action");
+        register("existingCanvas", "42.海通目录关联画布.ms", "71a48eec67605a2d5da8ce93b2cc02cb", "catalogId");
+        register("decodeCanvas", "43.海通解码保存画布.ms", "e06d4eb123494419e67f70f2fc03bceb", "row");
+        register("writeCanvas", "44.海通持久化画布设计.ms", "3fce842fc70d1d259e9938d81f963e11", "submitted", "pipelineId", "tenantId", "verifyRevision");
+        register("withRequest", "45.海通画布写入请求.ms", "44856f9262b98c0fb011f77d4c78abf1", "bodySignature", "input", "action");
+        register("groupScope", "46.海通删除校验原生组.ms", "40fabd244d0a1e4572f9e8803b25be8d", "targets", "rootId", "owner");
+        register("withAuthorizedGroups", "47.海通删除原生组响应.ms", "ec36858da4464ae3a44f14db2cc44f23",
                 "parameterName", "deleteAuthorizedGroups");
     }
 
@@ -154,8 +154,8 @@ class NifiPipelineWriteMagicTest {
             }
             return null;
         });
-        register("writeRuntime", "52.丽斐更新画布运行记录.ms", "nifi_canvas_runtime_write_v1", "pipelineId", "tenantId", "changes");
-        register("bindCandidate", "54.丽斐部署候选绑定.ms", "nifi_candidate_bind_v1", "canvas", "candidate", "tenantId");
+        register("writeRuntime", "52.海通更新画布运行记录.ms", "nifi_canvas_runtime_write_v1", "pipelineId", "tenantId", "changes");
+        register("bindCandidate", "54.海通部署候选绑定.ms", "nifi_candidate_bind_v1", "canvas", "candidate", "tenantId");
         doAnswer(call -> {
             jdbc.update("INSERT INTO projection_probe VALUES (?)", canvas.id());
             return null;
@@ -201,9 +201,9 @@ class NifiPipelineWriteMagicTest {
             }
             return null;
         });
-        register("respond", "53.丽斐生命周期错误响应.ms", "nifi_lifecycle_response_v1", "action");
-        register("findCanvas", "48.丽斐读取租户画布.ms", "nifi_pipeline_find_v1", "flowId", "tenantId");
-        register("writeRuntime", "52.丽斐更新画布运行记录.ms", "nifi_canvas_runtime_write_v1", "pipelineId", "tenantId", "changes");
+        register("respond", "53.海通生命周期错误响应.ms", "nifi_lifecycle_response_v1", "action");
+        register("findCanvas", "48.海通读取租户画布.ms", "nifi_pipeline_find_v1", "flowId", "tenantId");
+        register("writeRuntime", "52.海通更新画布运行记录.ms", "nifi_canvas_runtime_write_v1", "pipelineId", "tenantId", "changes");
         var ownGroup = new ObjectMapper().createObjectNode();
         ownGroup.putObject("component").put("id", "owned").put("parentGroupId", "root")
                 .put("comments", "data-elements:v1:" + TENANT + ":pipeline:" + canvas.id());
@@ -314,7 +314,7 @@ class NifiPipelineWriteMagicTest {
     @Test
     void canonicalCreationAndTaskAssociationUseOneTransactionWithoutLegacyAssetView() throws Exception {
         var magic = mock(MagicAPIService.class);
-        var task = script(COMMON + "27.丽斐画布接入任务关联.ms", "fbbbebbeee9346e1813e9b1bf635eb09");
+        var task = script(COMMON + "27.海通画布接入任务关联.ms", "fbbbebbeee9346e1813e9b1bf635eb09");
         when(magic.invoke(eq("/common/ensureNifiCatalogAccessTask"), anyMap())).thenAnswer(call -> {
             var arguments = new LinkedHashMap<>(bindings);
             arguments.putAll(call.getArgument(1));

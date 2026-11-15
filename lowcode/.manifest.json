@@ -1362,7 +1362,7 @@
       "type": "1",
       "sortOrder": 1,
       "path": "09.系统管理/02.用户与权限/权限管理(auth-manage)/右侧权限树(auth-perm-tree).vue",
-      "baseSha256": "5b8f63be99514893128d98e4a5090c6a21adc5549404b578f4c88f07aa7d12e2"
+      "baseSha256": "66ca33b3ae4ebe1dd05587240351f34988e3e685af0ab73c13cd996366abc25b"
     },
     {
       "id": "2034515052092538880",
@@ -1533,7 +1533,7 @@
       "type": "1",
       "sortOrder": 1,
       "path": "10.通用组件/全局导航(global-nav).vue",
-      "baseSha256": "70f6f893ee7ae4c5729650e4d2f4bf254e938fd32a57c2a9955575dc3af113dd"
+      "baseSha256": "4ff7e6d3c7644bbc760096e5a4d60e0fadd2d91d3d1c1dd52614e89fd85739f7"
     }
   ]
 }

@@ -59,7 +59,7 @@ pnpm run dev
 
 浏览器打开 `http://localhost:3002/#/integration/overview`。这个端口和入口与数据中台“数据集成中心”菜单一致；跨端口登录态通过平台现有的 `capability-session.html` 获取，不在地址栏传递 Token。生产环境使用同源 `/haitong/` 入口；源数据管理平台默认位于同一Nginx的根路径`/#/`，顶部小房子返回该首页。生产构建在`.env.production`显式维护`VITE_SOURCE_PLATFORM_HOME_URL=/#/`，源平台部署在子路径或其他域名时由构建环境覆盖，例如`/source-platform/#/`；不能沿用历史`/wanxiang/`地址推断实际入口。首页、登录、上报返回地址校验和iframe来源解析共用同一地址规则。项目沿用 React 18、Ant Design 5、X6 2、TypeScript 5 和 Vite 5；NiFi 画布直接复用同一安装树中的版本。依赖风险预检由 `predev` 和 `prebuild` 执行。依赖声明基准与风险阻断清单维护在工程 `scripts/dependency-baseline.json`、`scripts/dependency-risk.json`，历史检查报告放根 `logs/`。
 
-左上角的系统切换入口与万象使用同一组中心地址约定。治理、资源和资产中心使用 `VITE_WANXIANG_GOVERNANCE_URL`（开发默认 `http://localhost:3010/`，生产默认 `/wanxiang-governance/`）；启智及可视化中心使用 `VITE_QIZHI_BASE_URL`（开发默认 `http://localhost:3001/`，生产默认 `/qizhi/`），可视化路由与主平台的 `/visualization/screens` 一致。云搜和统一身份管理平台分别可由 `VITE_SEARCH_APP_URL`、`VITE_IDAAS_CENTER_URL` 覆盖。切换在当前标签页进行，不传递会话令牌。
+左上角的系统切换入口与万象使用同一组中心地址约定。数据计算中心打开风驰首页，地址由 `VITE_FENGCHI_BASE_URL` 配置，开发默认 `http://localhost:3020/`，生产默认 `/fengchi/`。治理、资源和资产中心使用 `VITE_WANXIANG_GOVERNANCE_URL`，开发默认 `http://localhost:3010/`，生产默认 `/wanxiang-governance/`。启智及可视化中心使用 `VITE_QIZHI_BASE_URL`，开发默认 `http://localhost:3001/`，生产默认 `/qizhi/`。可视化路由与主平台的 `/visualization/screens` 一致。云搜和统一身份管理平台分别可由 `VITE_SEARCH_APP_URL`、`VITE_IDAAS_CENTER_URL` 覆盖。切换在当前标签页进行，不传递会话令牌。
 
 
 <a id="data-report"></a>
@@ -1581,7 +1581,7 @@ LIVE_BATCH在两次执行间被外部修改时不能强求旧结果，测试需�
 | [画布编辑器](../data-elements-haitong/src/nifi/panels/FieldMappingEditor.tsx:120) | 10个UI函数、条件配置、模板/预览/编译入口；1851附近为合成样例 |
 | [ODS模板工具](../data-elements-haitong/src/nifi/utils/fieldMapping.ts:24) | 系统主键生成模板，与编辑器另一模板存在差异 |
 | [映射服务](../data-elements-parent/src/main/java/com/linewell/dataelement/integration/nifi/canvas/mapping/FieldMappingService.java:763) | 编译分支、函数白名单、预览实现和全局策略差距；1536附近为51函数名单 |
-| [映射接口](../magic/api/10.丽斐流程接口/13.字段映射/03.查询字段映射能力.ms) | `/nifi/map` 的能力、校验、预览、推荐、编译、旧规则转换和兼容字典模板 |
+| [映射接口](../magic/api/10.海通流程接口/13.字段映射/03.查询字段映射能力.ms) | `/nifi/map` 的能力、校验、预览、推荐、编译、旧规则转换和兼容字典模板 |
 | [NiFi发布编译](../data-elements-parent/src/main/java/com/linewell/dataelement/integration/nifi/canvas/compile/DslCompiler.java:1866) | 单值/多值展开链、组件数量；2797附近为来源下推边界 |
 | [多值运行脚本](../data-elements-parent/src/main/resources/nifi/multi-value-translation.groovy:43) | 100记录、500键、重复键与部分命中语义 |
 | [多值脚本测试](../data-elements-parent/src/test/java/com/linewell/dataelement/integration/nifi/canvas/compile/RecordLookupScriptTest.java:25) | 20/100/201记录与元数据/查询次数断言；本次未执行 |
@@ -1592,8 +1592,8 @@ LIVE_BATCH在两次执行间被外部修改时不能强求旧结果，测试需�
 | [目标物化Magic](../magic/api/03.数据接入/12.目标数据/01.数据接入物化建表.ms:501) | fieldTransformBindings及目标列落位 |
 | [模板Magic](../magic/api/03.数据接入/12.目标数据/03.根据表或目录获取建表申请模板.ms:357) | 译名列、系统字段、来源类型和显式清空 |
 | [部署规则Binder](../data-elements-parent/src/main/java/com/linewell/dataelement/integration/nifi/canvas/mapping/AccessTaskFieldMappingBinder.java:62) | 补齐旧映射、默认策略和按目标列恢复的边界 |
-| [画布保存](../data-elements-parent/src/main/java/com/linewell/dataelement/integration/nifi/canvas/controller/PipelineController.java:478) | DSL保存与版本控制，不等同映射投影统一事务已完成 |
-| [现有部署生命周期](../data-elements-parent/src/main/java/com/linewell/dataelement/integration/nifi/canvas/controller/PipelineRunController.java:567) | 旧组清理后重编译，需升级状态保存/恢复 |
+| [画布保存](../magic/api/10.海通流程接口/02.流程设计/08.保存流程.ms) | 在共享写锁和同一事务内校验设计版本、保存 DSL 及同步字段规则投影 |
+| [部署入口](../magic/api/10.海通流程接口/06.部署与启停/01.部署流程.ms)、[共用部署实现](../magic/function/01.通用函数/56.海通部署画布.ms) | 当前租户画布校验、队列检查、原生编译、候选切换和失败清理 |
 | [NiFi客户端](../data-elements-parent/src/main/java/com/linewell/dataelement/integration/nifi/canvas/nifi/NifiClient.java:706) | failure/retry自环、队列保护和简单类型匹配 |
 | [部署指纹](../data-elements-parent/src/main/java/com/linewell/dataelement/integration/nifi/canvas/pipeline/DslHasher.java:27) | 现有编译版本和DSL摘要机制 |
 | [任务映射实体](../data-elements-parent/src/main/java/com/linewell/dataelement/feature/dataaccess/infrastructure/persistence/entity/DataAccessFieldMapping.java:17) | 现有列与租户/版本字段 |
@@ -1644,7 +1644,7 @@ LIVE_BATCH在两次执行间被外部修改时不能强求旧结果，测试需�
 | 配置投影 | 画布 2.0 为权威配置；映射表以 pipelineId/nodeId/ruleId 标识完整投影或摘要，批量预取后写入；移除节点会清理其投影，旧 Binder 不回填覆盖 2.0 规则 | `MappingProjectionService.java`、`AccessTaskFieldMappingBinder.java` |
 | NiFi 运行 | 一个主要 Processor，独立批量字典 Controller Service，Reader/Writer 类型传递，512 行/8 MiB 窗口，同一 Session 提交，failure/invalid 保留、有界 retry | `data-elements-parent/mapping-extension/` |
 | 多节点及重放 | 计划摘要按处理器 ID 分隔，支持串联；输入身份和执行时钟保存在属性中，重试与复制属性的重放采用相同生成上下文 | `HaitongTransformRecord.java` |
-| 安全部署 | 新图先构建，旧图保留到切换；队列与来源 state 核查；不能证明可保留水位的重建返回阻止原因；插件类型和精确 bundle 检查 | `DslCompiler.java`、`PipelineRunController.java`、`NifiClient.java` |
+| 安全部署 | 新图先构建，旧图保留到切换。检查队列、来源 state、插件类型和精确 bundle，无法保留水位的重建返回阻止原因 | [海通部署画布](../magic/function/01.通用函数/56.海通部署画布.ms)、`DslCompiler.java`、`NifiClient.java` |
 
 
 <a id="field-mapping--212-数据库与时间适配原则"></a>

@@ -13,7 +13,7 @@ export function DraftTable<T extends object>({dataSource=[],columns,fields,defau
  const rows=dataSource.map((row,index)=>({id:String(typeof props.rowKey==='function'?props.rowKey(row,index):props.rowKey?(row as any)[props.rowKey]??index:(row as any).id??index),row}));
  const inputOrder=defaultOrder==='input'&&!order.sort.sortField;
  const body=JSON.stringify({items:rows.map((item,index)=>({id:item.id,value:inputOrder?index:definition?.value(item.row)??null})),kind:inputOrder?'number':definition?.kind,direction:inputOrder?'asc':order.sort.sortDir||(definition?.kind==='text'?'asc':'desc'),page,size});
- useEffect(()=>{let active=true;setLoading(true);setError('');platformApi<{keys:string[];total:number}>('/sym/table/preview-order',JSON.parse(body)).then(result=>{
+ useEffect(()=>{let active=true;setLoading(true);setError('');platformApi<{keys:string[];total:number}>('/sym/table/order',JSON.parse(body)).then(result=>{
   const wanted=new Set(JSON.parse(body).items.map((item:{id:string})=>item.id));
   if(result.total!==wanted.size||result.keys.some(id=>!wanted.has(id))||new Set(result.keys).size!==result.keys.length)throw new Error('草稿排序结果不完整或超出选择范围');
   if(active){setKeys(result.keys);setTotal(result.total);}

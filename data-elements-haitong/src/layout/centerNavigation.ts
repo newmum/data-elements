@@ -10,11 +10,12 @@ const routeUrl = (root: string, route: string): string => {
 
 const wanxiang = base(import.meta.env.VITE_WANXIANG_GOVERNANCE_URL, 'http://localhost:3010/', '/wanxiang-governance/');
 const qizhi = base(import.meta.env.VITE_QIZHI_BASE_URL, 'http://localhost:3001/', '/qizhi/');
+const fengchi = base(import.meta.env.VITE_FENGCHI_BASE_URL, 'http://localhost:3020/', '/fengchi/');
 
 export const centers = [
   { key: 'resource', name: '数据资源中心', description: '数仓规划、建模与资源交付', url: routeUrl(wanxiang, '/resource/overview') },
   { key: 'integration', name: '数据集成中心', description: '数据接入、同步与分发', url: routeUrl(window.location.href, '/overview') },
-  { key: 'compute', name: '数据计算中心', description: '数据加工、计算与分析', url: routeUrl(qizhi, '/compute/overview') },
+  { key: 'compute', name: '数据计算中心', description: '数据加工、计算与分析', url: new URL(fengchi, window.location.href).href },
   { key: 'governance', name: '数据治理中心', description: '元数据、标准与数据质量', url: routeUrl(wanxiang, '/governance/overview') },
   { key: 'security', name: '数据安全中心', description: '敏感发现、授权与安全防护', url: routeUrl(qizhi, '/security/overview') },
   { key: 'asset', name: '数据资产中心', description: '资产盘点、流通与运营', url: routeUrl(wanxiang, '/assets/overview') },

@@ -223,7 +223,7 @@ class ApiPullSyncMagicTest {
         }
 
         Object call(String tenant) {
-            var dataScope = new DataScopeMagicModule(new DataScopeAuthorizationService(null, null, json) {
+            var dataScope = new DataScopeMagicModule(new DataScopeAuthorizationService(null) {
                 @Override
                 public ScopeDecision currentScope(String code) {
                     assertThat(code).isEqualTo("MENU:2081000000000000002");

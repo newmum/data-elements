@@ -240,8 +240,11 @@ class NifiConnectionProbeHiveTest {
     @Test void takesRegisteredHiveConnectionModeFromTheActiveTenant() {
         when(registered.resolve("tenant-a", "hive-id")).thenReturn(Map.of("dbType", "hive",
                 "metadataAccessMode", "server-managed-mrs", "database", "analytics"));
-        when(magic.call(eq("POST"), anyString(), anyMap())).thenReturn(Map.of("success", true, "columns",
-                List.of(Map.of("col_name", "id", "data_type", "bigint"))));
+        when(magic.call(eq("POST"), eq("/dst/db/hive"), anyMap())).thenAnswer(invocation -> {
+            Map<String, Object> variables = invocation.getArgument(2);
+            variables.put("apiInfo", "/dst/db/hive");
+            return Map.of("success", true, "columns", List.of(Map.of("col_name", "id", "data_type", "bigint")));
+        });
         try (var ignored = com.linewell.dataelement.platform.tenant.domain.TenantContext.use("tenant-a")) {
             var result = (Map<?, ?>) columnsProbe(Map.of("manifestKey", "source.hive", "table", "`analytics`.`events`",
                     "config", Map.of("registeredDatasourceId", "hive-id", "database", "wrong-browser-db"))).getBody();
@@ -275,7 +278,7 @@ class NifiConnectionProbeHiveTest {
     static org.springframework.http.ResponseEntity<?> runProbe(String id, Map<String, Object> body,
             NifiConnectionProbe probe, DataSourceConnectionPropertyResolver resolver) {
         try {
-            String settings = CanonicalMagicSources.byId("nifi_connection_probe_settings_v1")
+            String settings = CanonicalMagicSources.byId("nifi_connection_probe_setting_v1")
                     .replaceAll("(?m)^import (com\\.linewell|nifiConnectionProbe|tenantRuntime)[^\\r\\n]*\\R", "");
             var prepare = MagicScript.create(settings, null);
             java.util.function.Function<Object[], Object> prepareSettings = arguments -> {

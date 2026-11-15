@@ -34,13 +34,16 @@ class DataSourceConnectionTestServiceTest {
     void elasticsearchConnectionUsesRegisteredEndpointAndPort() {
         var magic=mock(MagicAPIService.class);
         var probe=mock(StructuredSourceProbeService.class);
-        when(magic.call(eq("POST"),eq("/nifi/api/connection-test"),anyMap()))
-                .thenReturn(Map.of("code",0,"data",ResponseEntity.ok(Map.of("success",true))));
+        when(magic.execute(eq("POST"), eq("/nifi/api/connection-test"), anyMap())).thenAnswer(invocation -> {
+            Map<String, Object> variables = invocation.getArgument(2);
+            variables.put("apiInfo", "/nifi/api/connection-test");
+            return ResponseEntity.ok(Map.of("success", true));
+        });
         var service=new DataSourceConnectionTestService(mock(MetadataExplorerService.class),magic,probe);
         var result=service.test(Map.of("dbType","es","host","127.0.0.1","port",9200,"jdbcURL","http://127.0.0.1:19200"));
         assertTrue((Boolean)result.get("connected"));
         ArgumentCaptor<Map<String, Object>> request=ArgumentCaptor.captor();
-        verify(magic).call(eq("POST"),eq("/nifi/api/connection-test"),request.capture());
+        verify(magic).execute(eq("POST"), eq("/nifi/api/connection-test"), request.capture());
         var body=(Map<?,?>)request.getValue().get("body");
         assertEquals("http://127.0.0.1:19200",((Map<?,?>)body.get("config")).get("nodes"));
     }

@@ -262,7 +262,7 @@ mysql --host=127.0.0.1 --port=3306 --user=DBA_USER --password --default-characte
 
 86 的 `da_asset_t` 兼容视图已在公安、海渔和广电退役，澄天金仓原无此对象。三库各保留 219 张表和 4 个业务视图，`da_catalog_t` 的列与全量数据指纹一致。五库重新导出后，完整定义只移除这三个视图。结构比较的澄天 53 项既有差异仍记录在案。已有库分别按 [MySQL 增量](../db/increments/000009_retire_legacy_asset_view.mysql.sql) 和 [达梦增量](../db/increments/000009_retire_legacy_asset_view.dameng.sql) 的前置核对和恢复要求升级，具体部署目标以实际绑定为准。
 
-14 演示环境的四个 `baseline_demo_*` 库均已无 `da_asset_t`，目录数据继续使用 `da_catalog_t`。14 控制库仍有三项旧 Magic 资源包含可执行的旧表引用。演示环境资源的核对和发布按 [后端接手顺序](data-elements-parent.md#backend-simplification-handoff) 进行。
+14 公网演示环境使用四个 `baseline_demo_*` 库，目录数据保存在 `da_catalog_t`。本轮后端精简的验证目标是本机 8088 连接的 86 开发环境，见 [后端接手记录](data-elements-parent.md#backend-simplification-handoff)。
 
 此前“四行业统一为 176 张、表列主键索引外键一致”是历史核验口径，不能覆盖上述当前实测。原基线包含 3 张湖仓分层表、12 张服务网关表及登记第五步的接入申请三字段；海渔旧 `nifi_task_status_t` 的退役记录仍保留。14 公网演示连接及结构单独维护，不随本批升级；8088 的实际绑定以运行进程为准。
 
@@ -772,8 +772,10 @@ Use the released `my-db` page at `/register/register-sjkb/list` as the default v
 - 系统门户 Magic 资源位于 `01.系统门户`，门户首页为 `GET /portal/main/index`，本人改密为 `POST /portal/profile/password`。
 - `/portal/sso` 管理登录和会话。`POST /login` 和 `POST /logout` 分别登录和登出，`GET /ticket` 签发票据，`GET /redeem` 兑换票据或授权码。`GET /options` 和 `GET /settings` 提供登录选项与设置。`GET /session`、`GET /tenants` 和 `POST /switch` 校验已登录会话和租户成员关系。登录继续使用 SM3 入参。
 - 数据库资源 Magic API 位于 `02.数据盘点/02.数据库资源`，完整前缀为 `/dst/db`。两层叶目录内按数据源、库结构、登记表、字段、数据行、文件和上报顺序编号。数据源卡片及展开表格用 `POST /dst/db/dept` 的 `cards`、`tables` 模式，字段列表为 `GET /dst/db/fields`，分页预览为 `POST /dst/db/preview`，上报登记为 `POST /dst/db/register`。
+- `04.数据治理/03.资源中心/14.资源操作` 使用 `POST /dwm/center/command`，供万象目录编目、资源表格和共享低代码资产中心查询与操作资源。
 - 数据接入业务 Magic API 位于 `03.数据接入`，根路径为 `/ods`。任务分页为 `POST /ods/job/page`，多表编组分页为 `POST /ods/multi/page`，汇聚与分发分页分别为 `POST /ods/ingest/page` 和 `POST /ods/dist/page`，即时对账实例分页为 `POST /ods/recon/page`，ETL 分组树为 `GET /ods/job/groups`。完整叶组按同步节点、服务节点、接入任务、字段映射、任务监控、多表编组、接入登记、对账策略、对账执行、分发、汇聚、目标数据和 API 拉取组织。
-- 共享 NiFi 的 Magic 业务 API 位于 `10.NiFi流程接口`，根路径为 `/nifi`。流程设计与模板使用 `/flow`、`/canvas`，接入链路使用 `/chain`，运行状态、部署、流程组、节点及错误公告分别使用 `/run`、`/life`、`/group`、`/node`、`/event`。组件清单用 `/catalog`，字段映射按计划 `/plan`、模板 `/template`、字典 `/dict`、编辑规则 `/map`、运行版本 `/maprun` 组织。流程、组件或节点标识以查询参数传递，例如 `GET /nifi/flow/detail?id=<流程ID>`。
+- 共享海通流程的 Magic 业务 API 位于 `10.海通流程接口`，根路径为 `/nifi`。流程设计与模板使用 `/flow`、`/canvas`，接入链路使用 `/chain`，运行状态、部署、流程组、节点及错误公告分别使用 `/run`、`/life`、`/group`、`/node`、`/event`。组件清单用 `/catalog`，字段映射按计划 `/plan`、模板 `/template`、字典 `/dict`、编辑规则 `/map`、运行版本 `/maprun` 组织。流程、组件或节点标识以查询参数传递，例如 `GET /nifi/flow/detail?id=<流程ID>`。
+- `15.连接探查` 下的连接测试、字段探查和表探查沿用海通画布的 `/nifi/api/connection-test`、`/nifi/api/columns-probe`、`/nifi/api/tables-probe`。Magic 负责校验和当前租户的 Hive 登记配置，Java 负责协议连接与诊断。数据源登记的 `/dst/db/srctest` 复用其中的连接探查能力。
 - Data-application Magic resources belong under `06.数据应用` and use `/das` as the public root. Do not retain `/workshop` calls in low-code source/compiled JS or any frontend project.
 - 应用仓库按应用管理 `/das/app`、应用图标 `/das/icon` 和应用页签 `/das/tab` 归类。应用和页签分页使用 `POST /das/app/page`、`POST /das/tab/page`。取应用详情使用 `POST /das/app/detail`，澄天编辑器向 `POST /das/tab/bind` 绑定页面，通过 `POST /das/tab/thumb` 保存缩略图。
 

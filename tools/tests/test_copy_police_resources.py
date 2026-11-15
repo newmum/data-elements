@@ -58,7 +58,7 @@ class CopyPoliceResourcesTest(unittest.TestCase):
                 self.assertEqual(result['plannedChanges'],count)
                 self.assertEqual(query.call_count,3)
                 self.assertEqual(api.call_count,1)
-                self.assertEqual(api.call_args.args,('/sym/auth/currentDataScope',{'resourceCode':'MENU:2081000000000000002'}))
+                self.assertEqual(api.call_args.args,('/sym/scope/current',{'resourceCode':'MENU:2081000000000000002'}))
                 self.assertEqual(set(query.call_args.args[2][1:]),{'shadow-db','old-db'})
                 execute.assert_not_called()
 

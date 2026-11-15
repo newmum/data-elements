@@ -236,7 +236,7 @@ class DatasourceCompletionMagicTest {
         assertThat(eligible.connection.completedSaves).isEqualTo(2);
     }
 
-    private static SQLModule magicDb(DriverManagerDataSource source) {
+    static SQLModule magicDb(DriverManagerDataSource source) {
         var dynamic = new MagicDynamicDataSource();
         dynamic.setDefault(source);
         var db = new SQLModule(dynamic);
@@ -400,7 +400,11 @@ class DatasourceCompletionMagicTest {
             jdbc.execute("create index idx_test_source_identity on db_datasource_t(tid,tenant_id,is_del)");
             jdbc.execute("create index idx_test_table_identity on db_table_t(tid,tenant_id,is_del)");
             jdbc.update("insert into db_datasource_t(tid,tenant_id,asset_status,is_del) values('db','ga',0,0)");
-            for(int i=0;i<count;i++) jdbc.update("insert into db_table_t values(?,'ga','db',?,0)","table-"+i,i==0?0:2);
+            List<Object[]> tables = new java.util.ArrayList<>(count);
+            for (int i = 0; i < count; i++) {
+                tables.add(new Object[]{"table-" + i, i == 0 ? 0 : 2});
+            }
+            jdbc.batchUpdate("insert into db_table_t values(?,'ga','db',?,0)", tables);
             db = magicDb(source);
             metadata=new MetadataAssetPersistenceModule(source);
         }

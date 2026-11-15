@@ -100,8 +100,8 @@ const API = {
   DELETE: "/sym/menu/delete",
   TOGGLE_STATUS: "/sym/menu/toggleStatus",
   SORT: "/sym/menu/sort",
-  GET_ROLE_SCOPE: "/sym/auth/getRoleDataScope",
-  SAVE_ROLE_SCOPE: "/sym/auth/saveRoleDataScope",
+  GET_ROLE_SCOPE: "/sym/scope/role",
+  SAVE_ROLE_SCOPE: "/sym/scope/save",
 };
 
 // 菜单项接口（匹配 API 返回）

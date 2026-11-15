@@ -34,9 +34,9 @@ class KingbaseSqlTest {
         assertTrue(version.contains("public.json_number("));assertEquals(1,version.chars().filter(c->c=='?').count());
     }
     @Test void keepsAtomicUpsertWithReviewedTenantConflictKey() {
-        String sql=KingbaseSql.adapt("INSERT INTO surveillance_topic_daily_stat_t(tid,tenant_id,input_count,updated_time) VALUES(?,?,?,?) ON DUPLICATE KEY UPDATE input_count=input_count+VALUES(input_count),updated_time=VALUES(updated_time)");
-        assertTrue(sql.contains("ON CONFLICT (tenant_id,engine_code,resource_code,stat_date)"));
-        assertTrue(sql.contains("input_count=surveillance_topic_daily_stat_t.input_count+EXCLUDED.input_count"));
+        String sql=KingbaseSql.adapt("INSERT INTO dq_quality_metric_t(tid,tenant_id,input_count,updated_time) VALUES(?,?,?,?) ON DUPLICATE KEY UPDATE input_count=input_count+VALUES(input_count),updated_time=VALUES(updated_time)");
+        assertTrue(sql.contains("ON CONFLICT (tenant_id,run_id,task_rule_id)"));
+        assertTrue(sql.contains("input_count=dq_quality_metric_t.input_count+EXCLUDED.input_count"));
         assertTrue(sql.contains("updated_time=EXCLUDED.updated_time"));
     }
     @Test void adaptsControlDatabaseJobAndRelayUpserts() {
@@ -54,9 +54,9 @@ class KingbaseSqlTest {
     @Test void doesNotInterpretSqlTextStoredAsLiteralContent() {
         String literal="SELECT 'JSON_TABLE(a,b) ON DUPLICATE KEY UPDATE' AS note /* JSON_TABLE(a,b) */";
         assertEquals(literal,KingbaseSql.adapt(literal));
-        String insert="INSERT INTO surveillance_kafka_connection_t(tid,status) VALUES(?,?) ON DUPLICATE KEY UPDATE status='status'";
+        String insert="INSERT INTO api_job_t(tid,status) VALUES(?,?) ON DUPLICATE KEY UPDATE status='status'";
         assertTrue(KingbaseSql.adapt(insert).contains("status='status'"));
-        String storedSql="INSERT INTO surveillance_kafka_connection_t(tid,status) VALUES(?,?) ON DUPLICATE KEY UPDATE status='VALUES(status)'";
+        String storedSql="INSERT INTO api_job_t(tid,status) VALUES(?,?) ON DUPLICATE KEY UPDATE status='VALUES(status)'";
         assertTrue(KingbaseSql.adapt(storedSql).contains("status='VALUES(status)'"));
     }
     @Test void mapsMySqlCaseInsensitiveColumnIdentifiersToNativeLowercase() {

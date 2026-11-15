@@ -487,7 +487,7 @@ class DatasourceManagementPermissionsMagicTest {
             dialects.add(new MySQLDialect());
             db.setDialectAdapter(dialects);
 
-            dataScope = new DataScopeMagicModule(new DataScopeAuthorizationService(null, null, json) {
+            dataScope = new DataScopeMagicModule(new DataScopeAuthorizationService(null) {
                 @Override
                 public ScopeDecision currentScope(String resource) {
                     assertThat(resource).isEqualTo("MENU:2081000000000000002");

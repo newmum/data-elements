@@ -1,6 +1,8 @@
 package com.linewell.dataelement.platform.magic;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -27,6 +29,7 @@ import org.ssssssss.magicapi.modules.db.provider.DefaultColumnMapperProvider;
 import org.ssssssss.magicapi.modules.db.provider.LowerColumnMapperProvider;
 import org.ssssssss.script.MagicScript;
 import org.ssssssss.script.MagicScriptContext;
+import org.ssssssss.script.runtime.ExitValue;
 
 class CatalogRegistryPagingTest {
     private static final Map<String, Object> ALL = Map.of("scope", "ALL");
@@ -102,6 +105,62 @@ class CatalogRegistryPagingTest {
         var scoped = fixture.page(OWNER, Map.of("conditions", List.of(filter("orgIds", "in", List.of("org-b")))));
         assertEquals(0, ((Number) scoped.get("total")).intValue());
         assertThrows(Exception.class, () -> fixture.page(ALL, Map.of("sortField", "unknown SQL")));
+    }
+
+    @Test
+    void compatibilityListPaginatesInDatabaseAndReadsPropertiesOncePerPage() throws Exception {
+        var fixture = new Fixture();
+        var database = new JdbcTemplate(fixture.source);
+        database.update("UPDATE da_catalog_t SET updated_time = TIMESTAMP '2025-01-01 12:00:00', created_time = NULL");
+        database.update("UPDATE da_catalog_t SET is_del = NULL WHERE tid = 'catalog-000'");
+        database.update("""
+                INSERT INTO da_prop_t VALUES
+                    ('catalog-name-1','tenant-a','catalog-000','catalog','catalogName','本租户目录',NULL,NULL),
+                    ('catalog-name-2','tenant-a','catalog-000','catalog','catalogName','重复目录名',NULL,0),
+                    ('catalog-name-3','tenant-a','catalog-000','catalog','catalogNameEn','deleted',NULL,1),
+                    ('catalog-name-0','tenant-b','catalog-000','catalog','catalogName','外部属性',NULL,0)
+                """);
+
+        var small = StructuredValues.objectRows(fixture.legacyList(Map.of("pageSize", 20)));
+        assertEquals(3, fixture.source.reads);
+        var large = StructuredValues.objectRows(fixture.legacyList(Map.of("pageSize", 100)));
+        assertEquals(3, fixture.source.reads);
+        assertEquals(20, small.size());
+        assertEquals(100, large.size());
+        assertEquals(small, large.subList(0, 20));
+        var first = large.getFirst();
+        assertEquals("catalog-000", first.get("tid"));
+        assertEquals("本租户目录", first.get("catalogname"));
+        assertEquals("catalog", first.get("assettype"));
+        assertTrue(first.containsKey("catalognameen"));
+        assertNull(first.get("catalognameen"));
+        assertTrue(first.containsKey("asset_status"));
+        assertNull(first.get("asset_status"));
+
+        var next = StructuredValues.objectRows(fixture.legacyList(Map.of("pageNum", 2, "pageSize", 20)));
+        assertEquals(3, fixture.source.reads);
+        assertEquals(large.subList(20, 40), next);
+        var last = StructuredValues.objectRows(fixture.legacyList(Map.of("pageNum", 2, "pageSize", 100)));
+        assertEquals(3, fixture.source.reads);
+        assertEquals(6, last.size());
+        assertEquals("other-owner", last.getLast().get("tid"));
+    }
+
+    @Test
+    void compatibilityListScopesBothTablesToTheSessionTenantAndBoundsInputs() throws Exception {
+        var fixture = new Fixture();
+        var allowed = StructuredValues.objectRows(fixture.legacyList(Map.of("tid", "other-owner", "tenantId", "tenant-b")));
+        assertEquals(1, allowed.size());
+        assertEquals("tenant-a", allowed.getFirst().get("tenantid"));
+        assertEquals(3, fixture.source.reads);
+        for (String id : List.of("foreign", "deleted", "missing", "' OR 1=1 --")) {
+            assertTrue(StructuredValues.objectRows(fixture.legacyList(Map.of("tid", id))).isEmpty());
+            assertEquals(1, fixture.source.reads);
+        }
+        assertTrue(StructuredValues.objectRows(fixture.legacyList(Map.of("pageSize", 0))).isEmpty());
+        assertEquals(0, fixture.source.reads);
+        assertInstanceOf(ExitValue.class, fixture.legacyList(Map.of("pageSize", 1001)));
+        assertEquals(0, fixture.source.reads);
     }
 
     private static Map<String, Object> filter(String field, String type, Object value) {
@@ -195,6 +254,15 @@ class CatalogRegistryPagingTest {
             vars.put("body", body);
             return TenantContext.call("tenant-a",
                     () -> StructuredValues.objectMap(script.execute(new MagicScriptContext(vars))));
+        }
+
+        Object legacyList(Map<String, Object> body) throws Exception {
+            String canonical = CanonicalMagicSources.byId("datapd_catalog_list_01");
+            var list = MagicScript.create(canonical.replaceAll("(?m)^import (tenantRuntime|tableRead)\\s*\\R", ""), null);
+            var context = new MagicScriptContext(Map.of("tenantRuntime", new Tenant(), "tableRead", store,
+                    "db", dbModule, "body", body));
+            source.reads = 0;
+            return TenantContext.call("tenant-a", () -> list.execute(context));
         }
     }
 

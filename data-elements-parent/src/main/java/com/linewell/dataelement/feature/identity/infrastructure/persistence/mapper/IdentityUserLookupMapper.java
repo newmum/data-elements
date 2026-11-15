@@ -40,16 +40,7 @@ public interface IdentityUserLookupMapper {
             @Param("tenantId") String tenantId
     );
 
-    int countActiveRole(
-            @Param("roleId") String roleId,
-            @Param("tenantId") String tenantId
-    );
-
-    String selectRoleDataScope(@Param("roleId") String roleId, @Param("tenantId") String tenantId);
-
     List<String> selectRoleDataScopes(@Param("roleIds") List<String> roleIds, @Param("tenantId") String tenantId);
-
-    int updateRoleDataScope(@Param("roleId") String roleId, @Param("tenantId") String tenantId, @Param("scope") String scope);
 
     List<String> selectOrganizationIds(
             @Param("userId") String userId,

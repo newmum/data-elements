@@ -164,26 +164,26 @@ class SystemConfigServiceTest {
     }
 
     @Test
-    void saveEvictsCachedGroupAndReturnsUpdatedValue() {
-        insert("GLOBAL", "PORTAL", "systemName", "before", "STRING", 0);
-        assertEquals("before", service.publicSettings().get("systemName"));
-        assertFalse(redisValues.isEmpty());
+    void magicEvictionReloadsPortalSettingsAfterCommittedTenantUpdate() {
+        insert("GLOBAL", "PORTAL", "systemName", "默认平台", "STRING", 0);
+        insert("tenant-a", "PORTAL", "systemName", "下发前", "STRING", 0);
+        var magic = new SystemConfigMagicModule(service, new LegacyIntegrationSecretsProperties());
 
-        service.save(
-                Map.of(
-                        "tenantId", "GLOBAL",
-                        "configGroup", "PORTAL",
-                        "configCode", "systemName",
-                        "configName", "System name",
-                        "configValue", "after",
-                        "valueType", "STRING",
-                        "configScope", "PUBLIC"
-                ),
-                "test"
-        );
+        TenantContext.call("tenant-a", () -> {
+            assertEquals("下发前", magic.publicSettings().get("systemName"));
+            jdbcTemplate.update("""
+                    update sym_config_t set config_value = ?
+                     where tenant_id = ? and config_group = ? and config_code = ?
+                    """, "下发后", "tenant-a", "PORTAL", "systemName");
+            assertEquals("下发前", magic.publicSettings().get("systemName"));
 
-        assertTrue(redisValues.isEmpty());
-        assertEquals("after", service.publicSettings().get("systemName"));
+            assertTrue(magic.evict("PORTAL"));
+            assertTrue(redisValues.isEmpty());
+            assertEquals("下发后", magic.publicSettings().get("systemName"));
+            return null;
+        });
+
+        assertEquals("默认平台", magic.publicSettings().get("systemName"));
     }
 
     private void insert(

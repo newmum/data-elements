@@ -4,23 +4,26 @@ import com.linewell.dataelement.platform.tenant.domain.TenantContext;
 import com.linewell.dataelement.utils.StructuredValues;
 
 import static org.junit.jupiter.api.Assertions.*;
+import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Proxy;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.*;
+import java.util.regex.Pattern;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.ssssssss.magicapi.core.context.RequestEntity;
 import org.ssssssss.magicapi.core.interceptor.DefaultResultProvider;
-import org.ssssssss.magicapi.datasource.model.MagicDynamicDataSource;
 import org.ssssssss.magicapi.modules.db.*;
 import org.ssssssss.magicapi.modules.db.dialect.*;
 import org.ssssssss.magicapi.modules.db.inteceptor.SQLInterceptor;
-import org.ssssssss.magicapi.modules.db.provider.*;
 import org.ssssssss.script.*;
 import org.ssssssss.script.exception.MagicExitException;
 import org.ssssssss.script.exception.MagicScriptException;
@@ -28,6 +31,36 @@ import org.ssssssss.script.runtime.ExitValue;
 
 
 class WorkbenchMagicTest {
+ private static List<String> setupSchema;
+
+ @BeforeAll
+ static void prepareSchema() throws IOException {
+  String ddl = Files.readString(Path.of("../db/baseline_ga/init.sql"));
+  var columnDefinition = Pattern.compile("^\\s*`([^`]+)`\\s+(\\w+)(?:\\(([^)]+)\\))?.*");
+  var statements = new ArrayList<String>();
+  for (String table : List.of("db_datasource_t", "db_table_t", "metadata_table_collection_job_t",
+      "data_access_agg_task_t", "nifi_pipeline_t", "dwm_center_layer_source_t", "sym_dict_t",
+      "rm_role_t", "sym_application_t", "rm_org_t", "rm_user_t")) {
+   String section = ddl.split("CREATE TABLE `" + table + "` \\(", 2)[1].split("\\) ENGINE=", 2)[0];
+   var columns = new ArrayList<String>();
+   for (String line : section.lines().toList()) {
+    var column = columnDefinition.matcher(line);
+    if (column.matches()) {
+     String type = switch (column.group(2).toLowerCase(Locale.ROOT)) {
+      case "tinyint", "int", "bigint", "smallint" -> "bigint";
+      case "datetime" -> "timestamp";
+      case "decimal" -> "decimal(20,4)";
+      case "longtext" -> "clob";
+      default -> "varchar(4000)";
+     };
+     columns.add("`" + column.group(1) + "` " + type);
+    }
+   }
+   statements.add("create table `" + table + "`(" + String.join(",", columns) + ")");
+  }
+  setupSchema = List.copyOf(statements);
+ }
+
  public static class Scope {
   String value="ALL";
   List<String> organizations=List.of("org-a");
@@ -76,25 +109,24 @@ class WorkbenchMagicTest {
    };
    jdbc=new JdbcTemplate(source);
    tableRead=new StructuredTableReadMagicModule(jdbc);
-   String ddl=java.nio.file.Files.readString(java.nio.file.Path.of("../db/baseline_ga/init.sql"));
-   for(String table:List.of("db_datasource_t","db_table_t","metadata_table_collection_job_t","data_access_agg_task_t","nifi_pipeline_t","dwm_center_layer_source_t","sym_dict_t","rm_role_t","sym_application_t","rm_org_t","rm_user_t")) {
-    String section=ddl.split("CREATE TABLE `"+table+"` \\(",2)[1].split("\\) ENGINE=",2)[0];var columns=new ArrayList<String>();
-    for(String line:section.split("\\r?\\n")) {
-     var matcher=java.util.regex.Pattern.compile("^\\s*`([^`]+)`\\s+(\\w+)(?:\\(([^)]+)\\))?.*").matcher(line);
-     if(matcher.matches()) {
-      String type=matcher.group(2).toLowerCase();String mapped=List.of("tinyint","int","bigint","smallint").contains(type)?"bigint":type.equals("datetime")?"timestamp":type.equals("decimal")?"decimal(20,4)":type.equals("longtext")?"clob":"varchar(4000)";
-      columns.add("`"+matcher.group(1)+"` "+mapped);
-     }
-    }
-    jdbc.execute("create table `"+table+"`("+String.join(",",columns)+")");
-   }
+   jdbc.batchUpdate(setupSchema.toArray(String[]::new));
    jdbc.execute("insert into rm_role_t(id,tenant_id,app_id,code_num,deleted,status) values('role','police','app','admin',0,0)");
    jdbc.execute("insert into db_datasource_t(tid,tenant_id,db_name,created_by,org_id,asset_status,is_del) values('owned','police','本部门库','user','org-a',2,0),('other','police','其他部门库','another','org-b',1,0),('foreign','foreign','其他租户库','user','org-a',2,0)");
-   for(int i=0;i<count;i++)jdbc.update("insert into db_table_t(tid,datasource_id,tenant_id,table_name,table_name_cn,business_type,annotated,asset_status,field_count,field_governance_config,is_del) values(?,?,'police',?,'业务表','业务表',?,?,1,?,0)","table-"+i,i%2==0?"owned":"other","t_"+i,i%2,i%3==0?2:1,"{\"registrationSavedPhase\":\"business\",\"timestampField\":\"id\",\"fields\":[{\"columnName\":\"id\",\"standardField\":\"DATE\",\"dictionaryRelation\":{\"enabled\":true,\"sql\":\"select code\"}}]}");
+   var tables = new ArrayList<Object[]>(count);
+   String governance = "{\"registrationSavedPhase\":\"business\",\"timestampField\":\"id\",\"fields\":[{\"columnName\":\"id\","
+       + "\"standardField\":\"DATE\",\"dictionaryRelation\":{\"enabled\":true,\"sql\":\"select code\"}}]}";
+   for (int i = 0; i < count; i++) {
+    tables.add(new Object[]{"table-" + i, i % 2 == 0 ? "owned" : "other", "t_" + i, i % 2,
+        i % 3 == 0 ? 2 : 1, governance});
+   }
+   jdbc.batchUpdate("""
+       insert into db_table_t(tid,datasource_id,tenant_id,table_name,table_name_cn,business_type,
+           annotated,asset_status,field_count,field_governance_config,is_del)
+       values(?,?,'police',?,'业务表','业务表',?,?,1,?,0)
+       """, tables);
    jdbc.execute("insert into db_table_t(tid,datasource_id,tenant_id,table_name,business_type,annotated,asset_status,is_del) values('secret','owned','foreign','secret','业务表',1,2,0)");
-   var sources=new MagicDynamicDataSource();sources.setDefault(source);db=new SQLModule(sources);db.setDataSourceNode(sources.getDataSource());db.setResultProvider(new DefaultResultProvider("workbench-test"));
+   db=DatasourceCompletionMagicTest.magicDb(source);db.setResultProvider(new DefaultResultProvider("workbench-test"));
    db.setDialectAdapter(new DialectAdapter());
-   var mapper=new ColumnMapperAdapter();mapper.add(new DefaultColumnMapperProvider());mapper.add(new CamelColumnMapperProvider());mapper.setDefault("camel");db.setColumnMapperProvider(mapper);db.setColumnMapRowMapper(mapper.getDefaultColumnMapRowMapper());db.setRowMapColumnMapper(v->v);db.setNamedTableInterceptors(List.of());
    db.setSqlInterceptors(List.of(new SQLInterceptor(){@Override public void preHandle(BoundSql sql,RequestEntity req){// H2 does not retain bound values when it inlines a multiply referenced CTE.
     try {net.sf.jsqlparser.parser.CCJSqlParserUtil.parse(sql.getSql());} catch(Exception error) {throw new AssertionError("SQL must also pass the runtime tenant parser",error);}
     // Render only fixture parameters here; production Magic always uses JDBC bindings.

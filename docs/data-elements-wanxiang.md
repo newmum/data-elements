@@ -78,6 +78,7 @@ npm run dev
 | `VITE_DATA_ELEMENTS_API_BASE_URL` | 浏览器接口前缀，开发默认 `/dev-api`，生产默认 `/prod-api` |
 | `VITE_DATA_ELEMENTS_PLATFORM_URL` | 统一登录及返回平台地址，开发默认 `http://localhost:3000/#/`，生产默认 `/wanxiang/#/` |
 | `VITE_WANXIANG_GOVERNANCE_URL` | 系统切换中的治理中心地址，生产默认 `/wanxiang-governance/` |
+| `VITE_FENGCHI_BASE_URL` | 系统切换中的数据计算中心地址，开发默认 `http://localhost:3020/`，生产默认 `/fengchi/` |
 
 不要将账号、数据库密码、token 或 keytab 放入源码、构建环境文件或 URL。不同端口通过平台既有的 session bridge 同步登录态，生产同源部署复用平台存储。
 

@@ -86,24 +86,6 @@ class PipelineGroupOrganizerTest {
     }
 
     @Test
-    void groupsPolicySelectedPipelinesUnderTheSharedApplicationGroup() {
-        try (var scope = TenantContext.use("tenant1")) {
-            PipelineGroupOrganizer organizer = organizer();
-            organizer.setGroupingPolicies(List.of(pipeline -> Optional.of(
-                    new PipelineGroupingPolicy.Group("布控引擎组", "structured-surveillance"))));
-            var first = organizer.prepare(surveillancePipeline("结构化数据布控引擎流组 - 大巴购票 [person_bus]"));
-            var second = organizer.prepare(surveillancePipeline("结构化数据布控引擎流组 - 酒店住宿 [person_hotel]"));
-
-            assertThat(first.parentId()).isEqualTo(second.parentId());
-            assertThat(first.parentId()).isEqualTo(tree.get("root").getFirst().path("id").asText());
-            verify(nifi, times(1)).createProcessGroup(eq("root"), eq("布控引擎组"), anyDouble(), anyDouble(), anyString());
-            assertThat(tree.get("root")).singleElement()
-                    .extracting(group -> group.path("component").path("name").asText())
-                    .isEqualTo("布控引擎组");
-        }
-    }
-
-    @Test
     void discoversPreviousLeafWhenDepartmentChangesAndPreservesItsManualPosition() {
         try (var scope = TenantContext.use("tenant1")) {
             PipelineGroupOrganizer organizer = organizer();
@@ -243,8 +225,5 @@ class PipelineGroupOrganizerTest {
                 null, null, null, null, null, null, null);
     }
 
-    private Pipeline surveillancePipeline(String name) {
-        return new Pipeline(name, name, null, 1L, 1L, new Pipeline.Dsl(1, List.of(), List.of()),
-                null, null, null, null, null, null, null);
-    }
+
 }

@@ -11,7 +11,7 @@
 3. 菜单、组织机构、行业及品牌配置来自实际数据库的公开配置白名单；数据源、表及预览记录是虚构业务样例。两类数据的来源和维护方式不同。
 4. 风驰与澄天元数据平台使用同一组数据源和表 ID、同一字段定义、同一预览处理器以及同一份浏览器业务状态。风驰原独立模式的 `commerce_db` 不参与共享模式。
 5. Mock 模式直接从根 `lowcode/` 编译组件；真实模式仍消费共享库中已发布的组件。读取本地源码和发布真实资源是两个独立动作。
-6. **真实导航尚未发布。** 用户已明确要求同时发布真实导航，并表示会提供更新后的有效本地发布会话。源码合并、编译与 Mock 页面验证已完成，待有效会话后继续发布、刷新及运行回读；不能将构建成功当成已发布。
+6. 共享导航已在当前本机 `8088` 对应的 `baseline` 发布并刷新，两端共用源码。真实页面显示“数据计算中心”，海通同名入口实际打开 `http://localhost:3020/`。
 7. 本次没有完成真实 Java 迁 Magic，没有修改真实业务表结构，也没有将 Mock 业务数据写入实际租户库。
 
 数据源与风驰原批次的验证日期为 2026-11-08；日志核心本批核对日期为 2026-11-13。新窗口必须先检查工作区、运行进程和资源比较结果，再继续写入；文中的端口、数量及发布状态不能替代现场核对。
@@ -119,7 +119,7 @@ python tools/export-mock-config.py --with-structure --check
 
 ### 4.3 导航与会话限制
 
-全局导航的“风驰数据计算平台”使用 `VITE_FENGCHI_BASE_URL`；开发默认 `http://localhost:3020/`，部署默认 `/fengchi/`。从数据源详情进入时可带 `sourceId`，风驰仍检查对象是否可访问。风驰返回入口由 `VITE_METADATA_BASE_URL` 构造，当前默认返回 3000 的 `#/datasource-manage`。
+全局导航的“数据计算中心”使用 `VITE_FENGCHI_BASE_URL`，开发默认 `http://localhost:3020/`，部署默认 `/fengchi/`。从数据源详情进入时可带 `sourceId`，风驰仍检查对象是否可访问。风驰返回入口由 `VITE_METADATA_BASE_URL` 构造，当前默认返回 3000 的 `#/datasource-manage`。
 
 推荐在元数据平台登录后通过同页导航进入风驰，再用返回入口切回。独立新开窗口可能没有原标签页模拟会话，应返回元数据平台登录，不自动创建会话或扩大权限。共享模式没有真实数据库连接、SQL 执行或服务端写入。
 
@@ -187,7 +187,7 @@ python tools/export-mock-config.py --with-structure --check
 - 风驰组织数据源树、表／视图打开、字段结构、条件筛选、排序、分页和实际刷新。
 - 风驰保留所选 `sourceId`，刷新可恢复当前数据源；产品导航和返回链接在 Mock 页面已验证。
 - 共享模式只读：数据／结构写入、SQL、连接创建等不支持的操作禁用；导出只提供已读取当前页或显式选择，不把当前页当作全部记录。
-- 真实导航已合并当时远端已有的“人工智能中心”入口，保留其行为，并编译当前本地源码。
+- 真实全局导航使用根目录的唯一组件源码。运行回读已核对源码、编译 JavaScript 和 CSS，Mock 契约沿用当前配置。
 
 尚未完成：
 
@@ -195,7 +195,6 @@ python tools/export-mock-config.py --with-structure --check
 - 完整登记后续步骤、真实采集执行、NiFi、治理、服务、审批等未覆盖流程。
 - 风驰真实后端接入、统一真实认证、SQL 执行、结构与记录写入、DDL 编辑。
 - 表元数据异步采集业务的 Java → Magic 迁移。
-- **真实服务中的全局导航发布和发布后的实际验证。**
 
 没有结构变更，因此本次未生成数据库结构增量。后续真实结构修改仍须同步完整 `db/` 定义及方言增量，不能用 Mock 验证代替真实数据库验证。
 
@@ -226,7 +225,7 @@ python tools/export-mock-config.py --with-structure --check
 
 当前限定回归为共享页面、Mock 与澄天 **125/125**，IDAAS **117/117**（含无 `window` 请求头兼容）、日志／排版／紧凑布局浏览器 **34/34**、静态 UI **6397/6397**，海通 **142/142**；后端完整 **415 套／3304 项，跳过 7 项，失败及错误为 0**，四前端生产构建和澄天 Mock 构建通过。Mock 列表及批量 20／100 各一次请求、零 SQL 只说明模拟路径；真实列表 20／100 各一次请求由[真实页面／API／导出报告](../logs/audit-parameters/real-validation.json)确认，两条事件 SQL 与一次批量 SQL 由后端针对性测试确认，身份／范围解析另有固定开销。真实 API 保留嵌套、`false/0/null`、`businessCode`，敏感测试值详情无原值且搜索 0；同一显式筛选 CSV 摘要与 JSONL 安全快照各 1 条，当前请求按策略排除采集时明确为 `OMITTED`。[跨物理库隔离](../logs/audit-parameters/real-isolation.json)确认既存外租户详情及混 ID 整批拒绝，未写业务数据或授权；[所选资源](../logs/audit-parameters/resource-verification.json)与[三方言四库 124/124、24 列 DDL 及五库导出](../logs/audit-parameters/native-86/result.json)分别核验，不相互代替。
 
-上述日志专项中，全库检查澄天既有 53 项（缺 43 表／9 列／1 索引）前后相同、本批新增 0。导航“人工智能中心”预期与源码不一致，万象主题 hash 基线待核对。数据源 `saveOrUpdate` 摘要和行为由本节的独立回归核对。Mock 整页／浏览器下载与真实新快照归档仍须独立验证。
+上述日志专项中，全库检查澄天既有 53 项（缺 43 表／9 列／1 索引）前后相同、本批新增 0。万象主题 hash 基线待核对。数据源 `saveOrUpdate` 摘要和行为由本节的独立回归核对。Mock 整页／浏览器下载与真实新快照归档仍须独立验证。
 
 ## 8. 启动、验证与验收方法
 
@@ -283,7 +282,7 @@ pnpm --dir data-elements-chengtian run build
 
 数据源／风驰原批次的历史结果：Mock 22 项通过；当时契约 31 项检查通过；风驰 31 个测试文件共 432 项通过；澄天现有回归 70 项通过；导航 87 项检查通过；登录输入检查通过。两端 Mock 构建及澄天普通构建通过。澄天完整类型检查仍有 66 条既有诊断，与当时基线按文件和诊断代码比较没有新增；不能声称全仓 TypeScript 检查通过。修改后需按实际影响重新运行必要检查，历史数字不是当前通过证明。
 
-日志收尾专项 **27／27 通过**。首次与原澄天 Mock 合跑 **48／49 通过**，当时失败的是数据源保存摘要，后续数据源契约校验见 7.2。首次专项的 MSW 私有文件路径与截止预期两项测试已修正。登录输入回归通过。导航 Node 回归仍要求当前导航源码没有的“人工智能中心”。该测试通过现有编译器生成忽略的临时产物。
+日志收尾专项 **27／27 通过**。首次与原澄天 Mock 合跑 **48／49 通过**，当时失败的是数据源保存摘要，后续数据源契约校验见 7.2。首次专项的 MSW 私有文件路径与截止预期两项测试已修正。登录输入回归通过。导航 Node 回归按现行菜单运行，84 项通过。该测试通过现有编译器生成忽略的临时产物。
 
 局部 TypeScript 由 `tools/check-mock-types.mjs` 使用真实应用 tsconfig 和已安装 TypeScript 验证：Fetch／MSW 正反向类型样例 **0 诊断**；宿主入口依赖图当前 **24**、只读替换为 HEAD 入口的同依赖基线 **25**，新增 **0**、Mock 范围 **0**（修正原入口依赖 DOM.Iterable 的用法）。24 条既有依赖诊断位于 `src/plugins/common.ts`、`src/store/modules/detail-store.ts`、`src/store/modules/setting-store.ts`，不是全仓类型检查通过。初期未加载完整配置的 CLI 探查及类型样例缺 HttpResponse 泛型的问题均已修正后复验。全部本批文件编辑器诊断无错误，限定范围 `git diff --check` 通过。未运行 Maven、前端完整构建、服务起停、发布或浏览器验收。
 
@@ -301,33 +300,34 @@ Mock 路径不执行 SQL，SQL 数为 0；这个结果只能证明模拟路径�
 
 截图、构建日志、测试输出和资源报告在忽略目录 `logs/mock/chengtian/`，包括 `shared-browser-evidence.json`、`fengchi-shared.png`、`fengchi-shared-fields.png`、`metadata-shared-preview.png`、`type-comparison.json`、`resource-status-current.json`。这些是本机辅助证据，不是需要复制或提交的源码；新机器可以按以上步骤重新生成。
 
-## 9. 优先待办：完成真实导航发布
+## 9. 真实导航发布与核对
 
-用户已经明确选择“同时发布真实导航；我会提供更新后的有效本地发布会话”。需要的是有效会话，不是重复申请发布授权。最后检查时约定的会话文件仍为旧版本，尚未执行真实资源写入。
+已发布到本机 86 环境，刷新后回读当前组件源码及编译产物一致。实际页面核对了源数据管理平台的“全部导航”和海通的“切换系统”，同名菜单均可前往风驰 `3020`。后续修改沿用以下发布流程。
 
 - 目标：本机 `http://localhost:8088` 对应的控制库 `baseline`，以当前实际绑定及资源身份核对为准。
 - 唯一所选资源：`lowcode/10.通用组件/全局导航(global-nav).vue`。
 - 组件 ID：`2009111573765361664`；身份和目录不能改。
-- 会话交付位置：`C:\Users\Administrator\.codex\private\data-elements\publish-token.tmp`，只包含会话值，不能贴进聊天、命令参数、Git 或日志。
-- 工具默认私有连接配置：用户目录下 `.codex/private/data-elements/resources.local.json`，内容不写入本文。
+- 发布会话由本机受限配置提供。
+- 发布命令用 `--config` 显式选取与本机 `8088` 运行绑定相同的仓库外连接配置。
 
 接手步骤：
 
 1. 检查用户更新的会话是否有效，只读核对运行目标；通过受限配置或进程环境提供 `RESOURCE_API_TOKEN`／`RESOURCE_API_URL`，不得输出实际值。
-2. 重新生成所选资源计划。之前已显式合并远端“人工智能中心”入口，并只更新该资源索引的已审阅基准；上次计划是本地变化、远端无新增变化。不能沿用旧计划直接覆盖并发修改。
+2. 重新生成所选资源计划，核对当前本地、索引基准与运行库差异，合并并发修改后再发布。
 3. 重新从当前根源码编译，使用编译命令返回的产物路径发布，不能发布旧包。
 4. 用现有工具逐资源发布，保存 `source_code`、`compile_js`、`compile_css`，刷新 `/sym/component/cache/refresh`，运行回读源码及编译结果，验证实际导航地址与入口。
 5. 再次比较选定资源，确认内容一致。其他 Magic／低代码差异分别报告，不全量同步，不删除、不覆盖其他窗口工作。
 
 ```powershell
 # 工程根目录；先按上文提供有效的受限运行会话
-python tools/resource-sync.py plan --kind lowcode --file 'lowcode/10.通用组件/全局导航(global-nav).vue'
+$resourceConfig = '<本机运行绑定对应的仓库外连接文件>'
+python tools/resource-sync.py plan --config $resourceConfig --kind lowcode --file 'lowcode/10.通用组件/全局导航(global-nav).vue'
 node tools/compile-lowcode.mjs 'lowcode/10.通用组件/全局导航(global-nav).vue'
 
 # 将占位路径替换为上一条编译命令实际返回的 compiled 路径
-python tools/resource-sync.py publish --kind lowcode --file 'lowcode/10.通用组件/全局导航(global-nav).vue' --compiled '<本次编译输出的 JSON 路径>' --apply
+python tools/resource-sync.py publish --config $resourceConfig --kind lowcode --file 'lowcode/10.通用组件/全局导航(global-nav).vue' --compiled '<本次编译输出的 JSON 路径>' --apply
 
-python tools/resource-sync.py plan --kind lowcode --file 'lowcode/10.通用组件/全局导航(global-nav).vue'
+python tools/resource-sync.py plan --config $resourceConfig --kind lowcode --file 'lowcode/10.通用组件/全局导航(global-nav).vue'
 ```
 
 发布工具有身份、远端摘要和运行版本前置检查。出现并发变化必须先合并；数据库已保存但刷新／回读失败时必须按真实状态补齐，不能直接再次覆盖。正常低代码发布不需要重启后端。本授权不包含生产发布或全量资源覆盖。
@@ -336,4 +336,4 @@ python tools/resource-sync.py plan --kind lowcode --file 'lowcode/10.通用组�
 
 可以直接把以下内容交给新的 Codex 窗口：
 
-> 先阅读工程根 `AGENTS.md` 和 `docs/mock-design.md`，按链接查阅公共 Mock 规约及澄天、风驰主文档。接管时核对工作区和运行状态，保留并行改动。澄天 3000 与风驰 3020 共享目录、字段和预览场景。数据源保存和结束登记按 7.2 接续。日志公共宿主已接裸数组和原始文件，参数查询已登记共享函数依赖。日志 Mock 整页及下载、CSV 真实端差异和导航旧测试按 7.2、8.2 继续核对。对外行为变化时同步真实实现、Mock、调用方和验证。风驰继续读取同一份业务状态，使用现有端口、菜单和组织配置。
+> 先阅读工程根 `AGENTS.md` 和 `docs/mock-design.md`，按链接查阅公共 Mock 规约及澄天、风驰主文档。接管时核对工作区和运行状态，保留并行改动。澄天 3000 与风驰 3020 共享目录、字段和预览场景。数据源保存和结束登记按 7.2 接续。日志公共宿主已接裸数组和原始文件，参数查询已登记共享函数依赖。日志 Mock 整页和下载按 7.2、8.2 继续核对。对外行为变化时同步真实实现、Mock、调用方和验证。风驰继续读取同一份业务状态，使用现有端口、菜单和组织配置。

@@ -27,6 +27,7 @@ class NifiConnectionProbeFtpsTest {
     void explicitFtpsNegotiatesTlsAndNeverSendsCredentialsToPlainFtp() throws Exception {
         try (var server = new ServerSocket(0, 1, InetAddress.getLoopbackAddress());
              var executor = Executors.newSingleThreadExecutor()) {
+            server.setSoTimeout(PEER_READ_TIMEOUT_MILLIS);
             var command = executor.submit(() -> {
                 try (var socket = server.accept()) {
                     socket.setSoTimeout(PEER_READ_TIMEOUT_MILLIS);
@@ -50,6 +51,7 @@ class NifiConnectionProbeFtpsTest {
     void implicitFtpsStartsWithTlsHandshakeBeforeFtpCommands() throws Exception {
         try (var server = new ServerSocket(0, 1, InetAddress.getLoopbackAddress());
              var executor = Executors.newSingleThreadExecutor()) {
+            server.setSoTimeout(PEER_READ_TIMEOUT_MILLIS);
             var firstByte = executor.submit(() -> {
                 try (var socket = server.accept()) {
                     // The first TLS handshake can initialize JSSE providers after TCP connect.
@@ -64,6 +66,7 @@ class NifiConnectionProbeFtpsTest {
             assertThat(((Map<?, ?>) response.getBody()).get("success")).isEqualTo(false);
         }
     }
+
     private org.springframework.http.ResponseEntity<?> connect(Map<String, Object> body) {
         return NifiConnectionProbeHiveTest.runProbe("nifi_connection_test_post_v1", body, probe, registered);
     }

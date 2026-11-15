@@ -1,12 +1,13 @@
 /** Configurable first-party addresses; account tokens never appear in navigation URLs. */
 const base=(configured:string|undefined,development:string,production:string)=>configured?.trim() || (import.meta.env.DEV?development:production);
 const qizhi=base(import.meta.env.VITE_QIZHI_BASE_URL,'http://localhost:3001/','/qizhi/');
+const fengchi=base(import.meta.env.VITE_FENGCHI_BASE_URL,'http://localhost:3020/','/fengchi/');
 const link=(root:string,route:string)=>{const url=new URL(root,location.href);url.hash=route;return url.href;};
 export const centers=[
  {key:'resource',name:'数据资源中心',description:'数仓规划、建模与资源交付',url:link(location.href,'/resource/overview')},
  {key:'asset',name:'数据资产中心',description:'资产盘点、流通与运营',url:link(location.href,'/assets/overview')},
  {key:'integration',name:'数据集成中心',description:'数据接入、同步与分发',url:link(base(import.meta.env.VITE_HAITONG_BASE_URL,'http://localhost:3002/','/haitong/'),'/integration/overview')},
- {key:'compute',name:'数据计算中心',description:'数据加工、计算与分析',url:link(qizhi,'/compute/overview')},
+ {key:'compute',name:'数据计算中心',description:'数据加工、计算与分析',url:new URL(fengchi,location.href).href},
  {key:'governance',name:'数据治理中心',description:'元数据、标准与数据质量',url:link(location.href,'/governance/overview')},
  {key:'security',name:'数据安全中心',description:'敏感发现、授权与安全防护',url:link(qizhi,'/security/overview')},
  {key:'service',name:'数据服务中心',description:'服务发布与运行交付',url:link(qizhi,'/services/overview')},

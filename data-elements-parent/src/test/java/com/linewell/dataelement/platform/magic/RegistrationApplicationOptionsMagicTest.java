@@ -5,13 +5,11 @@ import com.linewell.dataelement.utils.StructuredValues;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.linewell.dataelement.feature.identity.api.DataScopeMagicModule;
 import com.linewell.dataelement.feature.identity.application.DataScopeAuthorizationService;
 import com.linewell.dataelement.feature.identity.application.DataScopeAuthorizationService.Scope;
 import com.linewell.dataelement.feature.identity.application.DataScopeAuthorizationService.ScopeDecision;
 import com.linewell.dataelement.feature.identity.infrastructure.persistence.mapper.IdentityUserLookupMapper;
-import com.linewell.dataelement.platform.configuration.SystemConfigService;
 import com.linewell.dataelement.platform.tenant.domain.TenantContext;
 import java.util.*;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -46,7 +44,7 @@ class RegistrationApplicationOptionsMagicTest {
                 """);
         var mapper = mock(IdentityUserLookupMapper.class);
         when(mapper.selectOrganizationIds("user", "ga")).thenReturn(Arrays.asList(" own-org ", "second-org", "own-org", null));
-        var scope = spy(new DataScopeAuthorizationService(mock(SystemConfigService.class), mapper, new ObjectMapper()));
+        var scope = spy(new DataScopeAuthorizationService(mapper));
         var counter = new TaskCategoryWarehouseScopeMagicTest.Counter();
         fixture.db.setSqlInterceptors(List.of(counter));
         String resource = "MENU:2081000000000000002";

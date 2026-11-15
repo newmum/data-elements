@@ -4,7 +4,7 @@ export const productGroups = [
     { name: '数据建设', centers: [
         { id: 'resource', name: '数据资源中心', description: '数据建设、模型与仓库', mark: '磐', color: '#1677FF', owner: 'wanxiang', home: '/resource/overview' },
         { id: 'integration', name: '数据集成中心', description: '数据接入、同步与分发', mark: '海', color: '#08979C', owner: 'haitong', home: '/integration/overview' },
-        { id: 'compute', name: '数据计算中心', description: '数据加工、计算与分析', mark: '风', color: '#2F54EB', owner: 'qizhi', home: '/compute/overview' },
+        { id: 'compute', name: '数据计算中心', description: '数据加工、计算与分析', mark: '风', color: '#2F54EB', owner: 'fengchi', home: '' },
     ] },
     { name: '治理与管控', centers: [
         { id: 'governance', name: '数据治理中心', description: '元数据、标准与数据质量', mark: '万', color: '#531DAB', owner: 'wanxiang', home: '/governance/overview' },
@@ -33,6 +33,7 @@ export const centerAddresses = (): CenterAddresses => ({
     wanxiang: import.meta.env.VITE_WANXIANG_GOVERNANCE_URL?.trim() || (import.meta.env.DEV ? 'http://localhost:3010/' : '/wanxiang-governance/'),
     qizhi: import.meta.env.VITE_QIZHI_CENTER_URL?.trim() || (import.meta.env.DEV ? 'http://localhost:3001/' : '/qizhi/'),
     haitong: import.meta.env.VITE_HAITONG_CENTER_URL?.trim() || (import.meta.env.DEV ? 'http://localhost:3002/' : '/haitong/'),
+    fengchi: import.meta.env.VITE_FENGCHI_BASE_URL?.trim() || (import.meta.env.DEV ? 'http://localhost:3020/' : '/fengchi/'),
     idaas: import.meta.env.VITE_IDAAS_CENTER_URL?.trim() || (import.meta.env.DEV ? 'http://localhost:3005/' : '/idaas/'),
 });
 

@@ -3217,13 +3217,14 @@ OIDC/SSO、MFA、公众身份、自动密码激活、角色/应用授权统一�
 | data-elements-idaas | 统一身份管理平台 | http://localhost:3005/ | /idaas/ |
 | data-elements-wanxiang | 数据资源中心（磐石）、数据治理中心（万象）、数据资产中心（皓月） | http://localhost:3010/ | /wanxiang-governance/ |
 | data-elements-haitong | 数据集成中心（海通） | http://localhost:3002/ | /haitong/ |
-| data-elements-qizhi | 数据计算、安全、服务、可视化、知识图谱、智能搜索、运行监控 | http://localhost:3001/ | /qizhi/ |
+| data-elements-fengchi | 数据计算中心 | http://localhost:3020/ | /fengchi/ |
+| data-elements-qizhi | 安全、服务、可视化、知识图谱、智能搜索、运行监控 | http://localhost:3001/ | /qizhi/ |
 
 卓鉴菜单按实际归属打开这些中心的现有主页。万象治理切换器、万象内磐石/皓月使用的切换器、启智的公共切换器以及海通的切换器均增加“平台支撑 → 统一身份管理”。因此启智承载的各中心共享新增入口，不需要逐页复制切换组件。
 
 澄天数据中台 `data-elements-chengtian` 的“全部导航”也增加“平台支撑 → 统一身份管理”。该入口来自共享后端控制库中的 `global-nav` 低代码组件，并非静态 Vue 菜单；当时使用的 `data/working/global-nav.vue` 工作副本不在当前 Git 树内。新增入口支持鼠标、Enter 和空格操作；抽屉高度扣除原有顶部 55px 偏移，避免矮窗口中末尾链接落在屏幕外。
 
-各工程均可用 `VITE_IDAAS_CENTER_URL` 覆盖卓鉴部署地址；目标路由固定为 `#/console/workforce/overview`。卓鉴访问万象、启智和海通分别使用 `VITE_WANXIANG_GOVERNANCE_URL`、`VITE_QIZHI_CENTER_URL`、`VITE_HAITONG_CENTER_URL`。默认生产地址使用部署前缀，五个工程的生产构建均包含 `/idaas/`，不包含卓鉴开发来源 `localhost:3005`。生产环境的反向代理需要按实际部署提供相应前缀，本次没有执行生产部署。
+各工程均可用 `VITE_IDAAS_CENTER_URL` 覆盖卓鉴部署地址，目标路由固定为 `#/console/workforce/overview`。卓鉴访问万象、启智、海通和风驰分别使用 `VITE_WANXIANG_GOVERNANCE_URL`、`VITE_QIZHI_CENTER_URL`、`VITE_HAITONG_CENTER_URL` 和 `VITE_FENGCHI_BASE_URL`。风驰入口打开应用首页。默认生产地址使用部署前缀，反向代理按实际部署提供相应前缀。
 
 
 <a id="guide-6fc0651c--会话与低代码发布"></a>

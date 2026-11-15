@@ -318,10 +318,10 @@ public class DataSourceConnectionTestService {
     }
 
     private Object probe(Map<String, Object> input) {
-        Object result = magicApi.call("POST", "/nifi/api/connection-test", Map.of("body", input));
-        if (result instanceof Map<?, ?> map && map.containsKey("data")) {
-            result = map.get("data");
-        }
+        // Magic API adds endpoint metadata to the request variables before running the script.
+        Map<String, Object> variables = new LinkedHashMap<>();
+        variables.put("body", input);
+        Object result = magicApi.execute("POST", "/nifi/api/connection-test", variables);
         return result instanceof ResponseEntity<?> response ? response.getBody() : result;
     }
 

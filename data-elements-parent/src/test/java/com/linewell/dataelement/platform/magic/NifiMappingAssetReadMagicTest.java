@@ -74,7 +74,7 @@ import org.ssssssss.script.runtime.function.MagicScriptLambdaFunction;
 
 class NifiMappingAssetReadMagicTest {
     private static final String COMMON = "function/01.通用函数/";
-    private static final String API = "api/10.丽斐流程接口/";
+    private static final String API = "api/10.海通流程接口/";
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final Timestamp CREATED = Timestamp.from(Instant.parse("2025-01-02T00:00:00Z"));
 
@@ -727,26 +727,26 @@ class NifiMappingAssetReadMagicTest {
             when(lockResponse.next()).thenReturn(true);
             when(lockResponse.getInt(1)).thenAnswer(call -> lockAvailable.get() ? 1 : 0);
             globals.put("mutation", new NifiMutationAspect(lockDataSource));
-            function("nifiDecodeCanvas", "43.丽斐解码保存画布.ms", "e06d4eb123494419e67f70f2fc03bceb", "row");
-            function("nifiFindCanvas", "48.丽斐读取租户画布.ms", "nifi_pipeline_find_v1", "flowId", "tenantId");
-            function("nifiPipelineReadHttp", "29.丽斐流程只读接口响应.ms", "nifi_pipeline_read_http_v1", "action");
-            function("nifiLifecycleBody", "55.丽斐读取生命周期请求体.ms", "nifi_lifecycle_body_v1",
+            function("nifiDecodeCanvas", "43.海通解码保存画布.ms", "e06d4eb123494419e67f70f2fc03bceb", "row");
+            function("nifiFindCanvas", "48.海通读取租户画布.ms", "nifi_pipeline_find_v1", "flowId", "tenantId");
+            function("nifiPipelineReadHttp", "29.海通流程只读接口响应.ms", "nifi_pipeline_read_http_v1", "action");
+            function("nifiLifecycleBody", "55.海通读取生命周期请求体.ms", "nifi_lifecycle_body_v1",
                     "input", "type", "oldType", "requiredSignature");
-            function("nifiMappingReadHttp", "61.丽斐映射读取响应.ms", "nifi_mapping_read_http_v1", "action");
-            function("nifiMappingPlanScope", "62.丽斐映射计划范围.ms", "nifi_mapping_plan_scope_v1", "pipelineId", "tenantId");
-            function("nifiReadMappingTemplate", "63.丽斐读取映射模板.ms", "nifi_mapping_template_read_v1", "templateId", "tenantId");
-            function("nifiMappingPlans", "64.丽斐映射计划历史.ms", "nifi_mapping_plans_v1");
-            function("nifiMappingPlanDetail", "65.丽斐映射计划版本.ms", "nifi_mapping_plan_v1", "planId");
-            function("nifiMappingTemplates", "66.丽斐映射模板版本.ms", "nifi_mapping_templates_v1");
-            function("nifiMappingTemplateDetail", "67.丽斐映射模板详情.ms", "nifi_mapping_template_v1", "templateId");
-            function("nifiMappingRetention", "68.丽斐映射版本保留策略.ms", "nifi_mapping_retention_v1");
-            function("nifiMappingDictionaryTables", "69.丽斐字典候选表.ms", "nifi_mapping_dict_tables_v1");
-            function("nifiMappingDictionaryColumns", "70.丽斐字典候选字段.ms", "nifi_mapping_dict_cols_v1");
-            function("nifiSaveMappingVersion", "71.丽斐追加映射资源版本.ms", "nifi_mapping_save_version_v1",
+            function("nifiMappingReadHttp", "61.海通映射读取响应.ms", "nifi_mapping_read_http_v1", "action");
+            function("nifiMappingPlanScope", "62.海通映射计划范围.ms", "nifi_mapping_plan_scope_v1", "pipelineId", "tenantId");
+            function("nifiReadMappingTemplate", "63.海通读取映射模板.ms", "nifi_mapping_template_read_v1", "templateId", "tenantId");
+            function("nifiMappingPlans", "64.海通映射计划历史.ms", "nifi_mapping_plans_v1");
+            function("nifiMappingPlanDetail", "65.海通映射计划版本.ms", "nifi_mapping_plan_v1", "planId");
+            function("nifiMappingTemplates", "66.海通映射模板版本.ms", "nifi_mapping_templates_v1");
+            function("nifiMappingTemplateDetail", "67.海通映射模板详情.ms", "nifi_mapping_template_v1", "templateId");
+            function("nifiMappingRetention", "68.海通映射版本保留策略.ms", "nifi_mapping_retention_v1");
+            function("nifiMappingDictionaryTables", "69.海通字典候选表.ms", "nifi_mapping_dict_tables_v1");
+            function("nifiMappingDictionaryColumns", "70.海通字典候选字段.ms", "nifi_mapping_dict_cols_v1");
+            function("nifiSaveMappingVersion", "71.海通追加映射资源版本.ms", "nifi_mapping_save_version_v1",
                     "kind", "key", "definition", "content");
-            function("nifiReadMappingPlans", "72.丽斐批量读取映射计划.ms", "nifi_mapping_plan_read_v1",
+            function("nifiReadMappingPlans", "72.海通批量读取映射计划.ms", "nifi_mapping_plan_read_v1",
                     "pipelineId", "tenantId", "ids");
-            function("nifiFieldMappingCapabilities", "73.丽斐字段映射能力.ms", "nifi_field_map_capabilities_v1");
+            function("nifiFieldMappingCapabilities", "73.海通字段映射能力.ms", "nifi_field_map_capabilities_v1");
             route("capabilities", "13.字段映射/03.查询字段映射能力.ms", "nifi_field_map_caps_get_v1");
             route("capabilitiesHead", "13.字段映射/04.核验字段映射能力.ms", "nifi_field_map_caps_head_v1");
             route("validateRules", "13.字段映射/05.校验字段映射.ms", "nifi_field_map_validate_v1");

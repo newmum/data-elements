@@ -9,17 +9,4 @@ export default defineConfig({
   base: '/',
   server: { ...localServer, proxy: { '/api/ai': { target: 'http://127.0.0.1:3021' } } },
   preview: localServer,
-  build: {
-    rollupOptions: {
-      output: {
-        manualChunks(id) {
-          if (id.includes('node_modules')) {
-            if (/codemirror|@lezer|@uiw/.test(id)) return 'sql-editor';
-            if (id.includes('antd') || id.includes('@ant-design') || id.includes('rc-')) return 'ui';
-            return 'vendor';
-          }
-        },
-      },
-    },
-  },
 });

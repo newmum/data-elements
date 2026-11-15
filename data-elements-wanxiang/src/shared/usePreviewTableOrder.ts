@@ -14,7 +14,7 @@ export function usePreviewTableOrder<T extends Record<string,any>>(rows:T[], fie
   if(!enabled)return;const controller=new AbortController();setLoading(true);setError(undefined);
   const body=JSON.parse(serialized);const wanted=new Set<string>(body.items.map((item:{id:string})=>item.id));
   if(!body.kind||wanted.size!==body.items.length){setError(new Error('预览排序字段或行标识无效'));setLoading(false);return;}
-  platformApi<{keys:string[];total:number}>('/sym/table/preview-order',body,{signal:controller.signal}).then(result=>{
+  platformApi<{keys:string[];total:number}>('/sym/table/order',body,{signal:controller.signal}).then(result=>{
    if(!Array.isArray(result.keys)||result.keys.length>size||new Set(result.keys).size!==result.keys.length||result.keys.some(id=>!wanted.has(id))||result.total!==wanted.size)throw new Error('预览排序返回范围不一致');
    setKeys(result.keys);setTotal(result.total);
   }).catch(cause=>{if(!controller.signal.aborted){setKeys([]);setTotal(0);setError(cause);}}).finally(()=>{if(!controller.signal.aborted)setLoading(false);});

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.*;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import com.linewell.dataelement.platform.tenant.domain.TenantContext;
+import java.sql.Timestamp;
 import java.util.*;
 import java.util.function.Function;
 import org.junit.jupiter.api.Test;
@@ -33,15 +34,15 @@ class TaskCategoryWarehouseScopeMagicTest {
         var f = fixture(count);
         var base = java.time.Instant.parse("2026-01-01T00:00:00Z");
         List<String> expected = new ArrayList<>();
+        var timestamps = new ArrayList<Object[]>(count);
         for (int i = 0; i < count; i++) {
-            var values = new LinkedHashMap<String,Object>();
-            values.put("updated_time", i >= count - 2 ? null : java.util.Date.from(base.plusSeconds(i / 2)));
-            values.put("access_request_status", 1);
-            // 仅准备测试数据；业务排序仍执行规范目录中的完整Magic接口。
-            MagicScript.create("db.table('db_table_t').withBlank().where().eq('tenant_id','ga').eq('tid',id).update(values)",null)
-                    .execute(new MagicScriptContext(Map.of("db",f.db,"id","table-"+i,"values",values)));
-            expected.add("table-"+i);
+            String id = "table-" + i;
+            timestamps.add(new Object[]{i >= count - 2 ? null : Timestamp.from(base.plusSeconds(i / 2)), id});
+            expected.add(id);
         }
+        // Seed the same ties and null timestamps in bulk before executing the canonical sorting endpoint.
+        f.jdbc.batchUpdate("update db_table_t set updated_time=?,access_request_status=1 where tenant_id='ga' and tid=?",
+                timestamps);
         expected.sort(Comparator.<String>comparingInt(id -> {
             int i = Integer.parseInt(id.substring(6)); return i >= count - 2 ? Integer.MAX_VALUE : -(i / 2);
         }).thenComparing(Comparator.naturalOrder()));
@@ -390,17 +391,19 @@ class TaskCategoryWarehouseScopeMagicTest {
     void classificationDoesNotHideAuthorizedDownstreamHopsOrBranchTargets(int count) throws Exception {
         var f = fixture(count);
         f.jdbc.update("update db_table_t set source_table_id=concat('table-',substring(tid,locate('-',tid)+1)) where datasource_id in ('warehouse','raw','files')");
+        var taskSeeds = new ArrayList<TaskSeed>(count * 3);
         for (int i = 0; i < count; i++) {
-            insertTask(f, "root-" + i, "table-" + i, "warehouse-" + i,
-                    List.of("warehouse-" + i, "raw-" + i, "denied-0", "foreign-0", "deleted"));
-            insertTask(f, "second-" + i, "warehouse-" + i, "raw-" + i, List.of("raw-" + i));
-            insertTask(f, "third-" + i, "raw-" + i, "files-" + i, List.of("files-" + i));
+            taskSeeds.add(new TaskSeed("root-" + i, "table-" + i, "warehouse-" + i,
+                    List.of("warehouse-" + i, "raw-" + i, "denied-0", "foreign-0", "deleted")));
+            taskSeeds.add(new TaskSeed("second-" + i, "warehouse-" + i, "raw-" + i, List.of("raw-" + i)));
+            taskSeeds.add(new TaskSeed("third-" + i, "raw-" + i, "files-" + i, List.of("files-" + i)));
         }
         // 同租户中间表不受旧菜单范围过滤；跨租户中间表不能因关联至有效根表而被读取。
         f.jdbc.update("update db_table_t set source_table_id='table-0' where tid='denied-0'");
-        insertTask(f, "denied-hop", "denied-0", "raw-0", List.of("raw-0"));
+        taskSeeds.add(new TaskSeed("denied-hop", "denied-0", "raw-0", List.of("raw-0")));
         f.jdbc.update("update db_table_t set source_table_id='table-0' where tid='foreign-0'");
-        insertTask(f, "foreign-hop", "foreign-0", "raw-0", List.of("raw-0"));
+        taskSeeds.add(new TaskSeed("foreign-hop", "foreign-0", "raw-0", List.of("raw-0")));
+        insertTasks(f, taskSeeds);
         var counter = f.countQueries();
         Map<?, ?> ingest = run(f, INGEST_PAGE, Map.of("viewLevel", "table", "pageSize", count, "datasourceIds", List.of("db")));
         assertThat((List<?>) ingest.get("list")).hasSize(count);
@@ -446,15 +449,23 @@ class TaskCategoryWarehouseScopeMagicTest {
         var f = fixture(count);
         f.jdbc.update("update db_table_t set source_table_id=tid where datasource_id='db'");
         f.jdbc.update("update db_datasource_t set asset_status=0 where tid='warehouse'");
+        var tables = new ArrayList<Object[]>(count * 17);
+        var taskSeeds = new ArrayList<TaskSeed>(count * 17);
         for (int root = 0; root < count; root++) {
             String previous = "table-" + root;
             for (int hop = 1; hop <= 17; hop++) {
                 String id = "deep-" + root + "-" + hop;
-                f.jdbc.update("insert into db_table_t(tid,tenant_id,datasource_id,asset_status,is_del,business_type,table_name,source_table_id,updated_time) values(?,'ga','warehouse',0,0,'业务表',?,?,current_timestamp)", id, id, previous);
-                insertTask(f, "step-" + root + "-" + hop, previous, id, List.of(id));
+                tables.add(new Object[]{id, id, previous});
+                taskSeeds.add(new TaskSeed("step-" + root + "-" + hop, previous, id, List.of(id)));
                 previous = id;
             }
         }
+        f.jdbc.batchUpdate("""
+                insert into db_table_t(tid,tenant_id,datasource_id,asset_status,is_del,business_type,
+                    table_name,source_table_id,updated_time)
+                values(?,'ga','warehouse',0,0,'业务表',?,?,current_timestamp)
+                """, tables);
+        insertTasks(f, taskSeeds);
         var counter = f.countQueries();
         Map<?, ?> result = run(f, INGEST_PAGE, Map.of("viewLevel", "table", "pageSize", count, "datasourceIds", List.of("db")));
         assertThat(((Number) result.get("total")).intValue()).isEqualTo(count);
@@ -600,14 +611,26 @@ class TaskCategoryWarehouseScopeMagicTest {
         f.jdbc.update("update db_datasource_t set asset_status=1,db_name='名称相同',db_type='mysql',org_id='org',app_id='app'");
         f.jdbc.update("update db_table_t set asset_status=1,business_type='业务表',table_name=tid,schema_name='public',updated_time=current_timestamp");
         f.jdbc.update("insert into sym_dict_t values('root','ga','0','dataSourceType',0),('ods','ga','root','ods',0),('raw-domain','ga','ods','raw',0),('file-domain','ga','ods','files',0),('dead-domain','ga','ods','dead',1),('dwd','ga','root','dwd',0),('fake-parent','ga','0','wrongRoot',0),('fake-ods','ga','fake-parent','ods',0),('foreign-domain','other','ods','raw',0)");
+        var datasources = new ArrayList<Object[]>();
+        var tables = new ArrayList<Object[]>();
         for (String id : List.of("warehouse", "raw", "files", "business-hive", "stale-binding", "foreign-binding", "deleted-node", "dwd-binding", "fake-root", "denied", "warehouse-draft", "foreign")) {
             String tenant = id.equals("foreign") ? "other" : "ga";
             int status = id.equals("warehouse-draft") ? 0 : 2;
-            f.jdbc.update("insert into db_datasource_t(tid,tenant_id,asset_status,is_del,db_name,db_type,org_id,app_id) values(?,?,?,0,'名称相同',?,'org','app')", id, tenant, status, id.equals("business-hive") ? "hive" : "mysql");
+            datasources.add(new Object[]{id, tenant, status, id.equals("business-hive") ? "hive" : "mysql"});
             int rows = List.of("warehouse", "raw", "files").contains(id) ? count : 1;
-            for (int i = 0; i < rows; i++)
-                f.jdbc.update("insert into db_table_t(tid,tenant_id,datasource_id,asset_status,is_del,business_type,table_name,table_name_cn,updated_time) values(?,?,?,2,0,'业务表',?,'同名业务表',current_timestamp)", id + "-" + i, tenant, id, "physical_" + i);
+            for (int i = 0; i < rows; i++) {
+                tables.add(new Object[]{id + "-" + i, tenant, id, "physical_" + i});
+            }
         }
+        f.jdbc.batchUpdate("""
+                insert into db_datasource_t(tid,tenant_id,asset_status,is_del,db_name,db_type,org_id,app_id)
+                values(?,?,?,0,'名称相同',?,'org','app')
+                """, datasources);
+        f.jdbc.batchUpdate("""
+                insert into db_table_t(tid,tenant_id,datasource_id,asset_status,is_del,business_type,
+                    table_name,table_name_cn,updated_time)
+                values(?,?,?,2,0,'业务表',?,'同名业务表',current_timestamp)
+                """, tables);
         f.jdbc.update("insert into dwm_center_layer_source_t values('ga','ods','layer','warehouse',0),('ga','raw-domain','domain','raw',0),('ga','file-domain','domain','files',0),('ga','ods','layer','denied',0),('ga','ods','layer','warehouse-draft',0),('ga','ods','layer','foreign',0),('ga','ods','layer','stale-binding',1),('other','ods','layer','foreign-binding',0),('ga','dead-domain','domain','deleted-node',0),('ga','dwd','layer','dwd-binding',0),('ga','fake-ods','layer','fake-root',0)");
         for (Object status : Arrays.asList(0, -1, null))
             f.jdbc.update("insert into db_table_t(tid,tenant_id,datasource_id,asset_status,is_del,business_type,table_name,updated_time) values(?,'ga','warehouse',?,0,'字典表','excluded_status',current_timestamp)", "status-" + status, status);
@@ -625,10 +648,27 @@ class TaskCategoryWarehouseScopeMagicTest {
         }
     }
     private static void insertTask(DatasourceCompletionMagicTest.Fixture f, String id, String source, String target, List<String> targets) {
-        List<Map<String, Object>> nodes = targets.stream().map(value -> Map.<String, Object>of("category", "sink", "config", Map.of("targetTableId", value))).toList();
-        String dsl = cn.hutool.json.JSONUtil.toJsonStr(Map.of("nodes", nodes));
-        f.jdbc.update("insert into nifi_pipeline_t(id,tenant_id,is_del,dsl_json) values(?,'ga',0,?)", "pipe-" + id, dsl);
-        f.jdbc.update("insert into data_access_agg_task_t(tid,source_table_id,target_table_id,pipeline_id,tenant_id,is_del,updated_time) values(?,?,?,?,'ga',0,current_timestamp)", id, source, target, "pipe-" + id);
+        insertTasks(f, List.of(new TaskSeed(id, source, target, targets)));
+    }
+
+    private record TaskSeed(String id, String source, String target, List<String> targets) {
+    }
+
+    private static void insertTasks(DatasourceCompletionMagicTest.Fixture f, List<TaskSeed> tasks) {
+        var pipelines = new ArrayList<Object[]>(tasks.size());
+        var rows = new ArrayList<Object[]>(tasks.size());
+        for (TaskSeed task : tasks) {
+            String pipeline = "pipe-" + task.id();
+            var nodes = task.targets().stream()
+                    .map(id -> Map.of("category", "sink", "config", Map.of("targetTableId", id))).toList();
+            pipelines.add(new Object[]{pipeline, cn.hutool.json.JSONUtil.toJsonStr(Map.of("nodes", nodes))});
+            rows.add(new Object[]{task.id(), task.source(), task.target(), pipeline});
+        }
+        f.jdbc.batchUpdate("insert into nifi_pipeline_t(id,tenant_id,is_del,dsl_json) values(?,'ga',0,?)", pipelines);
+        f.jdbc.batchUpdate("""
+                insert into data_access_agg_task_t(tid,source_table_id,target_table_id,pipeline_id,tenant_id,is_del,updated_time)
+                values(?,?,?,?,'ga',0,current_timestamp)
+                """, rows);
     }
     static Map<?, ?> run(CategoryFixture f, String id, Map<String, Object> body) throws Exception {
         return (Map<?, ?>) runValue(f, id, body);

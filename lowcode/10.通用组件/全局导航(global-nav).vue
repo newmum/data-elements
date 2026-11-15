@@ -21,7 +21,7 @@
         <div class="menu-items">
           <h5 @click="open('/integration/overview')">数据集成中心</h5>
           <h5 @click="open('/resource/overview')">数据资源中心</h5>
-          <h5 role="button" tabindex="0" @click="openFengchiCenter" @keydown.enter="openFengchiCenter" @keydown.space.prevent="openFengchiCenter">风驰数据计算平台</h5>
+          <h5 role="button" tabindex="0" @click="openFengchiCenter" @keydown.enter="openFengchiCenter" @keydown.space.prevent="openFengchiCenter">数据计算中心</h5>
           <h5 @click="open('/governance/overview')">数据治理中心</h5>
           <h5 @click="openAssetCenter">数据资产中心</h5>
           <h5 @click="open('/services/catalog')">数据服务中心</h5>

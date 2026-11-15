@@ -235,7 +235,9 @@ public class NifiConnectionProbe {
         String database = str(request.get("database"));
         String keyword = str(request.get("keyword"));
         Integer limit = request.get("limit") instanceof Number value ? value.intValue() : null;
-        Object raw = magicApiService.call("POST", "/dst/db/hive", Map.of("body", request));
+        Map<String, Object> variables = new LinkedHashMap<>();
+        variables.put("body", request);
+        Object raw = magicApiService.call("POST", "/dst/db/hive", variables);
         Map<String, Object> response = asMap(unwrapMagicData(raw));
         if (response == null) {
             return Map.of("success", false, "error", "华为 MRS Hive 元数据网关返回格式异常");

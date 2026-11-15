@@ -5,13 +5,18 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.attribute.FileTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
+import java.util.regex.Pattern;
 
 /** Loads editable Magic sources from the root manifest, never from historical migrations. */
 public final class CanonicalMagicSources {
-    private static final String SEPARATOR = "================================";
+    private static final Pattern SEPARATOR = Pattern.compile("(?m)^={32}\\r?$");
+    private static ManifestSnapshot manifestSnapshot;
 
     private CanonicalMagicSources() {
     }
@@ -55,19 +60,34 @@ public final class CanonicalMagicSources {
     private record Entry(Path root, String relativePath, String metadataId) {
     }
 
-    private static List<Entry> entries() throws IOException {
+    private record ManifestSnapshot(Path path, FileTime modified, long size, Object fileKey, List<Entry> entries) {
+        boolean matches(Path manifest, BasicFileAttributes attributes) {
+            return path.equals(manifest) && modified.equals(attributes.lastModifiedTime())
+                    && size == attributes.size() && Objects.equals(fileKey, attributes.fileKey());
+        }
+    }
+
+    private static synchronized List<Entry> entries() throws IOException {
         Path root = magicRoot();
-        var manifest = JSONUtil.parseObj(Files.readString(root.resolve(".manifest.json"), StandardCharsets.UTF_8));
+        Path path = root.resolve(".manifest.json");
+        var attributes = Files.readAttributes(path, BasicFileAttributes.class);
+        // Reuse the manifest index across fixture requests. Always read each selected script from disk.
+        if (manifestSnapshot != null && manifestSnapshot.matches(path, attributes)) {
+            return manifestSnapshot.entries();
+        }
+        var manifest = JSONUtil.parseObj(Files.readString(path, StandardCharsets.UTF_8));
         List<Entry> result = new ArrayList<>();
         for (var row : manifest.getJSONArray("resources")) {
             var value = JSONUtil.parseObj(row);
-            String path = value.getStr("path");
-            if (path != null && path.endsWith(".ms")) {
+            String relativePath = value.getStr("path");
+            if (relativePath != null && relativePath.endsWith(".ms")) {
                 String id = value.getStr("metadataId");
-                result.add(new Entry(root, path, id));
+                result.add(new Entry(root, relativePath, id));
             }
         }
-        return result;
+        manifestSnapshot = new ManifestSnapshot(path, attributes.lastModifiedTime(), attributes.size(),
+                attributes.fileKey(), List.copyOf(result));
+        return manifestSnapshot.entries();
     }
 
     private static Script read(Entry entry) throws IOException {
@@ -83,14 +103,14 @@ public final class CanonicalMagicSources {
             content = content.substring(1);
         }
         // A separator inside an older JSON script string is content, not the resource boundary.
-        var separator = java.util.regex.Pattern.compile("(?m)^={32}\\r?$").matcher(content);
+        var separator = SEPARATOR.matcher(content);
         int split = separator.find() ? separator.start() : -1;
         // Older valid functions store the script in the JSON object rather than after a separator.
         var metadata = JSONUtil.parseObj(split < 0 ? content : content.substring(0, split));
         if (!entry.metadataId.equals(metadata.getStr("id"))) {
             throw new IOException("Magic metadata ID does not match manifest: " + entry.relativePath);
         }
-        String source = split < 0 ? metadata.getStr("script") : content.substring(split + SEPARATOR.length());
+        String source = split < 0 ? metadata.getStr("script") : content.substring(separator.end());
         if (source == null) {
             throw new IOException("Magic resource has neither a script field nor a script separator: " + entry.relativePath);
         }

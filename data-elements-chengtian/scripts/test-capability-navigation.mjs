@@ -24,7 +24,6 @@ const routes = {
   "数据资产中心": "/assets/my",
   "数据集成中心": "/integration/overview",
   "数据资源中心": "/resource/overview",
-  "人工智能中心": "/ai/robots",
   "数据治理中心": "/governance/overview",
   "数据服务中心": "/services/catalog",
   "知识服务中心": "/graph/datasets",
@@ -39,8 +38,8 @@ let checks = 0;
 
 const groups = [...descriptor.template.content.matchAll(/<div class="grid">([\s\S]*?)<\/div>\s*<\/div>/g)];
 const expectedGroups = [
-  ["大数据能力产品", ["数据集成中心", "数据资源中心", "风驰数据计算平台", "数据治理中心", "数据资产中心", "数据服务中心"]],
-  ["数据应用产品", ["智能搜索中心", "知识服务中心", "数据可视化中心", "人工智能中心"]],
+  ["大数据能力产品", ["数据集成中心", "数据资源中心", "数据计算中心", "数据治理中心", "数据资产中心", "数据服务中心"]],
+  ["数据应用产品", ["智能搜索中心", "知识服务中心", "数据可视化中心"]],
   ["数据安全产品", ["统一身份管理中心", "数据安全中心", "数据运行监控中心"]],
 ];
 assert.equal(groups.length, expectedGroups.length);
@@ -119,7 +118,7 @@ function visit(value) {
   } else Object.entries(value).forEach(([key, item]) => visit(key === "default" && typeof item === "function" ? item() : item));
 }
 visit(tree);
-assert.equal(clicks.size, 13);
+assert.equal(clicks.size, expectedGroups.flatMap(([, items]) => items).length);
 for (const [name, route] of Object.entries(routes)) {
   clicks.get(name)();
   assert.equal(context.navigated.at(-1), `http://localhost:${devPorts[owner(route)]}/#${route}`);
@@ -170,10 +169,10 @@ for (const path of ["src/utils/capabilitySession.ts", "src/views/login/component
 // 风驰使用独立地址与只读 Mock 桥，不加入真实会话接收名单。
 assert.equal(loadRegistry({DEV:true}, "fengchiCenterBase"), "http://localhost:3020/");
 assert.equal(loadRegistry({DEV:false}, "fengchiCenterBase"), "/fengchi/");
-clicks.get("风驰数据计算平台")();
+clicks.get("数据计算中心")();
 assert.equal(context.navigated.at(-1), "http://localhost:3020/");
 context.window.location.hash = "#/datasource-manage/detail?id=selected-source&type=db&token=must-not-forward";
-clicks.get("风驰数据计算平台")();
+clicks.get("数据计算中心")();
 assert.equal(context.navigated.at(-1), "http://localhost:3020/?sourceId=selected-source");
 assert.ok(main.includes("window.__DATA_ELEMENTS_FENGCHI_BASE_URL__ = fengchiCenterBase"));
 checks += 5;

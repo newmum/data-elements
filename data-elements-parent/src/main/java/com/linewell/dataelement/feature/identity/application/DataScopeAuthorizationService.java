@@ -1,10 +1,7 @@
 package com.linewell.dataelement.feature.identity.application;
 
 import cn.dev33.satoken.stp.StpUtil;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.linewell.dataelement.feature.identity.infrastructure.persistence.mapper.IdentityUserLookupMapper;
-import com.linewell.dataelement.platform.configuration.SystemConfigService;
 import com.linewell.dataelement.platform.tenant.domain.TenantContext;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -15,36 +12,15 @@ import java.util.Locale;
 import java.util.Map;
 import org.springframework.stereotype.Service;
 
-/**
- * Resolves configurable resource data scopes for the current tenant.
- *
- * <p>The role-to-scope mapping is maintained by the low-code authorization
- * screen in {@code sym_config_t}; this service deliberately does not inspect
- * role names or role codes.  The only built-in concepts are reusable scope
- * values: ALL, ORG and OWNER.</p>
- */
+/** Resolves the current user's role scope for shared Java and Magic consumers. */
 @Service
 public class DataScopeAuthorizationService {
 
     public static final String DATA_SOURCE_RESOURCE = "DATA_SOURCE";
-    public static final String CONFIG_GROUP = "AUTH_DATA_SCOPE";
-    public static final String CONFIG_CODE = "RESOURCE_SCOPES";
-
-    private static final TypeReference<LinkedHashMap<String, Object>> MAP_TYPE =
-            new TypeReference<>() { };
-
-    private final SystemConfigService systemConfigService;
     private final IdentityUserLookupMapper identityMapper;
-    private final ObjectMapper objectMapper;
 
-    public DataScopeAuthorizationService(
-            SystemConfigService systemConfigService,
-            IdentityUserLookupMapper identityMapper,
-            ObjectMapper objectMapper
-    ) {
-        this.systemConfigService = systemConfigService;
+    public DataScopeAuthorizationService(IdentityUserLookupMapper identityMapper) {
         this.identityMapper = identityMapper;
-        this.objectMapper = objectMapper;
     }
 
     /** Returns the currently effective scope for a resource. */
@@ -68,37 +44,6 @@ public class DataScopeAuthorizationService {
                 ? currentUserOrganizationIds(userId, tenantId)
                 : List.of();
         return new ScopeDecision(resourceCode, scope, userId, organizationIds, roleIds, configured);
-    }
-
-    /** Returns the configured value for one role. Unconfigured roles are safely owner-only. */
-    public Map<String, Object> roleScope(String roleId, String resourceCode) {
-        requireRoleId(roleId);
-        Scope configured = Scope.optional(identityMapper.selectRoleDataScope(roleId, TenantContext.requireTenantId()));
-        Scope value = configured == null ? Scope.OWNER : configured;
-        return Map.of(
-                "resourceCode", normalizeResource(resourceCode),
-                "roleId", roleId,
-                "scope", value.name(),
-                "configured", configured != null
-        );
-    }
-
-    /**
-     * Saves a role data-scope selection.  The current tenant is always used;
-     * callers cannot provide a tenant id.
-     */
-    public Map<String, Object> saveRoleScope(String roleId, String resourceCode, String requestedScope) {
-        requireRoleId(roleId);
-        String tenantId = TenantContext.requireTenantId();
-        // A role must be from the active tenant before it may receive a policy.
-        if (identityMapper.countActiveRole(roleId, tenantId) == 0) {
-            throw new IllegalArgumentException("角色不存在或不属于当前租户");
-        }
-        Scope scope = Scope.require(requestedScope);
-        if (identityMapper.updateRoleDataScope(roleId, tenantId, scope.name()) != 1) {
-            throw new IllegalArgumentException("角色不存在或不属于当前租户");
-        }
-        return roleScope(roleId, resourceCode);
     }
 
     /** Applies the current legacy DATA_SOURCE decision to a source master row. */
@@ -213,74 +158,6 @@ public class DataScopeAuthorizationService {
                 .toList();
     }
 
-    private Map<String, Object> roleScopes(String resourceCode) {
-        Map<String, Object> resources = map(allResourceScopes().get("resources"));
-        String resourceCodeValue = normalizeResource(resourceCode);
-        Map<String, Object> resource = map(resources.get(resourceCodeValue));
-        Map<String, Object> roles = map(resource.get("roles"));
-        // Existing DATA_SOURCE policies remain a conservative compatibility
-        // baseline while administrators progressively configure concrete menu /
-        // component targets. A target-specific policy always overrides it.
-        if (roles.isEmpty() && !DATA_SOURCE_RESOURCE.equals(resourceCodeValue)) {
-            return map(map(resources.get(DATA_SOURCE_RESOURCE)).get("roles"));
-        }
-        return roles;
-    }
-
-    private Map<String, Object> allResourceScopes() {
-        Object value = systemConfigService.value(CONFIG_GROUP, CONFIG_CODE);
-        if (value instanceof Map<?, ?> map) {
-            return new LinkedHashMap<>(cast(map));
-        }
-        if (value instanceof String text && !text.isBlank()) {
-            try {
-                return objectMapper.readValue(text, MAP_TYPE);
-            } catch (Exception ignored) {
-                return new LinkedHashMap<>();
-            }
-        }
-        return new LinkedHashMap<>();
-    }
-
-    private Scope configuredScope(Object value) {
-        if (value instanceof Map<?, ?> map) {
-            value = map.get("scope");
-        }
-        if (value == null || String.valueOf(value).isBlank()) {
-            return null;
-        }
-        return Scope.optional(String.valueOf(value));
-    }
-
-    private Map<String, Object> map(Object value) {
-        if (!(value instanceof Map<?, ?> map)) {
-            return new LinkedHashMap<>();
-        }
-        return new LinkedHashMap<>(cast(map));
-    }
-
-    private Map<String, Object> cast(Map<?, ?> value) {
-        Map<String, Object> result = new LinkedHashMap<>();
-        value.forEach((key, item) -> result.put(String.valueOf(key), item));
-        return result;
-    }
-
-    private String normalizeResource(String resourceCode) {
-        String value = resourceCode == null || resourceCode.isBlank()
-                ? DATA_SOURCE_RESOURCE
-                : resourceCode.trim().toUpperCase(Locale.ROOT);
-        if (!value.matches("[A-Z0-9_:.\\-]{1,160}")) {
-            throw new IllegalArgumentException("资源标识不合法");
-        }
-        return value;
-    }
-
-    private void requireRoleId(String roleId) {
-        if (roleId == null || roleId.isBlank()) {
-            throw new IllegalArgumentException("角色ID不能为空");
-        }
-    }
-
     private String currentUserId() {
         if (!StpUtil.isLogin()) {
             throw new IllegalStateException("登录已过期，请重新登录");
@@ -325,13 +202,6 @@ public class DataScopeAuthorizationService {
             }
         }
 
-        static Scope require(String value) {
-            Scope scope = optional(value);
-            if (scope == null) {
-                throw new IllegalArgumentException("数据范围仅支持 ALL、ORG 或 OWNER");
-            }
-            return scope;
-        }
     }
 
     public record ScopeDecision(

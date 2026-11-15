@@ -307,7 +307,7 @@ def repair_chain_sources(db,apply_changes=False,pipeline_ids=None):
  if len(scope_ids)>100:raise RuntimeError('本批修复引用数据源超过100个')
  # 与组合画布相同的角色数据范围：服务端解析当前用户，数据源主档按租户一次预取，逐ID判断但不逐项查询。
  if scope_ids:
-  decision=m.api('/sym/auth/currentDataScope',{'resourceCode':'MENU:2081000000000000002'})
+  decision=m.api('/sym/scope/current',{'resourceCode':'MENU:2081000000000000002'})
   scope=decision.get('scope');actor=decision.get('userId');organizations=set(decision.get('organizationIds') or [])
   if scope not in ('ALL','ORG','OWNER') or not actor:raise RuntimeError('无法确认当前角色的数据范围，拒绝修复')
   masters=m.query(db,'select tid,created_by,org_id from db_datasource_t where tenant_id=%s and is_del=0 and tid in ('+','.join(['%s']*len(scope_ids))+')',[DST]+sorted(scope_ids))

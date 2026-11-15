@@ -1,6 +1,5 @@
 package com.linewell.dataelement.platform.configuration;
 
-import com.linewell.dataelement.platform.persistence.id.NumericId;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.linewell.dataelement.platform.tenant.domain.TenantContext;
@@ -13,9 +12,7 @@ import java.sql.Blob;
 import java.sql.Clob;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Timestamp;
 import java.time.Duration;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -30,9 +27,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
  * Unified read-through cache for runtime system configuration.
@@ -137,129 +131,6 @@ public class SystemConfigService {
         return group(group, false).get(code.trim());
     }
 
-    /**
-     * Transactional mutation boundary for cache-backed configuration.
-     */
-    @Transactional
-    public String save(Map<String, Object> body, String operator) {
-        String tenantId = normalizeTenantId(
-                text(body.get("tenantId"), properties.getGlobalTenantId())
-        );
-        String group = normalizeGroup(text(body.get("configGroup"), null));
-        String code = normalizeCode(text(body.get("configCode"), null));
-        String valueType = normalizeEnum(
-                text(body.get("valueType"), "STRING"),
-                "valueType",
-                List.of("STRING", "BOOLEAN", "INTEGER", "LONG", "DECIMAL", "JSON")
-        );
-        String scope = normalizeEnum(
-                text(body.get("configScope"), "INTERNAL"),
-                "configScope",
-                List.of("PUBLIC", "INTERNAL")
-        );
-        String name = text(body.get("configName"), code);
-        String description = text(body.get("configDesc"), null);
-        String value = serializeValue(body.get("configValue"), valueType);
-        int enabled = integer(body.get("isUse"), 1);
-        int encrypted = integer(body.get("isEncrypt"), 0);
-        int sortNo = integer(body.get("sortNo"), 0);
-        int ttlSeconds = integer(body.get("cacheTtlSeconds"), 1800);
-        if (ttlSeconds <= 0) {
-            throw new IllegalArgumentException("cacheTtlSeconds must be positive");
-        }
-        validateTenant(tenantId);
-        JdbcTemplate targetTemplate = configJdbcTemplate(tenantId);
-
-        List<Map<String, Object>> existing = targetTemplate.queryForList(
-                """
-                select tid, version_no
-                  from sym_config_t
-                 where tenant_id = ?
-                   and config_group = ?
-                   and config_code = ?
-                   and (is_del = 0 or is_del is null)
-                """,
-                tenantId,
-                group,
-                code
-        );
-        Timestamp now = Timestamp.valueOf(LocalDateTime.now());
-        String id;
-        if (existing.isEmpty()) {
-            id = NumericId.nextId();
-            targetTemplate.update(
-                    """
-                    insert into sym_config_t(
-                        tid, config_code, config_name, config_value, is_use,
-                        sort_no, config_type, config_desc, is_encrypt, json_data,
-                        create_time, update_time, create_by, update_by, is_del,
-                        tenant_id, config_group, value_type, config_scope,
-                        cache_ttl_seconds, version_no
-                    ) values (?, ?, ?, ?, ?, ?, null, ?, ?, null, ?, ?, ?, ?, 0,
-                              ?, ?, ?, ?, ?, 1)
-                    """,
-                    id, code, name, value, enabled, sortNo, description, encrypted,
-                    now, now, operator, operator, tenantId, group, valueType, scope,
-                    ttlSeconds
-            );
-        } else {
-            Map<String, Object> row = existing.get(0);
-            id = String.valueOf(row.get("tid"));
-            long currentVersion = ((Number) row.get("version_no")).longValue();
-            Object submittedVersion = body.get("versionNo");
-            if (submittedVersion != null
-                    && longValue(submittedVersion, currentVersion) != currentVersion) {
-                throw new IllegalStateException("System config was modified by another request");
-            }
-            int updated = targetTemplate.update(
-                    """
-                    update sym_config_t
-                       set config_name = ?, config_value = ?, is_use = ?,
-                           sort_no = ?, config_desc = ?, is_encrypt = ?,
-                           update_time = ?, update_by = ?, is_del = 0,
-                           value_type = ?, config_scope = ?,
-                           cache_ttl_seconds = ?, version_no = version_no + 1
-                     where tid = ? and version_no = ?
-                    """,
-                    name, value, enabled, sortNo, description, encrypted,
-                    now, operator, valueType, scope, ttlSeconds, id, currentVersion
-            );
-            if (updated != 1) {
-                throw new IllegalStateException("System config was modified by another request");
-            }
-        }
-        evictAfterCommit(tenantId, group);
-        return id;
-    }
-
-    @Transactional
-    public boolean delete(Map<String, Object> body, String operator) {
-        String tenantId = normalizeTenantId(
-                text(body.get("tenantId"), properties.getGlobalTenantId())
-        );
-        String group = normalizeGroup(text(body.get("configGroup"), null));
-        String code = normalizeCode(text(body.get("configCode"), null));
-        validateTenant(tenantId);
-        int updated = configJdbcTemplate(tenantId).update(
-                """
-                update sym_config_t
-                   set is_del = 1, is_use = 0, update_time = ?,
-                       update_by = ?, version_no = version_no + 1
-                 where tenant_id = ? and config_group = ? and config_code = ?
-                   and (is_del = 0 or is_del is null)
-                """,
-                Timestamp.valueOf(LocalDateTime.now()),
-                operator,
-                tenantId,
-                group,
-                code
-        );
-        if (updated > 0) {
-            evictAfterCommit(tenantId, group);
-        }
-        return updated > 0;
-    }
-
     public void evict(String group) {
         String normalizedGroup = normalizeGroup(group);
         evictScope(properties.getGlobalTenantId(), normalizedGroup);
@@ -269,31 +140,11 @@ public class SystemConfigService {
         }
     }
 
-    public void evict(String tenantId, String group) {
-        evictScope(normalizeTenantId(tenantId), normalizeGroup(group));
-    }
-
     private void evictScope(String tenantId, String group) {
         deleteCache(tenantId, group, false);
         deleteCache(tenantId, group, true);
         deleteCache(tenantId, group, false, true);
         deleteCache(tenantId, group, true, true);
-    }
-
-    private void evictAfterCommit(String tenantId, String group) {
-        Runnable eviction = () -> evictScope(tenantId, group);
-        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-            eviction.run();
-            return;
-        }
-        TransactionSynchronizationManager.registerSynchronization(
-                new TransactionSynchronization() {
-                    @Override
-                    public void afterCommit() {
-                        eviction.run();
-                    }
-                }
-        );
     }
 
     private Map<String, Object> loadScope(
@@ -523,24 +374,6 @@ public class SystemConfigService {
         return tenantId;
     }
 
-    private String normalizeCode(String value) {
-        String code = Objects.requireNonNullElse(value, "").trim();
-        if (!code.matches("[A-Za-z0-9_.-]{1,128}")) {
-            throw new IllegalArgumentException("Invalid system config code");
-        }
-        return code;
-    }
-
-    private String normalizeEnum(String value, String field, List<String> allowed) {
-        String normalized = Objects.requireNonNullElse(value, "")
-                .trim()
-                .toUpperCase(Locale.ROOT);
-        if (!allowed.contains(normalized)) {
-            throw new IllegalArgumentException("Invalid " + field);
-        }
-        return normalized;
-    }
-
     private void validateTenant(String tenantId) {
         if (properties.getGlobalTenantId().equals(tenantId)) {
             return;
@@ -558,49 +391,8 @@ public class SystemConfigService {
         }
     }
 
-    private JdbcTemplate configJdbcTemplate(String tenantId) {
-        return properties.getGlobalTenantId().equals(tenantId)
-                ? jdbcTemplate
-                : tenantJdbcTemplate(tenantId);
-    }
-
     private JdbcTemplate tenantJdbcTemplate(String tenantId) {
         return new JdbcTemplate(tenantDataSourceRegistry.dataSourceForTenant(tenantId));
-    }
-
-    private String serializeValue(Object value, String valueType) {
-        if (value == null) {
-            return null;
-        }
-        if ("JSON".equals(valueType) && !(value instanceof String)) {
-            try {
-                return objectMapper.writeValueAsString(value);
-            } catch (Exception exception) {
-                throw new IllegalArgumentException("Invalid JSON config value", exception);
-            }
-        }
-        return String.valueOf(value);
-    }
-
-    private String text(Object value, String fallback) {
-        if (value == null || String.valueOf(value).isBlank()) {
-            return fallback;
-        }
-        return String.valueOf(value).trim();
-    }
-
-    private int integer(Object value, int fallback) {
-        if (value == null || String.valueOf(value).isBlank()) {
-            return fallback;
-        }
-        return Integer.parseInt(String.valueOf(value));
-    }
-
-    private long longValue(Object value, long fallback) {
-        if (value == null || String.valueOf(value).isBlank()) {
-            return fallback;
-        }
-        return Long.parseLong(String.valueOf(value));
     }
 
     private long positiveSeconds(Duration duration) {

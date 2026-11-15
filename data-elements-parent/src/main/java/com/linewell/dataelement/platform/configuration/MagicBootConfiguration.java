@@ -88,8 +88,9 @@ public class MagicBootConfiguration {
 
     /** Keep a bounded view of JSON consumed by Magic so scripts can preserve typed request errors. */
     @Bean
-    public OncePerRequestFilter magicNifiJsonRequestCache() {
-        Pattern requests = Pattern.compile("/nifi/(life/(deploy|activate)|node/attrs|api/(connection-test|columns-probe|tables-probe))");
+    public OncePerRequestFilter magicJsonRequestCache() {
+        Pattern requests = Pattern.compile("/nifi/(life/(deploy|activate)|node/attrs|api/(connection-test|columns-probe|tables-probe))"
+                + "|/(sym/table|idaas/workspace)/order|/sym/scope/(role|save|current)");
         return new OncePerRequestFilter() {
             @Override
             protected boolean shouldNotFilter(HttpServletRequest request) {

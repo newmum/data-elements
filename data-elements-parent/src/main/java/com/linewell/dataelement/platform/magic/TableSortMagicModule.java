@@ -15,6 +15,12 @@ import org.ssssssss.magicapi.core.annotation.MagicModule;
 @Component
 @MagicModule("tableSort")
 public class TableSortMagicModule {
+    /** HTTP request types for Jackson binding before Magic validates and sorts a preview. */
+    public record PreviewItem(String id, Object value) {}
+
+    public record PreviewRequest(List<PreviewItem> items, String kind, String direction,
+                                 Integer page, Integer size, Boolean wholeCollection) {}
+
     public String field(Map<String, ?> request, Map<String, String> allowed, String fallback) {
         String requested = text(request == null ? null : request.get("sortField"));
         if (requested.isEmpty()) requested = fallback;

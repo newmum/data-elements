@@ -13,7 +13,6 @@ import java.util.Map;
 import java.util.Set;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
-import org.springframework.beans.factory.annotation.Autowired;
 
 /** Resolves business ownership from tenant master data and organizes native NiFi groups. */
 @Component
@@ -27,13 +26,6 @@ public class PipelineGroupOrganizer {
     private static final double MIN_VERTICAL_SEPARATION = 260;
     private final NifiClient nifi;
     private final JdbcTemplate jdbc;
-    private List<PipelineGroupingPolicy> groupingPolicies = List.of();
-
-    @Autowired(required = false)
-    public void setGroupingPolicies(List<PipelineGroupingPolicy> policies) {
-        groupingPolicies = List.copyOf(policies);
-    }
-
     public PipelineGroupOrganizer(NifiClient nifi, JdbcTemplate jdbc) {
         this.nifi = nifi;
         this.jdbc = jdbc;
@@ -84,24 +76,14 @@ public class PipelineGroupOrganizer {
         String top = nifi.getRootProcessGroupId();
         String applicationName = label(app, "app_name", "未归属应用系统");
         String taskName = label(task, "task_name", pipeline.name());
-        String flowParent;
+        String department = ensure(top, label(org, "name", "未归属部门"), marker("department", key(org, "id")), !candidate);
+        String flowParent = department;
         String controllerServiceScope = "";
-        var featureGroup = groupingPolicies.stream().map(policy -> policy.group(pipeline))
-                .flatMap(java.util.Optional::stream).findFirst();
-        if (featureGroup.isPresent()) {
-            var group = featureGroup.get();
-            flowParent = ensure(top, group.name(), marker("application", group.identity()), !candidate);
+        if (!sameGroupLabel(applicationName, taskName)) {
+            flowParent = ensure(department, applicationName, marker("application", key(app, "tid")), !candidate);
+            // Application services are visible to every task beneath it.
+            // A task placed directly below its department remains self-contained.
             controllerServiceScope = flowParent;
-        } else {
-            String department = ensure(top, label(org, "name", "未归属部门"), marker("department", key(org, "id")), !candidate);
-            flowParent = department;
-            if (!sameGroupLabel(applicationName, taskName)) {
-                flowParent = ensure(department, applicationName, marker("application", key(app, "tid")), !candidate);
-                // Services owned by an application are visible to every task PG
-                // beneath it. A compact single-name task flow has no application
-                // parent by design, so it remains fully self-contained.
-                controllerServiceScope = flowParent;
-            }
         }
         String flowMarker = marker("pipeline", pipeline.id());
         if (candidate) {

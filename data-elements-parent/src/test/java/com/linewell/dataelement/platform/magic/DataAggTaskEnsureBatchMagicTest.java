@@ -28,15 +28,11 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.ssssssss.magicapi.core.context.RequestEntity;
 import org.ssssssss.magicapi.core.interceptor.DefaultResultProvider;
-import org.ssssssss.magicapi.datasource.model.MagicDynamicDataSource;
 import org.ssssssss.magicapi.modules.db.BoundSql;
-import org.ssssssss.magicapi.modules.db.ColumnMapperAdapter;
 import org.ssssssss.magicapi.modules.db.SQLModule;
 import org.ssssssss.magicapi.modules.db.dialect.DialectAdapter;
 import org.ssssssss.magicapi.modules.db.dialect.MySQLDialect;
 import org.ssssssss.magicapi.modules.db.inteceptor.SQLInterceptor;
-import org.ssssssss.magicapi.modules.db.provider.CamelColumnMapperProvider;
-import org.ssssssss.magicapi.modules.db.provider.DefaultColumnMapperProvider;
 import org.ssssssss.script.MagicScript;
 import org.ssssssss.script.MagicScriptContext;
 import org.ssssssss.script.exception.MagicScriptException;
@@ -48,7 +44,7 @@ class DataAggTaskEnsureBatchMagicTest {
 
     @ParameterizedTest @CsvSource({"1,0,false","2,0,false","2,1,true"})
     void materializedHiveUsesGovernanceOnlyOnTheFirstOrSingleTarget(int count,int targetIndex,boolean raw) throws Exception {
-        var f=new Fixture(count);f.prepareCreation();
+        var f = Fixture.forCreation(count);
         f.jdbc.update("update db_datasource_t set db_type='hive',pool_cfg=? where tid like 'target-db-%'",
                 "{\"hiveProfile\":\"default\",\"database\":\"ods\"}");
         assertInstanceOf(Map.class,f.run());
@@ -71,7 +67,7 @@ class DataAggTaskEnsureBatchMagicTest {
     @Test void hiveChainContextUsesFixedReadCountForTwentyAndHundredTargets() throws Exception {
         var reads=new ArrayList<Integer>();
         for(int count:List.of(20,100)) {
-            var f=new Fixture(count);f.prepareCreation();
+            var f = Fixture.forCreation(count);
             f.jdbc.update("update db_datasource_t set db_type='hive',pool_cfg=? where tid like 'target-db-%'",
                     "{\"hiveProfile\":\"default\",\"database\":\"ods\"}");
             assertInstanceOf(Map.class,f.run());reads.add(f.counter.queries);
@@ -83,7 +79,7 @@ class DataAggTaskEnsureBatchMagicTest {
 
     @Test
     void creatingTaskAcceptsPendingApplicationButDryRunDoesNot() throws Exception {
-        var f = new Fixture(1); f.prepareCreation();
+        var f = Fixture.forCreation(1);
         f.jdbc.update("update db_table_t set access_request_status=1 where tid='source-1'");
         assertInstanceOf(Map.class,f.run(Map.of("tableId","source-1","dryRun",true)));
         assertEquals(1,f.jdbc.queryForObject("select access_request_status from db_table_t where tid='source-1'",Integer.class));
@@ -96,8 +92,7 @@ class DataAggTaskEnsureBatchMagicTest {
     @CsvSource({"1,0,2", "0,1,0", "1,1,2"})
     void multiHopApprovalUsesOnlyTheLockedRootApplication(int rootStatus, int intermediateStatus, int expectedRoot)
             throws Exception {
-        var fixture = new Fixture(2);
-        fixture.prepareCreation();
+        var fixture = Fixture.forCreation(2);
         fixture.jdbc.execute("alter table db_table_t add updated_by varchar(64); alter table db_table_t add updated_time timestamp");
         var historicalTime = Timestamp.valueOf("2025-01-01 08:30:00");
         fixture.jdbc.update("update db_table_t set updated_by='validation-auditor',updated_time=?", historicalTime);
@@ -133,8 +128,7 @@ class DataAggTaskEnsureBatchMagicTest {
 
     @Test
     void rootApprovalFailureRollsBackTheNewPipelineTaskAndMappingBatches() throws Exception {
-        var fixture = new Fixture(2);
-        fixture.prepareCreation();
+        var fixture = Fixture.forCreation(2);
         fixture.jdbc.update("update db_table_t set access_request_status=1 where tid in ('source-1','target-0')");
         fixture.jdbc.execute("""
                 alter table db_table_t add constraint reject_root_approval
@@ -171,7 +165,7 @@ class DataAggTaskEnsureBatchMagicTest {
     void timePartitionTaskKeepsSourceConnectorAndBatchesTwentyAndHundredTargets(String type) throws Exception {
         var reads=new ArrayList<Integer>();
         for(int size:List.of(20,100)) {
-            var f=new Fixture(size); f.prepareCreation();
+            var f = Fixture.forCreation(size);
             f.jdbc.update("update db_datasource_t set db_type=? where tid='source-db'",type);
             f.jdbc.execute("alter table db_table_column_t add data_type varchar(64)");
             f.jdbc.update("update db_table_column_t set data_type='varchar'");
@@ -198,7 +192,7 @@ class DataAggTaskEnsureBatchMagicTest {
 
     @Test
     void sourcePreflightNeedsNoTargetAndEnforcesSourceTenantRoleAndReadOnlyMode() throws Exception {
-        var f=new Fixture(0); f.prepareCreation();
+        var f = Fixture.forCreation(0);
         f.fileProbe.locatorFailure=new IllegalStateException("JDBC source must never request a file");
         var body=Map.<String,Object>of("tableId","source-1","validateSourceOnly",true,"dryRun",true);
         var result=assertInstanceOf(Map.class,f.run(body));
@@ -215,8 +209,7 @@ class DataAggTaskEnsureBatchMagicTest {
 
     @Test
     void apiSourcePreflightReusesTheTenantRowAndRejectsAnUnregisteredDefinitionWithoutWrites() throws Exception {
-        var fixture = new Fixture(0);
-        fixture.prepareCreation();
+        var fixture = Fixture.forCreation(0);
         var request = Map.<String, Object>of("tableId", "source-1", "validateSourceOnly", true, "dryRun", true);
         assertInstanceOf(Map.class, fixture.run(request));
         int originalReads = fixture.readCount();
@@ -244,7 +237,7 @@ class DataAggTaskEnsureBatchMagicTest {
 
     @ParameterizedTest @CsvSource({"文件服务器连接超时,连接超时","文件服务器认证未通过,认证未通过","登记的来源文件无法唯一定位,无法唯一定位","登记缺少工作表或JSON数据路径,工作表"})
     void fileFailuresKeepActionableCategoryAndNeverLeakUnderlyingDetails(String reason,String expected) throws Exception {
-        var f=new Fixture(2); f.prepareCreation();
+        var f = Fixture.forCreation(2);
         f.jdbc.update("update db_datasource_t set db_type='ftp' where tid='source-db'");
         f.fileProbe.locatorFailure=new IllegalStateException(reason+" password=test-only-private-secret");
         for(boolean preflight:List.of(true,false)) {
@@ -260,7 +253,7 @@ class DataAggTaskEnsureBatchMagicTest {
     @Test
     void longEnumRulesAreLosslessOnTextAndLegacyVarcharFailsBeforeAnyWrite() throws Exception {
         for (boolean legacy : List.of(true, false)) {
-            Fixture fixture = new Fixture(1); fixture.prepareCreation();
+            Fixture fixture = Fixture.forCreation(1);
             fixture.jdbc.execute("alter table data_access_field_mapping alter column func_value " + (legacy ? "varchar(255)" : "clob"));
             fixture.jdbc.execute("alter table nifi_pipeline_t alter column dsl_json clob");
             fixture.jdbc.update("insert into db_table_column_t values('translated','police','target-0','person_id_cn',null,2,0)");
@@ -290,8 +283,7 @@ class DataAggTaskEnsureBatchMagicTest {
     @ParameterizedTest
     @ValueSource(strings = {"snapshot", "role", "table", "missing", "invalid"})
     void newTaskWatermarkUsesOnlyTheRegisteredTimestampAndNeverThePrimaryKey(String mode) throws Exception {
-        Fixture fixture = new Fixture(1);
-        fixture.prepareCreation();
+        Fixture fixture = Fixture.forCreation(1);
         fixture.jdbc.execute("alter table db_table_column_t add primary_key int default 0");
         fixture.jdbc.update("update db_table_column_t set primary_key=1 where tid='source-col'");
         fixture.jdbc.update("insert into db_table_column_t(tid,tenant_id,table_id,column_name,ordinal_position,is_del) "
@@ -320,8 +312,7 @@ class DataAggTaskEnsureBatchMagicTest {
     void timestampInitializationForTwentyAndHundredTargetsAddsNoPerTargetReads() throws Exception {
         List<Integer> counts = new ArrayList<>();
         for (int size : List.of(20, 100)) {
-            Fixture fixture = new Fixture(size);
-            fixture.prepareCreation();
+            Fixture fixture = Fixture.forCreation(size);
             fixture.jdbc.update("update db_table_t set field_governance_config=? where is_del=0",
                     "{\"timestampField\":\"person_id\"}");
             assertInstanceOf(Map.class, fixture.run());
@@ -338,8 +329,7 @@ class DataAggTaskEnsureBatchMagicTest {
 
     @ParameterizedTest @ValueSource(ints = {1, 2})
     void positiveRegistrationStatesAllowTaskPlanning(int status) throws Exception {
-        Fixture fixture = new Fixture(2);
-        fixture.prepareCreation();
+        Fixture fixture = Fixture.forCreation(2);
         fixture.jdbc.update("update db_datasource_t set asset_status=? where tid='source-db'", status);
         fixture.jdbc.update("update db_table_t set asset_status=? where tid='source-1'", status);
         assertInstanceOf(Map.class, fixture.run(Map.of("tableId", "source-1", "dryRun", true)));
@@ -349,8 +339,7 @@ class DataAggTaskEnsureBatchMagicTest {
     @ParameterizedTest @ValueSource(strings = {"source", "table"})
     void zeroNullOrNegativeRegistrationStatesRejectTaskPlanning(String entity) throws Exception {
         for (Integer status : java.util.Arrays.asList(0, -1, null)) {
-            Fixture fixture = new Fixture(2);
-            fixture.prepareCreation();
+            Fixture fixture = Fixture.forCreation(2);
             fixture.jdbc.update(entity.equals("source")
                 ? "update db_datasource_t set asset_status=? where tid='source-db'"
                 : "update db_table_t set asset_status=? where tid='source-1'", status);
@@ -361,8 +350,7 @@ class DataAggTaskEnsureBatchMagicTest {
 
     @Test
     void ftpSelectedFileIsResolvedOnceAndClientCannotOverrideItsManagedLocator() throws Exception {
-        Fixture fixture = new Fixture(20);
-        fixture.prepareCreation();
+        Fixture fixture = Fixture.forCreation(20);
         fixture.jdbc.update("update db_datasource_t set db_type='ftp',pool_cfg=? where tid='source-db'",
                 "{\"ftpProtocol\":\"sftp\",\"ftpHost\":\"managed.invalid\",\"ftpPath\":\"/managed/data\"}");
         var result = assertInstanceOf(Map.class, fixture.run(Map.of("tableId", "source-1", "dryRun", true,
@@ -384,7 +372,7 @@ class DataAggTaskEnsureBatchMagicTest {
     void pushRegistrationUsesOdsFileBindingAndCommitAcknowledgementWithFixedReads() throws Exception {
         var reads=new ArrayList<Integer>();
         for(int size:List.of(20,100)) {
-            var f=new Fixture(size);f.prepareCreation();
+            var f = Fixture.forCreation(size);
             f.jdbc.execute("alter table dwm_center_layer_source_t add layer_code varchar(32)");
             f.jdbc.execute("alter table dwm_center_layer_source_t add updated_time timestamp");
             f.jdbc.update("update db_datasource_t set db_type='receive',pool_cfg=? where tid='source-db'","{\"accessMode\":\"receive\"}");
@@ -423,8 +411,7 @@ class DataAggTaskEnsureBatchMagicTest {
     @ParameterizedTest
     @ValueSource(strings = {"NUMBER(10,0)", "varchar(2)"})
     void registeredEnumCarriesSourceFieldTypeIntoGeneratedDslAndPersistence(String type) throws Exception {
-        Fixture fixture = new Fixture(1);
-        fixture.prepareCreation();
+        Fixture fixture = Fixture.forCreation(1);
         fixture.jdbc.update("insert into db_table_column_t values('translated','police','target-0','person_id_cn',null,2,0)");
         fixture.jdbc.execute("alter table db_table_column_t add data_type varchar(64)");
         fixture.jdbc.update("update db_table_column_t set data_type=? where tid='source-col'", type);
@@ -450,8 +437,7 @@ class DataAggTaskEnsureBatchMagicTest {
             "doris", "starrocks", "gbase8a", "gbase8s", "oscar", "highgo", "vastbase", "tdsql_pg",
             "tdsql_mysql", "ftp", "sftp", "minio", "api", "kafka", "elasticsearch", "hdfs", "hbase", "iotdb"})
     void multiStandardCreatesTaskForEveryRegisteredSourceWithoutMysqlGuard(String type) throws Exception {
-        Fixture fixture = new Fixture(2);
-        fixture.prepareCreation();
+        Fixture fixture = Fixture.forCreation(2);
         if (type.equals("api")) {
             fixture.registerApiSource("PERSON");
         } else {
@@ -501,8 +487,7 @@ class DataAggTaskEnsureBatchMagicTest {
     void multiDictionaryTaskReadsStayBatchedAndKeepRegisteredDictionaryType() throws Exception {
         List<Integer> counts = new ArrayList<>();
         for (int targets : List.of(20, 100)) {
-        Fixture fixture = new Fixture(targets);
-        fixture.prepareCreation();
+        Fixture fixture = Fixture.forCreation(targets);
         fixture.jdbc.execute("alter table nifi_pipeline_t alter column dsl_json clob");
         fixture.addDictionaryFields(1);
         fixture.jdbc.update("update db_datasource_t set db_type='oracle' where tid='source-db'");
@@ -532,8 +517,7 @@ class DataAggTaskEnsureBatchMagicTest {
 
     @Test
     void registeredVarcharTemporalMappingsAreExecutableAndPersisted() throws Exception {
-        Fixture fixture = new Fixture(2);
-        fixture.prepareCreation();
+        Fixture fixture = Fixture.forCreation(2);
         fixture.jdbc.execute("alter table db_table_column_t add data_type varchar(64)");
         fixture.jdbc.execute("alter table db_table_column_t add data_standard_id varchar(64)");
         fixture.jdbc.update("update db_table_column_t set data_type='varchar',data_standard_id='DATETIME' where tid='source-col'");
@@ -566,8 +550,7 @@ class DataAggTaskEnsureBatchMagicTest {
     @Test
     void temporalSnapshotFallbackNativeTypesAndClearAreRespected() throws Exception {
         for (String scenario : List.of("fallback", "native", "clear")) {
-            Fixture fixture = new Fixture(1);
-            fixture.prepareCreation();
+            Fixture fixture = Fixture.forCreation(1);
             fixture.jdbc.execute("alter table db_table_column_t add data_type varchar(64)");
             fixture.jdbc.execute("alter table db_table_column_t add data_standard_id varchar(64)");
             fixture.jdbc.update("update db_table_column_t set data_type=? where tid='source-col'", scenario.equals("native") ? "date" : "varchar");
@@ -589,8 +572,7 @@ class DataAggTaskEnsureBatchMagicTest {
             "minio,minio", "ftp,ftp", "sftp,sftp", "api,api", "kafka,kafka",
             "elasticsearch,elasticsearch", "tdsql_mysql,tdsql-mysql", "tdsql_pg,tdsql-pg", "vastbase,hailiang"})
     void createsTheRegisteredSourceTypeThroughTheActualEnsureScript(String raw, String manifest) throws Exception {
-        Fixture fixture = new Fixture(1);
-        fixture.prepareCreation();
+        Fixture fixture = Fixture.forCreation(1);
         if (raw.equals("api")) {
             fixture.registerApiSource("PERSON");
         } else {
@@ -635,8 +617,7 @@ class DataAggTaskEnsureBatchMagicTest {
             "oceanbaseoracle,OCEANBASE_ORACLE,jdbc:oceanbase:", "mariadb,MARIADB,jdbc:mariadb:",
             "gaussdb,GAUSSDB,jdbc:postgresql:", "hive,HIVE,jdbc:hive2:", "dm,DM,jdbc:dm:"})
     void targetDialectAndJdbcProtocolFollowTheRegisteredTarget(String raw, String expected, String protocol) throws Exception {
-        Fixture fixture = new Fixture(1);
-        fixture.prepareCreation();
+        Fixture fixture = Fixture.forCreation(1);
         fixture.jdbc.update("update db_datasource_t set db_type=?,pool_cfg=? where tid='target-db-0'", raw,
                 "{\"host\":\"db-host\",\"database\":\"business\"}");
         assertInstanceOf(Map.class, fixture.run());
@@ -648,8 +629,7 @@ class DataAggTaskEnsureBatchMagicTest {
 
     @Test
     void unsupportedSourceFailsBeforeCreatingAnyTaskOrCanvas() throws Exception {
-        Fixture fixture = new Fixture(1);
-        fixture.prepareCreation();
+        Fixture fixture = Fixture.forCreation(1);
         fixture.jdbc.update("update db_datasource_t set db_type='unknown-vendor' where tid='source-db'");
         assertInstanceOf(ExitValue.class, fixture.run());
         assertEquals(0, fixture.counter.writes);
@@ -658,8 +638,7 @@ class DataAggTaskEnsureBatchMagicTest {
 
     @Test
     void sourcePreflightIgnoresMetadataMenuRole() throws Exception {
-        Fixture fixture = new Fixture(1);
-        fixture.prepareCreation();
+        Fixture fixture = Fixture.forCreation(1);
         fixture.scope.deniedId = "source-db";
         assertInstanceOf(Map.class, fixture.run(Map.of("tableId","source-1","validateSourceOnly",true,"dryRun",true)));
         assertEquals(0, fixture.counter.writes);
@@ -804,8 +783,7 @@ class DataAggTaskEnsureBatchMagicTest {
 
     @Test
     void selectedOrderControlsEachHopAndDownstreamPreservesOdsFields() throws Exception {
-        Fixture fixture = new Fixture(3);
-        fixture.prepareCreation();
+        Fixture fixture = Fixture.forCreation(3);
         for (int index=0; index<3; index++) for (String name : List.of("ODS_UUID", "ODS_RKSJ", "ODS_GXSJ")) {
             fixture.jdbc.update("insert into db_table_column_t values(?,'police',?,?,null,3,0)", name+index, "target-"+index, name);
         }
@@ -824,7 +802,7 @@ class DataAggTaskEnsureBatchMagicTest {
 
     @Test
     void dryRunAndUnauthorizedSelectedIdNeverCreateTasks() throws Exception {
-        Fixture fixture=new Fixture(2); fixture.prepareCreation();
+        Fixture fixture = Fixture.forCreation(2);
         Map<?,?> plan=assertInstanceOf(Map.class,fixture.run(Map.of("tableId","source-1","dryRun",true)));
         assertEquals(2,plan.get("plannedCreateCount")); assertEquals(false,plan.get("sideEffectsApplied"));
         assertEquals(0,fixture.counter.writes);
@@ -836,7 +814,7 @@ class DataAggTaskEnsureBatchMagicTest {
     void configuredOdsDomainOrderOverridesReverseSelectionsWithConstantBatchReads() throws Exception {
         List<Integer> reads = new ArrayList<>();
         for (int size : List.of(20, 100)) {
-            Fixture fixture = new Fixture(size); fixture.prepareCreation();
+            Fixture fixture = Fixture.forCreation(size);
             fixture.jdbc.update("insert into sym_dict_t values('root','police','0','dataSourceType',0,0),('ods','police','root','ods',0,0)");
             List<String> reversed = new ArrayList<>();
             for (int i = 0; i < size; i++) {
@@ -859,13 +837,13 @@ class DataAggTaskEnsureBatchMagicTest {
             System.out.println("Configured ODS order: targets=" + size + ", SQL reads=" + fixture.counter.queries + ", batch writes=3; foreign/deleted domains excluded");
         }
         assertEquals(reads.getFirst(), reads.getLast());
-        Fixture changed = new Fixture(2); changed.prepareCreation();
+        Fixture changed = Fixture.forCreation(2);
         changed.jdbc.update("insert into sym_dict_t values('root','police','0','dataSourceType',0,0),('ods','police','root','ods',0,0),('huiju','police','ods','huiju',0,2),('yuanshi','police','ods','yuanshi',0,1)");
         changed.jdbc.update("insert into dwm_center_layer_source_t values('police','huiju','domain','target-db-0',0),('police','yuanshi','domain','target-db-1',0)");
         Map<?, ?> moved = assertInstanceOf(Map.class, changed.run(Map.of("tableId", "source-1", "targetTableIds", List.of("target-0", "target-1"))));
         assertEquals(List.of("target-1", "target-0"), moved.get("targetTableIds"));
         assertEquals("target-1", changed.jdbc.queryForObject("select source_table_id from data_access_agg_task_t where target_table_id='target-0'", String.class));
-        Fixture denied = new Fixture(2); denied.prepareCreation(); denied.scope.deniedId = "target-db-1";
+        Fixture denied = Fixture.forCreation(2); denied.scope.deniedId = "target-db-1";
         assertInstanceOf(Map.class, denied.run(Map.of("tableId", "source-1", "targetTableIds", List.of("target-1", "target-0"))));
         assertEquals(3, denied.counter.writes, "Current-tenant valid targets retain configured order without a menu-role gate");
     }
@@ -873,8 +851,7 @@ class DataAggTaskEnsureBatchMagicTest {
     @ParameterizedTest
     @ValueSource(strings = {"FIRST", "LAST"})
     void domainOrderKeepsTheDatabaseNullOrderAndFirstAssociation(String nullOrder) throws Exception {
-        Fixture fixture = new Fixture(4);
-        fixture.prepareCreation();
+        Fixture fixture = Fixture.forCreation(4);
         fixture.jdbc.execute("set default_null_ordering " + nullOrder);
         fixture.jdbc.update("""
                 insert into sym_dict_t values ('root','police','0','dataSourceType',0,0),
@@ -898,9 +875,11 @@ class DataAggTaskEnsureBatchMagicTest {
 
     @Test
     void domainOrderMergesWindowsAndIgnoresNonExactDatasourceIds() throws Exception {
-        Fixture fixture = new Fixture(3);
-        fixture.prepareCreation();
+        Fixture fixture = Fixture.forCreation(3);
         fixture.jdbc.execute("alter table dwm_center_layer_source_t alter column datasource_id set data type varchar_ignorecase(64)");
+        // Match the production association and dictionary lookup indexes for the multi-window query.
+        fixture.jdbc.execute("create index idx_layer_source_datasource on dwm_center_layer_source_t(datasource_id)");
+        fixture.jdbc.execute("create index idx_dictionary_tree on sym_dict_t(tenant_id,parent_id,is_del,sort_no)");
         fixture.jdbc.update("insert into sym_dict_t values('root','police','0','dataSourceType',0,0),('ods','police','root','ods',0,0)");
         List<Object[]> domains = new ArrayList<>();
         List<Object[]> bindings = new ArrayList<>();
@@ -939,7 +918,7 @@ class DataAggTaskEnsureBatchMagicTest {
         assertEquals(2,split.get("createdCount"));
         assertEquals(1,fixture.jdbc.queryForObject("select is_del from data_access_agg_task_t where tid='task-1'",Integer.class));
         assertEquals(2,fixture.jdbc.queryForObject("select count(*) from data_access_agg_task_t where is_del=0",Integer.class));
-        Fixture failed=new Fixture(2); failed.prepareCreation();
+        Fixture failed = Fixture.forCreation(2);
         failed.jdbc.execute("alter table data_access_agg_task_t add constraint fail_downstream check(target_table_id <> 'target-1')");
         assertThrows(Exception.class,failed::run);
         assertEquals(0,failed.jdbc.queryForObject("select count(*) from nifi_pipeline_t",Integer.class));
@@ -950,7 +929,7 @@ class DataAggTaskEnsureBatchMagicTest {
     void twentyAndHundredNewHopsUseConstantReadsAndOneRootApproval() throws Exception {
         List<Integer> reads=new ArrayList<>();
         for (int size:List.of(20,100)) {
-            Fixture fixture=new Fixture(size); fixture.prepareCreation();
+            Fixture fixture = Fixture.forCreation(size);
             fixture.jdbc.update("update db_table_t set access_request_status=1 where tid='source-1'");
             Map<?,?> result=assertInstanceOf(Map.class,fixture.run());
             assertEquals(size,result.get("createdCount"));
@@ -968,7 +947,7 @@ class DataAggTaskEnsureBatchMagicTest {
     void listAggregationGroupsRealHopSourcesUnderRootAndUsesConstantReads() throws Exception {
         List<Integer> readCounts = new ArrayList<>();
         for (int size : List.of(20, 100)) {
-            Fixture f = new Fixture(2); f.prepareCreation();
+            Fixture f = Fixture.forCreation(2);
             List<Map<String, Object>> rows = new ArrayList<>();
             List<String> ids = new ArrayList<>();
             for (int i = 0; i < size; i++) {
@@ -1061,7 +1040,7 @@ class DataAggTaskEnsureBatchMagicTest {
 
     @Test
     void distributionReadsConfiguredWarehouseSourceAndResolvesChainedTaskTarget() throws Exception {
-        Fixture f=new Fixture(2); f.prepareCreation();
+        Fixture f = Fixture.forCreation(2);
         assertInstanceOf(Map.class,f.run());
         f.jdbc.execute("alter table db_table_t add updated_time timestamp");
         f.jdbc.execute("alter table db_table_t add business_type varchar(64)");
@@ -1105,14 +1084,21 @@ class DataAggTaskEnsureBatchMagicTest {
         final QueryCounter counter = new QueryCounter();
         final ScopeRuntime scope = new ScopeRuntime();
         final FtpSourceProbeStub fileProbe = new FtpSourceProbeStub();
+        private final StructuredTableReadMagicModule tableRead;
+        private final StructuredTableWriteMagicModule tableWrite;
 
         Fixture(int targetCount) {
+            this(targetCount, true);
+        }
+
+        static Fixture forCreation(int targetCount) {
+            return new Fixture(targetCount, false);
+        }
+
+        private Fixture(int targetCount, boolean seedExistingTask) {
             var source = new DriverManagerDataSource("jdbc:h2:mem:agg_ensure_" + UUID.randomUUID()
                     + ";MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1");
-            var sources = new MagicDynamicDataSource();
-            sources.setDefault(source);
-            db = new SQLModule(sources);
-            db.setDataSourceNode(sources.getDataSource());
+            db = DatasourceCompletionMagicTest.magicDb(source);
             db.setResultProvider(new DefaultResultProvider("data-agg-ensure-test"));
             var dialects = new DialectAdapter();
             dialects.add(new MySQLDialect() {
@@ -1122,19 +1108,17 @@ class DataAggTaskEnsureBatchMagicTest {
                 }
             });
             db.setDialectAdapter(dialects);
-            var columns = new ColumnMapperAdapter();
-            columns.add(new DefaultColumnMapperProvider());
-            columns.add(new CamelColumnMapperProvider());
-            columns.setDefault("camel");
-            db.setColumnMapperProvider(columns);
             db.setSqlInterceptors(List.of(counter));
-            db.setNamedTableInterceptors(List.of());
-            db.setColumnMapRowMapper(columns.getDefaultColumnMapRowMapper());
-            db.setRowMapColumnMapper(value -> value);
             jdbc = new JdbcTemplate(source);
+            tableRead = TaskRuntimeMagicFixture.structuredReads(jdbc, sql -> {
+                assertTrue(TransactionSynchronizationManager.hasResource(jdbc.getDataSource()),
+                        "Domain ranking must read within the source-lock transaction");
+                counter.record(sql);
+            });
+            tableWrite = new StructuredTableWriteMagicModule(countedWriteJdbc());
             jdbc.execute("""
                     create table db_table_t(tid varchar(64),tenant_id varchar(32),datasource_id varchar(64),
-                        table_name varchar(100),table_name_en varchar(100),table_name_cn varchar(100),
+                        table_name varchar(100),table_name_en varchar(100),table_name_cn varchar(100),table_comment varchar(300),
                         source_table_id varchar(64),source_catalog_id varchar(64),timestamp_field varchar(100),
                         field_governance_config clob,created_time timestamp,is_del int,asset_status int default 2,
                         access_request_status int default 0)
@@ -1183,25 +1167,34 @@ class DataAggTaskEnsureBatchMagicTest {
             jdbc.update("insert into db_datasource_t(tid,tenant_id,db_type,is_del) values('source-db','police','mysql',0)");
             jdbc.update("insert into db_table_column_t(tid,tenant_id,table_id,column_name,ordinal_position,is_del) "
                     + "values('source-col','police','source-1','person_id',1,0)");
+            var tables = new ArrayList<Object[]>(targetCount);
+            var datasources = new ArrayList<Object[]>(targetCount);
+            var columns = new ArrayList<Object[]>(targetCount);
             List<Map<String, Object>> nodes = new ArrayList<>();
             for (int i = 0; i < targetCount; i++) {
                 String tableId = "target-" + i;
                 String datasourceId = "target-db-" + i;
-                jdbc.update("insert into db_table_t(tid,tenant_id,datasource_id,table_name,source_table_id,created_time,is_del) "
-                        + "values(?,?,?,?,?,dateadd('SECOND', ?, timestamp '2026-01-01 00:00:00'),0)",
-                        tableId, "police", datasourceId, "ods_person_" + i, "source-1", i);
-                jdbc.update("insert into db_datasource_t(tid,tenant_id,db_type,is_del) values(?,'police','mysql',0)", datasourceId);
-                jdbc.update("insert into db_table_column_t(tid,tenant_id,table_id,column_name,ordinal_position,is_del) "
-                        + "values(?,'police',?,'person_id',1,0)", "target-col-" + i, tableId);
-                nodes.add(Map.of("id", "sink-" + tableId, "category", "sink", "manifestKey", "sink.jdbc",
-                        "config", Map.of("targetTableId", tableId, "targetDbId", datasourceId)));
+                tables.add(new Object[]{tableId, datasourceId, "ods_person_" + i, i});
+                datasources.add(new Object[]{datasourceId});
+                columns.add(new Object[]{"target-col-" + i, tableId});
+                if (seedExistingTask) {
+                    nodes.add(Map.of("id", "sink-" + tableId, "category", "sink", "manifestKey", "sink.jdbc",
+                            "config", Map.of("targetTableId", tableId, "targetDbId", datasourceId)));
+                }
             }
-            jdbc.update("insert into data_access_agg_task_t(tid,tenant_id,source_table_id,target_table_id,pipeline_id,is_del) "
-                    + "values('task-1','police','source-1','target-0','pipeline-1',0)");
-            jdbc.update("insert into data_access_field_mapping(tid,tenant_id,task_id,is_del) "
-                    + "values('mapping-1','police','task-1',0)");
-            String dsl = cn.hutool.json.JSONUtil.toJsonStr(Map.of("version", 1, "nodes", nodes, "edges", List.of()));
-            jdbc.update("insert into nifi_pipeline_t(id,tenant_id,dsl_json,is_del) values('pipeline-1','police',?,0)", dsl);
+            jdbc.batchUpdate("insert into db_table_t(tid,tenant_id,datasource_id,table_name,source_table_id,created_time,is_del) "
+                    + "values(?,'police',?,?,'source-1',dateadd('SECOND', ?, timestamp '2026-01-01 00:00:00'),0)", tables);
+            jdbc.batchUpdate("insert into db_datasource_t(tid,tenant_id,db_type,is_del) values(?,'police','mysql',0)", datasources);
+            jdbc.batchUpdate("insert into db_table_column_t(tid,tenant_id,table_id,column_name,ordinal_position,is_del) "
+                    + "values(?,'police',?,'person_id',1,0)", columns);
+            if (seedExistingTask) {
+                jdbc.update("insert into data_access_agg_task_t(tid,tenant_id,source_table_id,target_table_id,pipeline_id,is_del) "
+                        + "values('task-1','police','source-1','target-0','pipeline-1',0)");
+                jdbc.update("insert into data_access_field_mapping(tid,tenant_id,task_id,is_del) "
+                        + "values('mapping-1','police','task-1',0)");
+                String dsl = cn.hutool.json.JSONUtil.toJsonStr(Map.of("version", 1, "nodes", nodes, "edges", List.of()));
+                jdbc.update("insert into nifi_pipeline_t(id,tenant_id,dsl_json,is_del) values('pipeline-1','police',?,0)", dsl);
+            }
         }
 
         void addDictionaryFields(int count) {
@@ -1221,12 +1214,6 @@ class DataAggTaskEnsureBatchMagicTest {
             }
         }
 
-        void prepareCreation() {
-            jdbc.update("delete from data_access_field_mapping");
-            jdbc.update("delete from nifi_pipeline_t");
-            jdbc.update("delete from data_access_agg_task_t");
-        }
-
         void registerApiSource(String tableName) {
             var item = Map.of("tableName", tableName, "baseUrl", "https://validation.example///",
                     "endpointPath", "person", "responseExtractPath", "$.data", "authType", "bearer",
@@ -1244,8 +1231,6 @@ class DataAggTaskEnsureBatchMagicTest {
         void resetCounter() { counter.queries=0; counter.writes=0; counter.structuredWriteStatements.clear(); }
 
         Object run(Map<String, Object> body) throws Exception {
-            // The adjacent materialization test reuses this fixture and provides its own comment column.
-            jdbc.execute("alter table db_table_t add column if not exists table_comment varchar(300)");
             String script = CanonicalMagicSources.byId(SOURCE_ID)
                     .replaceAll("(?m)^import (jsons|metadataAsset|targetTableSchema|tenantRuntime|dataScope|tableRead|tableWrite|com\\.linewell\\.dataelement\\.metautil\\.structured\\.StructuredSourceProbeService as structuredFileProbe)\\r?\\n", "");
             Map<String, Object> inputs = new LinkedHashMap<>();
@@ -1255,12 +1240,8 @@ class DataAggTaskEnsureBatchMagicTest {
             inputs.put("dataScope", scope);
             inputs.put("jsons", new JsonModule());
             inputs.put("structuredFileProbe", fileProbe);
-            inputs.put("tableRead", TaskRuntimeMagicFixture.structuredReads(jdbc, sql -> {
-                assertTrue(TransactionSynchronizationManager.hasResource(jdbc.getDataSource()),
-                        "Domain ranking must read within the source-lock transaction");
-                counter.record(sql);
-            }));
-            inputs.put("tableWrite", new StructuredTableWriteMagicModule(countedWriteJdbc()));
+            inputs.put("tableRead", tableRead);
+            inputs.put("tableWrite", tableWrite);
             resetCounter();
             try (var tenant = TenantContext.use(scope.id())) {
                 return MagicScript.create(script, null).execute(new MagicScriptContext(inputs));

@@ -127,7 +127,7 @@ export function useVxeGrid(props: UseVxeGridOptions, emit?: any) {
       const col=gridOptions.columns?.find(col=>col.field===field);
       const kind=/时间|日期|最近更新/.test(String(col?.title))?'time':/数量|总数|次数|条数|字段数|长度|大小|占比|率|耗时/.test(String(col?.title))?'number':'text';
       const items=rows.map(row=>{let value=get(row,field!);if(kind==='time'&&value){const date=new Date(value);value=Number.isNaN(date.getTime())?null:date.toISOString();}return {id:key(row),value:value??null};});
-      const response=await request.post<any, {keys:string[];total:number}>("/sym/table/preview-order",{items,kind,direction:order,wholeCollection:true});
+      const response=await request.post<any, {keys:string[];total:number}>("/sym/table/order",{items,kind,direction:order,wholeCollection:true});
       if(disposed||requestId!==sequence)return;
       const byId=new Map(rows.map(row=>[key(row),row]));
       if(response.total!==rows.length||response.keys.length!==rows.length||new Set(response.keys).size!==rows.length||response.keys.some(id=>!byId.has(id)))throw new Error('配置排序结果不完整或超出当前范围');

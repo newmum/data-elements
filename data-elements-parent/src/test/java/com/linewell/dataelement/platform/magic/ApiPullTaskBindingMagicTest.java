@@ -202,7 +202,7 @@ class ApiPullTaskBindingMagicTest {
             seed();
             tableRead = TaskRuntimeMagicFixture.structuredReads(jdbc, structuredQueries::add);
             tableWrite = new StructuredTableWriteMagicModule(jdbc);
-            dataScope = new DataScopeMagicModule(new DataScopeAuthorizationService(null, null, new ObjectMapper()) {
+            dataScope = new DataScopeMagicModule(new DataScopeAuthorizationService(null) {
                 @Override
                 public ScopeDecision currentScope(String resourceCode) {
                     return new ScopeDecision(resourceCode, scope, actor, organizations, List.of(), true);

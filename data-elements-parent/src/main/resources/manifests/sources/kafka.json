@@ -23,7 +23,7 @@
       { "label": "SCRAM-SHA-512", "value": "SCRAM-SHA-512" },
       { "label": "GSSAPI", "value": "GSSAPI" }
     ], "group": "security" },
-    { "key": "credentialRef", "label": "Kafka 凭据引用", "type": "text", "group": "security", "placeholder": "credential://kafka/structured-surveillance" },
+    { "key": "credentialRef", "label": "Kafka 凭据引用", "type": "text", "group": "security", "placeholder": "credential://kafka/data-integration" },
     { "key": "principal", "label": "Kerberos Principal", "type": "text", "group": "security" },
     { "key": "keytabPath", "label": "Keytab 路径", "type": "text", "group": "security" },
     { "key": "krb5ConfPath", "label": "krb5.conf 路径", "type": "text", "group": "security" },

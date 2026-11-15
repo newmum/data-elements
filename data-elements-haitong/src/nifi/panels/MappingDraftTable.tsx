@@ -21,7 +21,7 @@ export default function MappingDraftTable<T extends object>({ dataSource = [], c
     let active = true;
     setLoading(true); setError('');
     const input = JSON.parse(signature) as { items: typeof items; kind: Field<T>['kind']; direction: 'asc' | 'desc' };
-    Promise.resolve().then(() => platformApi<{ keys: string[]; total: number }>('/sym/table/preview-order', draftOrderRequest(input.items, input.kind, input.direction)))
+    Promise.resolve().then(() => platformApi<{ keys: string[]; total: number }>('/sym/table/order', draftOrderRequest(input.items, input.kind, input.direction)))
       .then(result => { const keys = checkedDraftKeys(input.items, result); if (active) setOrdered({ signature, keys }); })
       .catch(cause => { if (active) setError(cause instanceof Error ? cause.message : '排序暂不可用，当前仍显示全部规则'); })
       .finally(() => { if (active) setLoading(false); });

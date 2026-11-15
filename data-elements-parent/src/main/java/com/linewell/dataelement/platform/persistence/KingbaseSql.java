@@ -9,9 +9,6 @@ public final class KingbaseSql {
     private static final Pattern REVISION_INCREMENT = Pattern.compile(
         "(?i)\\bCOALESCE\\s*\\(\\s*CAST\\s*\\(\\s*revision\\s+AS\\s+UNSIGNED\\s*\\)\\s*,\\s*0\\s*\\)\\s*\\+\\s*1\\b");
     private static final Map<String,String> CONFLICT_KEYS=Map.of(
-        "surveillance_kafka_connection_t","tenant_id,engine_code,connection_role",
-        "surveillance_rule_snapshot_t","tenant_id,engine_code,channel_code,snapshot_version,is_del",
-        "surveillance_topic_daily_stat_t","tenant_id,engine_code,resource_code,stat_date",
         "dq_quality_metric_t","tenant_id,run_id,task_rule_id",
         "api_job_t","job_code",
         "data_push_relay_client_t","relay_client_id,tenant_id,datasource_id");
@@ -65,8 +62,7 @@ public final class KingbaseSql {
         if(!insert.find())return sql;
         String table=insert.group(2).replace("\"","").toLowerCase(Locale.ROOT);
         if(insert.group(1)!=null) {
-            if(!table.equals("surveillance_metric_batch_t"))throw new IllegalArgumentException("Unreviewed Kingbase INSERT IGNORE target");
-            return sql.replaceFirst("(?i)INSERT\\s+IGNORE\\s+INTO","INSERT INTO")+" ON CONFLICT DO NOTHING";
+            throw new IllegalArgumentException("Unreviewed Kingbase INSERT IGNORE target");
         }
         Matcher marker=Pattern.compile("(?i)\\bON\\s+DUPLICATE\\s+KEY\\s+UPDATE\\b").matcher(sql);
         boolean found=false;

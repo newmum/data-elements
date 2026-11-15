@@ -126,15 +126,6 @@ class NifiPipelineTemplateMagicTest {
                     .containsExactly("source.mysql", "transform.field-enrichment", "sink.jdbc");
             assertThat(canvas.dsl().edges()).hasSize(2);
         });
-        var surveillance = fixture.canvas(Map.of("templateType", "STRUCTURED-SURVEILLANCE"));
-        assertThat(surveillance.getBody()).isInstanceOfSatisfying(Pipeline.class, canvas -> {
-            assertThat(canvas.dsl().nodes()).hasSize(9);
-            assertThat(canvas.dsl().edges()).hasSize(6);
-            assertThat(canvas.dsl().nodes().getFirst().config()).containsEntry("credentialRef", "credential://kafka/structured-surveillance");
-            assertThat(canvas.dsl().nodes().stream().filter(node -> "transform.surveillance-match".equals(node.manifestKey())))
-                    .hasSize(3).allSatisfy(node -> assertThat(node.config())
-                            .containsEntry("matchUrl", "/api/v1/surveillance/match/batch"));
-        });
         assertThat(fixture.canvas(Map.of()).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertThat(fixture.canvas(Map.of("tid", "absent")).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     }
@@ -194,7 +185,7 @@ class NifiPipelineTemplateMagicTest {
 
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final String COMMON = "function/01.通用函数/";
-    private static final String API = "api/10.丽斐流程接口/";
+    private static final String API = "api/10.海通流程接口/";
 
     private static class Fixture {
         final JdbcTemplate jdbc;
@@ -262,14 +253,14 @@ class NifiPipelineTemplateMagicTest {
             });
             bindings.putAll(Map.of("db", db, "tableRead", TaskRuntimeMagicFixture.structuredReads(jdbc, structuredReads::add), "tenantRuntime",
                     new TenantMagicModule(null), "mapper", JSON, "metadataExplorer", explorer, "dataScope", scope));
-            register("respond", "nifi_pipe_list_response_v1", "35.丽斐流程列表超文本响应.ms", "action");
-            register("readAssets", "nifi_canvas_template_assets_v1", "37.丽斐画布模板资产.ms", "assetIds");
-            register("fieldMappings", "nifi_canvas_template_mapping_v1", "38.丽斐模板字段映射.ms", "sourceColumns", "targetColumns");
-            register("sourceNode", "nifi_canvas_template_source_v1", "39.丽斐模板来源节点.ms", "datasource", "tableAsset", "columns", "sourceTableName");
-            register("hiveConnection", "nifi_canvas_template_hive_v1", "40.丽斐模板数仓连接.ms", "datasource", "config", "rawType", "isSink");
-            register("targetNode", "nifi_canvas_template_sink_v1", "41.丽斐模板目标节点.ms", "datasource", "tableAsset", "columns", "explicitTableName");
-            register("apiTemplate", "d410778b200d4fcca1d3f6da2a68fbd3", "23.丽斐画布接口来源模板.ms", "datasource", "tableName");
-            register("readSavedCanvas", "71a48eec67605a2d5da8ce93b2cc02cb", "42.丽斐目录关联画布.ms", "catalogId");
+            register("respond", "nifi_pipe_list_response_v1", "35.海通流程列表超文本响应.ms", "action");
+            register("readAssets", "nifi_canvas_template_assets_v1", "37.海通画布模板资产.ms", "assetIds");
+            register("fieldMappings", "nifi_canvas_template_mapping_v1", "38.海通模板字段映射.ms", "sourceColumns", "targetColumns");
+            register("sourceNode", "nifi_canvas_template_source_v1", "39.海通模板来源节点.ms", "datasource", "tableAsset", "columns", "sourceTableName");
+            register("hiveConnection", "nifi_canvas_template_hive_v1", "40.海通模板数仓连接.ms", "datasource", "config", "rawType", "isSink");
+            register("targetNode", "nifi_canvas_template_sink_v1", "41.海通模板目标节点.ms", "datasource", "tableAsset", "columns", "explicitTableName");
+            register("apiTemplate", "d410778b200d4fcca1d3f6da2a68fbd3", "23.海通画布接口来源模板.ms", "datasource", "tableName");
+            register("readSavedCanvas", "71a48eec67605a2d5da8ce93b2cc02cb", "42.海通目录关联画布.ms", "catalogId");
             bindings.put("readCatalog", (MagicScriptLambdaFunction) (context, args) -> "catalog".equals(((Map<?, ?>) args[0]).get("id"))
                     ? Map.of("tid", "catalog", "catalogName", "验证目录", "sourceTableId", "source-table", "targetTableId", "target-table") : null);
         }

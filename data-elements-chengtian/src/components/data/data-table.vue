@@ -656,7 +656,7 @@ const fetchTableData = async () => {
         if(kind==='time' && value){const date=new Date(value);value=Number.isNaN(date.getTime())?null:date.toISOString();}
         return {id:String(index),value:value??null};
       });
-      const result=await request.post<any,{keys:string[];total:number}>('/sym/table/preview-order',{items,kind,direction:remoteSort.value.sortDir,page:currentPage.value,size:pageSize.value,wholeCollection:!props.showPage});
+      const result=await request.post<any,{keys:string[];total:number}>('/sym/table/order',{items,kind,direction:remoteSort.value.sortDir,page:currentPage.value,size:pageSize.value,wholeCollection:!props.showPage});
       if(requestId!==latestFetchRequestId) return;
       if(result.total!==fetchData.length || new Set(result.keys).size!==result.keys.length || result.keys.some(id=>!/^\d+$/.test(id)||Number(id)>=fetchData.length))throw new Error('配置排序结果不完整或超出当前范围');
       tableData.value=result.keys.map(id=>fetchData[Number(id)]);total.value=result.total;

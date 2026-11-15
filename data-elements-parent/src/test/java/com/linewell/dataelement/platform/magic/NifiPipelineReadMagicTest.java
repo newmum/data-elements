@@ -45,7 +45,7 @@ import org.ssssssss.script.MagicScriptContext;
 import org.ssssssss.script.runtime.function.MagicScriptLambdaFunction;
 
 class NifiPipelineReadMagicTest {
-    private static final String API = "api/10.丽斐流程接口/";
+    private static final String API = "api/10.海通流程接口/";
     private static final String PIPELINE_API = API;
     private static final String COMMON = "function/01.通用函数/";
     private static final ObjectMapper JSON = new ObjectMapper();
@@ -448,11 +448,11 @@ class NifiPipelineReadMagicTest {
         final QueryParameters request = new QueryParameters();
         final JdbcTemplate jdbc;
         final StructuredTableReadMagicModule tableRead;
-        final MagicScript overview = script(COMMON + "20.丽斐流程运行总览.ms", "4a9311c67f104f589affeb51aa1e3a62",
+        final MagicScript overview = script(COMMON + "20.海通流程运行总览.ms", "4a9311c67f104f589affeb51aa1e3a62",
                 "tableRead", "tableSort", "tenantRuntime", "'@/common/nifiPipelineReadHttp' as withHttpResponse");
-        final MagicScript page = script(COMMON + "22.丽斐流程分页.ms", "947c14bf3a694e99ae078d79d4307cbd",
+        final MagicScript page = script(COMMON + "22.海通流程分页.ms", "947c14bf3a694e99ae078d79d4307cbd",
                 "tableRead", "tableSort", "tenantRuntime", "'@/common/nifiPipelineReadHttp' as withHttpResponse");
-        final MagicScript response = script(COMMON + "29.丽斐流程只读接口响应.ms", "nifi_pipeline_read_http_v1", "request");
+        final MagicScript response = script(COMMON + "29.海通流程只读接口响应.ms", "nifi_pipeline_read_http_v1", "request");
         final MagicScript pageGet = script(PIPELINE_API + "02.流程设计/04.查询流程分页.ms", "nifi_pipeline_page_get_v1",
                 "'@/common/nifiPipelinePage' as readPipelinePage");
         final MagicScript pageHead = script(PIPELINE_API + "02.流程设计/05.核验流程分页.ms", "nifi_pipeline_page_head_v1",
@@ -461,16 +461,16 @@ class NifiPipelineReadMagicTest {
                 "'@/common/nifiRuntimeOverview' as readOverview");
         final MagicScript overviewHead = script(PIPELINE_API + "05.运行状态/02.核验流程运行总览.ms", "nifi_runtime_overview_head_v1",
                 "'@/common/nifiRuntimeOverview' as readOverview");
-        final MagicScript detailResponse = script(COMMON + "32.丽斐流程详情接口响应.ms", "nifi_pipe_detail_http_v1",
+        final MagicScript detailResponse = script(COMMON + "32.海通流程详情接口响应.ms", "nifi_pipe_detail_http_v1",
                 "com.fasterxml.jackson.databind.ObjectMapper as objectMapper", "tableRead", "tenantRuntime");
         final MagicScript detailGet = script(PIPELINE_API + "02.流程设计/06.查询流程详情.ms", "nifi_pipe_detail_get_v1",
                 "'@/common/nifiPipelineDetailHttp' as pipelineDetail");
         final MagicScript detailHead = script(PIPELINE_API + "02.流程设计/07.核验流程详情.ms", "nifi_pipe_detail_head_v1",
                 "'@/common/nifiPipelineDetailHttp' as pipelineDetail");
         final List<String> detailSql = new ArrayList<>();
-        final MagicScript decodeCanvas = script(COMMON + "43.丽斐解码保存画布.ms", "e06d4eb123494419e67f70f2fc03bceb",
+        final MagicScript decodeCanvas = script(COMMON + "43.海通解码保存画布.ms", "e06d4eb123494419e67f70f2fc03bceb",
                 "com.fasterxml.jackson.databind.ObjectMapper as mapper");
-        final MagicScript findCanvas = script(COMMON + "48.丽斐读取租户画布.ms", "nifi_pipeline_find_v1",
+        final MagicScript findCanvas = script(COMMON + "48.海通读取租户画布.ms", "nifi_pipeline_find_v1",
                 "tableRead", "'@/common/nifiDecodeCanvas' as decodeCanvas");
         int reads;
 
@@ -559,7 +559,7 @@ class NifiPipelineReadMagicTest {
             String headRoute;
             switch (operation) {
                 case "ui" -> {
-                    functionFile = "49.丽斐流程原生地址响应.ms";
+                    functionFile = "49.海通流程原生地址响应.ms";
                     functionId = "nifi_pipeline_ui_link_http_v1";
                     importName = "nifiPipelineUiLink";
                     routeId = "nifi_pipeline_ui_link";
@@ -567,7 +567,7 @@ class NifiPipelineReadMagicTest {
                     headRoute = "02.流程设计/11.核验流程原生地址.ms";
                 }
                 case "status" -> {
-                    functionFile = "50.丽斐流程运行状态响应.ms";
+                    functionFile = "50.海通流程运行状态响应.ms";
                     functionId = "nifi_pipeline_status_http_v1";
                     importName = "nifiPipelineStatus";
                     routeId = "nifi_pipeline_status";
@@ -575,7 +575,7 @@ class NifiPipelineReadMagicTest {
                     headRoute = "05.运行状态/06.核验流程运行状态.ms";
                 }
                 case "page" -> {
-                    functionFile = "51.丽斐处理器状态分页响应.ms";
+                    functionFile = "51.海通处理器状态分页响应.ms";
                     functionId = "nifi_processor_page_http_v1";
                     importName = "nifiProcessorStatusPage";
                     routeId = "nifi_processor_page";
