@@ -1,11 +1,8 @@
 {
-  "properties": {
-    "leafRoute": true
-  },
   "id": "haitong-ztgw-token-02",
   "groupId": "530d365665f8533282256c61df32bea4",
   "name": "01.网关令牌状态",
-  "path": "/",
+  "path": "/status",
   "method": "POST",
   "parameters": [],
   "options": [],
@@ -16,5 +13,9 @@
   "responseBodyDefinition": null
 }
 ================================
+
 import zeroTrustGateway
+
+// POST /gateway/token/status。检查 OAuth 令牌是否可用。dryRun=true 时只校验本地配置，响应不包含令牌。
+
 return zeroTrustGateway.tokenStatus(body == null ? {} : body)

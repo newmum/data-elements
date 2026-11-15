@@ -1,9 +1,9 @@
 {
-  "id": "haitong-files-6",
+  "id": "haitong-public-9",
   "groupId": "haitong-files-api",
-  "name": "22.提交业务推送",
-  "path": "/file-uploads/{id}/submit",
-  "method": "POST",
+  "name": "09.导入文件状态",
+  "path": "/files/{id}",
+  "method": "GET",
   "parameters": [],
   "options": [],
   "headers": [],
@@ -14,8 +14,5 @@
 import '@/haitong/common' as common
 import request
 var c=common();var _caller=c.caller;;var req=request.get().getRequest();var caller=_caller(req)
-import '@/haitong/files' as files
-import response
-var input={action:'submit',caller:caller,request:req,response:c.http.response()}
-input.id=path.id
-return files(input)
+import '@/haitong/message' as message
+return c.http.reply(200,message({action:'file',id:path.id,caller:caller}))

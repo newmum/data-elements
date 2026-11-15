@@ -2,20 +2,29 @@
   "id": "haitong-internal-9",
   "groupId": "bec8576a6f0c5793aac91b6f24574747",
   "name": "09.协议连接检测",
-  "path": "/connectors/{name}/health",
+  "path": "/health",
   "method": "GET",
-  "parameters": [],
+  "parameters": [{"name": "name", "required": false, "dataType": "String", "description": "必填查询参数 name"}],
   "options": [],
   "headers": [],
   "paths": [],
-  "description": "海通正式接口。认证由统一过滤器执行；业务规则在海通业务函数中维护。保留原HTTP状态及JSON契约。"
+  "description": "仅管理员。按 name 检查指定协议连接，支持 database、ftp 和 kafka。与同组入口共用 /haitong/operations。"
 }
 ================================
 import '@/haitong/common' as common
 import request
-var c=common();var _caller=c.caller;;var req=request.get().getRequest();var caller=_caller(req)
 import '@/haitong/operations' as operation
-var input={action:'health',caller:caller}
-input.name=path.name
-var result=operation(input)
-return c.http.reply(200,result)
+
+// GET /internal/v1/health。仅管理员。按 name 检查指定协议连接，支持 database、ftp 和 kafka。
+// 由 /haitong/operations 与同组入口共用权限及业务处理。
+
+var commonContext = common()
+var resolveCaller = commonContext.caller
+var req = request.get().getRequest()
+var caller = resolveCaller(req)
+
+var input = {action: 'health', caller: caller}
+var requireValue = commonContext.required
+input.name = requireValue(req.getParameter('name'), 'name')
+var result = operation(input)
+return commonContext.http.reply(200, result)

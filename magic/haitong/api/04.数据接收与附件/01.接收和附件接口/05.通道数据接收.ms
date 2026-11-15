@@ -1,8 +1,8 @@
 {
-  "id": "haitong-public-6",
+  "id": "haitong-public-5",
   "groupId": "haitong-files-api",
-  "name": "07.业务操作执行",
-  "path": "/actions/{code}",
+  "name": "05.通道数据接收",
+  "path": "/ingest/{channel}",
   "method": "POST",
   "parameters": [],
   "options": [],
@@ -17,5 +17,5 @@ var c=common();var _media=c.media;var _caller=c.caller;;var req=request.get().ge
 import '@/haitong/push' as push
 _media(req,'application/json')
 var raw=c.http.raw(req,c.p.getLimits().getMaxMessageBytes())
-var result=push({action:'action',caller:caller,request:req,raw:raw,body:c.json.object(raw),key:req.getHeader('Idempotency-Key'),code:path.code})
+var result=push({action:'ingest',caller:caller,request:req,raw:raw,body:c.json.object(raw),key:req.getHeader('Idempotency-Key'),channel:path.channel})
 return result.location==null?c.http.reply(result.status::int,result.body):c.http.located(result.status::int,result.body,result.location)

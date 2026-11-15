@@ -759,7 +759,7 @@ Use the released `my-db` page at `/register/register-sjkb/list` as the default v
 - 同级分组、接口、函数和任务各自从 `01.` 连续编号，同一序列无缺号、重号或未编号资源。移动、退役或新增后核对所涉同级序列。文件和分组名称与在线编辑器的显示名称一致。
 - 路由改造先制定分组路径。每个分组和 API 的 `path` 各提供一个有名字的 URL 段，用简短的小写英文单词或通用缩写，避免用连字符拼接长词组。门户登录由 `/portal`、`/sso`、`/login` 三段组成。按照业务对象、页面职责或协议边界设置叶组，规模较大的叶组按可说明的职责继续划分。
 - 编号和文件名只控制显示顺序。先列出旧、新的完整 HTTP 方法、路由、参数和资源 ID，核对所有实际调用。在改址同批更新真实前端、Magic 导入、Java 调用及权限、低代码源码及编译产物、配置、任务、Mock 契约和已知外部回调，演练恢复并验证切换。合并 GET 与 HEAD 前核对当前框架的隐式 HEAD、认证、状态、响应头及无响应体契约。
-- 独立海通旧资源中的 `properties.leafRoute` 是原尾斜杠兼容标记。迁移对应接口时改用有名字的单段 API 路径，并同步现役调用方。编辑器回读、真实 HTTP 及冷启动用于验证资源和调用切换。
+- 独立海通的联调和内部运维接口将新地址注册在 Magic，仍需兼容的旧 HTTP 地址在认证层匹配原方法后转入同一脚本。旧协议将对象标识放在路径时，该标识优先于同名查询参数。发布后核对编辑器回读、真实 HTTP 和冷启动。
 - 系统管理的 `/sym/dict` 叶组提供 `GET /query`、`POST /tree`、`POST /save` 和 `POST /sort`。字典保存和排序以认证租户中的有效字典项为边界，保存时校验普通父节点的租户归属。
 - 系统管理的组件和动态表单使用 `POST /sym/component/manage` 与 `POST /sym/form/config`。两项入口通过 `action` 选择各自的业务操作，组件缓存刷新使用 `/sym/component/cache/refresh`。
 - 业务附件与上报位于 `02.数据盘点/03.文件操作`。在 `/dst/file` 下，`POST /manage` 操作附件，`GET /download` 读取二进制，`POST /snapshot` 维护非结构化文件登记快照，`POST /register` 处理数据上报登记、历史和回执，`POST /submit` 提交规范化文件。Web 层在会话校验前将已保存的 `GET /data/download?fileId=…` 映射到同一 Magic 下载入口，保留查询参数及文件归属校验。
@@ -846,7 +846,7 @@ Use the released `my-db` page at `/register/register-sjkb/list` as the default v
 - 文件登记的保存和结束登记先在当前 Magic 写事务内锁定授权数据源，再批量读取决定上限、稳定标识和登记状态的文件及属性快照。异构字段更新按租户、记录及父对象限定批次，记录已变化时整批回滚并提示刷新。读取和 `dryRun` 无写入锁，结束登记的搜索投影在事务提交后刷新。
 - 文件登记的关联表按当前租户及角色范围批量查询，只有成功定位的关联表才参与字段预读，字段条件按实际选择的表和字段配对。精确 ID 优先于名称，名称存在多条有效记录时须提供 ID，避免把文件关联到其他表或字段。
 - 批量标注每次最多 100 张表，先整批校验有效来源，再预读显式表 ID 和实际请求的数据源与表名配对。同源显式 ID 可命中历史软删除记录，跨来源 ID 拒绝整批。未能按 ID 定位时只回退到同源活动表的规范化名称。多个活动记录同名时返回 409，须填写明确的表 ID 后重试。
-- 第五步结构化使用POST /api/v1/data-push JSON，非结构化默认single模式使用PUT /api/v1/data-push multipart（/single为兼容别名），一次接收并提交，随后GET /api/v1/data-push/uploads/{id}确认投递。大文件使用同体系的初始化、分片、完成并提交和状态查询，续传查询按需调用；原file-uploads协议继续兼容。请求只携带datasourceId、fileCode及业务参数，不指定租户或投递目标。文件策略仍来自海通自身YAML，file-code可映射至已有collection-id；平台FILE策略不自动下发。202和READY均不等于投递成功，不由页面自动上传或提交业务文件。
+- 第五步结构化使用POST /api/v1/data-push JSON，非结构化普通文件使用 `PUT /api/push/single` 和 multipart，一次接收并提交。随后用 `GET /api/push/status?id=…` 确认投递。大文件使用同体系的初始化、分片、完成并提交和状态查询，续传查询按需调用；表字段附件的现用入口在 `/api/file`，原 file-uploads 协议可继续使用。请求只携带datasourceId、fileCode及业务参数，不指定租户或投递目标。文件策略仍来自海通自身YAML，file-code可映射至已有collection-id；平台FILE策略不自动下发。202和READY均不等于投递成功，不由页面自动上传或提交业务文件。
 - 推送文件接入策略由 Magic 设置 `fileConsumptionPolicy=DELETE_AFTER_DATABASE_COMMIT`。NiFi 编译器以完成标记清单、持久队列及单 JDBC 目标实现该通用协议：仅列举 `.json.done`，下载时保留源文件，数据库成功提交后删除对应 JSON 及标记；失败或隔离记录不触发删除。多目标须拆成接入链路，首个数据库承接可靠落地后继续后续库；普通主动抽取和手工上报不自动启用该删除策略。主键更新用于异常重试幂等，不能把“下载完成”当成“落库成功”。
 - 推送文件的字段处理使用 `FAIL_FLOWFILE`，任意记录失败时保留整份输入，不能仅将部分成功记录写库后删除整份源文件。推送链路后续数据库节点在对应字段存在时继承来源登记的时间戳字段，避免退回只有日期精度的 ODS 水位而漏掉同日新批次；已保存、已发布的流程须显式迁移，保留原生来源组件标识及水位/文件状态，不能清空状态绕过重建保护。
 - 数据抽取类型卡片按 MySQL、Oracle、OceanBase MySQL、OceanBase Oracle、人大金仓、PostgreSQL、达梦、Hive、GaussDB、FTP、Kafka、MinIO、Elasticsearch、GBase 8a、SQL Server、Vertica 排列；MaxCompute 不再作为新建选项，历史登记的类型映射仍保留。

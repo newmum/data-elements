@@ -39,7 +39,7 @@ var apiKey = magicHttp.bean('secrets').resolve(magicHttp.bean('environment').get
 // 本机预填的是已上传的人员 PNG。要测试新附件，只替换下面这个 fileId。
 var fileId = 'fec585ae-a0ff-4c1a-9832-d9a5d7954f8a'
 var method = 'POST'
-var url = 'http://127.0.0.1:18083/api/v1/file-uploads/' + fileId + '/submit'
+var url = 'http://127.0.0.1:18083/api/file/submit?id=' + fileId
 var requestId = 'validation-submit-' + fileId
 
 // 2. Postman → Headers：同一附件重复提交沿用此幂等键和相同正文。

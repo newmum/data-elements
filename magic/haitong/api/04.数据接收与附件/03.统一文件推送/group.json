@@ -1,0 +1,7 @@
+{
+  "id": "haitong-unified-file-push",
+  "name": "03.统一文件推送",
+  "type": "api",
+  "parentId": "haitong-ingress-api",
+  "path": "/push"
+}

@@ -2,6 +2,6 @@
   "id": "be213b207d6a5a4c981b3e406033e695",
   "name": "01.调试数据推送",
   "parentId": "haitong-push-operations-04",
-  "path": "/data-push",
+  "path": "/debug",
   "type": "api"
 }

@@ -308,8 +308,8 @@ public class DataPushSchemaService {
                 Map.of("name", "batchId", "required", false, "description", "调用方批次标识，建议可追溯且不可复用"),
                 Map.of("name", "records", "required", true, "description", "1 至 10,000 条记录，每条仅可包含已登记字段")));
         result.put("endpoints", Map.of("dataPush", dataPush, "fileUpload", Map.of(
-                "method", "POST", "path", "/api/v1/file-uploads/single", "defaultMode", "SINGLE",
-                "chunkedPath", "/api/v1/file-uploads",
+                "method", "POST", "path", "/api/file/single", "defaultMode", "SINGLE",
+                "chunkedPath", "/api/file/init",
                 "description", "默认整文件上传，节点默认上限20 MB；大文件可用分片上传。校验就绪后，关联字段填写fileId；大小和格式同时满足字段及集合策略")));
         result.put("tables", tables);
         return result;

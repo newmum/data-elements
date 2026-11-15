@@ -118,7 +118,7 @@ test('20/100 file definitions default to two single endpoints and switch to boun
   assert.deepEqual(Object.keys(stages),['fileSingle','fileStatus']);
   assert.deepEqual(stages.fileSingle.parameters.map(p=>p.name),['datasourceId','fileCode','businessKey','file','metadata']);
   assert.ok(stages.fileSingle.parameters.every(p=>p.location==='请求体'));
-  assert.match(stages.fileSingle.sample,/^PUT https:\/\/gaw.example.test\/api\/v1\/data-push\r?\n/);
+  assert.match(stages.fileSingle.sample,/^PUT https:\/\/gaw.example.test\/api\/push\/single\r?\n/);
   const multipart = stages.fileSingle.sample;
   const form = await new Request('https://validation.invalid/',{method:'PUT',headers:{'Content-Type':multipart.match(/^Content-Type: ([^\r\n]+)/m)[1]},body:multipart.slice(multipart.indexOf('\r\n\r\n')+4)}).formData();
   assert.equal(form.get('datasourceId'),'source');assert.equal(form.get('fileCode'),'<已登记的文件英文名>');
@@ -130,7 +130,9 @@ test('20/100 file definitions default to two single endpoints and switch to boun
   assert.equal(stages.fileInit.parameters.find(p=>p.name==='sha256').required,false);
   assert.ok(Object.values(stages).every(s=>s.parameters.every(p=>p.location!=='请求头')));
   assert.match(stages.filePart.sample,/X-Part-SHA256:/);assert.match(stages.filePart.sample,/Content-Length:/);
-  assert.match(stages.fileParts.sample,/after=0&limit=100/);assert.equal(stages.fileParts.optional,true);
+  assert.match(stages.filePart.sample,/\/api\/push\/part\?id=<uploadId>&part=1/);
+  assert.match(stages.fileParts.sample,/\/api\/push\/parts\?id=<uploadId>&after=0&limit=100/);assert.equal(stages.fileParts.optional,true);
+  assert.equal(stages.filePart.parameters[0].location,'查询参数');
   assert.deepEqual(stages.fileComplete.parameters.map(p=>p.name),['id','businessKey','metadata']);
   assert.match(stages.fileComplete.sample,/businessKey/);assert.match(stages.fileComplete.sample,/Idempotency-Key:/);
   assert.match(stages.fileInit.sample,/"fileCode":/);assert.ok(!stages.fileInit.sample.includes('collectionId'));

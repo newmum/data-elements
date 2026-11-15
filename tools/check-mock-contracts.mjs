@@ -92,10 +92,7 @@ export async function checkContracts(root = repository) {
       );
     if (entry.source.kind === "magic") {
       const meta = metadata(source);
-      const stockRoute = `${prefix(meta.groupId)}/${meta.path || ""}`.replace(/\/{2,}/g, "/");
-      const route = meta.path === "/" && meta.properties?.leafRoute === true && stockRoute !== "/"
-        ? stockRoute.slice(0, -1)
-        : stockRoute;
+      const route = `${prefix(meta.groupId)}/${meta.path || ""}`.replace(/\/{2,}/g, "/");
       if (
         meta.id !== entry.source.id ||
         `${meta.method.toUpperCase()} ${route}` !== entry.operation

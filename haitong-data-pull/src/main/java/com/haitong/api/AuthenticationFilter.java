@@ -22,6 +22,7 @@ import java.util.concurrent.ConcurrentHashMap;
 @Order(Ordered.HIGHEST_PRECEDENCE+10)
 public final class AuthenticationFilter extends OncePerRequestFilter {
     public static final String IDENTITY=AuthenticationFilter.class.getName()+".identity";
+    public static final String ORIGINAL_PATH=AuthenticationFilter.class.getName()+".originalPath";
     private record Window(long minute,int count) {}
     private final ConcurrentHashMap<String,Window> windows=new ConcurrentHashMap<>();
     private final Secrets secrets;private final RelayProperties p;private final Json json;private final PushCredentialStore pushCredentials;
@@ -44,13 +45,17 @@ public final class AuthenticationFilter extends OncePerRequestFilter {
     }
     @Override protected void doFilterInternal(HttpServletRequest req,HttpServletResponse res,FilterChain chain) throws ServletException,IOException {
         res.setHeader("Cache-Control","no-store");res.setHeader("X-Content-Type-Options","nosniff");
-        String path=PushAccess.path(req);
+        String requestedPath = PushAccess.path(req);
         // Paths in this API are ASCII constants/IDs. Reject ambiguous servlet/matrix/encoded paths
         // before deciding whether admin authentication is required.
         String rawPath=req.getRequestURI();
         if(rawPath.contains("%") || rawPath.contains(";") || rawPath.contains("\\") || rawPath.contains("//") || rawPath.contains("/../") || rawPath.contains("/./")) {
             error(res,400,"INVALID_PATH","接口路径不能包含编码分隔符或路径参数");return;
         }
+        // 新旧地址共用一次鉴权。路径别名必须匹配原请求的完整路径及方法。
+        var route = PushAccess.route(req.getMethod(), requestedPath);
+        String path = route.path();
+        HttpServletRequest mapped = path.equals(requestedPath) ? req : mapRequest(req, requestedPath, route);
         // These are executable HTTP examples for the authenticated editor, not
         // public business endpoints. A business key must never grant access to
         // a server-side example that uses a separately configured test key.
@@ -69,7 +74,7 @@ public final class AuthenticationFilter extends OncePerRequestFilter {
         // REGISTRY_SYNC service flow, so it accepts the same service-to-service
         // credential. It cannot use that credential to publish business data:
         // The Magic push function checks route/channel permissions after JSON parsing.
-        boolean standaloneRegistrySync = req.getMethod().equals("POST") && ("/api/v1/data-push".equals(path) || "/push-operations/data-push".equals(path))
+        boolean standaloneRegistrySync = req.getMethod().equals("POST") && ("/api/v1/data-push".equals(path) || PushAccess.DEBUG_PUSH.equals(path))
                 && p.getStandaloneRegistry().isSyncEnabled();
         if (identity == null && platformCredentialIssue && p.getStandaloneRegistry().isSyncEnabled()) {
             // Compatibility for an optional inbound issuer key; no URL or platform lookup is used.
@@ -83,7 +88,7 @@ public final class AuthenticationFilter extends OncePerRequestFilter {
             if (!syncKey.isBlank() && Rules.constantEquals(syncKey, req.getHeader("X-Standalone-Registry-Key")))
                 identity = new Secrets.Identity("platform-standalone-registry", false, Set.of("standalone-registry-sync"), Set.of());
         }
-        if (identity == null && !p.getSecurity().isPushValidationEnabled() && PushAccess.endpoint(req.getMethod(), path)) {
+        if (identity == null && !p.getSecurity().isPushValidationEnabled() && PushAccess.endpoint(mapped, path)) {
             identity = PushAccess.identity();
         }
         if(identity==null && !internal) {
@@ -102,7 +107,56 @@ public final class AuthenticationFilter extends OncePerRequestFilter {
             Window w=windows.compute(identity.id(),(key,old)->new Window(minute,old!=null && old.minute()==minute?old.count()+1:1));
             if(w.count()>p.getSecurity().getRequestsPerMinute()) {res.setHeader("Retry-After","60");error(res,429,"RATE_LIMITED","请求过于频繁");return;}
         }
-        req.setAttribute(IDENTITY,identity);chain.doFilter(req,res);
+        req.setAttribute(IDENTITY,identity);
+        if (mapped != req) req.setAttribute(ORIGINAL_PATH, requestedPath);
+        chain.doFilter(mapped, res);
+    }
+
+    private HttpServletRequest mapRequest(HttpServletRequest req, String requestedPath, PushAccess.Route route) {
+        String path = route.path();
+        var supplied = route.parameters();
+        return new HttpServletRequestWrapper(req) {
+            @Override
+            public String getRequestURI() {
+                return getContextPath() + path;
+            }
+
+            @Override
+            public String getServletPath() {
+                return path;
+            }
+
+            @Override
+            public StringBuffer getRequestURL() {
+                StringBuffer original = super.getRequestURL();
+                return original.replace(original.length() - requestedPath.length(), original.length(), path);
+            }
+
+            // 旧协议的路径标识优先于同名查询参数，调用方不能借查询参数改变操作对象。
+            @Override
+            public String getParameter(String name) {
+                return supplied.containsKey(name) ? supplied.get(name) : super.getParameter(name);
+            }
+
+            @Override
+            public String[] getParameterValues(String name) {
+                return supplied.containsKey(name) ? new String[]{supplied.get(name)} : super.getParameterValues(name);
+            }
+
+            @Override
+            public Map<String, String[]> getParameterMap() {
+                if (supplied.isEmpty()) return super.getParameterMap();
+                var parameters = new LinkedHashMap<>(super.getParameterMap());
+                supplied.forEach((name, value) -> parameters.put(name, new String[]{value}));
+                return Collections.unmodifiableMap(parameters);
+            }
+
+            @Override
+            public Enumeration<String> getParameterNames() {
+                return supplied.isEmpty() ? super.getParameterNames()
+                        : Collections.enumeration(getParameterMap().keySet());
+            }
+        };
     }
     private boolean editorValidation(HttpServletRequest req) {
         if (environment == null || !environment.getProperty("haitong.validation.enabled", Boolean.class, false)) return false;

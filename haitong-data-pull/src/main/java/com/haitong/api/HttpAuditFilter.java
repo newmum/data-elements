@@ -20,7 +20,11 @@ public final class HttpAuditFilter extends OncePerRequestFilter {
         String id=UUID.randomUUID().toString();req.setAttribute("haitong.requestId",id);res.setHeader("X-Request-Id",id);
         long started=System.currentTimeMillis();Map<String,Object> c=new LinkedHashMap<>();c.put("requestId",id);c.put("attemptId",id);c.put("startedAt",started);
         // Only known ASCII path shapes, never a query string or header containing credentials.
-        String path=PushAccess.path(req);if(!path.matches("/(api/v1|internal/v1|actuator)/[A-Za-z0-9_./-]{1,200}"))path="[unrecognized-path]";
+        String path = PushAccess.path(req);
+        if (!path.matches("/(api/v1|api/file|api/push|internal/v1|actuator)/[A-Za-z0-9_./-]{1,200}")
+                && !PushAccess.auditDiagnosticPath(req.getMethod(), path)) {
+            path = "[unrecognized-path]";
+        }
         c.put("sourceRef",req.getMethod()+" "+path);safe("START","RUNNING",c);
         boolean thrown=false;
         try{chain.doFilter(req,res);}catch(ServletException|IOException|RuntimeException ex){thrown=true;throw ex;}

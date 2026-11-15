@@ -119,33 +119,35 @@ def main():
                 raise ValueError("服务响应过大")
             return json.loads(raw)
 
+    def session_path(operation, **query):
+        upload_id = upload["uploadId"]
+        return f"{transfer_path}/{operation}?" + urllib.parse.urlencode({"id": upload_id, **query})
+
+    transfer_path = "/api/push" if args.file_code else "/api/file"
     with args.file.open("rb") as source:
         size = os.fstat(source.fileno()).st_size
         if not args.chunked and args.file_code:
             body = Multipart(source, size, args.file.name, {"datasourceId": args.datasource, "fileCode": args.file_code,
                 "businessKey": args.business_key, "metadata": json.dumps(metadata, ensure_ascii=False)})
-            upload = request("PUT", "/api/v1/data-push", body, args.idempotency_key,
+            upload = request("PUT", transfer_path + "/single", body, args.idempotency_key,
                 {"Content-Type": "multipart/form-data; boundary=" + body.boundary, "Content-Length": str(body.length)})
-            prefix = "/api/v1/data-push/uploads/" + upload["uploadId"]
         elif not args.chunked:
             source.seek(0)
             query = urllib.parse.urlencode({"datasourceId": args.datasource, "tableName": args.table, "fieldName": args.field,
                 "fileName": args.file.name})
-            upload = request("POST", "/api/v1/file-uploads/single?" + query, Slice(source, size), args.idempotency_key,
+            upload = request("POST", transfer_path + "/single?" + query, Slice(source, size), args.idempotency_key,
                 {"Content-Type": "application/octet-stream", "Content-Length": str(size)})
-            prefix = "/api/v1/file-uploads/" + upload["uploadId"]
         else:
             sha256 = digest(source)
-            upload = request("POST", "/api/v1/data-push/uploads" if args.file_code else "/api/v1/file-uploads", {
+            upload = request("POST", transfer_path + "/init", {
                 "datasourceId": args.datasource, ("fileCode" if args.file_code else "collectionId"): args.file_code or args.collection,
                 "fileName": args.file.name, "size": size, "sha256": sha256,
             }, args.idempotency_key)
-            prefix = ("/api/v1/data-push/uploads/" if args.file_code else "/api/v1/file-uploads/") + upload["uploadId"]
             # Server pages are authoritative. Reading each page is not a per-file detail request.
             complete, after = set(), 0
             if upload["state"] in ("CREATED", "UPLOADING"):
                 while True:
-                    parts = request("GET", f"{prefix}/parts?after={after}&limit=100")["parts"]
+                    parts = request("GET", session_path("parts", after=after, limit=100))["parts"]
                     if not parts:
                         break
                     complete.update(p["partNumber"] for p in parts)
@@ -161,23 +163,23 @@ def main():
                     source.seek(offset)
                     checksum = digest(source, length)
                     source.seek(offset)
-                    request("PUT", f"{prefix}/parts/{number}", Slice(source, length), headers={
+                    request("PUT", session_path("part", part=number), Slice(source, length), headers={
                         "Content-Type": "application/octet-stream", "Content-Length": str(length), "X-Part-SHA256": checksum,
                     })
                     print(f"已确认分片 {number}/{upload['partCount']}", file=sys.stderr)
                 if not args.file_code:
-                    request("POST", prefix + "/complete")
+                    request("POST", session_path("complete"))
             elif upload["state"] not in ("FINALIZING", "READY"):
                 raise ValueError("该会话已取消、拒绝或过期，请检查文件后使用新的幂等键")
         if args.file_code:
             complete_key = hashlib.sha256(("file-push:complete:" + args.idempotency_key).encode('utf-8')).hexdigest()
-            accepted = request("POST", prefix + "/complete", {"businessKey": args.business_key, "metadata": metadata}, complete_key) if args.chunked else upload
+            accepted = request("POST", session_path("complete"), {"businessKey": args.business_key, "metadata": metadata}, complete_key) if args.chunked else upload
         else:
-            accepted = request("POST", prefix + "/submit", {"businessKey": args.business_key, "metadata": metadata}, args.idempotency_key)
+            accepted = request("POST", session_path("submit"), {"businessKey": args.business_key, "metadata": metadata}, args.idempotency_key)
         deadline = time.monotonic() + max(0, args.wait_seconds)
         delay = 0.5
         while True:
-            state = request("GET", prefix)
+            state = request("GET", session_path("status"))
             if state["state"] in ("REJECTED", "EXPIRED", "ABORTED"):
                 print(json.dumps(state, ensure_ascii=False, indent=2))
                 return 2

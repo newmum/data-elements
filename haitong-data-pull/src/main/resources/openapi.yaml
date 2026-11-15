@@ -117,50 +117,6 @@ paths:
         '200':
           description: 同幂等键且请求体一致的重复提交
         default: *id002
-    put:
-      summary: single模式：一次接收文件并提交业务推送
-      tags:
-      - 非结构化文件
-      parameters:
-      - name: Idempotency-Key
-        in: header
-        required: true
-        schema:
-          type: string
-      requestBody:
-        required: true
-        content:
-          multipart/form-data:
-            schema:
-              type: object
-              additionalProperties: false
-              required:
-              - datasourceId
-              - fileCode
-              - businessKey
-              - file
-              properties:
-                datasourceId:
-                  type: string
-                fileCode:
-                  type: string
-                  description: 登记的文件英文名；旧集合编码可作兼容值
-                businessKey:
-                  type: string
-                file:
-                  type: string
-                  format: binary
-                metadata:
-                  type: string
-                  description: 业务元数据JSON文本
-                  example: '{}'
-      responses:
-        '202':
-          description: 已接收并提交，查询statusUrl直到deliveryStatus=SUCCEEDED
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/FileUploadStatus'
   /api/v1/simple/ftp:
     post: &id005
       summary: 表批次写入 FTP/FTPS
@@ -344,7 +300,7 @@ paths:
         default: *id002
       security:
       - AdminKey: []
-  /internal/v1/config-summary:
+  /internal/v1/config:
     get:
       summary: 脱敏配置摘要
       operationId: get_internal_v1_config_summary
@@ -449,7 +405,7 @@ paths:
           type: integer
           minimum: 0
           default: 0
-  /internal/v1/deliveries/{id}/retry:
+  /internal/v1/retry:
     post:
       summary: 仅安全FAILED任务重试
       operationId: post_internal_v1_deliveries__id__retry
@@ -464,7 +420,7 @@ paths:
       - AdminKey: []
       parameters:
       - name: id
-        in: path
+        in: query
         required: true
         schema:
           type: string
@@ -481,7 +437,7 @@ paths:
                   type: string
                   minLength: 5
                   maxLength: 1000
-  /internal/v1/deliveries/{id}/resolve:
+  /internal/v1/resolve:
     post:
       summary: 核实UNKNOWN任务
       operationId: post_internal_v1_deliveries__id__resolve
@@ -496,7 +452,7 @@ paths:
       - AdminKey: []
       parameters:
       - name: id
-        in: path
+        in: query
         required: true
         schema:
           type: string
@@ -522,7 +478,7 @@ paths:
                 evidence:
                   type: string
                   minLength: 5
-  /internal/v1/files/{id}/retry:
+  /internal/v1/fileretry:
     post:
       summary: 恢复失败文件
       operationId: post_internal_v1_files__id__retry
@@ -537,7 +493,7 @@ paths:
       - AdminKey: []
       parameters:
       - name: id
-        in: path
+        in: query
         required: true
         schema:
           type: string
@@ -546,7 +502,7 @@ paths:
         content:
           application/json:
             schema: *id003
-  /internal/v1/connectors/{name}/health:
+  /internal/v1/health:
     get:
       summary: 只读连接检查：kafka/ftp/database
       operationId: get_internal_v1_connectors__name__health
@@ -561,11 +517,11 @@ paths:
       - AdminKey: []
       parameters:
       - name: name
-        in: path
+        in: query
         required: true
         schema:
           type: string
-  /internal/v1/ftp-scans/{routeCode}:
+  /internal/v1/scan:
     post:
       summary: 扫描已配置且开启的FTP目录
       operationId: post_internal_v1_ftp_scans__routeCode
@@ -579,12 +535,12 @@ paths:
       security:
       - AdminKey: []
       parameters:
-      - name: routeCode
-        in: path
+      - name: route
+        in: query
         required: true
         schema:
           type: string
-  /internal/v1/messages/{id}/payload:
+  /internal/v1/payload:
     get:
       summary: 管理员读取原文
       operationId: get_internal_v1_messages__id__payload
@@ -601,7 +557,7 @@ paths:
       - AdminKey: []
       parameters:
       - name: id
-        in: path
+        in: query
         required: true
         schema:
           type: string
@@ -619,7 +575,7 @@ paths:
         default: *id002
       security:
       - AdminKey: []
-  /internal/v1/exchange-logs:
+  /internal/v1/logs:
     get:
       summary: 查询追加写交换日志
       security:
@@ -664,7 +620,7 @@ paths:
           description: 时间或分页参数不合法
         '401':
           description: 未认证
-  /internal/v1/reconciliation/summary:
+  /internal/v1/reconcile:
     get:
       summary: 按接收窗口查看本地传输对账汇总
       security:
@@ -691,7 +647,7 @@ paths:
           description: 时间或分页参数不合法
         '401':
           description: 未认证
-  /api/v1/data-push/single:
+  /api/push/single:
     put:
       summary: single模式：一次接收文件并提交业务推送
       tags:
@@ -736,7 +692,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/FileUploadStatus'
-  /api/v1/data-push/uploads:
+  /api/push/init:
     post:
       summary: 初始化大文件推送
       parameters:
@@ -778,10 +734,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/FileUploadStatus'
-  /api/v1/data-push/uploads/{id}:
+  /api/push/status:
     parameters:
     - name: id
-      in: path
+      in: query
       required: true
       schema:
         type: string
@@ -803,10 +759,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /api/v1/data-push/uploads/{id}/parts:
+  /api/push/parts:
     parameters:
     - name: id
-      in: path
+      in: query
       required: true
       schema:
         type: string
@@ -851,16 +807,16 @@ paths:
           minimum: 1
           maximum: 100
           default: 100
-  /api/v1/data-push/uploads/{id}/parts/{part}:
+  /api/push/part:
     parameters:
     - name: id
-      in: path
+      in: query
       required: true
       schema:
         type: string
         format: uuid
     - name: part
-      in: path
+      in: query
       required: true
       schema:
         type: integer
@@ -897,10 +853,10 @@ paths:
             schema:
               type: string
               format: binary
-  /api/v1/data-push/uploads/{id}/complete:
+  /api/push/complete:
     parameters:
     - name: id
-      in: path
+      in: query
       required: true
       schema:
         type: string
@@ -942,7 +898,7 @@ paths:
                   type: string
                 metadata:
                   type: object
-  /api/v1/file-uploads/single:
+  /api/file/single:
     post:
       summary: 默认整文件上传，一次请求发送原始文件
       description: 按数据源、表名及附件字段定位服务端规则；不接收collectionId、size或sha256。实际大小和摘要由服务端计算，默认上限20MiB，并受字段规则限制；64KiB缓冲写盘，返回202后查询statusUrl等待READY。支持无Content-Length的有界流；重试发送同一完整文件，大文件改用分片协议。
@@ -971,7 +927,7 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/Error'}
-  /api/v1/file-uploads:
+  /api/file/init:
     post:
       summary: 初始化上传会话，服务端绑定租户、集合和目标
       tags:
@@ -1003,6 +959,7 @@ paths:
           type: string
           minLength: 1
           maxLength: 200
+  /api/file/page:
     get:
       summary: 按当前授权范围分页查询会话
       tags:
@@ -1044,10 +1001,10 @@ paths:
           minimum: 0
           maximum: 1000000
           default: 0
-  /api/v1/file-uploads/{id}:
+  /api/file/status:
     parameters:
     - name: id
-      in: path
+      in: query
       required: true
       schema:
         type: string
@@ -1069,6 +1026,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/file/abort:
+    parameters:
+    - name: id
+      in: query
+      required: true
+      schema:
+        type: string
+        format: uuid
     delete:
       summary: 取消未提交且未进入校验的上传
       tags:
@@ -1086,7 +1051,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /api/v1/file-uploads/status-batch:
+  /api/file/batch:
     post:
       summary: 1至100项批量状态；任一ID无权访问则整批404
       tags:
@@ -1124,10 +1089,10 @@ paths:
                   items:
                     type: string
                     format: uuid
-  /api/v1/file-uploads/{id}/parts:
+  /api/file/parts:
     parameters:
     - name: id
-      in: path
+      in: query
       required: true
       schema:
         type: string
@@ -1172,16 +1137,16 @@ paths:
           minimum: 1
           maximum: 100
           default: 100
-  /api/v1/file-uploads/{id}/parts/{part}:
+  /api/file/part:
     parameters:
     - name: id
-      in: path
+      in: query
       required: true
       schema:
         type: string
         format: uuid
     - name: part
-      in: path
+      in: query
       required: true
       schema:
         type: integer
@@ -1218,10 +1183,10 @@ paths:
             schema:
               type: string
               format: binary
-  /api/v1/file-uploads/{id}/complete:
+  /api/file/complete:
     parameters:
     - name: id
-      in: path
+      in: query
       required: true
       schema:
         type: string
@@ -1243,10 +1208,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /api/v1/file-uploads/{id}/submit:
+  /api/file/submit:
     parameters:
     - name: id
-      in: path
+      in: query
       required: true
       schema:
         type: string
@@ -1282,10 +1247,10 @@ paths:
           type: string
           minLength: 1
           maxLength: 200
-  /api/v1/file-uploads/{id}/receipts:
+  /api/file/receipt:
     parameters:
     - name: id
-      in: path
+      in: query
       required: true
       schema:
         type: string
@@ -1326,10 +1291,10 @@ paths:
           type: string
           minLength: 1
           maxLength: 200
-  /api/v1/file-uploads/{id}/content:
+  /api/file/content:
     parameters:
     - name: id
-      in: path
+      in: query
       required: true
       schema:
         type: string

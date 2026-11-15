@@ -18,7 +18,6 @@ class PushOperationsMagicTest {
             assertNull(groups.put(meta.get("id").toString(),meta),path.toString());
         }}
         int migrated=0;
-        int leafRoutes=0;
         try(var paths=Files.walk(root)){for(Path path:paths.filter(p->p.toString().endsWith(".ms")).toList()){
             var parts=Files.readString(path,StandardCharsets.UTF_8).split("================================",2);
             var meta=json.object(parts[0].getBytes(StandardCharsets.UTF_8));assertTrue(ids.add(meta.get("id").toString()),path.toString());
@@ -32,25 +31,28 @@ class PushOperationsMagicTest {
                     assertTrue(group.get("path").toString().matches("/[A-Za-z0-9_-]+"),path.toString());
                 }
                 String suffix=meta.get("path").toString();
-                if("/".equals(suffix) && meta.get("properties") instanceof Map<?,?> properties
-                        && Boolean.TRUE.equals(properties.get("leafRoute"))){
-                    suffix="";
-                    leafRoutes++;
+                assertNotEquals("/", suffix, path.toString());
+                if (path.toString().contains("零信任网关对接") || path.toString().contains("文件传输诊断")
+                        || path.toString().contains("数据推送调试")) {
+                    for (String segment : List.of(parent.get("path").toString(), leaf.get("path").toString(), suffix)) {
+                        assertTrue(segment.matches("/[a-z][a-z0-9]*"), path.toString());
+                    }
                 }
                 String route=meta.get("method")+" "+parent.get("path")+leaf.get("path")+suffix;
                 assertTrue(routes.add(route),route);
-                if(route.contains(" /api/v1/")||route.contains(" /internal/"))migrated++;
+                if(route.contains(" /api/v1/")||route.contains(" /api/file/")||route.contains(" /api/push/")||route.contains(" /internal/"))migrated++;
             }
         }}
-        // The seven unified data-push file routes extend the 37 legacy mappings.
-        assertEquals(44,migrated);
-        assertEquals(63,routes.size());
-        assertEquals(7,leafRoutes);
+        // The standalone transport maps both legacy single-file addresses to one Magic resource.
+        assertEquals(43,migrated);
+        assertEquals(62,routes.size());
         assertTrue(routes.containsAll(Set.of(
-            "PUT /api/v1/data-push", "PUT /api/v1/data-push/single",
-            "POST /api/v1/data-push/uploads", "PUT /api/v1/data-push/uploads/{id}/parts/{part}",
-            "POST /api/v1/data-push/uploads/{id}/complete", "GET /api/v1/data-push/uploads/{id}",
-            "GET /api/v1/data-push/uploads/{id}/parts")));
+            "GET /gateway/config/check", "POST /gateway/token/status", "POST /gateway/data/push",
+            "POST /ftp/connect/probe", "POST /push/debug/send", "POST /push/message/status", "POST /push/template/test",
+            "POST /api/v1/data-push", "PUT /api/push/single", "POST /api/push/init", "PUT /api/push/part",
+            "POST /api/push/complete", "GET /api/push/status", "GET /api/push/parts")));
+        assertFalse(routes.contains("PUT /api/v1/data-push"));
+        assertFalse(routes.contains("PUT /api/v1/data-push/single"));
         try(var paths=Files.walk(Path.of("src/main/java"))){for(Path path:paths.filter(p->p.toString().endsWith(".java")).toList()){
             assertFalse(Files.readString(path).contains("@RestController\n"),path.toString());
         }}

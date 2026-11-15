@@ -1,11 +1,8 @@
 {
-  "properties": {
-    "leafRoute": true
-  },
   "id": "haitong-ftp-diagnostics-probe-01",
   "groupId": "9310c3b9b222506b84a54ce10f0061ec",
   "name": "01.测试文件传输与写入",
-  "path": "/",
+  "path": "/probe",
   "method": "POST",
   "parameters": [],
   "options": [],
@@ -16,8 +13,12 @@
   "responseBodyDefinition": null
 }
 ================================
-// 仅管理员密钥可调用；具体权限由 ftpDiagnostics Java 模块校验。
-// 默认只检查连接和目录。createDirectories/uploadTest 必须显式设为 true 才会产生写入操作。
+
 import ftpDiagnostics
 import request
-return ftpDiagnostics.probe(body == null ? {} : body, request)
+
+// POST /ftp/connect/probe。仅管理员可检查服务端配置的 FTP。默认只读，显式启用 createDirectories 或 uploadTest 才写入。
+
+// 使用当前 HTTP 请求校验管理员身份，再按配置连接或写入目标目录。
+var httpRequest = request.get().getRequest()
+return ftpDiagnostics.probe(body == null ? {} : body, httpRequest)

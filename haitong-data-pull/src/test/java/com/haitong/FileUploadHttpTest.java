@@ -45,6 +45,7 @@ class FileUploadHttpTest {
         }
     }
     @LocalServerPort int port;@Autowired Json json;@Autowired DeliveryWorker worker;@Autowired RelayRepository repo;
+    @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
     record Reply(int statusCode,byte[] body,Map<String,List<String>> headers) {}
     Reply call(String method,String path,String key,String idem,byte[] body,Map<String,String> headers) throws Exception {
         // Blocking sockets also work on Windows/JDK installations with a broken selector pipe.
@@ -62,21 +63,32 @@ class FileUploadHttpTest {
         fail("File did not become ready: "+state);return state;
     }
     @Test void authenticatedHttpLifecycleRangeAndReceipt() throws Exception {
-        byte[] content="%PDF-1.7\nDemo file upload and delivery\n%%EOF".getBytes(java.nio.charset.StandardCharsets.US_ASCII);String base="/api/v1/file-uploads";
+        byte[] content="%PDF-1.7\nDemo file upload and delivery\n%%EOF".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
         String nonce=UUID.randomUUID().toString();
-        var init=post(base,"http-case-"+nonce,Map.of("datasourceId","police","collectionId","case-files","fileName","测试案卷.pdf","size",content.length,"sha256",Rules.sha256(content)));String id=init.get("uploadId").toString();String path=base+"/"+id;
-        assertEquals(404,call("GET",path,RECEIVER,null,null,Map.of()).statusCode());
-        var accepted=post(path+"/submit","http-submit-"+nonce,Map.of("businessKey","DEMO-HTTP-001","metadata",Map.of("caseNo","DEMO-HTTP-001")));String message=accepted.get("messageId").toString();
+        var init=post("/api/file/init","http-case-"+nonce,Map.of("datasourceId","police","collectionId","case-files","fileName","测试案卷.pdf","size",content.length,"sha256",Rules.sha256(content)));
+        String id=init.get("uploadId").toString();String legacy="/api/v1/file-uploads/"+id;
+        String query="?id="+id;
+        assertEquals("/api/file/status"+query,init.get("statusUrl"));
+        assertEquals(404,call("GET","/api/file/status"+query,RECEIVER,null,null,Map.of()).statusCode());
+        var accepted=post("/api/file/submit"+query,"http-submit-"+nonce,Map.of("businessKey","DEMO-HTTP-001","metadata",Map.of("caseNo","DEMO-HTTP-001")));String message=accepted.get("messageId").toString();
         assertEquals("WAITING_FILE",object(call("GET","/api/v1/messages/"+message,PRODUCER,null,null,Map.of()),200).get("status"));
-        assertEquals(200,call("PUT",path+"/parts/1",PRODUCER,null,content,Map.of("Content-Type","application/octet-stream","X-Part-SHA256",Rules.sha256(content))).statusCode());
-        object(call("POST",path+"/complete",PRODUCER,null,null,Map.of()),202);awaitReady(id);assertTrue(worker.runOne(Kind.FILE_LOCAL));
-        var range=call("GET",path+"/content",RECEIVER,null,null,Map.of("Range","bytes=5-12"));assertEquals(206,range.statusCode());assertArrayEquals(Arrays.copyOfRange(content,5,13),range.body());
-        assertEquals(416,call("GET",path+"/content",RECEIVER,null,null,Map.of("Range","bytes=900-1000")).statusCode());
-        assertEquals(content.length,Long.parseLong(call("HEAD",path+"/content",RECEIVER,null,null,Map.of()).headers().get("Content-Length").getFirst()));
-        assertArrayEquals(content,call("GET",path+"/content",RECEIVER,null,null,Map.of("Range","bytes=5-9","If-Range","\"wrong\"")).body());
+        assertEquals(200,call("PUT",legacy+"/parts/1?id=ignored&part=99",PRODUCER,null,content,Map.of("Content-Type","application/octet-stream","X-Part-SHA256",Rules.sha256(content))).statusCode());
+        object(call("POST","/api/file/complete"+query,PRODUCER,null,null,Map.of()),202);
+        assertEquals(legacy+"/content",awaitReady(id).get("contentUrl"));assertTrue(worker.runOne(Kind.FILE_LOCAL));
+        assertEquals("/api/file/content"+query,object(call("GET","/api/file/status"+query,PRODUCER,null,null,Map.of()),200).get("contentUrl"));
+        var range=call("GET","/api/file/content"+query,RECEIVER,null,null,Map.of("Range","bytes=5-12"));assertEquals(206,range.statusCode());assertArrayEquals(Arrays.copyOfRange(content,5,13),range.body());
+        assertEquals(416,call("GET","/api/file/content"+query,RECEIVER,null,null,Map.of("Range","bytes=900-1000")).statusCode());
+        for(String url:List.of("/api/file/content"+query,legacy+"/content")) {
+            var head=call("HEAD",url,RECEIVER,null,null,Map.of());
+            assertEquals(200,head.statusCode());assertEquals(0,head.body().length);
+            assertEquals(content.length,Long.parseLong(head.headers().get("Content-Length").getFirst()));
+        }
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM ht_exchange_log WHERE phase='START' AND source_ref=?",
+                Integer.class, "HEAD /api/file/content"));
+        assertArrayEquals(content,call("GET",legacy+"/content",RECEIVER,null,null,Map.of("Range","bytes=5-9","If-Range","\"wrong\"")).body());
         var delivery=repo.deliveries(message).getFirst();var receipt=Map.of("deliveryId",delivery.id(),"sha256",Rules.sha256(content),"status","ACCEPTED","businessRef","received-http-001");
-        assertEquals(200,call("POST",path+"/receipts",RECEIVER,"receipt-http-"+nonce,json.bytes(receipt),Map.of("Content-Type","application/json")).statusCode());
-        assertEquals(422,call("POST",base,PRODUCER,"forge-tenant",json.bytes(Map.of("tenantId","ct","datasourceId","police","collectionId","case-files","fileName","x.pdf","size",10)),Map.of("Content-Type","application/json")).statusCode());
+        assertEquals(200,call("POST","/api/file/receipt"+query,RECEIVER,"receipt-http-"+nonce,json.bytes(receipt),Map.of("Content-Type","application/json")).statusCode());
+        assertEquals(422,call("POST","/api/file/init",PRODUCER,"forge-tenant",json.bytes(Map.of("tenantId","ct","datasourceId","police","collectionId","case-files","fileName","x.pdf","size",10)),Map.of("Content-Type","application/json")).statusCode());
         assertEquals(1,repo.deliveries(message).size());
     }
     @Test void singleRequestHttpUploadIsDefaultAndUsesExistingContentAndDeliveryLifecycle() throws Exception {
@@ -108,10 +120,14 @@ class FileUploadHttpTest {
         byte[] body=multipart(boundary,fields,content);var headers=Map.of("Content-Type","multipart/form-data; boundary="+boundary);
         assertEquals(401,call("PUT","/api/v1/data-push","invalid",key,body,headers).statusCode());
         assertEquals(404,call("PUT","/api/v1/data-push",RECEIVER,key,body,headers).statusCode());
-        var accepted=object(call("PUT","/api/v1/data-push",PRODUCER,key,body,headers),202);String id=accepted.get("uploadId").toString();
+        var accepted=object(call("PUT","/api/push/single",PRODUCER,key,body,headers),202);String id=accepted.get("uploadId").toString();
         assertEquals("case_document",accepted.get("fileCode"));assertEquals("验证案卷.pdf",accepted.get("fileName"));
-        assertEquals("/api/v1/data-push/uploads/"+id,accepted.get("statusUrl"));
-        assertEquals(id,object(call("PUT","/api/v1/data-push/single",PRODUCER,key,body,headers),202).get("uploadId"));
+        assertEquals("/api/push/status?id="+id,accepted.get("statusUrl"));
+        for (String legacy : List.of("/api/v1/data-push","/api/v1/data-push/single")) {
+            var replay=object(call("PUT",legacy,PRODUCER,key,body,headers),202);
+            assertEquals(id,replay.get("uploadId"));
+            assertEquals("/api/v1/data-push/uploads/"+id,replay.get("statusUrl"));
+        }
         awaitReady(id);assertTrue(worker.runOne(Kind.FILE_LOCAL));
         assertEquals("SUCCEEDED",object(call("GET","/api/v1/data-push/uploads/"+id,PRODUCER,null,null,Map.of()),200).get("deliveryStatus"));
         assertEquals(422,call("POST","/api/v1/data-push",PRODUCER,"validation-json",json.bytes(Map.of()),Map.of("Content-Type","application/json")).statusCode());
@@ -119,12 +135,22 @@ class FileUploadHttpTest {
     }
     @Test void unifiedChunksCombineCompletionAndSubmission() throws Exception {
         byte[] data="%PDF-1.7\nvalidation chunk push\n%%EOF".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
-        var init=post("/api/v1/data-push/uploads","validation-init-"+UUID.randomUUID(),Map.of("datasourceId","police","fileCode","case_document","fileName","large.pdf","size",data.length));
-        String path="/api/v1/data-push/uploads/"+init.get("uploadId");
-        assertEquals(200,call("PUT",path+"/parts/1",PRODUCER,null,data,Map.of("Content-Type","application/octet-stream","X-Part-SHA256",Rules.sha256(data))).statusCode());
-        post(path+"/complete","validation-complete-"+UUID.randomUUID(),Map.of("businessKey","validation-chunk","metadata",Map.of("caseNo","VALIDATION-2")));
+        var init=post("/api/push/init","validation-init-"+UUID.randomUUID(),Map.of("datasourceId","police","fileCode","case_document","fileName","large.pdf","size",data.length));
+        String id=init.get("uploadId").toString();
+        String legacy="/api/v1/data-push/uploads/"+id;
+        String status="/api/push/status?id="+id;
+        assertEquals(status,init.get("statusUrl"));
+        Map<String,String> partHeaders=Map.of("Content-Type","application/octet-stream","X-Part-SHA256",Rules.sha256(data));
+        assertEquals(404,call("PUT","/api/push/part?id="+id+"&part=1",RECEIVER,null,data,partHeaders).statusCode());
+        assertEquals(200,call("PUT",legacy+"/parts/1?id=ignored&part=99",PRODUCER,null,data,partHeaders).statusCode());
+        assertEquals(200,call("PUT","/api/push/part?id="+id+"&part=1",PRODUCER,null,data,partHeaders).statusCode());
+        var parts=object(call("GET","/api/push/parts?id="+id+"&after=0&limit=100",PRODUCER,null,null,Map.of()),200);
+        assertEquals(1,((List<?>)parts.get("parts")).size());
+        var accepted=post("/api/push/complete?id="+id,"validation-complete-"+UUID.randomUUID(),Map.of("businessKey","validation-chunk","metadata",Map.of("caseNo","VALIDATION-2")));
+        assertEquals(status,accepted.get("statusUrl"));
         awaitReady(init.get("uploadId").toString());assertTrue(worker.runOne(Kind.FILE_LOCAL));
-        assertEquals("SUCCEEDED",object(call("GET",path,PRODUCER,null,null,Map.of()),200).get("deliveryStatus"));
+        assertEquals("SUCCEEDED",object(call("GET",status,PRODUCER,null,null,Map.of()),200).get("deliveryStatus"));
+        assertEquals(legacy,object(call("GET",legacy,PRODUCER,null,null,Map.of()),200).get("statusUrl"));
     }
     @Test @EnabledIfSystemProperty(named="haitong.large-file.tests",matches="true") void threeGiBFileStreamsThroughRealHttpAndLocalDelivery() throws Exception {
         long size=3L*1024*1024*1024;Path source=WORK.resolve("three-gib.pdf");Files.createDirectories(WORK);

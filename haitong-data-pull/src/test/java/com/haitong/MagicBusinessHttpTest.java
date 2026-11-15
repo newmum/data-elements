@@ -65,16 +65,17 @@ class MagicBusinessHttpTest {
     }
     void installSqlCounter(){
         var original=jdbc.getDataSource();
+        var requestThread = Thread.currentThread();
         var counted=new org.springframework.jdbc.datasource.DelegatingDataSource(original){
             @Override public java.sql.Connection getConnection()throws java.sql.SQLException{
                 var connection=org.springframework.jdbc.datasource.DataSourceUtils.getConnection(original);
                 return (java.sql.Connection)java.lang.reflect.Proxy.newProxyInstance(getClass().getClassLoader(),new Class[]{java.sql.Connection.class},(proxy,method,args)->{
                     try{
                         if(method.getName().equals("close")){org.springframework.jdbc.datasource.DataSourceUtils.releaseConnection(connection,original);return null;}
-                        if(method.getName().equals("prepareStatement")&&args[0].toString().stripLeading().toUpperCase().startsWith("SELECT"))sqlReads.incrementAndGet();
+                        if(Thread.currentThread()==requestThread&&method.getName().equals("prepareStatement")&&args[0].toString().stripLeading().toUpperCase().startsWith("SELECT"))sqlReads.incrementAndGet();
                         var result=method.invoke(connection,args);
                         if(method.getName().equals("createStatement"))return java.lang.reflect.Proxy.newProxyInstance(getClass().getClassLoader(),new Class[]{java.sql.Statement.class},(statement,m,a)->{
-                            try{if(m.getName().equals("executeQuery")&&a[0].toString().stripLeading().toUpperCase().startsWith("SELECT"))sqlReads.incrementAndGet();return m.invoke(result,a);}catch(java.lang.reflect.InvocationTargetException e){throw e.getCause();}
+                            try{if(Thread.currentThread()==requestThread&&m.getName().equals("executeQuery")&&a[0].toString().stripLeading().toUpperCase().startsWith("SELECT"))sqlReads.incrementAndGet();return m.invoke(result,a);}catch(java.lang.reflect.InvocationTargetException e){throw e.getCause();}
                         });
                         return result;
                     }catch(java.lang.reflect.InvocationTargetException e){throw e.getCause();}
@@ -120,9 +121,9 @@ class MagicBusinessHttpTest {
         mvc.perform(post("/api/v1/data-push").header("X-Standalone-Registry-Key","magic-sync-0123456789abcdef0123456789").contentType("application/json").content(json.bytes(Map.of("deliveryType","REGISTRY_SYNC","registryAction","STATUS","tableRefs",Collections.nCopies(1001,Map.of("datasourceId","validation-status-20-0","tableName","demo")))))).andExpect(status().isPayloadTooLarge());
     }
     @Test void magicOwnsNativeContractsAndAuthentication()throws Exception{
-        mvc.perform(get("/gateway/config-check")).andExpect(status().isUnauthorized());
-        mvc.perform(get("/gateway/config-check").header("X-Admin-Key",ADMIN)).andExpect(status().isOk());
-        mvc.perform(post("/push-operations/message-status").header("X-Admin-Key",ADMIN).contentType("application/json").content("{}"))
+        mvc.perform(get("/gateway/config/check")).andExpect(status().isUnauthorized());
+        mvc.perform(get("/gateway/config/check").header("X-Admin-Key",ADMIN)).andExpect(status().isOk());
+        mvc.perform(post("/push/message/status").header("X-Admin-Key",ADMIN).contentType("application/json").content("{}"))
             .andExpect(status().isUnprocessableEntity()).andExpect(jsonPath("$.code").value("INVALID_BODY"));
         mvc.perform(get("/internal/v1/overview")).andExpect(status().isUnauthorized());
         mvc.perform(get("/internal/v1/overview").header("X-Admin-Key",ADMIN)).andExpect(status().isOk()).andExpect(jsonPath("$.deliveryCounts").exists());
@@ -138,6 +139,46 @@ class MagicBusinessHttpTest {
                 .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
                 .andExpect(jsonPath("$.message").value("clientId必须为数据源推送调用方编号"));
     }
+
+    @Test void diagnosticAliasesKeepTheSameAuthenticationAndResponses() throws Exception {
+        var gateway = mvc.perform(get("/gateway/config/check").header("X-Admin-Key", ADMIN))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsByteArray();
+        mvc.perform(get("/gateway/config-check")).andExpect(status().isUnauthorized());
+        var legacyGateway = mvc.perform(get("/gateway/config-check").header("X-Admin-Key", ADMIN))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsByteArray();
+        assertEquals(diagnosticBody(gateway), diagnosticBody(legacyGateway));
+
+        assertDiagnosticResponse("/gateway/token-status", "/gateway/token/status", "{\"dryRun\":true}", 200);
+        assertDiagnosticResponse("/gateway/data-push", "/gateway/data/push",
+                "{\"dryRun\":true,\"deliveryType\":\"FTP\",\"datasourceId\":\"validation\",\"tableName\":\"demo\",\"records\":[{}]}", 200);
+        assertDiagnosticResponse("/ftp-diagnostics/probe", "/ftp/connect/probe", "{}", 403);
+        assertDiagnosticResponse("/push-operations/data-push", "/push/debug/send", "{\"deliveryType\":\"invalid\"}", 422);
+        assertDiagnosticResponse("/push-operations/message-status", "/push/message/status", "{\"messageId\":\"validation-missing\"}", 404);
+        assertDiagnosticResponse("/push-operations/template-test", "/push/template/test", "{\"deliveryType\":\"invalid\"}", 422);
+        mvc.perform(post("/gateway/config-check").header("X-Admin-Key", ADMIN)).andExpect(status().isNotFound());
+
+        for (String path : List.of("/push/debug/send", "/push-operations/data-push")) {
+            mvc.perform(post(path).header("X-Standalone-Registry-Key", "magic-sync-0123456789abcdef0123456789")
+                            .contentType("application/json").content("{\"deliveryType\":\"REGISTRY_SYNC\",\"registryAction\":\"STATUS\",\"tableRefs\":[{\"datasourceId\":\"validation-missing\",\"tableName\":\"demo\"}]}"))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.data.readOnly").value(true));
+        }
+    }
+
+    private void assertDiagnosticResponse(String oldPath, String path, String body, int expectedStatus) throws Exception {
+        var current = mvc.perform(post(path).header("X-Api-Key", CLIENT).header("Idempotency-Key", "validation-diagnostic")
+                        .contentType("application/json").content(body))
+                .andExpect(status().is(expectedStatus)).andReturn().getResponse().getContentAsByteArray();
+        var previous = mvc.perform(post(oldPath).header("X-Api-Key", CLIENT).header("Idempotency-Key", "validation-diagnostic")
+                        .contentType("application/json").content(body))
+                .andExpect(status().is(expectedStatus)).andReturn().getResponse().getContentAsByteArray();
+        assertEquals(diagnosticBody(current), diagnosticBody(previous));
+    }
+
+    private Map<String, Object> diagnosticBody(byte[] response) {
+        var body = new HashMap<>(json.object(response));
+        body.remove("timestamp");
+        return body;
+    }
     @Test void invalidSnapshotAndDatabaseFailureAreAtomic()throws Exception{
         var source=Map.of("datasourceId","magic-rollback","datasourceName","synthetic","clientIds",List.of("default"),"tables",List.of());
         jdbc.execute("ALTER TABLE ht_standalone_datasource ADD CONSTRAINT magic_fail CHECK(datasource_id <> 'magic-rollback')");
@@ -146,22 +187,65 @@ class MagicBusinessHttpTest {
         jdbc.execute("ALTER TABLE ht_standalone_datasource DROP CONSTRAINT magic_fail");
         mvc.perform(post("/api/v1/data-push").header("X-Admin-Key",ADMIN).header("Idempotency-Key","magic-duplicate-source").contentType("application/json").content(json.bytes(Map.of("deliveryType","REGISTRY_SYNC","datasources",List.of(source,source))))).andExpect(status().isUnprocessableEntity());
     }
-    @Test void legacyFilePagesUseThreeBusinessReadsForTwentyAndOneHundredRows()throws Exception{
+    @Test void adminFileAndLogPagesUseBoundedReadsForTwentyAndOneHundredRows()throws Exception{
         for(int i=0;i<100;i++)jdbc.update("INSERT INTO ht_file_checkpoint(id,owner,source_type,source_scope,source_key,route_code,original_name,payload_ref,content_sha256,file_size,content_format,config_snapshot,status,retry_audit,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,'JSONL','{}','READY','[]',?,0)","magic-page-"+i,"magic-owner","HTTP_FILE","magic-page","magic-page-"+i,"demo","demo.jsonl","spool/demo","hash",10,100L-i);
+        var entries = new ArrayList<Object[]>();
+        for (int i = 0; i < 100; i++) entries.add(new Object[]{"validation-log-" + i, 1000L + i});
+        jdbc.batchUpdate("""
+                INSERT INTO ht_exchange_log (id, protocol, direction, event_type, phase, outcome, metadata, created_at)
+                VALUES (?, 'HTTP', 'IN', 'HTTP_ACCESS', 'FINISH', 'RESPONDED', '{}', ?)
+                """, entries);
         installSqlCounter();
         for(int limit:List.of(20,100)){
             sqlReads.set(0);
             mvc.perform(get("/internal/v1/files?limit="+limit).header("X-Admin-Key",ADMIN)).andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(limit));
             assertEquals(5,reads(),"One page and two aggregates plus two HTTP audit clock reads");
+            sqlReads.set(0);
+            mvc.perform(get("/internal/v1/logs?from=1000&to=1100&limit="+limit).header("X-Admin-Key",ADMIN))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(limit));
+            assertEquals(3, reads(), "One log page plus two HTTP audit clock reads");
+            System.out.println("admin exchange logs " + limit + ": one request, one page read, two audit reads");
         }
     }
     @Test void administrationQueriesAndPayloadRemainNativeResponses()throws Exception{
-        for(String path:List.of("config-summary","files?limit=100","quarantined","connectors/database/health","exchange-logs?from=0&to=1","reconciliation/summary?from=0&to=1"))mvc.perform(get("/internal/v1/"+path).header("X-Admin-Key",ADMIN)).andExpect(status().isOk());
-        mvc.perform(get("/internal/v1/openapi").header("X-Admin-Key",ADMIN)).andExpect(status().isOk()).andExpect(content().contentTypeCompatibleWith("application/yaml"));
+        for(String path:List.of("config","files?limit=100","quarantined","health?name=database","logs?from=0&to=1","reconcile?from=0&to=1"))mvc.perform(get("/internal/v1/"+path).header("X-Admin-Key",ADMIN)).andExpect(status().isOk());
+        mvc.perform(get("/internal/v1/openapi").header("X-Admin-Key",ADMIN)).andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith("application/yaml"))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("/internal/v1/payload:")));
         mvc.perform(post("/api/v1/ingest/demo").header("X-Api-Key",CLIENT).header("Idempotency-Key","magic-payload").contentType("application/json").content("{\"v\":1}")).andExpect(status().isAccepted());
         String id=jdbc.queryForObject("SELECT id FROM ht_message WHERE source_key='magic-payload'",String.class);
-        mvc.perform(get("/internal/v1/messages/"+id+"/payload").header("X-Admin-Key",ADMIN)).andExpect(status().isOk()).andExpect(content().bytes("{\"v\":1}".getBytes()));
+        for (String path : List.of("/internal/v1/payload?id="+id,
+                "/internal/v1/messages/"+id+"/payload?id=validation-other")) {
+            mvc.perform(get(path).header("X-Admin-Key",ADMIN)).andExpect(status().isOk())
+                    .andExpect(header().string("Content-Disposition", "attachment; filename=message-"+id+".bin"))
+                    .andExpect(content().bytes("{\"v\":1}".getBytes()));
+        }
         mvc.perform(post("/api/v1/ingest/demo").header("X-Api-Key",CLIENT).header("Idempotency-Key","magic-payload").contentType("application/json").content("{ \"v\":1}")).andExpect(status().isConflict());
         mvc.perform(post("/api/v1/ingest/demo").header("X-Api-Key",CLIENT).contentType("application/json").content("{}")).andExpect(status().isBadRequest());
+    }
+
+    @Test void adminAliasesKeepTheirPermissionsAndPathParameterPriority() throws Exception {
+        for (String path : List.of("config", "config-summary", "health?name=database",
+                "connectors/database/health?name=validation-other", "logs?from=0&to=1", "exchange-logs?from=0&to=1",
+                "reconcile?from=0&to=1", "reconciliation/summary?from=0&to=1")) {
+            mvc.perform(get("/internal/v1/"+path).header("X-Api-Key", CLIENT)).andExpect(status().isUnauthorized());
+            mvc.perform(get("/internal/v1/"+path).header("X-Admin-Key", ADMIN)).andExpect(status().isOk());
+        }
+        String id = "00000000-0000-0000-0000-000000000106";
+        var writePaths = Map.of("retry?id="+id, "{\"reason\":\"validation retry\"}",
+                "deliveries/"+id+"/retry", "{\"reason\":\"validation retry\"}",
+                "resolve?id="+id, "{\"reason\":\"validation resolution\",\"decision\":\"MARK_SUCCEEDED\",\"evidence\":\"validation evidence\"}",
+                "deliveries/"+id+"/resolve", "{\"reason\":\"validation resolution\",\"decision\":\"MARK_SUCCEEDED\",\"evidence\":\"validation evidence\"}",
+                "fileretry?id="+id, "{\"reason\":\"validation retry\"}",
+                "files/"+id+"/retry", "{\"reason\":\"validation retry\"}",
+                "scan?route=validation-missing", "{}", "ftp-scans/validation-missing", "{}");
+        for (var entry : writePaths.entrySet()) {
+            String path = "/internal/v1/"+entry.getKey();
+            mvc.perform(post(path).header("X-Api-Key", CLIENT)).andExpect(status().isUnauthorized());
+            mvc.perform(post(path).header("X-Admin-Key", ADMIN).contentType("application/json").content(entry.getValue()))
+                    .andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
+        }
+        mvc.perform(get("/internal/v1/health").header("X-Admin-Key", ADMIN)).andExpect(status().isUnprocessableEntity());
+        mvc.perform(get("/internal/v1/ftp-scans/validation-missing").header("X-Admin-Key", ADMIN)).andExpect(status().isNotFound());
     }
 }

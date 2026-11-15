@@ -2,21 +2,34 @@
   "id": "haitong-internal-5",
   "groupId": "bec8576a6f0c5793aac91b6f24574747",
   "name": "05.不确定任务核实",
-  "path": "/deliveries/{id}/resolve",
+  "path": "/resolve",
   "method": "POST",
-  "parameters": [],
+  "parameters": [{"name": "id", "required": false, "dataType": "String", "description": "必填查询参数 id"}],
   "options": [],
   "headers": [],
   "paths": [],
-  "description": "海通正式接口。认证由统一过滤器执行；业务规则在海通业务函数中维护。保留原HTTP状态及JSON契约。"
+  "description": "仅管理员。按投递任务 ID 核实 UNKNOWN 状态，请求体包含决策、原因和证据。与同组入口共用 /haitong/operations。"
 }
 ================================
 import '@/haitong/common' as common
 import request
-var c=common();var _media=c.media;var _caller=c.caller;;var req=request.get().getRequest();var caller=_caller(req)
 import '@/haitong/operations' as operation
-var input={action:'resolve',caller:caller}
-input.id=path.id
-_media(req,'application/json');input.body=c.http.object(req,65536)
-var result=operation(input)
-return c.http.reply(200,result)
+
+// POST /internal/v1/resolve。仅管理员。按投递任务 ID 核实 UNKNOWN 状态，请求体包含决策、原因和证据。
+// 由 /haitong/operations 与同组入口共用权限及业务处理。
+
+var commonContext = common()
+var checkMedia = commonContext.media
+var resolveCaller = commonContext.caller
+var req = request.get().getRequest()
+var caller = resolveCaller(req)
+
+var input = {action: 'resolve', caller: caller}
+var requireValue = commonContext.required
+// ID 来自查询参数，业务函数仍按原对象范围与状态处理。
+input.id = requireValue(req.getParameter('id'), 'id')
+// 管理员写操作保留原 JSON 请求体和大小限制。
+checkMedia(req, 'application/json')
+input.body = commonContext.http.object(req, 65536)
+var result = operation(input)
+return commonContext.http.reply(200, result)

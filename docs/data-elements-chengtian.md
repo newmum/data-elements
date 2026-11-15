@@ -544,7 +544,7 @@ ES 资产投影从当前澄天主表及白名单属性重新生成，按每批 2
 
 登记审查按当前数据源已保存的推送类型展示规范，结构化与非结构化统一使用“数据推送接口规范”标题，已发布状态统一为绿色“已发布接口规范”；草稿、读取中和读取失败按实际状态展示。结构化请求使用 application/json，展示 deliveryType、datasourceId、tableName、可选 batchId、records 及登记表字段和 JSON 示例；示例使用 FTP，已配置并获授权的 Kafka 通道可使用 KAFKA。密钥区展示当前数据源凭据的同步状态和轮换入口，明文仅首次生成时展示。
 
-非结构化上方“文件推送接口”统一为 PUT /api/v1/data-push，multipart/form-data，默认普通文件single模式，也支持 /api/v1/data-push/single 别名。页面使用相连的分段组件切换“普通文件”和“大文件（分片续传）”，模式说明显示在“文件推送步骤与请求参数”标题右侧并随选择更新，切换组件与第一步采用紧凑间距：普通文件仅展示一次性上传并提交、查询投递结果两类接口；大文件展示初始化、分片、完成并提交、查询结果，断点续传作为可选项。公共请求头集中展示，multipart的boundary由客户端自动生成。文件类别参数统一使用fileCode；原始fileName、大小和摘要在普通模式由服务端从文件取得，分片初始化才需另填fileName、size和可选sha256。候选类别来自当前授权快照，不逐文件向节点探测。文件推送各接口请求示例统一按HTTP请求报文展示，普通文件展示multipart表单分段，大文件按实际接口展示JSON或二进制请求体。请求示例默认展开，使用灰色静态标题，与右侧“复制请求示例”按钮水平对齐，不重复显示步骤名称；结构化推送复用同一示例标题栏。
+非结构化上方「文件推送接口」显示 `PUT /api/push/single`，使用 multipart/form-data。页面使用相连的分段组件切换“普通文件”和“大文件（分片续传）”，模式说明显示在“文件推送步骤与请求参数”标题右侧并随选择更新，切换组件与第一步采用紧凑间距：普通文件仅展示一次性上传并提交、查询投递结果两类接口；大文件展示初始化、分片、完成并提交、查询结果，断点续传作为可选项。公共请求头集中展示，multipart的boundary由客户端自动生成。文件类别参数统一使用fileCode；原始fileName、大小和摘要在普通模式由服务端从文件取得，分片初始化才需另填fileName、size和可选sha256。候选类别来自当前授权快照，不逐文件向节点探测。文件推送各接口请求示例统一按HTTP请求报文展示，普通文件展示multipart表单分段，大文件按实际接口展示JSON或二进制请求体。请求示例默认展开，使用灰色静态标题，与右侧“复制请求示例”按钮水平对齐，不重复显示步骤名称；结构化推送复用同一示例标题栏。
 
 大文件初始化的sha256仍为可选整文件摘要，分片X-Part-SHA256必填；普通文件无需填写大小或摘要，服务端流式计算并校验。页面保留大文件摘要说明及Linux/PowerShell获取示例。
 
@@ -552,7 +552,7 @@ ES 资产投影从当前澄天主表及白名单属性重新生成，按每批 2
 
 第一步文件模板结果仅保留已登记文件数量、下载/上传操作及真实错误、未保存状态，移除“文件登记模板导入结果”小标题和上次成功保存快照等描述。内容审查中的文件表与结构化表共用 review-workbench、data-table-information-card、data-table-toolbar、data-table-section-content 和 DataTable 样式，统一卡片内边距、标题间距、表头、边框和行高。
 
-新分片接口位于/api/v1/data-push/uploads：POST初始化，PUT写入指定片，POST /{id}/complete同时请求合并和提交业务意图，GET /{id}查询最终投递结果；GET /{id}/parts只在断点续传时使用。202表示受理，READY表示文件可用，均不能代替deliveryStatus=SUCCEEDED。旧file-uploads及表/附件字段single接口继续兼容。文件集合策略仍由节点自身配置，平台登记不自动下发FILE策略或扩大密钥权限。
+大文件走 `POST /api/push/init` 初始化，再用 `PUT /api/push/part?id=…&part=…` 写分片，调用 `POST /api/push/complete?id=…` 请求合并和投递。通过 `GET /api/push/status?id=…` 查询最终结果。续传时用 `GET /api/push/parts?id=…` 核对已确认片。旧统一推送路径继续兼容。202表示受理，READY表示文件可用，均不能代替deliveryStatus=SUCCEEDED。表字段附件接口归到 `/api/file`，旧 file-uploads 地址继续兼容。文件集合策略仍由节点自身配置，平台登记不自动下发FILE策略或扩大密钥权限。
 
 当前公安演示推送源保留四张表，其中 `police_person_info.portrait_file_id` 为可选的人员照片文件编号（varchar(64)，10MB，jpg/jpeg/png），`police_case_record.case_document_file_id` 为可选的案件文档文件编号（varchar(64)，20MB，pdf/docx）。对应集合编号为“表名.字段名”，已在本地节点配置这两个集合及该数据源调用方；其他字段定义与表数量保持不变。附件原文先上传到READY，表记录仅携带文件编号。
 

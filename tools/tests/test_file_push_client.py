@@ -14,7 +14,7 @@ CLIENT = ROOT / 'haitong-data-pull/scripts/upload_file.py'
 
 
 class FilePushClientTest(unittest.TestCase):
-    def run_client(self, chunked):
+    def run_client(self, chunked, registered_code=True):
         payload = b'%PDF-1.7\n' + b'V' * 140000
         calls = []
         class Handler(BaseHTTPRequestHandler):
@@ -31,7 +31,7 @@ class FilePushClientTest(unittest.TestCase):
                 else:
                     result = {'uploadId': 'validation-upload', 'state': 'CREATED', 'partSize': 65536, 'partCount': 3}
                 data = json.dumps(result).encode()
-                self.send_response(200 if self.command == 'GET' or '/parts/' in self.path else 202)
+                self.send_response(200 if self.command in ('GET', 'PUT') else 202)
                 self.send_header('Content-Type', 'application/json')
                 self.send_header('Content-Length', str(len(data)))
                 self.end_headers()
@@ -47,8 +47,14 @@ class FilePushClientTest(unittest.TestCase):
         file = directory / 'validation.pdf'
         file.write_bytes(payload)
         args = [sys.executable, str(CLIENT), str(file), '--base-url', 'http://127.0.0.1:' + str(server.server_port),
-                '--datasource', 'validation-source', '--file-code', 'case_document', '--business-key', 'validation-case',
+                '--datasource', 'validation-source', '--business-key', 'validation-case',
                 '--idempotency-key', 'validation-request', '--metadata', '{"caseNo":"VALIDATION-1"}', '--wait-seconds', '5']
+        if registered_code:
+            args.extend(['--file-code', 'case_document'])
+        elif chunked:
+            args.extend(['--collection', 'case-files'])
+        else:
+            args.extend(['--table', 'case_record', '--field', 'document_id'])
         if chunked:
             args.append('--chunked')
         try:
@@ -65,7 +71,7 @@ class FilePushClientTest(unittest.TestCase):
 
     def test_single_uses_put_multipart_and_only_queries_after_acceptance(self):
         calls, payload = self.run_client(False)
-        self.assertEqual([(m, p) for m, p, _, _ in calls], [('PUT', '/api/v1/data-push'), ('GET', '/api/v1/data-push/uploads/validation-upload')])
+        self.assertEqual([(m, p) for m, p, _, _ in calls], [('PUT', '/api/push/single'), ('GET', '/api/push/status?id=validation-upload')])
         _, _, headers, body = calls[0]
         self.assertTrue(headers['Content-Type'].startswith('multipart/form-data; boundary='))
         self.assertEqual(int(headers['Content-Length']), len(body))
@@ -79,13 +85,28 @@ class FilePushClientTest(unittest.TestCase):
         self.assertEqual(init['fileCode'], 'case_document')
         self.assertEqual(init['sha256'], hashlib.sha256(payload).hexdigest())
         parts = [(p, b) for m, p, _, b in calls if m == 'PUT']
-        self.assertEqual([p.rsplit('/', 1)[1] for p, _ in parts], ['2', '3'])
+        self.assertEqual([p for p, _ in parts], [f'/api/push/part?id=validation-upload&part={part}' for part in (2, 3)])
         self.assertEqual(b''.join(b for _, b in parts), payload[65536:])
-        complete = [(h, json.loads(b)) for m, p, h, b in calls if m == 'POST' and p.endswith('/complete')]
+        complete = [(h, json.loads(b)) for m, p, h, b in calls if m == 'POST' and p == '/api/push/complete?id=validation-upload']
         self.assertEqual(len(complete), 1)
         self.assertEqual(complete[0][1]['businessKey'], 'validation-case')
         self.assertEqual(complete[0][1]['metadata'], {'caseNo': 'VALIDATION-1'})
+        self.assertEqual(calls[0][1], '/api/push/init')
+        self.assertEqual(calls[1][1], '/api/push/parts?id=validation-upload&after=0&limit=100')
         self.assertFalse(any('/submit' in p for _, p, _, _ in calls))
+
+    def test_attachment_chunked_uses_named_routes_and_keeps_confirmed_parts(self):
+        calls, payload = self.run_client(True, registered_code=False)
+        self.assertEqual([(method, path) for method, path, _, _ in calls], [
+            ('POST', '/api/file/init'),
+            ('GET', '/api/file/parts?id=validation-upload&after=0&limit=100'),
+            ('PUT', '/api/file/part?id=validation-upload&part=2'),
+            ('PUT', '/api/file/part?id=validation-upload&part=3'),
+            ('POST', '/api/file/complete?id=validation-upload'),
+            ('POST', '/api/file/submit?id=validation-upload'),
+            ('GET', '/api/file/status?id=validation-upload'),
+        ])
+        self.assertEqual(b''.join(body for method, _, _, body in calls if method == 'PUT'), payload[65536:])
 
 
 if __name__ == '__main__':

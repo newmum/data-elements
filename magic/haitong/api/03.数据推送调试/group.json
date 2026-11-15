@@ -3,7 +3,7 @@
   "name": "03.数据推送调试",
   "type": "api",
   "parentId": "0",
-  "path": "/push-operations",
+  "path": "/push",
   "createTime": 1789786800000,
   "updateTime": 1789786800000,
   "paths": [],

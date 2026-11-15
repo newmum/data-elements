@@ -2,22 +2,36 @@
   "id": "haitong-internal-13",
   "groupId": "bec8576a6f0c5793aac91b6f24574747",
   "name": "13.交换日志分页",
-  "path": "/exchange-logs",
+  "path": "/logs",
   "method": "GET",
   "parameters": [],
   "options": [],
   "headers": [],
   "paths": [],
-  "description": "海通正式接口。认证由统一过滤器执行；业务规则在海通业务函数中维护。保留原HTTP状态及JSON契约。"
+  "description": "仅管理员。按 UTC 毫秒区间及可选筛选项分页读取交换日志。与同组入口共用 /haitong/reconciliation。"
 }
 ================================
 import '@/haitong/common' as common
 import request
-var c=common();var _integer=c.integer;var _query=c.query;var _caller=c.caller;;var req=request.get().getRequest();var caller=_caller(req)
 import '@/haitong/reconciliation' as operation
-var input={action:'logs',caller:caller}
-input.limit=_integer(_query(req,'limit','50'),50);input.offset=_integer(_query(req,'offset','0'),0)
-input.status=_query(req,'status','')
-input.from=_query(req,'from',null);input.to=_query(req,'to',null);input.protocol=_query(req,'protocol','');input.messageId=_query(req,'messageId','')
-var result=operation(input)
-return c.http.reply(200,result)
+
+// GET /internal/v1/logs。仅管理员。按 UTC 毫秒区间及可选筛选项分页读取交换日志。
+// 由 /haitong/reconciliation 与同组入口共用权限及业务处理。
+
+var commonContext = common()
+var parseInteger = commonContext.integer
+var readQuery = commonContext.query
+var resolveCaller = commonContext.caller
+var req = request.get().getRequest()
+var caller = resolveCaller(req)
+
+var input = {action: 'logs', caller: caller}
+input.limit = parseInteger(readQuery(req, 'limit', '50'), 50)
+input.offset = parseInteger(readQuery(req, 'offset', '0'), 0)
+input.status = readQuery(req, 'status', '')
+input.from = readQuery(req, 'from', null)
+input.to = readQuery(req, 'to', null)
+input.protocol = readQuery(req, 'protocol', '')
+input.messageId = readQuery(req, 'messageId', '')
+var result = operation(input)
+return commonContext.http.reply(200, result)

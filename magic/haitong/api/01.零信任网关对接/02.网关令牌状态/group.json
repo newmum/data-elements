@@ -2,6 +2,6 @@
   "id": "530d365665f8533282256c61df32bea4",
   "name": "02.网关令牌状态",
   "parentId": "haitong-ztgw-02",
-  "path": "/token-status",
+  "path": "/token",
   "type": "api"
 }

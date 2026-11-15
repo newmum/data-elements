@@ -76,7 +76,7 @@
           <div v-else-if="pushContractError" class="push-contract-error"><Icon icon="el-icon-WarningFilled" /><div><strong>正式规范读取失败</strong><p>{{ pushContractError }}</p></div><el-button plain @click="loadPushContract(true)">重试</el-button></div>
           <template v-if="pushIsAttachmentMode">
             <div class="push-contract-endpoint-grid">
-              <div class="push-contract-endpoint is-selected"><span class="push-endpoint-label">文件推送接口<span class="push-endpoint-selection">已选择</span></span><strong><em>PUT</em>{{pushProtocolUrl('/api/v1/data-push')}}</strong><small>普通文件可一次上传并提交；大文件支持分片续传。</small></div>
+              <div class="push-contract-endpoint is-selected"><span class="push-endpoint-label">文件推送接口<span class="push-endpoint-selection">已选择</span></span><strong><em>PUT</em>{{pushProtocolUrl(pushFileStages[0].path)}}</strong><small>普通文件可一次上传并提交；大文件支持分片续传。</small></div>
             </div>
           </template>
           <div v-else class="push-contract-endpoint-grid" role="radiogroup" aria-label="选择推送接口">
@@ -1691,12 +1691,12 @@ async function loadPushProtocolNodes(datasourceId, force = false) {
   }
 }
 const pushFileStages = [
-  {key:"fileSingle",label:"一次性上传并提交",method:"PUT",path:"/api/v1/data-push",description:"multipart请求体同时发送文件及业务参数，服务端计算大小与摘要，完成接收并自动提交。返回202表示已受理，随后查询最终投递结果；也支持 /api/v1/data-push/single 别名。"},
-  {key:"fileInit",label:"初始化上传",method:"POST",path:"/api/v1/data-push/uploads",description:"选择已登记的文件英文名，创建上传会话并取得 uploadId、partSize、partCount。文件格式和大小须符合该类别限制。"},
-  {key:"filePart",label:"上传分片",method:"PUT",path:"/api/v1/data-push/uploads/{id}/parts/{part}",description:"按初始化返回的 partSize 切分原文件，从第1片开始上传，正文为当前片原始字节。额外请求头 X-Part-SHA256 必填，填写当前片的64位摘要；Content-Length 由HTTP客户端按当前片实际字节数设置。同一片重试保持内容和摘要一致。"},
-  {key:"fileComplete",label:"完成并提交",method:"POST",path:"/api/v1/data-push/uploads/{id}/complete",description:"全部分片上传后一次完成合并请求和业务提交。返回202及WAITING_FILE表示已受理；服务端校验通过、文件READY后自动投递，无需先轮询等待READY或另调submit接口。"},
-  {key:"fileStatus",label:"查询投递结果",method:"GET",path:"/api/v1/data-push/uploads/{id}",description:"无请求体。按有界退避策略轮询，确认 deliveryStatus=SUCCEEDED 并核对 deliveries 和业务回执；超时后保留 uploadId 继续查询。READY 只表示文件可用，不代表投递成功。"},
-  {key:"fileParts",label:"断点续传",method:"GET",path:"/api/v1/data-push/uploads/{id}/parts",optional:true,description:"上传中断后分页查询已确认片号，只补传缺失片，再调用完成并提交。该接口无请求体，正常连续上传可跳过。"},
+  {key:"fileSingle",label:"一次性上传并提交",method:"PUT",path:"/api/push/single",description:"multipart请求体同时发送文件及业务参数，服务端计算大小与摘要，完成接收并自动提交。返回202表示已受理，随后按 statusUrl 查询最终投递结果。"},
+  {key:"fileInit",label:"初始化上传",method:"POST",path:"/api/push/init",description:"选择已登记的文件英文名，创建上传会话并取得 uploadId、partSize、partCount。文件格式和大小须符合该类别限制。"},
+  {key:"filePart",label:"上传分片",method:"PUT",path:"/api/push/part?id={id}&part={part}",description:"按初始化返回的 partSize 切分原文件，从第1片开始上传，正文为当前片原始字节。额外请求头 X-Part-SHA256 必填，填写当前片的64位摘要；Content-Length 由HTTP客户端按当前片实际字节数设置。同一片重试保持内容和摘要一致。"},
+  {key:"fileComplete",label:"完成并提交",method:"POST",path:"/api/push/complete?id={id}",description:"全部分片上传后一次完成合并请求和业务提交。返回202及WAITING_FILE表示已受理；服务端校验通过、文件READY后自动投递，无需先轮询等待READY或另调submit接口。"},
+  {key:"fileStatus",label:"查询投递结果",method:"GET",path:"/api/push/status?id={id}",description:"无请求体。按有界退避策略轮询，确认 deliveryStatus=SUCCEEDED 并核对 deliveries 和业务回执；超时后保留 uploadId 继续查询。READY 只表示文件可用，不代表投递成功。"},
+  {key:"fileParts",label:"断点续传",method:"GET",path:"/api/push/parts?id={id}",optional:true,description:"上传中断后分页查询已确认片号，只补传缺失片，再调用完成并提交。该接口无请求体，正常连续上传可跳过。"},
 ];
 const pushContractEndpointItems = computed(() => pushIsAttachmentMode.value ? pushFileStages.filter(stage => pushFileMode.value === "single" ? ["fileSingle","fileStatus"].includes(stage.key) : stage.key !== "fileSingle") : [
   {key:"dataPush",label:"数据推送接口",method:pushContract.value?.endpoints?.dataPush?.method || "POST",
@@ -1711,7 +1711,7 @@ const pushContractHeaders = computed(() => [
 const pushVisibleTables = computed(() => pushContract.value?.tables || []);
 const pushSelectedParameters = computed(() => (pushContract.value?.requiredParameters || []).map(item => ({...item,location:"请求体"})));
 function pushFileStageParameters(type) {
-  const id = {name:"id",location:"路径参数",required:true,description:"初始化响应中的 uploadId，同一个文件的后续请求始终使用该值"};
+  const id = {name:"id",location:"查询参数",required:true,description:"初始化响应中的 uploadId，同一个文件的后续请求始终使用该值"};
   const code = {name:"fileCode",location:"请求体",required:true,description:"登记的文件英文名，用于选择文件类别及接收规则。与每次上传的原始文件名分开；节点须配置对应英文名并授权当前业务密钥。"};
   const business = {name:"businessKey",location:"请求体",required:true,description:"调用方的文件业务唯一标识；同一次业务推送重试保持一致"};
   const metadata = {name:"metadata",location:"请求体",required:false,description:"业务元数据JSON对象；multipart中填写JSON文本，字段及必填规则以节点类别配置为准，无要求时使用 {}"};
@@ -1727,7 +1727,7 @@ function pushFileStageParameters(type) {
   ];
   if (type === "filePart") return [
     id,
-    {name:"part",location:"路径参数",required:true,description:"分片编号从1开始，最大为初始化响应中的 partCount"},
+    {name:"part",location:"查询参数",required:true,description:"分片编号从1开始，最大为初始化响应中的 partCount"},
     {name:"文件分片正文",location:"请求体",required:true,description:"按响应 partSize 切分后的原始字节，不封装成JSON、表单或Base64"}];
   if (type === "fileParts") return [id,
     {name:"after",location:"查询参数",required:false,description:"已读分片编号游标，首次为0，后续传本页最后一个片号"},
@@ -1776,7 +1776,7 @@ function pushFileStageSample(type) {
     lines.push("",JSON.stringify({datasourceId:String(sourceTid.value || ""),fileCode:"<已登记的文件英文名，见 fileCode 参数>",fileName:"<原始文件名，含已登记格式扩展名>",size:2048},null,2));
   }
   if (stage.key === "filePart") lines.push("","<当前分片的原始字节>");
-  if (stage.key === "fileParts") lines[0] += "?after=0&limit=100";
+  if (stage.key === "fileParts") lines[0] += "&after=0&limit=100";
   if (stage.key === "fileComplete") lines.push("",JSON.stringify({businessKey:"<本文件业务唯一标识>",metadata:{}},null,2));
   return lines.join("\n");
 }

@@ -1,7 +1,4 @@
 {
-  "properties": {
-    "leafRoute": true
-  },
   "id": "haitong-push-operations-status-02",
   "script": null,
   "groupId": "f60fbc37cec250dcae3796beae651b2e",
@@ -11,7 +8,7 @@
   "lock": null,
   "createBy": null,
   "updateBy": "haitong-admin",
-  "path": "/",
+  "path": "/status",
   "method": "POST",
   "parameters": [],
   "options": [],
@@ -24,9 +21,17 @@
   "responseBodyDefinition": null
 }
 ================================
+
 import '@/haitong/common' as common
 import request
-var c=common();var _required=c.required;var _caller=c.caller;;var req=request.get().getRequest();var caller=_caller(req)
 import '@/haitong/message' as message
-var value=c.http.object(req,65536)
-return message({caller:caller,id:_required(value.messageId,'messageId')})
+
+// POST /push/message/status。按 messageId 查询当前调用方可见的消息。与正式消息查询共用 /haitong/message。
+
+var c = common()
+var resolveCaller = c.caller
+var req = request.get().getRequest()
+var caller = resolveCaller(req)
+var value = c.http.object(req, 65536)
+var requireValue = c.required
+return message({caller: caller, id: requireValue(value.messageId, 'messageId')})

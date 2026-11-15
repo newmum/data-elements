@@ -1,7 +1,4 @@
 {
-  "properties": {
-    "leafRoute": true
-  },
   "id": "haitong-push-operations-push-01",
   "script": null,
   "groupId": "be213b207d6a5a4c981b3e406033e695",
@@ -11,7 +8,7 @@
   "lock": null,
   "createBy": null,
   "updateBy": "haitong-admin",
-  "path": "/",
+  "path": "/send",
   "method": "POST",
   "parameters": [],
   "options": [],
@@ -24,10 +21,26 @@
   "responseBodyDefinition": null
 }
 ================================
+
 import '@/haitong/common' as common
 import request
-var c=common();var _media=c.media;var _caller=c.caller;;var req=request.get().getRequest();var caller=_caller(req)
 import '@/haitong/push' as push
-_media(req,'application/json')
-var normalized=c.http.object(req,c.p.getLimits().getMaxMessageBytes());var raw=c.json.bytes(normalized)
-return push({action:'data-push',caller:caller,request:req,raw:raw,body:normalized,key:req.getHeader('Idempotency-Key')}).body
+
+// POST /push/debug/send。由 /haitong/push 与正式数据推送接口共用登记、幂等和异步投递逻辑。登记同步使用专用服务身份。
+
+var c = common()
+var resolveCaller = c.caller
+var req = request.get().getRequest()
+var caller = resolveCaller(req)
+var requireMedia = c.media
+requireMedia(req, 'application/json')
+var normalized = c.http.object(req, c.p.getLimits().getMaxMessageBytes())
+var raw = c.json.bytes(normalized)
+return push({
+    action: 'data-push',
+    caller: caller,
+    request: req,
+    raw: raw,
+    body: normalized,
+    key: req.getHeader('Idempotency-Key')
+}).body

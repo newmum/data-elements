@@ -29,18 +29,40 @@
 }
 ================================
 import '@/haitong/common' as common
+import com.haitong.api.AuthenticationFilter
+import com.haitong.api.PushAccess
 import com.haitong.files.FileUploadService
 import com.haitong.core.Rules
 import java.util.HashSet
+import java.util.LinkedHashMap
+
+// /haitong/files 供附件与统一文件推送接口共用，按调用方范围校验会话、原文和回执。
+// 附件与统一推送的新地址返回对应状态链接。旧客户端继续收到旧链接。
 var c=common();var _bean=c.bean;var _fail=c.fail;var _required=c.required;var _integer=c.integer;var _query=c.query;var _bounds=c.bounds;var _unknown=c.unknown;var _media=c.media;var _list=c.list;var _object=c.object;;var req=input.request;var caller=input.caller;var action=input.action
 var service=null
 try{service=_bean('fileUploadService')}catch(ignored){_fail(404,'RESOURCE_NOT_FOUND','附件传输未启用')}
 var repo=_bean('fileUploadRepository');var catalog=_bean('fileContractCatalog')
 var optional=(body,key)=>{var value=body[key];if(value!=null && !(value instanceof String)){_fail(422,'INVALID_REQUEST','字段必须为字符串：'+key)}return value}
+var apiPath = PushAccess.path(req)
+var canonicalPush = apiPath.startsWith('/api/push/')
+var canonicalRequest = req.getAttribute(AuthenticationFilter.ORIGINAL_PATH) == null && (canonicalPush || apiPath.startsWith('/api/file/'))
+var publicLinks = value => {
+    if (canonicalRequest && value.uploadId != null && (value.statusUrl != null || value.contentUrl != null)) {
+        value = new LinkedHashMap(value)
+        if (value.statusUrl != null) {
+            var statusPath = canonicalPush ? '/api/push/status?id=' : '/api/file/status?id='
+            value.statusUrl = statusPath + value.uploadId
+        }
+        if (value.contentUrl != null) {
+            value.contentUrl = '/api/file/content?id=' + value.uploadId
+        }
+    }
+    return value
+}
 var basic=u=>{
     var result={uploadId:u.id(),fileId:u.id(),datasourceId:u.text('datasource_id'),collectionId:u.text('collection_id'),fileName:u.text('file_name'),size:u.size(),mediaType:u.text('media_type'),sha256:u.text('final_sha256'),partSize:u.number('part_size'),partCount:u.number('part_count'),state:u.state(),securityState:u.text('security_state'),contractVersion:u.number('contract_version'),messageId:u.text('message_id'),errorCode:u.text('error_code'),expiresAt:u.number('expires_at'),statusUrl:'/api/v1/file-uploads/'+u.id()}
     if(u.state()=='READY'){result.contentUrl='/api/v1/file-uploads/'+u.id()+'/content'}
-    return result
+    return publicLinks(result)
 }
 var decorate=rows=>{
     var progress=repo.progress(rows);var deliveries=repo.deliveries(rows);var result=[]
@@ -57,17 +79,17 @@ if(action=='pushSingle'){
     var parts=c.http.multipart(req,_bean('fileTransferProperties').getSingleUploadMaxBytes(),['datasourceId','fileCode','businessKey','metadata'])
     var metadata=parts.metadata==null || parts.metadata.trim()=='' ? {} : _bean('json').object(parts.metadata.getBytes('UTF-8'))
     var file=parts.file;var stream=file.getInputStream()
-    try{return c.http.reply(202,service.singlePush(caller,key,new FileUploadService.Push(_required(parts.datasourceId,'datasourceId'),_required(parts.fileCode,'fileCode'),_required(parts.businessKey,'businessKey'),metadata),file.getSubmittedFileName(),file.getSize(),stream))}finally{stream.close()}
+    try{return c.http.reply(202,publicLinks(service.singlePush(caller,key,new FileUploadService.Push(_required(parts.datasourceId,'datasourceId'),_required(parts.fileCode,'fileCode'),_required(parts.businessKey,'businessKey'),metadata),file.getSubmittedFileName(),file.getSize(),stream)))}finally{stream.close()}
 }
 if(action=='pushInit'){
     _media(req,'application/json');var body=c.http.object(req,65536);_unknown(body,['datasourceId','fileCode','fileName','size','sha256'])
-    return c.http.reply(202,service.initializePush(caller,key,new FileUploadService.Init(_required(body.datasourceId,'datasourceId'),_required(body.fileCode,'fileCode'),_required(body.fileName,'fileName'),_integer(body.size,-1),optional(body,'sha256'))))
+    return c.http.reply(202,publicLinks(service.initializePush(caller,key,new FileUploadService.Init(_required(body.datasourceId,'datasourceId'),_required(body.fileCode,'fileCode'),_required(body.fileName,'fileName'),_integer(body.size,-1),optional(body,'sha256')))))
 }
 if(action=='pushComplete'){
     _media(req,'application/json');var body=c.http.object(req,65536);_unknown(body,['businessKey','metadata'])
-    return c.http.reply(202,service.completePush(caller,input.id,key,new FileUploadService.Submission(_required(body.businessKey,'businessKey'),_object(body.metadata))))
+    return c.http.reply(202,publicLinks(service.completePush(caller,input.id,key,new FileUploadService.Submission(_required(body.businessKey,'businessKey'),_object(body.metadata)))))
 }
-if(action=='pushStatus'){return c.http.reply(200,service.pushReply(service.status(caller,input.id)))}
+if(action=='pushStatus'){return c.http.reply(200,publicLinks(service.pushReply(service.status(caller,input.id))))}
 if(action=='content'){
     var u=service.readable(caller,input.id)
     if(u.state()!='READY'){_fail(409,'FILE_NOT_READY','文件尚未就绪')}
@@ -97,7 +119,7 @@ if(action=='single'){
     var allowed=['datasourceId','tableName','fieldName','fileName']
     for(name,values in req.getParameterMap()){if(!allowed.contains(name) || values.length!=1){_fail(422,'INVALID_REQUEST','请求包含未定义或重复参数')}}
     var source=_required(_query(req,'datasourceId',null),'datasourceId');var table=_required(_query(req,'tableName',null),'tableName');var field=_required(_query(req,'fieldName',null),'fieldName');var name=_required(_query(req,'fileName',null),'fileName')
-    return c.http.reply(202,service.single(caller,key,new FileUploadService.Single(source,table,field,name),req.getContentLengthLong(),req.getInputStream()))
+    return c.http.reply(202,publicLinks(service.single(caller,key,new FileUploadService.Single(source,table,field,name),req.getContentLengthLong(),req.getInputStream())))
 }
 if(action=='part'){
     _media(req,'application/octet-stream')
@@ -112,16 +134,16 @@ if(action=='parts'){
 if(action=='init'){
     _media(req,'application/json');var body=c.http.object(req,65536);_unknown(body,['datasourceId','collectionId','fileName','size','sha256'])
     var size=_integer(body.size,-1)
-    return c.http.reply(202,service.initialize(caller,key,new FileUploadService.Init(_required(body.datasourceId,'datasourceId'),_required(body.collectionId,'collectionId'),_required(body.fileName,'fileName'),size,optional(body,'sha256'))))
+    return c.http.reply(202,publicLinks(service.initialize(caller,key,new FileUploadService.Init(_required(body.datasourceId,'datasourceId'),_required(body.collectionId,'collectionId'),_required(body.fileName,'fileName'),size,optional(body,'sha256')))))
 }
 if(action=='submit'){
     _media(req,'application/json');var body=c.http.object(req,65536);_unknown(body,['businessKey','metadata'])
-    return c.http.reply(202,service.submit(caller,input.id,key,new FileUploadService.Submission(_required(body.businessKey,'businessKey'),_object(body.metadata))))
+    return c.http.reply(202,publicLinks(service.submit(caller,input.id,key,new FileUploadService.Submission(_required(body.businessKey,'businessKey'),_object(body.metadata)))))
 }
 if(action=='receipt'){
     _media(req,'application/json');var body=c.http.object(req,65536);_unknown(body,['deliveryId','sha256','status','businessRef'])
     return c.http.reply(200,service.receipt(caller,input.id,key,new FileUploadService.Receipt(_required(body.deliveryId,'deliveryId'),_required(body.sha256,'sha256'),_required(body.status,'status'),optional(body,'businessRef'))))
 }
-if(action=='complete'){return c.http.reply(202,service.complete(caller,input.id))}
-if(action=='abort'){return c.http.reply(200,service.abort(caller,input.id))}
+if(action=='complete'){return c.http.reply(202,publicLinks(service.complete(caller,input.id)))}
+if(action=='abort'){return c.http.reply(200,publicLinks(service.abort(caller,input.id)))}
 _fail(404,'RESOURCE_NOT_FOUND','接口操作不存在')

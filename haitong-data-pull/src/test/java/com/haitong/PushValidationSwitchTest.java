@@ -59,13 +59,15 @@ class PushValidationSwitchTest {
     @Test void twentyAndOneHundredRowsUseTheSameReadsAndZeroRegistrationReads()throws Exception{
         var original=jdbc.getDataSource();var reads=new java.util.concurrent.atomic.AtomicInteger();
         var registrationReads=new java.util.concurrent.atomic.AtomicInteger();
+        var requestThread = Thread.currentThread();
         jdbc.setDataSource(new org.springframework.jdbc.datasource.DelegatingDataSource(original){
             @Override public java.sql.Connection getConnection()throws java.sql.SQLException{
                 var connection=org.springframework.jdbc.datasource.DataSourceUtils.getConnection(original);
                 return (java.sql.Connection)java.lang.reflect.Proxy.newProxyInstance(getClass().getClassLoader(),new Class[]{java.sql.Connection.class},(proxy,method,args)->{
                     try{
                         if(method.getName().equals("close")){org.springframework.jdbc.datasource.DataSourceUtils.releaseConnection(connection,original);return null;}
-                        if(method.getName().equals("prepareStatement")){
+                        // Only count the synchronous HTTP request, even when the scheduled file worker is running.
+                        if(Thread.currentThread()==requestThread && method.getName().equals("prepareStatement")){
                             String sql=args[0].toString().stripLeading().toUpperCase(Locale.ROOT);
                             if(sql.startsWith("SELECT")){reads.incrementAndGet();if(sql.contains("HT_STANDALONE_"))registrationReads.incrementAndGet();}
                         }
@@ -100,6 +102,13 @@ class PushValidationSwitchTest {
         mvc.perform(get("/data/actuator/health").contextPath("/data")).andExpect(status().isOk());
         mvc.perform(get("/data/internal/v1/overview").contextPath("/data")).andExpect(status().isUnauthorized());
         mvc.perform(post("/data/api/v1/data-push%20").contextPath("/data")).andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("INVALID_PATH"));
+        for (String path : List.of("/data/push/debug/send", "/data/push-operations/data-push")) {
+            mvc.perform(post(path).contextPath("/data").header("Idempotency-Key","context-forbidden-sync")
+                            .contentType("application/json").content("{\"deliveryType\":\"REGISTRY_SYNC\"}"))
+                    .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("FORBIDDEN_REGISTRY_SYNC"));
+        }
+        mvc.perform(post("/data/push-operations/data-push;test=1").contextPath("/data"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("INVALID_PATH"));
     }
     @Test void managementSyncExamplesAndActionsAreNotOpened()throws Exception{
         for(String path:List.of("/internal/v1/overview","/internal/v1/config-summary","/actuator/metrics","/gateway/config"))
@@ -151,13 +160,22 @@ class PushValidationSwitchTest {
         mvc.perform(post(base+"/complete")).andExpect(status().isAccepted());
         mvc.perform(post(base+"/submit").header("Idempotency-Key","open-file-submit").contentType("application/json")
             .content(json.bytes(Map.of("businessKey","validation-document-001","metadata",Map.of("unregisteredDescription","无需登记"))))).andExpect(status().isAccepted());
-        for(int i=0;i<10 && !files.status(PushAccess.identity(),id).get("state").equals("READY");i++)files.runOne();
-        mvc.perform(get(base)).andExpect(status().isOk()).andExpect(jsonPath("$.state").value("READY"));
-        assertTrue(worker.runOne(Kind.FILE_LOCAL));
+        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(10);
+        while (!files.status(PushAccess.identity(), id).get("state").equals("READY") && System.nanoTime() < deadline) {
+            // The scheduled merger may already hold the lease when the test tries to claim it.
+            if (!files.runOne()) Thread.sleep(50);
+        }
+        mvc.perform(get("/api/file/status?id="+id)).andExpect(status().isOk()).andExpect(jsonPath("$.state").value("READY"));
+        deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(10);
+        while (!files.status(PushAccess.identity(), id).get("deliveryStatus").equals("SUCCEEDED") && System.nanoTime() < deadline) {
+            if (!worker.runOne(Kind.FILE_LOCAL)) Thread.sleep(50);
+        }
+        mvc.perform(get("/api/file/status?id="+id)).andExpect(status().isOk()).andExpect(jsonPath("$.deliveryStatus").value("SUCCEEDED"));
         mvc.perform(get(base+"/content")).andExpect(status().isOk()).andExpect(content().bytes(data));
-        mvc.perform(post("/api/v1/file-uploads/status-batch").contentType("application/json").content(json.bytes(Map.of("uploadIds",List.of(id,UUID.randomUUID().toString()))))).andExpect(status().isNotFound());
+        mvc.perform(post("/api/file/batch").contentType("application/json").content(json.bytes(Map.of("uploadIds",List.of(id,UUID.randomUUID().toString()))))).andExpect(status().isNotFound());
         mvc.perform(get("/api/v1/file-uploads?limit=20")).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(1));
         mvc.perform(post(base+"/receipts")).andExpect(status().isUnauthorized());
+        mvc.perform(post("/api/file/receipt?id="+id)).andExpect(status().isUnauthorized());
         assertEquals(0,jdbc.queryForObject("SELECT reserved_bytes FROM ht_storage_quota WHERE quota_key='GLOBAL'",Long.class));
         assertEquals((long)data.length,jdbc.queryForObject("SELECT committed_bytes FROM ht_storage_quota WHERE quota_key='GLOBAL'",Long.class));
     }

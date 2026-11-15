@@ -3,7 +3,7 @@
   "id": "haitong-public-8",
   "script": null,
   "groupId": "haitong-files-api",
-  "name": "11.批量文件导入",
+  "name": "08.批量文件导入",
   "createTime": null,
   "updateTime": 1792981130061,
   "lock": null,

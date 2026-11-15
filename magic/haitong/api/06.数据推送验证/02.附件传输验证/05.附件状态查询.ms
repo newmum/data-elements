@@ -39,7 +39,7 @@ var apiKey = magicHttp.bean('secrets').resolve(magicHttp.bean('environment').get
 // 已预填本机成功联调的 ID，可直接运行；查询自己的新请求时只替换下面这一行。
 var fileId = 'fec585ae-a0ff-4c1a-9832-d9a5d7954f8a'
 var method = 'GET'
-var url = 'http://127.0.0.1:18083/api/v1/file-uploads/' + fileId
+var url = 'http://127.0.0.1:18083/api/file/status?id=' + fileId
 
 // 2. Postman → Headers：GET 状态查询只需 X-Api-Key，无需 Idempotency-Key。
 var headers = {'X-Api-Key': apiKey}

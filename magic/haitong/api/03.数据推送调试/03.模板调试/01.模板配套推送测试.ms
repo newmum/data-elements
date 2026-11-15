@@ -1,7 +1,4 @@
 {
-  "properties": {
-    "leafRoute": true
-  },
   "id": "haitong-push-template-test-03",
   "script": null,
   "groupId": "a239d5d166685b5e934abe4be283af8b",
@@ -11,7 +8,7 @@
   "lock": null,
   "createBy": null,
   "updateBy": "haitong-admin",
-  "path": "/",
+  "path": "/test",
   "method": "POST",
   "parameters": [],
   "options": [],
@@ -20,7 +17,7 @@
     {
       "name": "Content-Type",
       "value": "application/json",
-      "description": "表数据使用JSON；附件原文先通过/api/v1/file-uploads/single上传",
+      "description": "表数据使用JSON；附件原文先通过/api/file/single上传",
       "required": true,
       "dataType": "String",
       "type": null,
@@ -59,15 +56,31 @@
   ],
   "paths": [],
   "responseBody": "{}",
-  "description": "与《数据推送登记模板-联调示例》对应。默认示例使用本机已登记的测试数据源，表名push_template_demo，5个字段，attachment_file_id为可选附件字段。真实调用原统一推送流程，不代填密钥、不跳过登记与权限校验。先在节点管理同步配置，再填写该源X-Api-Key和Idempotency-Key。FTP返回受理后用02.消息状态查询确认最终投递结果。附件先上传，等待READY，再将fileId写入attachment_file_id；没有附件可省略该字段。其他环境须替换datasourceId。",
+  "description": "与《数据推送登记模板-联调示例》对应。默认示例使用本机已登记的测试数据源，表名push_template_demo，5个字段，attachment_file_id为可选附件字段。真实调用原统一推送流程，不代填密钥、不跳过登记与权限校验。先在节点管理同步配置，再填写该源X-Api-Key和Idempotency-Key。FTP 返回受理后用 POST /push/message/status 确认最终投递结果。附件先上传，等待READY，再将fileId写入attachment_file_id；没有附件可省略该字段。其他环境须替换datasourceId。",
   "requestBodyDefinition": null,
   "responseBodyDefinition": null
 }
 ================================
+
 import '@/haitong/common' as common
 import request
-var c=common();var _media=c.media;var _caller=c.caller;;var req=request.get().getRequest();var caller=_caller(req)
 import '@/haitong/push' as push
-_media(req,'application/json')
-var normalized=c.http.object(req,c.p.getLimits().getMaxMessageBytes());var raw=c.json.bytes(normalized)
-return push({action:'data-push',caller:caller,request:req,raw:raw,body:normalized,key:req.getHeader('Idempotency-Key')}).body
+
+// POST /push/template/test。用登记模板验证真实投递。与正式数据推送接口共用 /haitong/push 的登记、幂等和异步投递逻辑。
+
+var c = common()
+var resolveCaller = c.caller
+var req = request.get().getRequest()
+var caller = resolveCaller(req)
+var requireMedia = c.media
+requireMedia(req, 'application/json')
+var normalized = c.http.object(req, c.p.getLimits().getMaxMessageBytes())
+var raw = c.json.bytes(normalized)
+return push({
+    action: 'data-push',
+    caller: caller,
+    request: req,
+    raw: raw,
+    body: normalized,
+    key: req.getHeader('Idempotency-Key')
+}).body

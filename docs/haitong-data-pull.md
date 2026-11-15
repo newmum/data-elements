@@ -17,7 +17,7 @@
 - [Linux / Windows 原生部署包](#native-release-packages)
 - [统一数据推送接口文档](#guide-38565d24)
 - [FTP / SFTP 投递诊断说明](#guide-ee01ab21)
-- [Magic-API：02.零信任网关对接](#guide-89fdbceb)
+- [Magic-API 零信任网关对接](#guide-89fdbceb)
 - [haitong（海通）详细设计](#guide-81a7266f)
 - [海通：三个场景快速使用](#guide-a185e7e4)
 - [从V1.0升级到haitong V1.1](#guide-be3d02f6)
@@ -49,7 +49,7 @@ relay:
 | `true` | `X-Api-Key` 或 Bearer 验证本地静态调用方/数据库签发凭据，随后校验通道权限 | 海通独立库登记镜像为权威；没有镜像时兼容 YAML 契约，检查有效状态、调用方授权、表白名单、字段白名单及必填值 | 本机 `files.collections` 约束来源、集合、调用方、格式/大小及目标 |
 | `false` | 标准推送可省略或传入任意 `X-Api-Key`，统一使用非管理员身份 `unvalidated-publisher` | 不查询登记镜像、不校验登记状态、表字段白名单和必填字段；`datasourceId/tableName/records` 等基础参数仍须正确 | 不要求预先登记集合；固定本地隔离域 `unvalidated-push`，按 `files.unregistered-targets` 和全局传输配置生成运行契约；不接受请求中的租户或目标地址 |
 
-开关适用于 `/api/v1/data-push`、FTP/Kafka/LOG 兼容入口、`/push-operations` 的推送/状态测试入口，以及分片和兼容整文件上传、完成、提交、取消、状态与内容读取。未认证的请求不能访问历史已认证调用方的消息/文件。关闭时不同匿名发送方共享一个身份，须为每个业务批次使用全局唯一 `Idempotency-Key`；同一键及同一原始正文重试返回原消息，正文改变仍返回冲突。重新开启后，匿名模式创建的对象不会自动转授给其他业务密钥。
+开关适用于 `/api/v1/data-push`、FTP/Kafka/LOG 兼容入口、`/push` 的推送、状态和模板调试入口，以及分片和兼容整文件上传、完成、提交、取消、状态与内容读取。未认证的请求不能访问历史已认证调用方的消息/文件。关闭时不同匿名发送方共享一个身份，须为每个业务批次使用全局唯一 `Idempotency-Key`；同一键及同一原始正文重试返回原消息，正文改变仍返回冲突。重新开启后，匿名模式创建的对象不会自动转授给其他业务密钥。
 
 Magic 编辑器登录、`/internal/**` 运维及签发、`REGISTRY_SYNC` 服务间鉴权、下游业务回执和通用动作入口继续单独保护。可选 `X-Gateway-Key` 网关限制、路径格式、请求大小、记录数、幂等、配额、文件签名、SHA-256 和分片状态校验不因开关关闭而取消。未登记附件只支持既有 `jpg/jpeg/png/pdf/docx` 技术格式；若配置了 `scanner-command` 则继续执行扫描，无扫描器时记录 `HEADER_VERIFIED_NOT_SCANNED`。本地 FTP/Kafka 连接和目标仍必须启用并配置正确，接收结构化数据不等于平台已经知道如何物化该表，后续平台接入仍需自己的表结构。
 
@@ -82,7 +82,7 @@ Magic 编辑器登录、`/internal/**` 运维及签发、`REGISTRY_SYNC` 服务�
 | 07.推送密钥 | 1 | 平台服务签发和显式轮换数据源业务密钥 |
 | 08.附件传输 | 13 | 单次上传、初始化、分片、完成、提交、取消、状态、分页、批量状态、回执及 GET/HEAD 内容读取 |
 
-原 02.零信任网关对接、03.FTP诊断和04.数据推送调试仍保留。04 分组与正式入口共用脚本业务函数；旧调试入口保留 Magic 成功信封和原有 JSON 规范化幂等语义，正式入口保留原始 JSON 字节幂等语义及原生 HTTP/JSON 响应。
+`01.零信任网关对接`、`02.文件传输诊断` 和 `03.数据推送调试` 提供网关与联调入口。数据推送调试与正式入口共用脚本业务函数。调试入口使用 Magic 成功信封和规范化 JSON 幂等校验，正式入口使用原生 HTTP/JSON 响应和原始 JSON 字节幂等校验。
 
 `09.数据推送验证` 是可直接运行的 Postman 请求示例。01～06 分别向正式 `POST /api/v1/data-push` 发送状态字典、机构字典、人员、车辆、事件和事件操作日志各两行合成数据；07～09 对正式附件接口发送内嵌 PNG 的原始字节；10 提交附件；11、12 各执行一次附件或业务消息状态查询。每条脚本按 URL、Headers、Body、一次 HTTP 调用、响应的顺序格式化，逐项说明数据源 ID、登记表名、字段、幂等键及返回 ID 的获取位置。脚本不直接调用内部业务函数，也不隐藏同步、查询数据库或轮询流程。
 
@@ -135,9 +135,13 @@ python tools/resource-sync.py publish --project haitong-data-pull --file "magic/
 
 可维护配置示例为 [`application-files.yml.example`](../haitong-data-pull/config/application-files.yml.example)，默认整文件、可选分片续传的标准库流式客户端为 [`upload_file.py`](../haitong-data-pull/scripts/upload_file.py)，机器接口定义在 [`openapi.yaml`](../haitong-data-pull/src/main/resources/openapi.yaml)。配置只声明服务端可信租户、集合和目标，API 请求不接受 tenantId、路径、Topic、存储地址或回调 URL。
 
-平台结构化推送继续使用POST /api/v1/data-push和application/json；非结构化使用PUT同一路径、multipart/form-data，普通文件默认single模式一次上传并提交，再查询响应statusUrl确认投递。/api/v1/data-push/single是同一普通模式的别名。multipart包含datasourceId、fileCode、businessKey、file及可选JSON文本metadata，文件名取file部分，实际大小及SHA-256由服务端流式计算；默认20MiB并受类别上限约束，临时文件落运行目录并受Servlet上限约束。新模板增加文件英文名，其他名称、说明、格式、大小及可选关联保留，旧模板兼容；FILE定义复用现有表/治理JSON，无物理结构变化。
+平台结构化推送使用 `POST /api/v1/data-push` 和 JSON。非结构化普通文件使用 `PUT /api/push/single` 和 multipart，一次上传并提交，随后根据响应的 `statusUrl` 确认投递。旧 `PUT /api/v1/data-push` 和 `PUT /api/v1/data-push/single` 进入同一脚本。multipart包含datasourceId、fileCode、businessKey、file及可选JSON文本metadata，文件名取file部分，实际大小及SHA-256由服务端流式计算；默认20MiB并受类别上限约束，临时文件落运行目录并受Servlet上限约束。新模板增加文件英文名，其他名称、说明、格式、大小及可选关联保留，旧模板兼容；FILE定义复用现有表/治理JSON，无物理结构变化。
 
-新调用使用datasourceId＋fileCode定位文件类别，YAML的relay.files.collections.<key>.file-code可映射到既有collection-id，省略时沿用collection-id。同源英文名和集合编码不得冲突，调用方授权、租户及目标仍由服务端决定。登记不自动创建海通运行策略；部署方须匹配来源、英文名、集合编码、格式和大小。原始file-uploads、表/附件字段single、旧CLI参数均保持兼容。客户端推荐 --file-code scene_photo，默认统一single；加--chunked则使用新分片协议。
+新调用使用datasourceId＋fileCode定位文件类别，YAML的relay.files.collections.<key>.file-code可映射到既有collection-id，省略时沿用collection-id。同源英文名和集合编码不得冲突，调用方授权、租户及目标仍由服务端决定。登记不自动创建海通运行策略；部署方须匹配来源、英文名、集合编码、格式和大小。表字段附件使用 `/api/file`，原附件地址和原 CLI 参数继续兼容。客户端推荐 --file-code scene_photo，默认统一single；加--chunked则使用新分片协议。
+
+大文件推送使用「03.统一文件推送」。初始化为 `POST /api/push/init`，写入分片为 `PUT /api/push/part?id=…&part=…`。续传时用 `GET /api/push/parts?id=…&after=0&limit=100` 读取已确认片。全部上传后用 `POST /api/push/complete?id=…` 一次请求合并和提交，最终结果在 `GET /api/push/status?id=…` 查询。
+
+旧 `/api/v1/data-push/uploads` 系列保留原 HTTP 方法、路径参数和响应链接。旧路径中的上传 ID、片号优先于同名查询参数。新路由返回 `/api/push/status?id=…`，可读原文链接使用 `/api/file/content?id=…`。
 
 当前使用单节点持久卷，目录加进程锁；相同本地卷不能同时运行两个文件实例，也不能将各自拥有本地卷的多个实例直接置于随机负载均衡后。正式多实例需完成共享对象存储适配及跨节点校验。普通文件 API 与旧表批次共用 HTTP 服务，分片流量仍会占用该进程的网络和数据库；文件校验池、FILE_LOCAL/FILE_FTP/FILE_KAFKA 投递池分别有界，不承诺物理资源完全隔离。
 
@@ -220,22 +224,24 @@ flowchart LR
 
 平台结构化与非结构化页面的标题统一为“数据推送接口规范”，已发布时显示“已发布接口规范”；这项展示统一不改变下表的路径、方法或正文。非结构化顶部同样展示 Idempotency-Key：初始化与业务提交分别使用稳定的键，同一操作重试保持不变；分片 PUT 以 uploadId、片号和实际摘要核对重复请求，complete 根据会话状态幂等，GET 查询无需额外幂等键。
 
-`POST /api/v1/data-push` 当前只接受 application/json，业务分支为 FTP/KAFKA/LOG 表批次及服务间 REGISTRY_SYNC，要求对应的表和 records 契约；当前不接受独立文件原始字节，也没有 FILE 分支。若扩展统一 POST 入口，可以让新的文件提交类型携带已上传会话/文件引用、businessKey 和 metadata，复用 FileUploadService.submit、现有授权及投递账本；文件字节仍可经现有分片接口传输。若要求单次 POST 同时上传文件，则需增加明确的流式原始字节或 multipart 契约，复用配额、大小/格式、摘要、安全校验和幂等逻辑，并核验代理正文限制、断线重试及权限边界。上述属于后续接口扩展方案，尚未实现；不能只修改页面 URL 或把 PUT 字样改成 POST。已有 `/file-uploads/single` 是绑定表字段的附件入口，仍要求 tableName/fieldName，不能直接替代关联字段可为空的独立文件集合协议。
+`POST /api/v1/data-push` 当前只接受 application/json，业务分支为 FTP/KAFKA/LOG 表批次及服务间 REGISTRY_SYNC，要求对应的表和 records 契约；当前不接受独立文件原始字节，也没有 FILE 分支。若扩展统一 POST 入口，可以让新的文件提交类型携带已上传会话/文件引用、businessKey 和 metadata，复用 FileUploadService.submit、现有授权及投递账本；文件字节仍可经现有分片接口传输。若要求单次 POST 同时上传文件，则需增加明确的流式原始字节或 multipart 契约，复用配额、大小/格式、摘要、安全校验和幂等逻辑，并核验代理正文限制、断线重试及权限边界。上述属于后续接口扩展方案，尚未实现；不能只修改页面 URL 或把 PUT 字样改成 POST。已有 `/api/file/single` 是绑定表字段的附件入口，仍要求 tableName/fieldName，不能直接替代关联字段可为空的独立文件集合协议。
 
 | 已实现接口 | 行为与边界 |
 | --- | --- |
-| `POST /api/v1/file-uploads/single` | 默认整文件入口：查询参数 datasourceId、tableName、fieldName、fileName，application/octet-stream 正文直接发送完整文件；携带 X-Api-Key、Idempotency-Key；返回202和fileId/statusUrl，自动进入异步校验 |
-| `POST /api/v1/file-uploads` | 大文件分片模式：JSON 初始化会话并预留容量；返回 uploadId/fileId、partSize、partCount、状态、到期时间和查询入口 |
-| `PUT /api/v1/file-uploads/{uploadId}/parts/{part}` | `application/octet-stream` 原始字节；片号从 1 开始；必填 `X-Part-SHA256`；服务端逐字节校验长度和 SHA-256，64KiB 缓冲写盘 |
-| `GET /api/v1/file-uploads/{uploadId}/parts?after=0&limit=100` | 返回已确认片的 partNumber/size/sha256；按片号游标分页，最多 100 片 |
-| `POST /api/v1/file-uploads/{uploadId}/complete` | 无正文；检查片数和实际字节总数，置 FINALIZING 返回 202；后台合并、校验、检查格式及运行配置的扫描器 |
-| `POST /api/v1/file-uploads/{uploadId}/submit` | JSON 业务意图；可在上传结束前调用；预先持久化 messageId，READY 后原子建立消息、检查点和所有目标任务 |
-| `GET /api/v1/file-uploads/{uploadId}` | 文件状态、confirmedBytes/completedParts、逐目标投递状态及独立 businessStatus/businessRef；不返回物理路径和凭据 |
-| `GET /api/v1/file-uploads?limit=20&offset=0` | 服务端分页，limit 为 1～100，offset 不超过 1000000；当前服务端授权范围内计数与查询 |
-| `POST /api/v1/file-uploads/status-batch` | JSON `{"uploadIds":["..."]}`；1～100 个不重复 ID，一次验证全部归属；任一 ID 不可访问即整批 404 |
-| `DELETE /api/v1/file-uploads/{uploadId}` | 取消未提交且尚未进入 FINALIZING/READY 的上传；物理清理后释放配额，不直接删除已被业务引用的原文 |
-| `GET/HEAD /api/v1/file-uploads/{uploadId}/content` | 就绪文件鉴权回读，支持单 Range、后缀 Range、ETag 和 If-Range；无权限 404，非法范围 416，附件方式返回 |
-| `POST /api/v1/file-uploads/{uploadId}/receipts` | 已指定接收方身份回执；校验 deliveryId、目标、传输 SUCCEEDED、文件摘要和幂等键；业务状态为 ACCEPTED/REJECTED |
+| `POST /api/file/single` | 默认整文件入口：查询参数 datasourceId、tableName、fieldName、fileName，application/octet-stream 正文直接发送完整文件；携带 X-Api-Key、Idempotency-Key；返回202和fileId/statusUrl，自动进入异步校验 |
+| `POST /api/file/init` | 大文件分片模式：JSON 初始化会话并预留容量；返回 uploadId/fileId、partSize、partCount、状态、到期时间和查询入口 |
+| `PUT /api/file/part?id={uploadId}&part={part}` | `application/octet-stream` 原始字节；片号从 1 开始；必填 `X-Part-SHA256`；服务端逐字节校验长度和 SHA-256，64KiB 缓冲写盘 |
+| `GET /api/file/parts?id={uploadId}&after=0&limit=100` | 返回已确认片的 partNumber/size/sha256；按片号游标分页，最多 100 片 |
+| `POST /api/file/complete?id={uploadId}` | 无正文；检查片数和实际字节总数，置 FINALIZING 返回 202；后台合并、校验、检查格式及运行配置的扫描器 |
+| `POST /api/file/submit?id={uploadId}` | JSON 业务意图；可在上传结束前调用；预先持久化 messageId，READY 后原子建立消息、检查点和所有目标任务 |
+| `GET /api/file/status?id={uploadId}` | 文件状态、confirmedBytes/completedParts、逐目标投递状态及独立 businessStatus/businessRef；不返回物理路径和凭据 |
+| `GET /api/file/page?limit=20&offset=0` | 服务端分页，limit 为 1～100，offset 不超过 1000000；当前服务端授权范围内计数与查询 |
+| `POST /api/file/batch` | JSON `{"uploadIds":["..."]}`；1～100 个不重复 ID，一次验证全部归属；任一 ID 不可访问即整批 404 |
+| `DELETE /api/file/abort?id={uploadId}` | 取消未提交且尚未进入 FINALIZING/READY 的上传；物理清理后释放配额，不直接删除已被业务引用的原文 |
+| `GET/HEAD /api/file/content?id={uploadId}` | 就绪文件鉴权回读，支持单 Range、后缀 Range、ETag 和 If-Range；无权限 404，非法范围 416，附件方式返回 |
+| `POST /api/file/receipt?id={uploadId}` | 已指定接收方身份回执；校验 deliveryId、目标、传输 SUCCEEDED、文件摘要和幂等键；业务状态为 ACCEPTED/REJECTED |
+
+这些附件资源位于「02.附件传输」。已有调用可沿用 `/api/v1/file-uploads` 的原 HTTP 方法、路径参数和响应链接。新请求使用 `/api/file`，响应中的状态和内容链接也使用该分组。定位旧请求的上传 ID 与片号时，以路径中的值为准。
 
 整文件默认上限20MiB，由 `relay.files.single-upload-max-bytes` 配置，并同时满足字段绑定集合的大小和格式限制；超限返回413 `SINGLE_UPLOAD_TOO_LARGE`。调用方只传 `datasourceId、tableName、fieldName、fileName` 和原始文件正文，不再传 `collectionId、size、sha256`，旧参数会被拒绝。文件名须URL编码，不接受租户或目标地址。服务端先按可信配置校验数据源、表、字段和调用方授权，再以64KiB缓冲有界暂存、统计实际字节数并计算SHA-256，支持没有Content-Length的流；空文件、超限、断线和长度不符会清理暂存。接收阶段不占用长数据库事务，暂存并发受max-streams限制，额外临时磁盘上界为max-streams × single-upload-max-bytes，并预留磁盘安全余量；启动持有节点锁后清理断电遗留的incoming文件。测得大小后才创建持久会话和两倍大小的配额预留，复用原有分片落盘、异步格式/扫描、下载和业务提交机制。该方案增加一次有界磁盘拷贝，以避免整文件占用堆内存；大文件仍走原分片续传协议。重复请求比较服务端计算的实际正文摘要，同键不同文件409；中断后使用相同幂等键重发整文件，两种模式不能混用同一初始化幂等键。
 
@@ -271,7 +277,7 @@ flowchart LR
 
 受理前 `/messages/{messageId}` 返回 WAITING_FILE 或明确的终态；READY 并正式建任务后兼容原消息查询。状态页首选会话 statusUrl，能同时看到文件校验、各目标传输及业务回执。Kafka 消息包含 schemaVersion、messageId、deliveryId、fileId、集合、大小、摘要、元数据和相对 contentUrl；接收方使用约定的海通 base URL 与其自身只读凭据获取文件，通知中没有密钥、私有磁盘路径或 Base64 原文。
 
-原 `/api/v1/data-push`、旧 `/files/{channel}` 和原通道路由保持原有语义。旧 BINARY 通道不会自动成为新的文件集合。平台 FILE_VERSION_REF、短时下载授权、`/file-push` 快捷入口、multipart 表单入口、批量业务提交和内部 FJGHCC 复制回调目前均未开放；默认使用 `/api/v1/file-uploads/single` 原始字节整文件接口；大文件保留原分片协议。
+原 `/api/v1/data-push`、旧 `/files/{channel}` 和原通道路由保持原有语义。旧 BINARY 通道不会自动成为新的文件集合。平台 FILE_VERSION_REF、短时下载授权、`/file-push` 快捷入口、multipart 表单入口、批量业务提交和内部 FJGHCC 复制回调目前均未开放；默认使用 `/api/file/single` 原始字节整文件接口；大文件保留原分片协议。
 
 ### 5. 大文件上传与存储
 
@@ -751,8 +757,8 @@ GET  /api/v1/messages/{messageId}
 POST /api/v1/files/{channel}
 GET  /api/v1/files/{fileId}
 POST /api/v1/actions/{code}
-GET  /internal/v1/exchange-logs?from=<UTC毫秒>&to=<UTC毫秒>&protocol=HTTP
-GET  /internal/v1/reconciliation/summary?from=<UTC毫秒>&to=<UTC毫秒>
+GET  /internal/v1/logs?from=<UTC毫秒>&to=<UTC毫秒>&protocol=HTTP
+GET  /internal/v1/reconcile?from=<UTC毫秒>&to=<UTC毫秒>
 GET  /internal/v1/openapi
 ```
 
@@ -763,6 +769,20 @@ GET  /internal/v1/openapi
 `/api/v1/simple/log` 暂作为兼容别名保留，新接入不得再使用它们。
 
 日志查询最多200条/页；单次时间窗最长31天、左闭右开。数据库中的业务时间字段保留来源原始时间文本，不擅自推定时区。
+
+运行管理使用以下地址，须提供 `X-Admin-Key`。旧地址仍使用原 HTTP 方法进入同一权限检查和处理脚本。旧地址中的路径参数优先于同名查询参数。
+
+| 方法 | 现用地址 | 兼容地址 |
+| --- | --- | --- |
+| GET | `/internal/v1/config` | `/internal/v1/config-summary` |
+| POST | `/internal/v1/retry?id=…` | `/internal/v1/deliveries/{id}/retry` |
+| POST | `/internal/v1/resolve?id=…` | `/internal/v1/deliveries/{id}/resolve` |
+| POST | `/internal/v1/fileretry?id=…` | `/internal/v1/files/{id}/retry` |
+| POST | `/internal/v1/scan?route=…` | `/internal/v1/ftp-scans/{route}` |
+| GET | `/internal/v1/health?name=…` | `/internal/v1/connectors/{name}/health` |
+| GET | `/internal/v1/payload?id=…` | `/internal/v1/messages/{id}/payload` |
+| GET | `/internal/v1/logs` | `/internal/v1/exchange-logs` |
+| GET | `/internal/v1/reconcile` | `/internal/v1/reconciliation/summary` |
 
 
 <a id="overview--7-日志和对账边界"></a>
@@ -1550,7 +1570,7 @@ Body 必填
 发行包启动后，Magic-API 会在 `03.FTP诊断` 分组中自动增加以下接口：
 
 ```text
-POST /ftp-diagnostics/probe
+POST /ftp/connect/probe
 ```
 
 这是一个有副作用的运维接口：它可以按需创建目录、上传一个随机命名的文本测试文件、回读校验，并在默认情况下删除该测试文件。因此仅接受管理员密钥，不接受普通 `X-Api-Key`。
@@ -1688,15 +1708,15 @@ LIMIT 100;
 
 <a id="guide-89fdbceb"></a>
 
-## Magic-API：02.零信任网关对接
+## Magic-API 零信任网关对接
 
 `haitong-data-pull` 在启动时把下列接口初始化到 `haitong.ht_magic_api_file`。该表是本服务唯一的 Magic-API 资源库，不使用本地 `data/magic-api` 文件夹，也不能与数据元素平台的 `baseline.api_file_t` 共用。若已在编辑器中修改过同名接口，后续升级不会覆盖数据库中的现有记录。
 
 | 编辑器分组 | 方法和路径 | 用途 |
 | --- | --- | --- |
-| `02.零信任网关对接` | `GET /gateway/config-check` | 只读检查零信任网关部署配置，绝不返回密钥或令牌。 |
-| `02.零信任网关对接` | `POST /gateway/token-status` | 检查 OAuth2 `client_credentials` 令牌可用性；`{"dryRun":true}` 只做本地检查。 |
-| `02.零信任网关对接` | `POST /gateway/data-push` | 转发表批次至已配置的零信任网关；`dryRun=true` 不会产生外部调用。 |
+| `01.零信任网关对接` | `GET /gateway/config/check` | 只读检查零信任网关部署配置，绝不返回密钥或令牌。 |
+| `01.零信任网关对接` | `POST /gateway/token/status` | 检查 OAuth2 `client_credentials` 令牌可用性；`{"dryRun":true}` 只做本地检查。 |
+| `01.零信任网关对接` | `POST /gateway/data/push` | 转发表批次至已配置的零信任网关；`dryRun=true` 不会产生外部调用。 |
 
 编辑器地址为 `http://<host>:18083/api/web/index.html#/home`。资源配置固定为：
 
@@ -1716,7 +1736,7 @@ magic-api:
 ### 认证和安全边界
 
 - 编辑器使用 `HAITONG_MAGIC_EDITOR_USERNAME`（默认 `haitong-admin`）和必须设置的 `HAITONG_MAGIC_EDITOR_PASSWORD`。将编辑器限制在运维网络，不能对公网开放。
-- 三个业务路由遵循海通服务的访问控制，需要有效 `X-Api-Key`；`POST /gateway/data-push` 另外必须传递 `Idempotency-Key`。
+- 三个业务路由遵循海通服务的访问控制，需要有效 `X-Api-Key`；`POST /gateway/data/push` 另外必须传递 `Idempotency-Key`。
 - 外部 OAuth2 地址、client ID、client secret、调用方 IP 都仅取自 `relay.zero-trust-gateway` 配置。`client-secret` 固定通过 `env:HAITONG_ZERO_TRUST_CLIENT_SECRET` 解析，绝不写入 Magic 脚本、日志或接口响应。
 
 
@@ -1738,7 +1758,7 @@ relay:
       System_Code: "<按网关要求填写>"
 ```
 
-设置 `enabled=true` 前必须取得网关所有者的授权资料。接口 `config-check` 会显示缺失项；尚未就绪时 `token-status` 和 `data-push` 的 dry run 会返回诊断信息而不访问外部服务。
+设置 `enabled=true` 前必须取得网关所有者的授权资料。接口 `/gateway/config/check` 会显示缺失项；尚未就绪时令牌检查和网关推送的 dry run 会返回诊断信息而不访问外部服务。
 
 
 <a id="guide-89fdbceb--调试示例"></a>
@@ -1746,16 +1766,16 @@ relay:
 ### 调试示例
 
 ```http
-GET /gateway/config-check
+GET /gateway/config/check
 X-Api-Key: <海通调用方密钥>
 
-POST /gateway/token-status
+POST /gateway/token/status
 Content-Type: application/json
 X-Api-Key: <海通调用方密钥>
 
 {"dryRun": true}
 
-POST /gateway/data-push
+POST /gateway/data/push
 Content-Type: application/json
 X-Api-Key: <海通调用方密钥>
 Idempotency-Key: gateway-push-20260917-001
@@ -1867,7 +1887,7 @@ INGESTED是文件数据已接管；COMPLETED在状态查询中根据全部关联
 
 日志用于还原各次尝试，不能SUM日志行数作为消息总数。摘要有三层：原始输入、规范化输出、协议实际字节（如JSONL增加换行）。只有约定相同内容口径的摘要才可比较。
 
-管理接口GET /internal/v1/exchange-logs提供最多200条/页查询。GET /internal/v1/reconciliation/summary提供实时汇总；from/to为UTC毫秒，最多31天。多条SQL之间仍可能有任务状态变化，因此provisional=true，不是冻结报表。
+管理接口 `GET /internal/v1/logs` 每页最多 200 条。`GET /internal/v1/reconcile` 提供实时汇总，`from` 和 `to` 使用 UTC 毫秒，区间最长 31 天。多条 SQL 之间仍可能有任务状态变化，因此响应标记 `provisional=true`。
 
 
 <a id="guide-81a7266f--9-完整业务对账的扩展设计本版未实现"></a>
@@ -2177,18 +2197,20 @@ Content-Type: application/json
 
 ### Magic API 调试入口
 
-服务启动后，Magic 编辑器中的 **04.数据推送调试** 提供：
+服务启动后，Magic 编辑器中的 **03.数据推送调试** 与 **02.文件传输诊断** 提供：
 
-- `POST /push-operations/data-push`：与正式 `/api/v1/data-push` 复用同一 Magic 推送业务函数；
-- `POST /push-operations/message-status`：查询当前调用方拥有的异步消息状态；
-- `POST /push-operations/template-test`：模板配套测试入口，编辑器中预填 `push_template_demo` 的五字段请求示例及必需请求头；与正式推送接口使用同一鉴权、登记规范、幂等和异步投递逻辑；
-- `POST /ftp-diagnostics/probe`：使用服务器配置的 FTP 参数检查连接、目录、上传、回读和清理。
+- `POST /push/debug/send`：与正式 `/api/v1/data-push` 复用同一 Magic 推送业务函数；
+- `POST /push/message/status`：查询当前调用方拥有的异步消息状态；
+- `POST /push/template/test`：模板配套测试入口，编辑器中预填 `push_template_demo` 的五字段请求示例及必需请求头；与正式推送接口使用同一鉴权、登记规范、幂等和异步投递逻辑；
+- `POST /ftp/connect/probe`：使用服务器配置的 FTP 参数检查连接、目录、上传、回读和清理。
+
+零信任网关、FTP 诊断和数据推送调试共七个入口已迁到上述命名路径。旧地址按原 HTTP 方法进入同一个脚本，使用相同的鉴权、业务处理和响应。接入方使用本节列出的路径。
 
 Magic API 保存通道选择、登记授权、字段校验、配置同步、密钥签发及受理编排等业务规则；Java 提供认证适配、事务队列、文件流、协议客户端和异步执行等通用技术能力。
 
 模板配套示例表为 `push_template_demo`：`record_id`（字符串64、主键、必填）、`business_no`（字符串64、必填）、`occur_time`（日期时间、时间戳及业务时间、必填）、`title`（字符串200、必填）、`attachment_file_id`（字符串64、可空、关联附件）。附件上限10MB，允许 `jpg,jpeg,png,pdf`。登记模板只定义字段和限制，不填写业务记录或附件原文。编辑器示例中的 `datasourceId` 为本机联调源，其他环境须替换成实际已登记的数据源ID，并使用该源第五步签发的 `X-Api-Key`，不能使用编辑器密码、管理员密钥或节点同步密钥代替。
 
-验证顺序为：导入模板并完成表与数据源登记 → 节点管理选择已启用的数据推送节点并“同步配置” → 第五步获取数据源业务密钥 → 如有附件，调用 `POST /api/v1/file-uploads/single` 上传原始字节并查询至 `READY` → 将返回的 `fileId` 填入 `attachment_file_id` → 在 `03.模板配套推送测试` 中发送记录 → 在 `02.消息状态查询` 中核对最终状态。节点同步只下发表字段规范及调用方授权，不发送业务数据、不签发或轮换密钥，也不自动创建文件集合。附件集合及同源调用方须由节点配置显式维护。
+导入模板并完成表与数据源登记后，在节点管理选择已启用的数据推送节点并同步配置，在第五步获取数据源业务密钥。如有附件，调用 `POST /api/file/single` 上传原始字节并查询至 `READY`，再将 `fileId` 填入 `attachment_file_id`。通过 `POST /push/template/test` 发送记录，在 `POST /push/message/status` 核对最终状态。节点同步只下发表字段规范及调用方授权，密钥签发、文件集合维护和业务投递均通过各自的入口操作。附件集合及同源调用方须由节点配置显式维护。
 
 返回 `ACCEPTED` 表示已经受理；须继续查询到 `SUCCEEDED` 并核对 `FILE_VERIFIED` 才表示 FTP 文件已核验发布；启用旧标记兼容模式或文件集合推送时，返回 `FILE_AND_MARKER_VERIFIED`。`relay.worker.enabled=false` 时消息只会等待，不会自动投递；启用前应核查已有待处理队列。相同 `Idempotency-Key` 和正文返回同一消息，修改正文时使用新的幂等键。附件原文使用独立上传幂等键，不能将Base64或文件字节放进表记录。
 

@@ -1,0 +1,7 @@
+{
+  "id": "haitong-attachment-api",
+  "name": "02.附件传输",
+  "type": "api",
+  "parentId": "haitong-ingress-api",
+  "path": "/file"
+}

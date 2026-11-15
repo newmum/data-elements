@@ -42,7 +42,7 @@ import java.util.Base64
 // fieldName：登记模板标注“关联附件”的字段英文名 attachment_file_id。
 // fileName：上游文件原始名称；扩展名需符合该字段登记的允许格式。
 var method = 'POST'
-var url = 'http://127.0.0.1:18083/api/v1/file-uploads/single'
+var url = 'http://127.0.0.1:18083/api/file/single'
     + '?datasourceId=2113960660861288448'
     + '&tableName=validation_push_event'
     + '&fieldName=attachment_file_id'
