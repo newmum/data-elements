@@ -194,7 +194,7 @@ NiFi 与业务接口使用数据平台的登录会话。独立打开海通时，
 
 NiFi 流程本身不保存在 IndexedDB；本地工作区只保存可选的 `nifiPipelineId` 关联。若从另一浏览器、另一租户或已删除的本地任务进入，仍应以 NiFi 后端流程列表为准。登录到不同租户时不能因为流程名称相同而复用其他租户的流程。
 
-集成平台总览由 Magic API 直接提供 `GET /nifi/api/pipelines/runtime-overview` 及对应 `HEAD`。内部 Magic 函数 `@/common/nifiRuntimeOverview` 从当前认证行业库统计有效流程总数、运行数和失败数，并读取按任务名称、最近运行时间或更新时间排序的前五条。统计与明细各执行一次查询。明细空值末置，同值按流程 ID 排序。运行和失败取已保存的流程状态，页面刷新无需连接 NiFi 或来源库。GET 保留原始 JSON 响应，HEAD 返回对应状态和响应头。
+集成平台总览由 Magic API 直接提供 `GET /nifi/api/pipelines/runtime-overview` 及对应 `HEAD`。两者共用 `@/common/nifiRuntimeOverview`，依次读取请求参数、校验可信行业库和排序字段、统计有效流程总数、运行数和失败数，再读取按任务名称、最近运行时间或更新时间排序的前五条。统计与明细各执行一次查询。明细空值末置，同值按流程 ID 排序。运行和失败取已保存的流程状态，页面刷新无需连接 NiFi 或来源库。GET 保留原始 JSON 响应，HEAD 返回对应状态和响应头。
 
 共享平台的海通流程页和万象血缘页使用 Magic API 直接提供的 `GET /nifi/api/pipelines/page`。内部函数 `@/common/nifiPipelinePage` 从可信租户读取有效画布，按 `q` 在名称和说明中做字面匹配，空关键词显示全部有效流程。支持名称、节点数、创建及更新时间排序，默认更新时间降序，空值末置，同值按流程 ID 升序。节点数由数据库按旧 DSL 的节点展开规则计算后参与排序。默认每页 20 条，最多 100 条，越界页返回空 `list` 并保留请求页码和 `total`。非空页用一条计数和一条分页查询，空页只查总数。Magic 延续原参数转换和原始 JSON，提供对应的 `HEAD`。轻量安装包使用其独立后端的同名路由。
 
@@ -203,6 +203,8 @@ NiFi 流程本身不保存在 IndexedDB；本地工作区只保存可选的 `nif
 `GET /nifi/api/pipelines` 和 `GET /nifi/api/pipelines/runtime-list` 及其 HEAD 由 Magic 直接提供。两个兼容查询均保留完整数组，只执行一次当前租户的结构化查询。游标逐行读取画布和节点映射，略过保存内容损坏的流程，并将未记录更新时间的流程放在末尾。普通列表返回摘要，海通工具栏的「打开流程」使用此入口。运行列表在关闭游标后，按需解析 NiFi 根组标识并读取一次递归快照，只有租户可见且已部署的流程才添加运行指标或对应错误。分页页面独立使用 `/nifi/api/pipelines/page`。
 
 打开已保存画布使用 Magic `GET /nifi/api/pipelines/{id}`，并提供对应 HEAD。Magic 按当前认证行业租户和路径 ID 执行一次结构化查询。返回原始画布 JSON，保持持久化 `designHash`、时间及实际来源节点，可见范围外或无法解析的流程返回空体 404。Hive 画布投影沿用现行规则。读取无写入、元数据探查或 NiFi 请求，同一路径的 POST 保存沿用原契约。
+
+共享平台使用 Magic 提供同一流程下的 `GET /ui-link`、`GET /status` 和 `GET /status/page` 及对应 HEAD。原生页面地址由现有部署关联决定，未部署返回 400。运行状态从现有部署指纹、本地错误和租户运行快照组装，读取时不改写已保存状态。处理器分页在当前流程的一次 NiFi 递归快照内排序，默认 20 条，最多 100 条。三个入口分别只执行一次按当前租户和流程 ID 的结构化查询，跨租户、已删除或损坏的流程返回空体 404。
 
 
 <a id="overview--验证与结构"></a>
@@ -1579,7 +1581,7 @@ LIVE_BATCH在两次执行间被外部修改时不能强求旧结果，测试需�
 | [画布编辑器](../data-elements-haitong/src/nifi/panels/FieldMappingEditor.tsx:120) | 10个UI函数、条件配置、模板/预览/编译入口；1851附近为合成样例 |
 | [ODS模板工具](../data-elements-haitong/src/nifi/utils/fieldMapping.ts:24) | 系统主键生成模板，与编辑器另一模板存在差异 |
 | [映射服务](../data-elements-parent/src/main/java/com/linewell/dataelement/integration/nifi/canvas/mapping/FieldMappingService.java:763) | 编译分支、函数白名单、预览实现和全局策略差距；1536附近为51函数名单 |
-| [映射接口](../data-elements-parent/src/main/java/com/linewell/dataelement/integration/nifi/canvas/controller/FieldMappingController.java:22) | 六个现有接口、响应及公开字典摘要 |
+| [映射接口](../magic/api/14.NiFi流程接口/01.接口/77.查询字段映射能力.ms) | 原 `/nifi/api/field-mapping` 的能力、校验、预览、推荐、编译、旧规则转换和兼容字典模板 |
 | [NiFi发布编译](../data-elements-parent/src/main/java/com/linewell/dataelement/integration/nifi/canvas/compile/DslCompiler.java:1866) | 单值/多值展开链、组件数量；2797附近为来源下推边界 |
 | [多值运行脚本](../data-elements-parent/src/main/resources/nifi/multi-value-translation.groovy:43) | 100记录、500键、重复键与部分命中语义 |
 | [多值脚本测试](../data-elements-parent/src/test/java/com/linewell/dataelement/integration/nifi/canvas/compile/RecordLookupScriptTest.java:25) | 20/100/201记录与元数据/查询次数断言；本次未执行 |
@@ -1636,7 +1638,7 @@ LIVE_BATCH在两次执行间被外部修改时不能强求旧结果，测试需�
 | 共享 Java 内核 | 编译后不可变计划、SHA-256 指纹、目标依赖排序及循环检测、固定时钟与身份、类型化逐字段步骤链 | `data-elements-parent/src/main/java/com/linewell/dataelement/mapping/core/` |
 | 规则与函数 | 原值、常量、拼接、条件、受限表达式、枚举/强制对标、类型转换、日期解析/格式化、身份证转换/校验、系统值；53 个直接值函数，UUID/表达式/码表通过编排算子调用 | `MappingEngine.java`、`FunctionRegistry.java`、`Expressions.java` |
 | 外部码表 | 登记数据源/表/列批量授权，保留 schema、复合键、静态过滤、空标签和重复键策略；按字典和依赖阶段合并编码；拆分顺序和重复值保留 | `RegisteredDictionaryCatalog.java`、`BatchDictionaryReader.java` |
-| 正式服务 | capabilities、validate、compile、preview 复用同一个内核；编译返回 ENGINE_PLAN，转换 query 为 null；正式服务不可用时拒绝假预览成功 | `UnifiedMappingService.java`、`FieldMappingController.java` |
+| 正式服务 | capabilities、validate、compile、preview 复用同一个内核；编译返回 ENGINE_PLAN，转换 query 为 null；正式服务不可用时拒绝假预览成功 | 共享 Magic 字段映射接口、`UnifiedMappingService.java` |
 | 画布编辑 | 旧配置明确升级为 2.0；规则表格、服务端草稿排序/分页、批量启停、来源字段选取、目标逻辑类型/长度/精度、步骤排序、常用策略控件及高级类型化 JSON；手工样本最多 100 行 | `FieldMappingEditor.tsx`、`UnifiedFieldMappingEditor.tsx` |
 | 数据接入 | 新生成映射采用 JAVA_RECORD，并将目标物理类型及非空要求纳入规则；登记枚举、字典条件、日期标准和 ODS 系统表达式仍通过原生成链承接 | `magic/api/03.数据接入/13.按来源表补齐接入任务.ms` |
 | 配置投影 | 画布 2.0 为权威配置；映射表以 pipelineId/nodeId/ruleId 标识完整投影或摘要，批量预取后写入；移除节点会清理其投影，旧 Binder 不回填覆盖 2.0 规则 | `MappingProjectionService.java`、`AccessTaskFieldMappingBinder.java` |
@@ -1893,14 +1895,16 @@ LIVE_BATCH在两次执行间被外部修改时不能强求旧结果，测试需�
 
 | 模块 | 可维护源码 |
 | --- | --- |
-| 版本表、历史与当前发布引用 | `integration/nifi/canvas/mapping/MappingVersionStore.java`；各行业 `db/<实际库>/init.sql` |
-| 模板、快照、Schema、取样与升级接口 | `integration/nifi/canvas/controller/MappingAssetController.java` |
+| 计划归档、发布写入和快照批量读取 | `integration/nifi/canvas/mapping/MappingVersionStore.java`；各行业 `db/<实际库>/init.sql` |
+| 计划历史和详情、模板读取和导入、版本保留策略、字典候选表和字段 | 共享 Magic 的 `/nifi/api/field-mapping`，计划和模板版本正文按当前租户复核现行引用 |
+| 模板保存、字典快照、Schema 契约、脱敏取样 | 共享 Magic 的 `/nifi/api/field-mapping`，模板和快照共用不可变版本写入 |
+| 计划恢复、运行升级与发布版本启动 | 共享 Magic 的 `/nifi/api/field-mapping`，入口在同一 NiFi 锁内校验当前租户、画布和版本 |
 | 物理结构与受控取样 | `integration/nifi/canvas/mapping/RegisteredMappingSchemaService.java` |
 | 统一编译、快照绑定和正式预览 | `integration/nifi/canvas/mapping/UnifiedMappingService.java`、`mapping/core/PreviewMasking.java` |
 | 函数参数能力 | `mapping/core/FunctionRegistry.java`、`FunctionArgumentSchema.java` |
 | 字典模式与完整快照构建 | `mapping/core/DictionaryPolicyProvider.java`、`mapping/jdbc/BatchDictionaryReader.java` |
 | 选定节点升级与编译 | `integration/nifi/canvas/mapping/MappingUpgradeService.java`、`compile/DslCompiler.java` |
-| 已发布图启动与并发更新 | `integration/nifi/canvas/mapping/PublishedMappingLifecycleService.java`、`pipeline/PipelineRepository.java`、`lifecycle/SerializedNifiMutation.java` |
+| 已发布图启动与并发更新 | `integration/nifi/canvas/mapping/PublishedMappingLifecycleService.java`、`pipeline/PipelineRepository.java`、`lifecycle/NifiMutationAspect.java` |
 | NiFi 运行上下文和敏感快照属性 | `mapping-extension/runtime/.../HaitongTransformRecord.java`、`JdbcHaitongDictionaryService.java` |
 | 海通操作界面 | `src/nifi/panels/UnifiedFieldMappingEditor.tsx`、`MappingAssetsPanel.tsx`、`src/nifi/api/fieldMapping.ts` |
 
@@ -2747,13 +2751,13 @@ NiFi 对自动精度小数在每个既有有界窗口内计算一个能承载所
 
 共享平台的 `POST /nifi/api/pipelines/template` 和 `POST /nifi/api/pipelines/template/node` 在生成 API 来源配置时共用 `@/common/nifiApiTemplateConfig`。接口完成租户和资产读取后，函数使用已有的数据源配置及表名匹配 API 定义，输出地址、方法、请求体、响应提取、分页、增量、超时和调度字段。保留只有一条定义时的历史回退，并从画布输出中移除认证等敏感请求头。缺失或无效的可选 JSON 配置走原有默认规则，显式 JSON `null` 也按缺失处理。模板转换只处理内存数据，无额外 SQL 或 NiFi 请求。
 
-画布创建入口 `POST /nifi/api/pipelines` 携带 `catalogTid` 时，按保存新流程、关联接入任务、尝试绑定规则的顺序执行。内部 Magic 函数 `@/common/bindCanvasApiPullRules` 确认当前租户的有效来源为 API 拉取后，按租户、来源和表更新有效规则，沿用 `system` 和应用时钟审计。Java 为函数提供独立事务，绑定成功后单独提交，绑定出错回滚其事务并保留画布保存结果。已有画布直接保存设计，任务关联失败直接结束创建，两种情况都不调用绑定。对外的规则绑定接口按其原有的权限、锁和数据库时钟契约执行。
+画布创建入口 `POST /nifi/api/pipelines` 携带 `catalogTid` 时，由 Magic 校验当前租户的目录或来源表范围，按保存新流程、关联接入任务、尝试绑定规则的顺序执行。创建脚本在独立事务中确认有效来源为 API 拉取后，按租户、来源和表更新有效规则，沿用 `system` 和应用时钟审计。绑定失败时回滚该事务并保留画布和任务。已有画布直接保存设计，任务关联失败时画布回滚，这两种情况均不执行绑定。对外的规则绑定接口按其原有的权限、锁和数据库时钟契约执行。
 
 创建画布、构建部署候选和完整部署共用内部 Magic 函数 `@/common/ensureNifiCatalogAccessTask`。按当前租户优先复用已经绑定该流程的活动任务，再按目录匹配未绑定任务。目录已经被其他流程占用时沿用原错误。DSL 中的来源、目标及主键字段沿用已有别名优先级。首建任务从有效目录及其扩展属性读取，澄天缺少旧 `da_asset_t` 视图仍可创建。传入现用来源表标识时核查其有效数据源与租户，并识别已验证的来源目录。独立画布保留原有关联。创建时任务写入与画布同事务，部署沿用原时序。目录属性及 Elasticsearch 投影继续通过已有回调更新。
 
-`POST /ods/registrationAccessControl` 接受当前数据源、表ID、任务ID和`start|stop`。先验证任务属于当前表，再调用单项技术适配`taskLifecycle`；不接受客户端流程ID。此登记入口的“启动”包含按需自动部署：先由既有生命周期复核当前配置；仅遇到`409/deployment-required`时，调用同一`PipelineRunController.deploy`部署当前已保存配置，成功后再启动。已部署且版本一致时直接复用现有运行图。部署失败立即中止，不再启动；运行状态无法确认或生命周期正在处理时不可操作。不传`force`或`confirmCleanup`，不绕过队列、水位、配置和清空确认检查。
+`POST /ods/registrationAccessControl` 接受当前数据源、表 ID、任务 ID 和 `start|stop`。先核对当前表与任务的关联，再用已授权的流程 ID 调用画布共用的 `@/common/nifiStartCanvas` 或 `@/common/nifiStopCanvas`。收到 `409/deployment-required` 时由 `@/common/nifiDeployCanvas` 部署已保存配置，部署成功后才启动。启停沿用共享写锁、已部署版本和清空确认。登记入口使用普通启动参数，部署和启动各自核验当前配置、队列和水位。
 
-`taskLifecycle.start`及普通技术启动接口本身仍保持只启动的语义，自动部署属于登记入口的业务编排。多个直接任务在弹框中逐项明确操作，不自动批量启停，也不控制下游分发任务。`dryRun=true`只返回授权验证和部署需求，不调用部署或NiFi。摘要增加`requiresDeployment`，未部署或已保存新版本可显示“部署并启动”；按钮操作期间防止重复确认和重复提交，执行超时为180秒，失败在对应卡片中保留提示并重新核对状态。
+普通启动使用当前绑定的原生组，按需部署由登记入口编排。弹框按明确选择的直接任务执行每次操作。`dryRun=true` 只返回授权与部署需求。摘要的 `requiresDeployment` 支持显示「部署并启动」，操作时防止重复确认和提交，执行超时为 180 秒。失败在对应卡片中显示，并重新读取状态。
 
 内部函数 `@/common/nifiTaskState` 同步启动、停止、失败状态和原生流程组关联。`PipelineRunController` 在原有流程锁和调用次序下调用，用可信行业租户、流程 ID 和有效标志一次更新关联任务。启动、停止分别维护对应的秒级运行时间，部署和失败分支可单独更新状态，解除部署时显式清空流程组。同步保留原更新人，记录应用更新时间。每次状态同步执行一次条件更新，业务函数无需预读，也不直接请求 NiFi。
 

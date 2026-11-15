@@ -64,14 +64,14 @@ class PipelineNativeLifecycleTest {
                             p.nifiProcessGroupId(), i.getArgument(1), p.lastDeployedHash(), p.lastDeployedAt(),
                             p.lastStoppedAt(), p.nodeMapping(), p.lastBulletinId())));
             var compiler = new DslCompiler(nifi, mock(ManifestRegistry.class), mock(FieldMappingService.class), mock(HiveModule.class));
-            var controller = new PipelineRunController(repo, compiler, nifi, mock(ErrorService.class),
-                    mock(PipelineTaskLifecycleSynchronizer.class), mock(PipelineRuntimeStatusResolver.class), groups,
-                    mock(TargetTableCleanupService.class));
-            assertThat(controller.deploy("one", null).getStatusCode().value()).isEqualTo(200);
+            var errors = mock(ErrorService.class);
+            var lifecycle = mock(PipelineTaskLifecycleSynchronizer.class);
+            var deployment = new NifiDeploymentMagicFixture(repo, compiler, nifi, errors, lifecycle, groups, mock(TargetTableCleanupService.class));
+            assertThat(deployment.deploy("one", null, false).getStatusCode().value()).isEqualTo(200);
             String firstGroup = pipelines.get("one").nifiProcessGroupId();
-            assertThat(controller.deploy("one", null).getStatusCode().value()).isEqualTo(200);
+            assertThat(deployment.deploy("one", null, false).getStatusCode().value()).isEqualTo(200);
             assertThat(pipelines.get("one").nifiProcessGroupId()).isEqualTo(firstGroup);
-            assertThat(controller.deploy("two", null).getStatusCode().value()).isEqualTo(200);
+            assertThat(deployment.deploy("two", null, false).getStatusCode().value()).isEqualTo(200);
             String taskParent = nifi.getProcessGroup(firstGroup).path("component").path("parentGroupId").asText();
             String sourceParent = nifi.getProcessGroup(taskParent).path("component").path("parentGroupId").asText();
             var tasks = nifi.listProcessGroups(sourceParent);
@@ -80,17 +80,17 @@ class PipelineNativeLifecycleTest {
             Pipeline old = pipelines.get("one");
             var invalid = new Pipeline.Dsl(2, List.of(new Pipeline.Node("invalid", "unknown", "invalid", "source", 0, 0, Map.of())), List.of());
             pipelines.put("one", withDsl(old, invalid));
-            assertThat(controller.deploy("one", null).getStatusCode().value()).isEqualTo(400);
+            assertThat(deployment.deploy("one", null, false).getStatusCode().value()).isEqualTo(400);
             String partialGroup = pipelines.get("one").nifiProcessGroupId();
             assertThat(partialGroup).isNotEqualTo(firstGroup);
             assertThat(nifi.listProcessGroups(taskParent)).hasSize(1);
             pipelines.put("one", withDsl(pipelines.get("one"), new Pipeline.Dsl(3, List.of(), List.of())));
-            assertThat(controller.deploy("one", null).getStatusCode().value()).isEqualTo(200);
+            assertThat(deployment.deploy("one", null, false).getStatusCode().value()).isEqualTo(200);
             assertThat(pipelines.get("one").nifiProcessGroupId()).isNotEqualTo(partialGroup);
             assertThat(nifi.listProcessGroups(taskParent)).hasSize(1);
-            assertThat(controller.undeploy("one").getStatusCode().value()).isEqualTo(200);
+            assertThat(deployment.undeploy("one").getStatusCode().value()).isEqualTo(200);
             assertThat(nifi.listProcessGroups(sourceParent).stream().map(g -> g.path("id").asText())).doesNotContain(taskParent);
-            assertThat(controller.undeploy("two").getStatusCode().value()).isEqualTo(200);
+            assertThat(deployment.undeploy("two").getStatusCode().value()).isEqualTo(200);
         } finally {
             nifi.cleanupProcessGroupTree(testRoot);
         }

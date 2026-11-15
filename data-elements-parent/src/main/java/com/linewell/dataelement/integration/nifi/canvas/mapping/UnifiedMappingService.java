@@ -119,11 +119,13 @@ public class UnifiedMappingService {
     }
     private static void renameDictionaryReferences(JsonNode node,Map<String,String> aliases){if(node.isArray()){node.forEach(child->renameDictionaryReferences(child,aliases));return;}if(!node.isObject())return;ObjectNode object=(ObjectNode)node;String id=object.path("dictionaryId").asText();if(aliases.containsKey(id))object.put("dictionaryId",aliases.get(id));JsonNode reference=object.path("definitionRef");if(reference.isObject()&&aliases.containsKey(reference.path("id").asText()))((ObjectNode)reference).put("id",aliases.get(reference.path("id").asText()));object.fields().forEachRemaining(entry->{if(!entry.getKey().equals("dictionaryBindings"))renameDictionaryReferences(entry.getValue(),aliases);});}
     private static void dictionaryReferences(JsonNode node,Set<String> ids){if(node.isArray()){node.forEach(child->dictionaryReferences(child,ids));return;}if(!node.isObject())return;if(node.hasNonNull("dictionaryId"))ids.add(node.path("dictionaryId").asText());if(node.path("definitionRef").isObject())ids.add(node.path("definitionRef").path("id").asText());node.fields().forEachRemaining(entry->dictionaryReferences(entry.getValue(),ids));}
-    public JsonNode buildSnapshot(ObjectNode definition,String name){ObjectNode draft=JSON.createObjectNode().put("schemaVersion","2.0");draft.putArray("rules");draft.putObject("dictionaryBindings").set("requested",definition);var compiled=compile(draft);var spec=compiled.plan().dictionaries().values().iterator().next();JsonNode binding=compiled.plan().document().path("dictionaryBindings").path(spec.id());try(var reader=new BatchDictionaryReader(id->pool(id,compiled.connections()).getConnection())){JsonNode payload=reader.snapshot(spec,binding.path("definitionHash").asText());return versions.saveResource("DICTIONARY_SNAPSHOT",name,binding,payload);}}
-    public Map<String,Object> compileResponse(JsonNode raw){
-        var plan=compileForEditing(raw).plan();Map<String,Object>result=new LinkedHashMap<>();result.put("mode","ENGINE_PLAN");result.put("query",null);result.put("finalQuery",null);result.put("lookups",List.of());result.put("executable",true);result.put("schemaVerification","REGISTERED_ONLY");
-        result.put("plan",Map.of("planVersion","1.0","engineVersion",MappingEngine.engineVersion(),"functionLibraryVersion",FunctionRegistry.libraryVersion(),"planHash",plan.hash(),"outputFields",plan.outputFields(),"outputTypes",plan.outputTypes(),"dictionaryGroupCount",plan.dictionaries().size(),"executionPlan",plan.document()));
-        result.put("nifiComponentConfig",Map.of("processorType","com.linewell.dataelement.nifi.HaitongTransformRecord","planHash",plan.hash()));return result;
+    /** Read an already-authorized dictionary through the mapping JDBC runtime. */
+    public JsonNode readSnapshot(Compiled compiled, String dictionaryId) {
+        var specification = compiled.plan().dictionaries().get(dictionaryId);
+        var definition = compiled.plan().document().path("dictionaryBindings").path(dictionaryId);
+        try (var reader = new BatchDictionaryReader(id -> pool(id, compiled.connections()).getConnection())) {
+            return reader.snapshot(specification, definition.path("definitionHash").asText());
+        }
     }
     public FieldMappingService.PreviewResponse preview(JsonNode raw,List<Map<String,Object>> sample){
         if(sample==null)sample=List.of();if(sample.size()>100)throw new MappingException("BUDGET_EXCEEDED","预览最多100行");RecordBudget.window(sample);var compiled=compileForEditing(raw);var plan=compiled.plan();JsonNode policies=plan.document().path("policies");
@@ -155,7 +157,6 @@ public class UnifiedMappingService {
     }
     java.sql.Connection openRegistered(String id,Map<String,Map<String,Object>>connections)throws java.sql.SQLException{return pool(id,connections).getConnection();}
     private static String text(Map<String,Object>cfg,String...keys){for(String key:keys){Object value=cfg.get(key);if(value!=null&&!value.toString().isBlank())return value.toString();}return "";}
-    public List<Map<String,Object>> capabilities(){List<Map<String,Object>>out=new ArrayList<>();for(String fn:FunctionRegistry.NAMES){String operator=switch(fn){case "uuid"->"SYSTEM_VALUE";case "codeTableLookup"->"LOOKUP";case "expression"->"EXPRESSION";default->"FUNCTION";};out.add(Map.of("name",fn,"version",FunctionRegistry.libraryVersion(),"previewSupported",true,"runtimeSupported",true,"implementation","JAVA_RECORD","operator",operator,"directFunction",operator.equals("FUNCTION"),"parameterSchema",FunctionArgumentSchema.parameters(fn),"additionalParametersAllowed",Set.of("coalesce","nvl").contains(fn)));}return out;}
     public FieldMappingService.ValidationResponse validateSchemas(JsonNode raw,List<FieldMappingService.FieldMeta>source,List<FieldMappingService.FieldMeta>target){
         return validateSchemas(compile(raw).plan(),source,target);
     }

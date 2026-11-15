@@ -34,7 +34,7 @@ public final class CanonicalMagicSources {
         return read(matches.getFirst());
     }
 
-    static String byPath(String relativePath, String metadataId) throws IOException {
+    public static String byPath(String relativePath, String metadataId) throws IOException {
         return read(new Entry(magicRoot(), relativePath, metadataId)).source();
     }
 

@@ -1,8 +1,6 @@
 package com.linewell.dataelement.integration.nifi.canvas.lifecycle;
 
 import com.linewell.dataelement.dataassets.runtime.DataAssetRuntimeAdapter;
-import com.linewell.dataelement.feature.dataaccess.infrastructure.persistence.entity.DataAccessAggTaskT;
-import com.linewell.dataelement.feature.dataaccess.infrastructure.persistence.service.IDataAccessAggTaskTService;
 import com.linewell.dataelement.integration.nifi.canvas.pipeline.Pipeline;
 import java.util.HashMap;
 import java.util.List;
@@ -18,16 +16,13 @@ import org.ssssssss.script.exception.MagicScriptException;
 public class PipelineTaskLifecycleSynchronizer {
 
     private static final Logger log = LoggerFactory.getLogger(PipelineTaskLifecycleSynchronizer.class);
-    private final IDataAccessAggTaskTService taskService;
     private final DataAssetRuntimeAdapter dataAssetRuntimeAdapter;
     private final MagicAPIService magic;
 
     public PipelineTaskLifecycleSynchronizer(
-            IDataAccessAggTaskTService taskService,
             DataAssetRuntimeAdapter dataAssetRuntimeAdapter,
             MagicAPIService magic
     ) {
-        this.taskService = taskService;
         this.dataAssetRuntimeAdapter = dataAssetRuntimeAdapter;
         this.magic = magic;
     }
@@ -65,27 +60,6 @@ public class PipelineTaskLifecycleSynchronizer {
         }
     }
 
-    public void unlinkCatalogTasks(String pipelineId) {
-        List<DataAccessAggTaskT> tasks = taskService.list(new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<DataAccessAggTaskT>()
-                .eq(DataAccessAggTaskT::getPipelineId, pipelineId).eq(DataAccessAggTaskT::getIsDel, 0));
-        for (DataAccessAggTaskT task : tasks) {
-            if (isBlank(task.getDataCatalogId())) continue;
-            clearLegacyCatalogLink(task, pipelineId);
-        }
-    }
-
-    /** Clears the optional legacy mirror without making pipeline deletion depend on it. */
-    private void clearLegacyCatalogLink(DataAccessAggTaskT task, String pipelineId) {
-        try {
-            Map<String, Object> catalog = dataAssetRuntimeAdapter.queryById(task.getDataCatalogId());
-            if (catalog == null || !task.getTid().equals(stringValue(catalog.get("accessTaskId")))) return;
-            dataAssetRuntimeAdapter.propBatchSaveOrUpdate(List.of(task.getDataCatalogId()), Map.of("accessTaskId", ""));
-        } catch (Exception exception) {
-            log.info("Skip legacy asset-catalog task unlink for pipeline {} catalog {}: {}",
-                    pipelineId, task.getDataCatalogId(), exception.getMessage());
-        }
-    }
-
     /** Runs the Magic write at the caller's existing lifecycle and transaction boundary. */
     public void syncState(String pipelineId, String operation, Object value) {
         Map<String, Object> parameters = new HashMap<>();
@@ -102,10 +76,6 @@ public class PipelineTaskLifecycleSynchronizer {
             if (failure.getCause() instanceof RuntimeException original) throw original;
             throw failure;
         }
-    }
-
-    private static boolean isBlank(String value) {
-        return value == null || value.isBlank();
     }
 
     private static String stringValue(Object value) {

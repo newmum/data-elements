@@ -162,21 +162,21 @@ class NifiPipelineLegacyListMagicTest {
                 "jdbc:h2:mem:nifi_list_" + UUID.randomUUID() + ";MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1"));
         final StructuredTableReadMagicModule tableRead = new StructuredTableReadMagicModule(jdbc);
         final NifiClient nifi = mock(NifiClient.class);
-        final MagicScript load = script(COMMON + "47.NiFi已保存流程列表.ms", "nifi_saved_canvas_rows_v1",
+        final MagicScript load = script(COMMON + "46.NiFi已保存流程列表.ms", "nifi_saved_canvas_rows_v1",
                 "com.fasterxml.jackson.databind.ObjectMapper as objectMapper", "tableRead", "tenantRuntime");
-        final MagicScript respond = script(COMMON + "49.NiFi流程列表HTTP响应.ms", "nifi_pipe_list_response_v1");
-        final MagicScript list = script(COMMON + "48.NiFi流程列表响应.ms", "nifi_pipe_list_http_v1",
+        final MagicScript respond = script(COMMON + "48.NiFi流程列表HTTP响应.ms", "nifi_pipe_list_response_v1");
+        final MagicScript list = script(COMMON + "47.NiFi流程列表响应.ms", "nifi_pipe_list_http_v1",
                 "'@/common/nifiSavedCanvasRows' as loadSavedCanvases", "'@/common/nifiPipelineListResponse' as respond");
-        final MagicScript runtime = script(COMMON + "50.NiFi流程运行列表响应.ms", "nifi_pipe_runtime_list_http_v1",
+        final MagicScript runtime = script(COMMON + "49.NiFi流程运行列表响应.ms", "nifi_pipe_runtime_list_http_v1",
                 "'@/common/nifiSavedCanvasRows' as loadSavedCanvases", "'@/common/nifiPipelineListResponse' as respond",
                 "com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient as nifi");
-        final MagicScript listGet = script(API + "08.查询流程列表.ms", "nifi_pipe_list_get_v1",
+        final MagicScript listGet = script(API + "07.查询流程列表.ms", "nifi_pipe_list_get_v1",
                 "'@/common/nifiPipelineListHttp' as readPipelines");
-        final MagicScript listHead = script(API + "09.核验流程列表.ms", "nifi_pipe_list_head_v1",
+        final MagicScript listHead = script(API + "08.核验流程列表.ms", "nifi_pipe_list_head_v1",
                 "'@/common/nifiPipelineListHttp' as readPipelines");
-        final MagicScript runtimeGet = script(API + "01.流程管理/19.查询流程运行列表.ms", "nifi_pipe_runtime_list_get_v1",
+        final MagicScript runtimeGet = script(API + "28.查询流程运行列表.ms", "nifi_pipe_runtime_list_get_v1",
                 "'@/common/nifiPipelineRuntimeListHttp' as readPipelines");
-        final MagicScript runtimeHead = script(API + "01.流程管理/20.核验流程运行列表.ms", "nifi_pipe_runtime_list_head_v1",
+        final MagicScript runtimeHead = script(API + "29.核验流程运行列表.ms", "nifi_pipe_runtime_list_head_v1",
                 "'@/common/nifiPipelineRuntimeListHttp' as readPipelines");
 
         Fixture() throws Exception {

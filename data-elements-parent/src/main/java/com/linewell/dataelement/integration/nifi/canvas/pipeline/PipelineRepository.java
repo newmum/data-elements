@@ -182,17 +182,6 @@ public class PipelineRepository {
                 cur.nodeMapping(), cur.lastBulletinId()));
     }
 
-    public synchronized boolean delete(String id) {
-        requireTenantDatabase();
-        NifiPipelineT row = nifiPipelineTMapper.selectById(id);
-        if (row == null || Integer.valueOf(1).equals(row.getIsDel())) {
-            return false;
-        }
-        row.setIsDel(1);
-        row.setUpdatedAt(System.currentTimeMillis());
-        return nifiPipelineTMapper.updateById(row) > 0;
-    }
-
     private void upsert(Pipeline p) {
         requireTenantDatabase();
         try {

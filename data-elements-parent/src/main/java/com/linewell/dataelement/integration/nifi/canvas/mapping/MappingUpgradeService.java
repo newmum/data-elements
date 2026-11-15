@@ -6,9 +6,9 @@ import com.linewell.dataelement.integration.nifi.canvas.compile.DslCompiler;
 import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient;
 import com.linewell.dataelement.integration.nifi.canvas.pipeline.*;
 import com.linewell.dataelement.mapping.core.*;
-import com.linewell.dataelement.platform.tenant.domain.TenantContext;
 import org.springframework.stereotype.Service;
 import java.util.*;
+import java.util.function.Supplier;
 
 /** Upgrade a selected mapping node in place. No source processor is copied, deleted, or cleared. */
 @Service
@@ -16,17 +16,17 @@ public class MappingUpgradeService {
     private static final ObjectMapper JSON=new ObjectMapper().enable(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS);
     private final MappingVersionStore versions;
     private final PipelineRepository pipelines;
-    private final UnifiedMappingService engine;
     private final DslCompiler compiler;
     private final NifiClient nifi;
     private final org.springframework.transaction.support.TransactionTemplate transaction;
-    public MappingUpgradeService(MappingVersionStore versions,PipelineRepository pipelines,UnifiedMappingService engine,DslCompiler compiler,NifiClient nifi,org.springframework.transaction.PlatformTransactionManager manager){this.versions=versions;this.pipelines=pipelines;this.engine=engine;this.compiler=compiler;this.nifi=nifi;transaction=new org.springframework.transaction.support.TransactionTemplate(manager);}
-    public Map<String,Object> upgrade(String pipelineId,String nodeId,long revision,String expectedPlanHash,boolean start){
-        Pipeline pipeline=versions.requirePipeline(pipelineId);if(pipeline.updatedAt()==null||pipeline.updatedAt()!=revision)throw new MappingException("DRAFT_VERSION_CONFLICT","画布已变化，请重新加载后升级");
-        var node=pipeline.dsl().nodes().stream().filter(value->value.id().equals(nodeId)&&Set.of("transform.field-mapping","transform.field-enrichment").contains(value.manifestKey())).findFirst().orElseThrow(()->new MappingException("RESOURCE_FORBIDDEN","节点不属于当前流程的字段映射"));
+    public MappingUpgradeService(MappingVersionStore versions,PipelineRepository pipelines,DslCompiler compiler,NifiClient nifi,org.springframework.transaction.PlatformTransactionManager manager){this.versions=versions;this.pipelines=pipelines;this.compiler=compiler;this.nifi=nifi;transaction=new org.springframework.transaction.support.TransactionTemplate(manager);}
+    public Map<String,Object> replaceNode(Pipeline pipeline, Pipeline.Node node, String tenantId, boolean start,
+                                          Supplier<UnifiedMappingService.Compiled> prepare) {
+        String pipelineId = pipeline.id();
+        String nodeId = node.id();
         if(pipeline.nodeMapping()==null||pipeline.nodeMapping().primaryProcessorIds()==null||pipeline.nodeMapping().edgeProcessorEndpoints()==null)throw new MappingException("MIGRATION_UNAVAILABLE","旧运行图缺少原生节点与连接标识");
         String primary=pipeline.nodeMapping().primaryProcessorIds().get(nodeId);if(primary==null||pipeline.nifiProcessGroupId()==null)throw new MappingException("MIGRATION_UNAVAILABLE","节点尚未发布");
-        JsonNode owner=nifi.getProcessGroup(pipeline.nifiProcessGroupId());String marker="data-elements:v1:"+TenantContext.requireTenantId()+":pipeline:"+pipelineId;if(!marker.equals(owner.path("component").path("comments").asText()))throw new MappingException("RESOURCE_FORBIDDEN","旧运行图缺少可核验的租户及流程归属标记");
+        JsonNode owner=nifi.getProcessGroup(pipeline.nifiProcessGroupId());String marker="data-elements:v1:"+tenantId+":pipeline:"+pipelineId;if(!marker.equals(owner.path("component").path("comments").asText()))throw new MappingException("RESOURCE_FORBIDDEN","旧运行图缺少可核验的租户及流程归属标记");
         JsonNode original=nifi.get("/processors/"+primary,JsonNode.class);String group=original.path("component").path("parentGroupId").asText();JsonNode rootFlow=nifi.get("/flow/process-groups/"+pipeline.nifiProcessGroupId(),JsonNode.class).path("processGroupFlow").path("flow");
         if(!group.equals(pipeline.nifiProcessGroupId())&&!containsId(rootFlow.path("processGroups"),group))throw new MappingException("RESOURCE_FORBIDDEN","字段处理器不在当前流程组范围内");
         JsonNode flow=group.equals(pipeline.nifiProcessGroupId())?rootFlow:nifi.get("/flow/process-groups/"+group,JsonNode.class).path("processGroupFlow").path("flow");
@@ -41,7 +41,8 @@ public class MappingUpgradeService {
         Map<String,JsonNode> connections=index(flow.path("connections"));Map<String,JsonNode> selected=new LinkedHashMap<>();String last=primary;
         for(var edge:edges){var endpoint=pipeline.nodeMapping().edgeProcessorEndpoints().get(edge.id());if(endpoint==null||!connections.containsKey(endpoint.connectionId()))throw new MappingException("MIGRATION_UNAVAILABLE","旧图连接发生变化，请重新核对");JsonNode connection=connections.get(endpoint.connectionId());selected.put(edge.id(),connection);if(edge.source().equals(nodeId))last=endpoint.sourceProcessorId();}
         String writer=serviceReference(processors.get(last).path("component").path("config").path("properties"),serviceMap,false);
-        var prepared=engine.compile(parse(node.config().get("mappings")));if(expectedPlanHash==null||!expectedPlanHash.equals(prepared.plan().hash()))throw new MappingException("DRAFT_NOT_SAVED","当前规则与已保存草稿不一致，请先保存画布再升级");compiler.preflightGlobalRecordServices(pipeline);nifi.requireMappingExtension();requireEmpty(pipeline.nifiProcessGroupId());
+        var prepared = prepare.get();
+        compiler.preflightGlobalRecordServices(pipeline);nifi.requireMappingExtension();requireEmpty(pipeline.nifiProcessGroupId());
         DslCompiler.MappingReplacement replacement=null;Map<String,String> newConnections=new LinkedHashMap<>();Set<String> deleted=new LinkedHashSet<>();Set<String> disabled=new LinkedHashSet<>();boolean committed=false;
         try{
             // Stopping can already change the runtime, even when its response or a later read fails.
@@ -89,6 +90,5 @@ public class MappingUpgradeService {
     private static boolean containsId(JsonNode nodes,String id){for(JsonNode node:nodes)if(id.equals(node.path("id").asText()))return true;return false;}
     private static Map<String,JsonNode> index(JsonNode nodes){Map<String,JsonNode> result=new LinkedHashMap<>();nodes.forEach(node->result.put(node.path("id").asText(),node));return result;}
     private static Set<String> running(JsonNode flow){Set<String> result=new LinkedHashSet<>();for(JsonNode processor:flow.path("processors"))if(processor.path("component").path("state").asText().equals("RUNNING"))result.add(processor.path("id").asText());return result;}
-    private static JsonNode parse(Object value){try{return value instanceof String text?JSON.readTree(text):JSON.valueToTree(value);}catch(Exception error){throw new MappingException("INVALID_JSON","字段草稿无法解析");}}
     private static Pipeline runtime(Pipeline value,NifiNodeMapping mapping,PipelineStatus status){return new Pipeline(value.id(),value.name(),value.description(),value.createdAt(),value.updatedAt(),value.dsl(),value.nifiProcessGroupId(),status,value.lastDeployedHash(),value.lastDeployedAt(),value.lastStoppedAt(),mapping,value.lastBulletinId());}
 }

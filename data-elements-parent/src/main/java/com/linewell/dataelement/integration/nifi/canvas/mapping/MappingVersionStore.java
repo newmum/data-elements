@@ -103,70 +103,11 @@ public class MappingVersionStore {
         var rows=jdbc.query(sql("SELECT `node_id`,`plan_id` FROM `data_access_mapping_publication_t` WHERE `tenant_id`=? AND `pipeline_id`=?"),(rs,i)->row(rs),TenantContext.requireTenantId(),pipeline.id());if(rows.size()>100)throw new MappingException("BUDGET_EXCEEDED","已有发布引用超过100个节点");Map<String,String> plans=new LinkedHashMap<>();rows.forEach(item->plans.put(String.valueOf(item.get("node_id")),String.valueOf(item.get("plan_id"))));plans.put(node,plan);activate(pipeline,plans,group);
     }
 
-    public Map<String,String> publishedReferences(String pipelineId){
-        requirePipeline(pipelineId);
-        var rows=boundedRows("SELECT `node_id`,`plan_id` FROM `data_access_mapping_publication_t` WHERE `tenant_id`=? AND `pipeline_id`=?",List.of(TenantContext.requireTenantId(),pipelineId),100);
-        if(rows.size()>100)throw new MappingException("BUDGET_EXCEEDED","已发布映射节点超过100项");
-        Map<String,String> result=new LinkedHashMap<>();
-        for(var value:rows){
-            String node=Objects.toString(value.get("node_id"),""),plan=Objects.toString(value.get("plan_id"),"");
-            if(node.isBlank()||plan.isBlank()||result.putIfAbsent(node,plan)!=null)throw new MappingException("RESOURCE_CORRUPTED","发布引用缺失或节点重复");
-        }
-        return Collections.unmodifiableMap(result);
-    }
-
-    public Map<String,Object> history(String pipelineId,String nodeId,int page,int size,String sortField,String sortDir){
-        requirePipeline(pipelineId);page=Math.max(1,page);size=Math.max(1,Math.min(100,size));String tenant=TenantContext.requireTenantId();
-        String order=switch(sortField==null?"created_time":sortField){case "plan_revision"->"`plan_revision`";case "created_time"->"`created_time`";case "node_id"->"`node_id`";default->throw new MappingException("INVALID_SORT","计划历史排序字段不支持");};String direction="asc".equals(sortDir)?"ASC":"DESC";
-        List<Object> args=new ArrayList<>(List.of(tenant,pipelineId));String where=" WHERE `tenant_id`=? AND `pipeline_id`=?";if(nodeId!=null&&!nodeId.isBlank()){where+=" AND `node_id`=?";args.add(nodeId);}
-        Long total=jdbc.queryForObject(sql("SELECT COUNT(*) FROM `data_access_mapping_plan_t`"+where),Long.class,args.toArray());
-        String select="SELECT * FROM (SELECT `tid`,`node_id`,`plan_revision`,`draft_revision`,`plan_hash`,`engine_version`,`created_by`,`created_time`,ROW_NUMBER() OVER (ORDER BY "+order+" "+direction+",`tid` ASC) AS `row_no` FROM `data_access_mapping_plan_t`"+where+") `page_rows` WHERE `row_no` BETWEEN ? AND ? ORDER BY `row_no`";args.add((page-1)*size+1);args.add(page*size);
-        var rows=jdbc.query(sql(select),(rs,i)->row(rs),args.toArray());return Map.of("rows",rows,"total",total==null?0:total,"page",page,"size",size);
-    }
-    public JsonNode plan(String pipelineId,String planId){return batchPlans(pipelineId,List.of(planId)).get(planId);}
-    public Map<String,JsonNode> batchPlans(String pipelineId,Collection<String> ids){
-        if(ids==null||ids.size()>100)throw new MappingException("BUDGET_EXCEEDED","计划引用最多100项");
-        Set<String> distinct=new LinkedHashSet<>(ids);
-        if(distinct.stream().anyMatch(id->id==null||id.isBlank()))throw new MappingException("RESOURCE_FORBIDDEN","计划引用无效");
-        requirePipeline(pipelineId);
-        if(distinct.isEmpty())return Map.of();
-        List<Object> args=new ArrayList<>(distinct);args.add(TenantContext.requireTenantId());args.add(pipelineId);
-        String query=sql("SELECT `tid`,`plan_hash`,`plan_content` FROM `data_access_mapping_plan_t` WHERE `tid` IN ("+String.join(",",Collections.nCopies(distinct.size(),"?"))+") AND `tenant_id`=? AND `pipeline_id`=?");
-        Map<String,JsonNode> result=jdbc.query(query,statement->{statement.setMaxRows(101);statement.setQueryTimeout(10);for(int i=0;i<args.size();i++)statement.setObject(i+1,args.get(i));},rs->{
-            Map<String,JsonNode> found=new LinkedHashMap<>();long bytes=0;
-            while(rs.next()){
-                String id=rs.getString("tid"),content=readPlanContent(rs);
-                bytes+=content.getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
-                if(bytes>33_554_432)throw new MappingException("BUDGET_EXCEEDED","批量计划内容超过32MiB");
-                JsonNode document=parse(content);
-                if(!document.isObject()||!MappingEngine.hash(document).equals(rs.getString("plan_hash")))throw new MappingException("RESOURCE_CORRUPTED","计划版本摘要不一致");
-                if(!distinct.contains(id)||found.putIfAbsent(id,document)!=null)throw new MappingException("RESOURCE_CORRUPTED","计划版本标识重复或不属于请求范围");
-            }
-            return found;
-        });
-        if(result==null||!result.keySet().equals(distinct))throw new MappingException("RESOURCE_FORBIDDEN","包含不存在、其他租户或其他流程的计划版本");
-        return Collections.unmodifiableMap(result);
-    }
-    private static String readPlanContent(ResultSet result)throws SQLException{
-        try(java.io.Reader reader=result.getCharacterStream("plan_content")){
-            if(reader==null)throw new MappingException("RESOURCE_CORRUPTED","计划内容缺失");
-            StringBuilder value=new StringBuilder();char[] buffer=new char[8192];int length;
-            while((length=reader.read(buffer))!=-1){if(value.length()+length>2_097_152)throw new MappingException("BUDGET_EXCEEDED","执行计划超过2MiB");value.append(buffer,0,length);}
-            String content=value.toString();if(content.getBytes(java.nio.charset.StandardCharsets.UTF_8).length>2_097_152)throw new MappingException("BUDGET_EXCEEDED","执行计划超过2MiB");return content;
-        }catch(java.io.IOException error){throw new MappingException("RESOURCE_CORRUPTED","计划内容读取失败");}
-    }
-    public JsonNode saveResource(String kind,String key,JsonNode definition,JsonNode content){
-        if(!Set.of("TEMPLATE","DICTIONARY_SNAPSHOT").contains(kind)||key==null||key.isBlank()||key.length()>128)throw new MappingException("INVALID_RESOURCE","资源类型或名称无效");bounded(content,1_048_576);String tenant=TenantContext.requireTenantId();
-        Long maximum=jdbc.queryForObject(sql("SELECT MAX(`version_no`) FROM `data_access_mapping_resource_t` WHERE `tenant_id`=? AND `resource_kind`=? AND `resource_key`=?"),Long.class,tenant,kind,key);long version=maximum==null?1:maximum+1;String resourceId=id();String hash=MappingEngine.hash(content);
-        jdbc.update(sql("INSERT INTO `data_access_mapping_resource_t` (`tid`,`tenant_id`,`resource_kind`,`resource_key`,`version_no`,`resource_hash`,`definition_json`,`resource_content`,`created_by`,`created_time`) VALUES (?,?,?,?,?,?,?,?,?,?)"),resourceId,tenant,kind,key,version,hash,definition.toString(),content.toString(),actor(),Timestamp.from(Instant.now()));
-        return JSON.createObjectNode().put("id",resourceId).put("kind",kind).put("key",key).put("version",version).put("hash",hash);
-    }
     public Map<String,JsonNode> resources(Collection<String> ids,String kind){
         Set<String> distinct=new LinkedHashSet<>(ids);if(distinct.isEmpty())return Map.of();if(distinct.size()>32)throw new MappingException("BUDGET_EXCEEDED","资源引用超过32个");List<Object> args=new ArrayList<>(distinct);args.add(TenantContext.requireTenantId());args.add(kind);
         var rows=jdbc.query(sql("SELECT `tid`,`resource_hash`,`definition_json`,`resource_content` FROM `data_access_mapping_resource_t` WHERE `tid` IN ("+String.join(",",Collections.nCopies(distinct.size(),"?"))+") AND `tenant_id`=? AND `resource_kind`=?"),(rs,i)->row(rs),args.toArray());
         Map<String,JsonNode> result=new LinkedHashMap<>();for(var row:rows){JsonNode content=parse(String.valueOf(row.get("resource_content")));if(!MappingEngine.hash(content).equals(row.get("resource_hash")))throw new MappingException("RESOURCE_CORRUPTED","版本资源摘要不一致");ObjectNode envelope=JSON.createObjectNode();envelope.set("definition",parse(String.valueOf(row.get("definition_json"))));envelope.set("content",content);envelope.put("hash",String.valueOf(row.get("resource_hash")));result.put(String.valueOf(row.get("tid")),envelope);}
         if(!result.keySet().equals(distinct))throw new MappingException("RESOURCE_FORBIDDEN","包含不存在或其他租户的版本资源");return result;
     }
-    public Map<String,Object> templates(int page,int size,String sortField,String sortDir){size=Math.max(1,Math.min(100,size));page=Math.max(1,page);String tenant=TenantContext.requireTenantId();String order=switch(sortField==null?"created_time":sortField){case "resource_key"->"`resource_key`";case "version_no"->"`version_no`";case "created_time"->"`created_time`";default->throw new MappingException("INVALID_SORT","模板排序字段不支持");};String direction="asc".equals(sortDir)?"ASC":"DESC";Long total=jdbc.queryForObject(sql("SELECT COUNT(*) FROM `data_access_mapping_resource_t` WHERE `tenant_id`=? AND `resource_kind`='TEMPLATE'"),Long.class,tenant);String select="SELECT * FROM (SELECT `tid`,`resource_key`,`version_no`,`resource_hash`,`created_time`,ROW_NUMBER() OVER (ORDER BY "+order+" "+direction+",`tid` ASC) AS `row_no` FROM `data_access_mapping_resource_t` WHERE `tenant_id`=? AND `resource_kind`='TEMPLATE') `page_rows` WHERE `row_no` BETWEEN ? AND ? ORDER BY `row_no`";return Map.of("rows",jdbc.query(sql(select),(rs,i)->row(rs),tenant,(page-1)*size+1,page*size),"total",total==null?0:total);}
     private static JsonNode parse(String value){try{return JSON.readTree(value);}catch(Exception ex){throw new MappingException("RESOURCE_CORRUPTED","版本内容无法解析");}}
 }

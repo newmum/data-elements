@@ -63,10 +63,8 @@ class PipelineGroupOrganizerTest {
         Pipeline draft = new Pipeline("draft", "流程草稿", null, 1L, 1L, null, null,
                 PipelineStatus.SAVED, null, null, null, null, null);
         try (var scope = TenantContext.use("tenant1")) {
-            when(jdbc.queryForList(anyString(), eq("tenant1"), eq(draft.id()))).thenReturn(List.of());
-            assertThat(new PipelineGroupOrganizer(nifi, jdbc).existingIds(draft)).isEmpty();
-            verify(jdbc).queryForList(anyString(), eq("tenant1"), eq(draft.id()));
-            verifyNoInteractions(nifi);
+            assertThat(new PipelineGroupOrganizer(nifi, jdbc).existingIds(draft, List.of())).isEmpty();
+            verifyNoInteractions(jdbc, nifi);
         }
     }
 

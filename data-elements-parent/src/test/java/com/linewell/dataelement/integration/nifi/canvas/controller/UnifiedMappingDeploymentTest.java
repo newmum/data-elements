@@ -21,7 +21,7 @@ class UnifiedMappingDeploymentTest {
     private final PipelineGroupOrganizer groups=mock(PipelineGroupOrganizer.class);
     private final PipelineTaskLifecycleSynchronizer tasks=mock(PipelineTaskLifecycleSynchronizer.class);
     private final ErrorService errors=mock(ErrorService.class);
-    private final PipelineRunController controller=new PipelineRunController(repo,compiler,nifi,errors,tasks,mock(PipelineRuntimeStatusResolver.class),groups,mock(TargetTableCleanupService.class));
+    private final NifiDeploymentMagicFixture deployment = new NifiDeploymentMagicFixture(repo, compiler, nifi, errors, tasks, groups, mock(TargetTableCleanupService.class));
     private Pipeline fixture(){
         var p=new Pipeline("p","flow","",1L,2L,new Pipeline.Dsl(1,List.of(
                 new Pipeline.Node("s","source.mysql","来源","source",0,0,Map.of()),
@@ -34,7 +34,7 @@ class UnifiedMappingDeploymentTest {
     }
     @Test void sourceWatermarkPreventsAnyRebuildOrDeletion()throws Exception{
         fixture();when(nifi.get(eq("/processors/source/state"),eq(com.fasterxml.jackson.databind.JsonNode.class))).thenReturn(new ObjectMapper().readTree("{\"componentState\":{\"clusterState\":{\"state\":[{\"key\":\"maxvalue.id\",\"value\":\"100\"}]}}}"));
-        var response=controller.deploy("p",null);assertEquals(409,response.getStatusCode().value());
+        var response=deployment.deploy("p", null, false);assertEquals(409,response.getStatusCode().value());
         verify(errors).add(eq("p"), argThat(error -> error.detail().contains("增量水位") && error.message().contains("来源状态")));
         assertTrue(((Map<?,?>)response.getBody()).containsKey("flowError"));
         verify(compiler,never()).compile(any(),any(),any());verify(nifi,never()).cleanupProcessGroup(anyString());verify(nifi,never()).setProcessGroupState(anyString(),anyString());
@@ -42,12 +42,12 @@ class UnifiedMappingDeploymentTest {
     @Test void candidateCompileFailureLeavesOldGraphIntact()throws Exception{
         fixture();when(nifi.get(eq("/processors/source/state"),eq(com.fasterxml.jackson.databind.JsonNode.class))).thenReturn(new ObjectMapper().readTree("{\"componentState\":{}}"));
         when(compiler.compile(any(),any(),any())).thenThrow(new IllegalStateException("candidate invalid"));
-        assertEquals(409,controller.deploy("p",null).getStatusCode().value());verify(nifi,never()).cleanupProcessGroup("old");verify(nifi,never()).setProcessGroupState(eq("old"),anyString());
+        assertEquals(409,deployment.deploy("p", null, false).getStatusCode().value());verify(nifi,never()).cleanupProcessGroup("old");verify(nifi,never()).setProcessGroupState(eq("old"),anyString());
     }
     @Test void unavailableBundleRestoresPreviousStatusBeforeAnyNativeMutation() {
         fixture();
         doThrow(new IllegalStateException("extension unavailable")).when(compiler).preflightMapping(any());
-        var response=controller.deploy("p",null);
+        var response=deployment.deploy("p", null, false);
         assertEquals(422,response.getStatusCode().value());
         verify(errors).add(eq("p"), argThat(error -> error.detail().contains("extension unavailable") && error.phase()==FlowError.ErrorPhase.DEPLOYMENT));
         assertTrue(((Map<?,?>)response.getBody()).containsKey("flowError"));
@@ -65,7 +65,7 @@ class UnifiedMappingDeploymentTest {
                 .thenReturn(new ObjectMapper().readTree("{\"componentState\":{}}"));
         when(compiler.compile(any(),any(),any())).thenThrow(new NifiException("POST /processors failed: 400",400,
                 "Record Writer must reference an enabled Controller Service; password=private-value"));
-        var response=controller.deploy("p",null);
+        var response=deployment.deploy("p", null, false);
         assertEquals(409,response.getStatusCode().value());
         verify(errors).add(eq("p"), argThat(error -> error.detail().contains("Record Writer must reference")
                 && error.detail().contains("HTTP 400") && !error.detail().contains("private-value")));
@@ -89,7 +89,7 @@ class UnifiedMappingDeploymentTest {
             call.<java.util.function.Consumer<String>>getArgument(1).accept("candidate");
             throw new IllegalStateException("分区组件创建失败");
         });
-        var response = controller.deploy("p", null);
+        var response = deployment.deploy("p", null, false);
         assertEquals(409, response.getStatusCode().value());
         verify(nifi).cleanupProcessGroup("candidate");
         verify(nifi, never()).cleanupProcessGroup("old");
@@ -107,7 +107,7 @@ class UnifiedMappingDeploymentTest {
         when(repo.findById("p")).thenReturn(Optional.of(pipeline));
         when(nifi.get(eq("/processors/source/state"), eq(com.fasterxml.jackson.databind.JsonNode.class)))
                 .thenReturn(new ObjectMapper().readTree("{\"componentState\":{\"clusterState\":{\"state\":[{\"key\":\"maxvalue.id\",\"value\":\"100\"}]}}}"));
-        assertEquals(409, controller.deploy("p", null).getStatusCode().value());
+        assertEquals(409, deployment.deploy("p", null, false).getStatusCode().value());
         verify(compiler, never()).compile(any(), any(), any());
         verify(nifi, never()).cleanupProcessGroup(anyString());
         verify(nifi, never()).setProcessGroupState(anyString(), anyString());
@@ -122,7 +122,7 @@ class UnifiedMappingDeploymentTest {
         // Native partition-specific configuration is deliberately completed by the operator later.
         doThrow(new IllegalStateException("partition-specific native configuration is incomplete"))
                 .when(nifi).requireValidGeneratedProcessGroup("candidate");
-        var response = controller.deploy("p", null);
+        var response = deployment.deploy("p", null, false);
         assertEquals(200, response.getStatusCode().value());
         assertEquals("staged-hive-template-deploy", ((Map<?, ?>) response.getBody()).get("mode"));
         verify(nifi, never()).requireValidGeneratedProcessGroup(anyString());
@@ -135,7 +135,7 @@ class UnifiedMappingDeploymentTest {
             call.<java.util.function.Consumer<String>>getArgument(1).accept("candidate");
             return new DslCompiler.CompileResult("candidate", Map.of(), Map.of(), Map.of());
         });
-        var response = controller.deploy("p", null);
+        var response = deployment.deploy("p", null, false);
         assertEquals(200, response.getStatusCode().value());
         assertEquals("staged-hive-template-deploy", ((Map<?, ?>) response.getBody()).get("mode"));
         var order = inOrder(compiler, nifi);
@@ -159,7 +159,7 @@ class UnifiedMappingDeploymentTest {
             return new DslCompiler.CompileResult("candidate", Map.of(), Map.of(), Map.of());
         });
         doThrow(new IllegalStateException("MergeRecord 配置校验失败")).when(nifi).requireValidGeneratedProcessGroup("candidate");
-        assertEquals(409, controller.deploy("p", null).getStatusCode().value());
+        assertEquals(409, deployment.deploy("p", null, false).getStatusCode().value());
         verify(nifi).cleanupProcessGroup("candidate");
         verify(nifi, never()).setProcessGroupState(eq("old"), anyString());
         verify(nifi, never()).cleanupProcessGroup("old");

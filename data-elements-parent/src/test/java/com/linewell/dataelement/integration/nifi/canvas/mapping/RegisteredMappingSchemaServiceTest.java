@@ -163,31 +163,14 @@ class RegisteredMappingSchemaServiceTest {
         }
     }
 
-    @Test void dictionaryTablePagesTwentyAndHundredUseFixedCountAndPageReadsAndTenantArguments()throws Exception {
-        for(int count:List.of(20,100)) {
-            Fixture fixture=new Fixture(count);
-            when(fixture.jdbc.queryForObject(contains("SELECT COUNT(*)"),eq(Long.class),any(Object[].class))).thenReturn((long)count);
-            when(fixture.jdbc.queryForList(contains("ROW_NUMBER()"),any(Object[].class))).thenAnswer(invocation->{
-                String sql=invocation.getArgument(0);Object[] args=(Object[])invocation.getRawArguments()[1];
-                assertTrue(sql.contains("tenant_id=?"));assertTrue(sql.contains("is_del=0"));assertEquals("db",args[0]);assertEquals("tenant-A",args[1]);
-                assertEquals("%!%!_%",args[2]);assertEquals(1L,args[4]);assertEquals((long)count,args[5]);return fixture.tables;
-            });
-            try(var ignored=TenantContext.use("tenant-A")){var response=fixture.service.dictionaryTables("db","%_",1,count);assertEquals(count,((List<?>)response.get("rows")).size());}
-            verify(fixture.sources,times(1)).resolveBatch(eq("tenant-A"),eq(Set.of("db")),eq("MENU:2081000000000000002"));
-            verify(fixture.jdbc,times(1)).queryForObject(contains("SELECT COUNT(*)"),eq(Long.class),any(Object[].class));
-            verify(fixture.jdbc,times(1)).queryForList(contains("ROW_NUMBER()"),any(Object[].class));
-            verifyNoInteractions(fixture.engine);
+    @Test void foreignDictionaryTableCannotReadColumns() throws Exception {
+        Fixture foreign = new Fixture(1);
+        var ref = JSON.createObjectNode().put("datasourceId", "db").put("tableId", "other-tenant-table");
+        try (var ignored = TenantContext.use("tenant-A")) {
+            assertEquals("RESOURCE_FORBIDDEN", assertThrows(MappingException.class,
+                    () -> foreign.service.resolve(Map.of("dictionary", ref))).code());
         }
-    }
-
-    @Test void deniedDictionaryDatasourceStopsBeforeAnyTableReadAndForeignTableCannotReadColumns()throws Exception {
-        Fixture fixture=new Fixture(1);fixture.config=Map.of();
-        try(var ignored=TenantContext.use("tenant-A")){assertEquals("RESOURCE_FORBIDDEN",assertThrows(MappingException.class,()->fixture.service.dictionaryTables("denied","",1,20)).code());}
-        verify(fixture.jdbc,never()).queryForList(anyString(),any(Object[].class));
-        verify(fixture.jdbc,never()).queryForObject(anyString(),eq(Long.class),any(Object[].class));
-        Fixture foreign=new Fixture(1);
-        try(var ignored=TenantContext.use("tenant-A")){assertEquals("RESOURCE_FORBIDDEN",assertThrows(MappingException.class,()->foreign.service.dictionaryColumns("db","other-tenant-table")).code());}
-        verify(foreign.jdbc,never()).queryForList(contains("db_table_column_t"),any(Object[].class));
+        verify(foreign.jdbc, never()).queryForList(contains("db_table_column_t"), any(Object[].class));
         verifyNoInteractions(foreign.engine);
     }
 

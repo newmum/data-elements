@@ -1,20 +1,22 @@
 package com.linewell.dataelement.bk.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import com.linewell.dataelement.integration.nifi.canvas.pipeline.Pipeline;
 import org.junit.jupiter.api.Test;
 
 class SurveillancePipelineExtensionTest {
     private final SurveillancePipelineExtension extension = new SurveillancePipelineExtension();
 
     @Test
-    void preservesThreeChannelTemplateAndMatchEndpoint() {
-        assertThat(extension.supports("structured-surveillance")).isTrue();
-        assertThat(extension.supports(null)).isFalse();
-        var pipeline = extension.template();
-        assertThat(pipeline.dsl().nodes()).hasSize(9);
-        assertThat(pipeline.dsl().edges()).hasSize(6);
-        assertThat(pipeline.dsl().nodes().stream().filter(node -> "transform.surveillance-match".equals(node.manifestKey())))
-                .hasSize(3).allSatisfy(node -> assertThat(node.config()).containsEntry("matchUrl", "/api/v1/surveillance/match/batch"));
-        assertThat(extension.group(pipeline)).isEmpty();
+    void onlySavedGroupNamesSelectSurveillancePlacement() {
+        var separate = new Pipeline(null, "结构化数据布控引擎", null, null, null, null,
+                null, null, null, null, null, null, null);
+        assertThat(extension.group(separate)).isEmpty();
+        var grouped = new Pipeline(null, "结构化数据布控引擎流组 - 测试", null, null, null, null,
+                null, null, null, null, null, null, null);
+        assertThat(extension.group(grouped)).hasValueSatisfying(group -> {
+            assertThat(group.name()).isEqualTo("布控引擎组");
+            assertThat(group.identity()).isEqualTo("structured-surveillance");
+        });
     }
 }

@@ -11,7 +11,7 @@ import java.sql.DatabaseMetaData;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import javax.sql.DataSource;
-import org.aspectj.lang.ProceedingJoinPoint;
+import org.apache.commons.lang3.function.FailableSupplier;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -29,11 +29,11 @@ class NifiMutationAspectTest {
             when(statement.executeQuery()).thenReturn(result);
             when(result.next()).thenReturn(true);
             when(result.getInt(1)).thenReturn(0);
-            ProceedingJoinPoint work = mock(ProceedingJoinPoint.class);
+            FailableSupplier<Object, Throwable> work = mock();
             TaskRuntimeStatusService cache = mock(TaskRuntimeStatusService.class);
             var aspect = new NifiMutationAspect(source);
             aspect.setRuntimeStatus(cache);
-            assertThatThrownBy(() -> aspect.serialize(work))
+            assertThatThrownBy(() -> aspect.withMutationLock(work))
                     .isInstanceOf(ResponseStatusException.class).hasMessageContaining("409");
             verifyNoInteractions(work);
             verifyNoInteractions(cache);
@@ -60,15 +60,15 @@ class NifiMutationAspectTest {
             when(statement.executeQuery()).thenReturn(result);
             when(result.next()).thenReturn(true);
             when(result.getInt(1)).thenReturn(successCode);
-            ProceedingJoinPoint work = mock(ProceedingJoinPoint.class);
-            when(work.proceed()).thenThrow(new IllegalStateException("deployment failed"));
+            FailableSupplier<Object, Throwable> work = mock();
+            when(work.get()).thenThrow(new IllegalStateException("deployment failed"));
             TaskRuntimeStatusService cache = mock(TaskRuntimeStatusService.class);
             var aspect = new NifiMutationAspect(source);
             aspect.setRuntimeStatus(cache);
-            assertThatThrownBy(() -> aspect.serialize(work)).hasMessage("deployment failed");
+            assertThatThrownBy(() -> aspect.withMutationLock(work)).hasMessage("deployment failed");
             var order = inOrder(connection, work, cache);
             order.verify(connection).prepareStatement(acquireSql);
-            order.verify(work).proceed();
+            order.verify(work).get();
             order.verify(cache).invalidateTenant();
             order.verify(connection).prepareStatement(releaseSql);
             order.verify(connection).close();

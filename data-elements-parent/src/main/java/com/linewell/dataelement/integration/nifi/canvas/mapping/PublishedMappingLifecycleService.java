@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient;
 import com.linewell.dataelement.integration.nifi.canvas.pipeline.*;
 import com.linewell.dataelement.mapping.core.MappingException;
-import com.linewell.dataelement.platform.tenant.domain.TenantContext;
 import org.springframework.stereotype.Service;
 import java.util.*;
 
@@ -13,20 +12,19 @@ import java.util.*;
 @Service
 public class PublishedMappingLifecycleService {
     private static final ObjectMapper JSON=new ObjectMapper();
-    private final MappingVersionStore versions;
     private final PipelineRepository pipelines;
     private final NifiClient nifi;
-    private UnifiedMappingService engine;
-    @org.springframework.beans.factory.annotation.Autowired public void setEngine(UnifiedMappingService engine){this.engine=engine;}
-    public PublishedMappingLifecycleService(MappingVersionStore versions,PipelineRepository pipelines,NifiClient nifi){this.versions=versions;this.pipelines=pipelines;this.nifi=nifi;}
-    public Map<String,Object> start(String pipelineId,long expectedUpdatedAt){
-        Pipeline pipeline=versions.requirePipeline(pipelineId);
-        if(pipeline.updatedAt()==null||pipeline.updatedAt()!=expectedUpdatedAt)throw new MappingException("DRAFT_VERSION_CONFLICT","流程已变化，请重新读取后启动运行版本");
-        if(pipeline.nifiProcessGroupId()==null||pipeline.nodeMapping()==null)throw new MappingException("RUNTIME_UNAVAILABLE","流程没有可核验的已发布运行图");
-        Map<String,String> published=versions.publishedReferences(pipelineId);if(published.isEmpty())throw new MappingException("RUNTIME_UNAVAILABLE","没有字段映射发布引用，不能绕过整图部署检查");
-        if(engine==null)throw new MappingException("AUTHORIZATION_UNAVAILABLE","已发布计划重验服务未配置");engine.compileBatch(versions.batchPlans(pipelineId,published.values()));
+
+    public PublishedMappingLifecycleService(PipelineRepository pipelines, NifiClient nifi) {
+        this.pipelines = pipelines;
+        this.nifi = nifi;
+    }
+
+    /** Verify and start the authorized publication using current native component revisions. */
+    public Map<String,Object> start(Pipeline pipeline, Map<String,String> published, String tenantId) {
+        String pipelineId = pipeline.id();
         String group=pipeline.nifiProcessGroupId();JsonNode owner=nifi.getProcessGroup(group);
-        if(!("data-elements:v1:"+TenantContext.requireTenantId()+":pipeline:"+pipelineId).equals(owner.path("component").path("comments").asText()))throw new MappingException("RESOURCE_FORBIDDEN","原生运行图归属标记不一致");
+        if(!("data-elements:v1:"+tenantId+":pipeline:"+pipelineId).equals(owner.path("component").path("comments").asText()))throw new MappingException("RESOURCE_FORBIDDEN","原生运行图归属标记不一致");
         Map<String,JsonNode> flows=new LinkedHashMap<>();JsonNode root=flow(group);flows.put(group,root);
         if(root.path("processGroups").size()>1)throw new MappingException("MIGRATION_SCOPE_UNSUPPORTED","当前启动入口仅支持已核验的单层运行图");
         for(JsonNode child:root.path("processGroups")){String id=child.path("id").asText();JsonNode nested=flow(id);if(!nested.path("processGroups").isEmpty())throw new MappingException("MIGRATION_SCOPE_UNSUPPORTED","运行图嵌套范围未被核验");flows.put(id,nested);}

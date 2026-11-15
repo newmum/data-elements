@@ -47,12 +47,30 @@ class RegistrationAccessMagicTest {
     public static class Completion {public Map<String,Object> refreshRegistrationStatus(String id,boolean partial){return Map.of("assetStatus",1);}}
     public static class Lifecycle {
         int starts,stops;final Deque<Map<String,Object>> results=new ArrayDeque<>();
-        public Map<String,Object> start(String id){starts++;return results.isEmpty()?Map.of("accepted",true):results.removeFirst();}
-        public Map<String,Object> stop(String id){stops++;return Map.of("accepted",true);}
+        void bind(Map<String, Object> bindings) {
+            bindings.put("startCanvas", (org.ssssssss.script.runtime.function.MagicScriptLambdaFunction) (context, args) -> {
+                assertThat(args).containsExactly("p", false, false);
+                starts++;
+                if (results.isEmpty()) return org.springframework.http.ResponseEntity.ok().build();
+                var next = results.removeFirst();
+                return org.springframework.http.ResponseEntity.status((Integer) next.get("status")).body(next.get("body"));
+            });
+            bindings.put("stopCanvas", (org.ssssssss.script.runtime.function.MagicScriptLambdaFunction) (context, args) -> {
+                assertThat(args).containsExactly("p");
+                stops++;
+                return org.springframework.http.ResponseEntity.ok().build();
+            });
+        }
     }
     public static class Deployment {
         int calls;org.springframework.http.ResponseEntity<?> result=org.springframework.http.ResponseEntity.ok(Map.of("mode","full-deploy"));
-        public org.springframework.http.ResponseEntity<?> deploy(String id,Object request){assertThat(id).isEqualTo("p");assertThat(request).isNull();calls++;return result;}
+        org.ssssssss.script.runtime.function.MagicScriptLambdaFunction invoke() {
+            return (context, args) -> {
+                assertThat(args).containsExactly("p", null, false);
+                calls++;
+                return result;
+            };
+        }
     }
     static Map<String,Object> deploymentRequired(){return Map.of("accepted",false,"status",409,"body",Map.of("error","deployment-required"));}
     static Map<String,Object> body(String... ids){return Map.of("datasourceId","db","tableIds",List.of(ids));}
@@ -146,7 +164,7 @@ class RegistrationAccessMagicTest {
         var response=(com.fasterxml.jackson.databind.node.ObjectNode)TaskRuntimeMagicFixture.emptyRootStatus();
         response.withObject("/processGroupStatus/aggregateSnapshot").putArray("processGroupStatusSnapshots").addObject().putObject("processGroupStatusSnapshot").put("id","pg").putArray("processorStatusSnapshots").addObject().putObject("processorStatusSnapshot").put("runStatus","Stopped");
         try(var runtime=new TaskRuntimeMagicFixture("ga",response)) {
-            var lifecycle=new Lifecycle();f.bindings.put("taskLifecycle",lifecycle);
+            var lifecycle=new Lifecycle();lifecycle.bind(f.bindings);
             var valid=Map.<String,Object>of("datasourceId","db","tableId","s0","taskId","task","action","start");
             assertThat(f.execute("22.登记表接入任务启停",valid,runtime)).isInstanceOf(Map.class);assertThat(lifecycle.starts).isEqualTo(1);
             assertThat(f.execute("22.登记表接入任务启停",Map.of("datasourceId","db","tableId","s0","taskId","other-task","action","start"),runtime)).isInstanceOf(ExitValue.class);
@@ -158,7 +176,7 @@ class RegistrationAccessMagicTest {
         var f=new Fixture(1);f.task("SAVED");
         f.f.jdbc.update("update nifi_pipeline_t set nifi_process_group_id=null,last_deployed_hash=null");
         try(var runtime=new TaskRuntimeMagicFixture("ga")) {
-            var lifecycle=new Lifecycle();var deployment=new Deployment();f.bindings.put("taskLifecycle",lifecycle);f.bindings.put("pipelineDeployment",deployment);
+            var lifecycle=new Lifecycle();var deployment=new Deployment();lifecycle.bind(f.bindings);f.bindings.put("deployPipeline",deployment.invoke());
             var valid=new HashMap<String,Object>(Map.of("datasourceId","db","tableId","s0","taskId","task","action","start"));valid.put("dryRun",true);
             assertThat(((Map<?,?>)f.execute("22.登记表接入任务启停",valid,runtime)).get("deploymentRequired")).isEqualTo(true);
             assertThat(lifecycle.starts).isZero();assertThat(deployment.calls).isZero();valid.remove("dryRun");
@@ -171,7 +189,7 @@ class RegistrationAccessMagicTest {
         for(boolean cleanup:List.of(false,true)) {
             var f=new Fixture(1);f.task("SAVED");f.f.jdbc.update("update nifi_pipeline_t set nifi_process_group_id=null,last_deployed_hash=null");
             try(var runtime=new TaskRuntimeMagicFixture("ga")) {
-                var lifecycle=new Lifecycle();var deployment=new Deployment();f.bindings.put("taskLifecycle",lifecycle);f.bindings.put("pipelineDeployment",deployment);
+                var lifecycle=new Lifecycle();var deployment=new Deployment();lifecycle.bind(f.bindings);f.bindings.put("deployPipeline",deployment.invoke());
                 lifecycle.results.add(cleanup?Map.of("accepted",false,"status",409,"body",Map.of("error","cleanup-confirmation-required")):deploymentRequired());
                 deployment.result=org.springframework.http.ResponseEntity.unprocessableEntity().body(Map.of("message","来源配置不完整"));
                 assertThat(f.execute("22.登记表接入任务启停",Map.of("datasourceId","db","tableId","s0","taskId","task","action","start"),runtime)).isInstanceOf(ExitValue.class);
@@ -184,7 +202,7 @@ class RegistrationAccessMagicTest {
             var f=new Fixture(1);f.task(status);f.f.jdbc.update("update nifi_pipeline_t set nifi_process_group_id=null,last_deployed_hash=null");
             if(status.equals("MISSING_RECORD"))f.f.jdbc.update("delete from nifi_pipeline_t");
             try(var runtime=new TaskRuntimeMagicFixture("ga")) {
-                var lifecycle=new Lifecycle();var deployment=new Deployment();f.bindings.put("taskLifecycle",lifecycle);f.bindings.put("pipelineDeployment",deployment);
+                var lifecycle=new Lifecycle();var deployment=new Deployment();lifecycle.bind(f.bindings);f.bindings.put("deployPipeline",deployment.invoke());
                 assertThat(f.execute("22.登记表接入任务启停",Map.of("datasourceId","db","tableId","s0","taskId","task","action","start"),runtime)).isInstanceOf(ExitValue.class);
                 assertThat(lifecycle.starts).isZero();assertThat(deployment.calls).isZero();
             }

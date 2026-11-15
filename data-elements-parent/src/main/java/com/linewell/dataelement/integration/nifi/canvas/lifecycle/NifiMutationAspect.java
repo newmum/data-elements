@@ -7,17 +7,12 @@ import java.sql.ResultSet;
 import java.util.Locale;
 import javax.sql.DataSource;
 import org.apache.commons.lang3.function.FailableSupplier;
-import org.aspectj.lang.ProceedingJoinPoint;
-import org.aspectj.lang.annotation.Around;
-import org.aspectj.lang.annotation.Aspect;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ResponseStatusException;
 
-@Aspect
 @Component
-@org.springframework.core.annotation.Order(org.springframework.core.Ordered.HIGHEST_PRECEDENCE + 100)
 public class NifiMutationAspect {
     // Tenants may share one NiFi root. A control-database advisory lock also protects
     // sibling position allocation and survives requests reaching different JVMs.
@@ -32,12 +27,7 @@ public class NifiMutationAspect {
         this.controlDataSource = controlDataSource;
     }
 
-    @Around("@annotation(com.linewell.dataelement.integration.nifi.canvas.lifecycle.SerializedNifiMutation)")
-    public Object serialize(ProceedingJoinPoint invocation) throws Throwable {
-        return withMutationLock(invocation::proceed);
-    }
-
-    /** Applies the shared NiFi mutation lock to both annotated methods and Magic callbacks. */
+    /** Applies the shared NiFi mutation lock to Magic callbacks. */
     public Object withMutationLock(FailableSupplier<Object, Throwable> action) throws Throwable {
         TenantContext.requireTenantId();
         try (Connection connection = controlDataSource.getConnection()) {

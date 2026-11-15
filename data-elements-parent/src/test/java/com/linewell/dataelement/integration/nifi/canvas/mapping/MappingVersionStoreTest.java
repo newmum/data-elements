@@ -1,6 +1,5 @@
 package com.linewell.dataelement.integration.nifi.canvas.mapping;
 
-import com.linewell.dataelement.utils.StructuredValues;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.linewell.dataelement.integration.nifi.canvas.pipeline.*;
@@ -25,18 +24,28 @@ class MappingVersionStoreTest {
         INSERT INTO data_access_agg_task_t VALUES('p','alpha',0,'source',NULL,NULL,NULL);
         INSERT INTO db_datasource_t VALUES('source','alpha',0,'alice','org-a');
         """);return jdbc;}
-    @Test void twentyAndHundredNodeArchivesUseFourReadsIncludingAuthorizationAndHistorySortsBeforePaging()throws Exception{
+    @Test void twentyAndHundredNodeArchivesUseFourReadsIncludingAuthorization()throws Exception{
         var json=new ObjectMapper();var plan=MappingEngine.compile(json.readTree("""
             {"schemaVersion":"2.0","rules":[{"ruleId":"r","input":{"kind":"FIELD","name":"x"},"target":{"name":"y","logicalType":"STRING"},"steps":[]}]}
             """));
         for(int count:List.of(20,100)){var jdbc=database();var repository=mock(PipelineRepository.class);List<Pipeline.Node>nodes=new ArrayList<>();Map<String,MappingEngine.Plan>plans=new LinkedHashMap<>();for(int i=0;i<count;i++){String name=String.format("node-%03d",i);nodes.add(new Pipeline.Node(name,"transform.field-mapping",name,"transform",0,0,Map.of()));plans.put(name,plan);}var pipeline=new Pipeline("p","test","",1L,2L,new Pipeline.Dsl(1,nodes,List.of()),null,PipelineStatus.DRAFT,null,null,null,null,null);when(repository.findById("p")).thenReturn(Optional.of(pipeline));var scopes=mock(DataScopeAuthorizationService.class,CALLS_REAL_METHODS);doReturn(new DataScopeAuthorizationService.ScopeDecision("MENU:2081000000000000002",DataScopeAuthorizationService.Scope.OWNER,"alice",List.of(),List.of("ordinary-role"),true)).when(scopes).currentScope(anyString());var store=new MappingVersionStore(jdbc,repository,scopes);
-            try(var ignored=TenantContext.use("alpha")){jdbc.reads=0;var ids=store.archive(pipeline,plans);assertEquals(count,ids.size());assertEquals(4,jdbc.reads);verifyNoInteractions(scopes);jdbc.reads=0;assertEquals(ids,store.archive(pipeline,plans));assertEquals(4,jdbc.reads);var page=store.history("p",null,2,10,"node_id","asc");assertEquals((long)count,page.get("total"));assertEquals("node-010",(StructuredValues.objectRows(page.get("rows"))).getFirst().get("node_id"));store.activate(pipeline,ids,"group");assertEquals(count,jdbc.queryForObject("SELECT COUNT(*) FROM data_access_mapping_publication_t",Integer.class));}
+            try(var ignored=TenantContext.use("alpha")){jdbc.reads=0;var ids=store.archive(pipeline,plans);assertEquals(count,ids.size());assertEquals(4,jdbc.reads);verifyNoInteractions(scopes);jdbc.reads=0;assertEquals(ids,store.archive(pipeline,plans));assertEquals(4,jdbc.reads);store.activate(pipeline,ids,"group");assertEquals(count,jdbc.queryForObject("SELECT COUNT(*) FROM data_access_mapping_publication_t",Integer.class));}
         }
     }
-    @Test void mixedTenantResourceIdsRejectEntireRequestAndVersionsRemainImmutable()throws Exception{
-        var jdbc=database();var store=new MappingVersionStore(jdbc,mock(PipelineRepository.class));var json=new ObjectMapper();String own,foreign;
-        try(var ignored=TenantContext.use("alpha")){own=store.saveResource("TEMPLATE","template",json.createObjectNode(),json.createObjectNode().put("rule","original")).path("id").asText();}
-        try(var ignored=TenantContext.use("beta")){foreign=store.saveResource("TEMPLATE","template",json.createObjectNode(),json.createObjectNode().put("rule","foreign")).path("id").asText();}
-        try(var ignored=TenantContext.use("alpha")){assertEquals("RESOURCE_FORBIDDEN",assertThrows(MappingException.class,()->store.resources(List.of(own,foreign),"TEMPLATE")).code());assertEquals("original",store.resources(List.of(own),"TEMPLATE").get(own).path("content").path("rule").asText());assertEquals(2,store.saveResource("TEMPLATE","template",json.createObjectNode(),json.createObjectNode().put("rule","new")).path("version").asLong());assertEquals("original",store.resources(List.of(own),"TEMPLATE").get(own).path("content").path("rule").asText());}
+    @Test void mixedTenantDictionaryResourceIdsRejectTheEntireBatch() throws Exception {
+        var jdbc = database();
+        var store = new MappingVersionStore(jdbc, mock(PipelineRepository.class));
+        var document = new ObjectMapper().createObjectNode().put("rule", "original");
+        String content = document.toString();
+        String hash = MappingEngine.hash(document);
+        for (var entry : Map.of("own", "alpha", "foreign", "beta").entrySet()) {
+            jdbc.update("INSERT INTO data_access_mapping_resource_t VALUES (?,?,'DICTIONARY_SNAPSHOT','dictionary',1,?,'{}',?,'validation',CURRENT_TIMESTAMP)",
+                    entry.getKey(), entry.getValue(), hash, content);
+        }
+        try (var ignored = TenantContext.use("alpha")) {
+            assertEquals("RESOURCE_FORBIDDEN", assertThrows(MappingException.class,
+                    () -> store.resources(List.of("own", "foreign"), "DICTIONARY_SNAPSHOT")).code());
+            assertEquals(document, store.resources(List.of("own"), "DICTIONARY_SNAPSHOT").get("own").path("content"));
+        }
     }
 }

@@ -150,16 +150,9 @@ public class PipelineGroupOrganizer {
     }
 
     /** Read-only recovery for undeploy/delete; never creates missing hierarchy groups. */
-    public List<String> existingIds(Pipeline pipeline) {
-        String tenant = TenantContext.requireTenantId();
-        Set<String> ids = new LinkedHashSet<>();
-        if (pipeline.nifiProcessGroupId() != null && !pipeline.nifiProcessGroupId().isBlank()) ids.add(pipeline.nifiProcessGroupId());
-        for (Map<String, Object> task : jdbc.queryForList("""
-                select process_group_id from data_access_agg_task_t
-                 where tenant_id = ? and pipeline_id = ? and is_del = 0
-                """, tenant, pipeline.id())) {
-            if (!text(task, "process_group_id").isBlank()) ids.add(text(task, "process_group_id"));
-        }
+    /** Recover managed native groups using bindings already read and scoped by the caller. */
+    public List<String> existingIds(Pipeline pipeline, List<String> bindings) {
+        var ids = new LinkedHashSet<>(bindings);
         if (ids.isEmpty() && pipeline.lastDeployedHash() == null && pipeline.lastDeployedAt() == null
                 && pipeline.nodeMapping() == null
                 && (pipeline.status() == PipelineStatus.DRAFT || pipeline.status() == PipelineStatus.SAVED)) {

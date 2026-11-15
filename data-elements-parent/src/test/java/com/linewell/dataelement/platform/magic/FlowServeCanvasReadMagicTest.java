@@ -43,7 +43,7 @@ import org.ssssssss.script.runtime.function.MagicScriptLambdaFunction;
 
 class FlowServeCanvasReadMagicTest {
     private static final String API = "api/06.数据服务/01.服务编排/01.流程管理/";
-    private static final String HELPER = "function/01.通用函数/44.云梯画布只读接口响应.ms";
+    private static final String HELPER = "function/01.通用函数/43.云梯画布只读接口响应.ms";
     private static final String TENANT = "tenant-a";
     private static final Timestamp TIME = Timestamp.valueOf("2026-10-20 09:01:02.123456");
     private static final ObjectMapper MAPPER = new ObjectMapper();

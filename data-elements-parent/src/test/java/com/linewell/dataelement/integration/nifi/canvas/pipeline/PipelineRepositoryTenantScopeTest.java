@@ -30,7 +30,6 @@ class PipelineRepositoryTenantScopeTest {
         assertThrows(TenantAccessException.class, () -> repository.findRunningPage(1, 20));
         assertThrows(TenantAccessException.class, () -> repository.findMonitorablePage(1, 20));
         assertThrows(TenantAccessException.class, () -> repository.findById("flow"));
-        assertThrows(TenantAccessException.class, () -> repository.delete("flow"));
         verifyNoInteractions(mapper);
     }
 
@@ -39,7 +38,6 @@ class PipelineRepositoryTenantScopeTest {
         try (var tenant = TenantContext.use("tenant-a"); var control = TenantContext.control()) {
             assertThrows(TenantAccessException.class, repository::findAll);
             assertThrows(TenantAccessException.class, () -> repository.findById("flow"));
-            assertThrows(TenantAccessException.class, () -> repository.delete("flow"));
             verifyNoInteractions(mapper);
         }
     }

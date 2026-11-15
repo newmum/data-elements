@@ -22,6 +22,11 @@
   "responseBodyDefinition" : null
 }
 ================================
+import '@/common/nifiDeployCanvas' as deployPipeline
+import '@/common/nifiStartCanvas' as startCanvas
+import '@/common/nifiStopCanvas' as stopCanvas
+import '@/common/registrationAccessSummary' as registrationAccessSummary
+
 /*
  * 功能：部门用户启动或停止当前登记表由管理员配置的一个直接任务。
  * 输入：datasourceId、tableId、taskId、action=start|stop；dryRun只验证、不调用NiFi。
@@ -32,9 +37,6 @@
  * 并发：先批量装载全部授权前提，再调用一次技术组件；无循环内查询。
  * 异常：部署失败即中止，不再调用启动；配置、队列、版本和NiFi错误如实报告。
  */
-import '@/common/registrationAccessSummary' as registrationAccessSummary
-import taskLifecycle
-import com.linewell.dataelement.integration.nifi.canvas.controller.PipelineRunController as pipelineDeployment
 var action = body?.action == null ? '' : body.action + ''
 if (!['start','stop'].contains(action)) { exit 400, '请选择启动或停止任务' }
 var result = registrationAccessSummary({datasourceId:body?.datasourceId,tableIds:[body?.tableId]})
@@ -45,20 +47,21 @@ var task = matches[0]
 if (action == 'start' && task.canStart != true) { exit 409, task.actionHint || '当前任务不能启动' }
 if (action == 'stop' && task.canStop != true) { exit 409, task.actionHint || '当前任务不能停止' }
 if (body?.dryRun == true) { return {valid:true,taskId:task.tid,action:action,autoDeploy:action == 'start',deploymentRequired:task.requiresDeployment} }
-var outcome = action == 'start' ? taskLifecycle.start(task.pipelineId) : taskLifecycle.stop(task.pipelineId)
+var outcome = action == 'start' ? startCanvas(task.pipelineId, false, false) : stopCanvas(task.pipelineId)
 var deploymentPerformed = false
 // 普通启动保留既有已部署图；只有版本核验明确要求部署时，复用同一生命周期的显式部署能力。
 // 不传force或confirmCleanup，配置了清空策略的任务仍会被现有启动检查拒绝。
-if (action == 'start' && outcome.accepted != true && outcome.status == 409 && outcome.body?.error == 'deployment-required') {
-    var deployment = pipelineDeployment.deploy(task.pipelineId, null)
+if (action == 'start' && outcome.statusCode.value() == 409 && outcome.body?.error == 'deployment-required') {
+    var deployment = deployPipeline(task.pipelineId, null, false)
     if (!deployment.statusCode.is2xxSuccessful()) {
         exit deployment.statusCode.value(), '部署未完成：' + (deployment.body?.message || deployment.body?.error || '请检查任务配置后重试')
     }
     deploymentPerformed = true
-    outcome = taskLifecycle.start(task.pipelineId)
+    outcome = startCanvas(task.pipelineId, false, false)
 }
-if (outcome.accepted != true) {
-    exit outcome.status, outcome.body?.message || outcome.body?.error || '任务操作失败，请查看任务运行详情'
+if (!outcome.statusCode.is2xxSuccessful() || outcome.body?.success == false) {
+    var failureCode = outcome.statusCode.is2xxSuccessful() ? (outcome.body?.code || 500) : outcome.statusCode.value()
+    exit failureCode, outcome.body?.message || outcome.body?.msg || outcome.body?.error || '任务操作失败，请查看任务运行详情'
 }
 return {accepted:true,taskId:task.tid,action:action,deploymentPerformed:deploymentPerformed,
     summary:registrationAccessSummary({datasourceId:body.datasourceId,tableIds:[body.tableId]})}

@@ -130,17 +130,10 @@ class PackageArchitectureTest {
     }
 
     @Test
-    void pipelineControllerDoesNotOwnPersistenceOrRuntimeSynchronization() {
-        Path controller = JAVA_ROOT.resolve(
-                "integration/nifi/canvas/controller/PipelineRunController.java"
-        );
-        String source = read(controller);
-
-        assertThat(source)
-                .doesNotContain("LambdaUpdateWrapper")
-                .doesNotContain("IDataAccessAggTaskTService")
-                .doesNotContain("DataAssetRuntimeAdapter")
-                .doesNotContain(".infrastructure.persistence");
+    void retiredPipelineControllersAreAbsentFromProductionSources() {
+        Path controllers = JAVA_ROOT.resolve("integration/nifi/canvas/controller");
+        assertThat(controllers.resolve("PipelineController.java")).doesNotExist();
+        assertThat(controllers.resolve("PipelineRunController.java")).doesNotExist();
     }
 
     @Test
