@@ -33,7 +33,7 @@ import static org.mockito.Mockito.when;
 
 final class NifiDeploymentMagicFixture {
     private static final String COMMON = "function/01.通用函数/";
-    private static final String API = "api/10.海通流程接口/";
+    private static final String API = "api/09.海通流程接口/";
     private static final String TENANT = "deployment-validation";
     private final PipelineRepository repository;
     private final PipelineTaskLifecycleSynchronizer tasks;

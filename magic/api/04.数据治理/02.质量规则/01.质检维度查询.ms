@@ -25,7 +25,7 @@
 // 接口：01.质检维度查询
 // 路由：GET /dwm/quality/getQualityDimension
 // 业务说明：读取质检规则及字典中的维度定义，组装质量规则页面可选择的维度资料。
-import '@post:/sym/getDict' as getDict 
+import '@post:/sym/dict/tree' as getDict
 import log
 
 

@@ -55,7 +55,7 @@ import org.ssssssss.script.runtime.function.MagicScriptLambdaFunction;
 
 class NifiPipelineWriteMagicTest {
     private static final String TENANT = "tenant-a";
-    private static final String API = "api/10.海通流程接口/";
+    private static final String API = "api/09.海通流程接口/";
     private static final String COMMON = "function/01.通用函数/";
     private final Map<String, Object> bindings = new LinkedHashMap<>();
     private final PipelineTaskLifecycleSynchronizer tasks = mock(PipelineTaskLifecycleSynchronizer.class);

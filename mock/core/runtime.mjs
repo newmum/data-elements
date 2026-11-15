@@ -677,14 +677,14 @@ export class ChengtianMockRuntime {
     }
     if (key === "POST /sym/user/me") return this.user();
     if (key === "GET /sym/menu/routes") return this.routes();
-    if (key === "GET /sym/dict") return query.code ? [] : {};
+    if (key === "GET /sym/dict/query") return query.code ? [] : {};
     if (key === "POST /dws/cart/page") {
       assert(body.mode === "count", 501, "首阶段仅提供导航购物车计数");
       return { total: 0 };
     }
     if (key === "POST /sym/org/getOrgTree")
       return organizationTree(this.database.organizations);
-    if (key === "POST /sym/component") {
+    if (key === "POST /sym/component/manage") {
       assert(
         ["list", "runtimeBatch"].includes(query.action),
         501,
@@ -694,7 +694,7 @@ export class ChengtianMockRuntime {
         ? this.components
         : { complete: true, scope: "all", components: this.components };
     }
-    if (key === "POST /sym/form") {
+    if (key === "POST /sym/form/config") {
       assert(
         !query.action || query.action === "get",
         501,

@@ -449,43 +449,7 @@ export async function loadReportTableFields(table: ReportTable): Promise<ReportT
     .filter(field => field.name);
 }
 
-export async function submitRegisteredReport(
-  context: ReportContext,
-  task: SyncTask,
-  sourceFile?: File,
-): Promise<{ targetDatasourceName?: string; remoteFileName?: string }> {
-  if (!task.targetTable) {
-    throw new Error('请先选择已完成五步登记的数据表，再上传并提交数据');
-  }
-  const registered = context.tables.find(table => table.id === task.targetTable?.id
-    && table.datasourceId === task.targetTable?.datasourceId
-    && table.name.toLowerCase() === task.targetTable?.name.toLowerCase());
-  if (!registered) {
-    throw new Error(`“${task.targetTable.displayName}”不在当前数据源可上报的登记表范围内，请返回登记流程确认权限与表状态`);
-  }
-  if (task.schema.englishName.trim().toLowerCase() !== registered.name.toLowerCase()) {
-    throw new Error('上传资源与所选登记表不一致，请重新选择数据表并读取对应的数据文件');
-  }
-  if (!sourceFile) {
-    throw new Error('原始上报文件已不在当前会话中，请重新读取文件后再提交');
-  }
-  const form = new FormData();
-  form.append('datasourceId', registered.datasourceId);
-  form.append('tableName', registered.name);
-  form.append('file', sourceFile, sourceFile.name);
-  const result = await platformApi<{ targetDatasourceName?: string; remoteFileName?: string }>('/dst/database/report-file', {
-    method: 'POST',
-    body: form,
-  });
-  return result;
-}
-
-/**
- * Reads a legacy immutable task snapshot by physical English column name.
- * It is retained for historical-task compatibility and tests only; the live
- * report-file flow transfers the original uploaded workbook instead of this
- * row payload.
- */
+/** Read historical task snapshots by physical English column name. */
 export function reportRowsForSubmission(task: SyncTask): Record<string, unknown>[] {
   return task.items.map(item => Object.fromEntries(
     task.schema.fields

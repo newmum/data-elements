@@ -1,0 +1,15 @@
+{
+  "properties": {},
+  "id": "datapd_asset_group_01",
+  "name": "07.资产管理",
+  "type": "api",
+  "parentId": "ae3a63e77a194c2db32d854923f4983a",
+  "path": "/asset",
+  "createTime": 1791030855462,
+  "updateTime": 1791030855462,
+  "createBy": null,
+  "updateBy": null,
+  "paths": [],
+  "options": []
+}
+================================

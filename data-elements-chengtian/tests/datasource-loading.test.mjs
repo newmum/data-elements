@@ -9,7 +9,7 @@ const { parse, compileScript } = require('vue/compiler-sfc');
 const root = new URL('../../', import.meta.url);
 const componentPath = 'lowcode/01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource).vue';
 const source = fs.readFileSync(new URL(componentPath, root), 'utf8');
-const magic = fs.readFileSync(new URL('magic/api/02.数据盘点/02.数据库资源/08.本部门数据源清单.ms', root), 'utf8');
+const magic = fs.readFileSync(new URL('magic/api/02.数据盘点/02.库表资源/08.本部门数据源清单.ms', root), 'utf8');
 const { descriptor, errors } = parse(source, { filename: componentPath });
 assert.deepEqual(errors, []);
 const { scriptSetupAst } = compileScript(descriptor, { id: 'datasource-loading-test' });

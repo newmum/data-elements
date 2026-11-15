@@ -5968,7 +5968,7 @@ async function loadFileRegistrationRows(force = false) {
   if (state.dirty || state.loading || (state.loaded && !force)) return;
   state.loading=true;state.error="";
   try {
-    const result=await $common.post("/dst/db/file",{dbId:sourceId,action:"read"});
+    const result=await $common.post("/dst/file/snapshot",{dbId:sourceId,action:"read"});
     if (String(currentDid.value)!==key || state.dirty) return;
     const payload=result?.data || result || {};
     state.rows=(payload.list || []).map(row=>({...row,id:row.tableId}));state.loaded=true;
@@ -5979,7 +5979,7 @@ async function loadFileRegistrationRows(force = false) {
 async function saveFileRegistrationRows(sourceId) {
   const state=fileRegistrationState.value;
   if (!state.rows.length) throw new Error("请先上传已填写的文件登记模板");
-  const result=await $common.post("/dst/db/file",{dbId:sourceId,action:"save",files:state.rows});
+  const result=await $common.post("/dst/file/snapshot",{dbId:sourceId,action:"save",files:state.rows});
   const payload=result?.data || result || {};
   const saved={rows:(payload.list || []).map(row=>({...row,id:row.tableId})),fileName:state.fileName,loaded:true,dirty:false,loading:false,error:""};
   fileRegistrationBySource[String(currentDid.value)]=saved;
@@ -6240,7 +6240,7 @@ async function fetchReportFileHistory({pageNo=1,pageSize=20,sortField,sortDir}={
   const version=reportHistoryVersion;
   const current=()=>version===reportHistoryVersion&&dbId===reportHistorySourceId.value&&accessMode.value==='upload';
   try {
-    const result=await $common.post('/dst/db/register',{action:'history',dbId,pageNo,pageSize,sortField,sortDir});
+    const result=await $common.post('/dst/file/register',{action:'history',dbId,pageNo,pageSize,sortField,sortDir});
     if(!current())return {list:[],total:0};
     reportHistory.total=Number(result?.total)||0;reportHistory.error='';return result;
   } catch(error) {if(!current())return {list:[],total:0};reportHistory.error='failed';throw error;}

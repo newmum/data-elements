@@ -267,8 +267,8 @@
       "metadataId": "7868bf218e904ebc999a94f041d91c36"
     },
     {
-      "path": "api/02.数据盘点/02.数据库资源",
-      "databasePath": "/magic-api/api/02.数据盘点/02.数据库资源/",
+      "path": "api/02.数据盘点/02.库表资源",
+      "databasePath": "/magic-api/api/02.数据盘点/02.库表资源/",
       "rowIds": [
         null
       ],
@@ -276,8 +276,8 @@
       "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "api/02.数据盘点/02.数据库资源/01.数据源联通测试.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/02.数据库资源/01.数据源联通测试.ms",
+      "path": "api/02.数据盘点/02.库表资源/01.数据源联通测试.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/02.库表资源/01.数据源联通测试.ms",
       "rowIds": [
         "5c1e80431c9b440881fcce698f0b8634"
       ],
@@ -286,8 +286,8 @@
       "metadataId": "5c1e80431c9b440881fcce698f0b8634"
     },
     {
-      "path": "api/02.数据盘点/02.数据库资源/02.华为数仓元数据网关.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/02.数据库资源/02.华为数仓元数据网关.ms",
+      "path": "api/02.数据盘点/02.库表资源/02.华为数仓元数据网关.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/02.库表资源/02.华为数仓元数据网关.ms",
       "rowIds": [
         "mrs_hive_jdbc_debug_23"
       ],
@@ -296,8 +296,8 @@
       "metadataId": "mrs_hive_jdbc_debug_23"
     },
     {
-      "path": "api/02.数据盘点/02.数据库资源/03.数据源分页查询.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/02.数据库资源/03.数据源分页查询.ms",
+      "path": "api/02.数据盘点/02.库表资源/03.数据源分页查询.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/02.库表资源/03.数据源分页查询.ms",
       "rowIds": [
         "datapd_database_page_01"
       ],
@@ -306,8 +306,8 @@
       "metadataId": "datapd_database_page_01"
     },
     {
-      "path": "api/02.数据盘点/02.数据库资源/04.数据源列表查询.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/02.数据库资源/04.数据源列表查询.ms",
+      "path": "api/02.数据盘点/02.库表资源/04.数据源列表查询.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/02.库表资源/04.数据源列表查询.ms",
       "rowIds": [
         "datapd_database_list_01"
       ],
@@ -316,8 +316,8 @@
       "metadataId": "datapd_database_list_01"
     },
     {
-      "path": "api/02.数据盘点/02.数据库资源/05.数据源详情.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/02.数据库资源/05.数据源详情.ms",
+      "path": "api/02.数据盘点/02.库表资源/05.数据源详情.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/02.库表资源/05.数据源详情.ms",
       "rowIds": [
         "datapd_database_detail_01"
       ],
@@ -326,8 +326,8 @@
       "metadataId": "datapd_database_detail_01"
     },
     {
-      "path": "api/02.数据盘点/02.数据库资源/06.保存数据源.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/02.数据库资源/06.保存数据源.ms",
+      "path": "api/02.数据盘点/02.库表资源/06.保存数据源.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/02.库表资源/06.保存数据源.ms",
       "rowIds": [
         "datapd_save_update_datasource_01"
       ],
@@ -336,8 +336,8 @@
       "metadataId": "datapd_save_update_datasource_01"
     },
     {
-      "path": "api/02.数据盘点/02.数据库资源/07.删除数据源.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/02.数据库资源/07.删除数据源.ms",
+      "path": "api/02.数据盘点/02.库表资源/07.删除数据源.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/02.库表资源/07.删除数据源.ms",
       "rowIds": [
         "datapd_database_delete_01"
       ],
@@ -346,8 +346,8 @@
       "metadataId": "datapd_database_delete_01"
     },
     {
-      "path": "api/02.数据盘点/02.数据库资源/08.本部门数据源清单.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/02.数据库资源/08.本部门数据源清单.ms",
+      "path": "api/02.数据盘点/02.库表资源/08.本部门数据源清单.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/02.库表资源/08.本部门数据源清单.ms",
       "rowIds": [
         "datapd_dept_datasources_01"
       ],
@@ -356,8 +356,8 @@
       "metadataId": "datapd_dept_datasources_01"
     },
     {
-      "path": "api/02.数据盘点/02.数据库资源/09.数据源组织业务系统统计.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/02.数据库资源/09.数据源组织业务系统统计.ms",
+      "path": "api/02.数据盘点/02.库表资源/09.数据源组织业务系统统计.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/02.库表资源/09.数据源组织业务系统统计.ms",
       "rowIds": [
         "datapd_db_tree_stats_20260723"
       ],
@@ -366,8 +366,8 @@
       "metadataId": "datapd_database_tree_statistics_01"
     },
     {
-      "path": "api/02.数据盘点/02.数据库资源/10.同步推送登记配置.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/02.数据库资源/10.同步推送登记配置.ms",
+      "path": "api/02.数据盘点/02.库表资源/10.同步推送登记配置.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/02.库表资源/10.同步推送登记配置.ms",
       "rowIds": [
         null
       ],
@@ -376,8 +376,8 @@
       "metadataId": "c78db2b6d3b04a2ba5d0854d8171a106"
     },
     {
-      "path": "api/02.数据盘点/02.数据库资源/11.获取表列表.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/02.数据库资源/11.获取表列表.ms",
+      "path": "api/02.数据盘点/02.库表资源/11.获取表列表.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/02.库表资源/11.获取表列表.ms",
       "rowIds": [
         "52e398a9f2fc429da79048b9ea719b37"
       ],
@@ -386,8 +386,8 @@
       "metadataId": "52e398a9f2fc429da79048b9ea719b37"
     },
     {
-      "path": "api/02.数据盘点/02.数据库资源/12.查询数据库元信息.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/02.数据库资源/12.查询数据库元信息.ms",
+      "path": "api/02.数据盘点/02.库表资源/12.查询数据库元信息.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/02.库表资源/12.查询数据库元信息.ms",
       "rowIds": [
         "metadata_db_info_01"
       ],
@@ -396,8 +396,8 @@
       "metadataId": "metadata_db_info_01"
     },
     {
-      "path": "api/02.数据盘点/02.数据库资源/13.刷新数据库元信息.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/02.数据库资源/13.刷新数据库元信息.ms",
+      "path": "api/02.数据盘点/02.库表资源/13.刷新数据库元信息.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/02.库表资源/13.刷新数据库元信息.ms",
       "rowIds": [
         "metadata_refresh_db_info_01"
       ],
@@ -406,8 +406,8 @@
       "metadataId": "metadata_refresh_db_info_01"
     },
     {
-      "path": "api/02.数据盘点/02.数据库资源/14.获取建表语句.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/02.数据库资源/14.获取建表语句.ms",
+      "path": "api/02.数据盘点/02.库表资源/14.获取建表语句.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/02.库表资源/14.获取建表语句.ms",
       "rowIds": [
         "8a56e7d664934c1499102cfa508cd58a"
       ],
@@ -416,8 +416,8 @@
       "metadataId": "8a56e7d664934c1499102cfa508cd58a"
     },
     {
-      "path": "api/02.数据盘点/02.数据库资源/15.建表接口.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/02.数据库资源/15.建表接口.ms",
+      "path": "api/02.数据盘点/02.库表资源/15.建表接口.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/02.库表资源/15.建表接口.ms",
       "rowIds": [
         "a0b5bba38fbf428c8e3646864d83d56b"
       ],
@@ -426,8 +426,8 @@
       "metadataId": "a0b5bba38fbf428c8e3646864d83d56b"
     },
     {
-      "path": "api/02.数据盘点/02.数据库资源/16.手工导入元数据快照.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/02.数据库资源/16.手工导入元数据快照.ms",
+      "path": "api/02.数据盘点/02.库表资源/16.手工导入元数据快照.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/02.库表资源/16.手工导入元数据快照.ms",
       "rowIds": [
         "metadata_import_snapshot_01"
       ],
@@ -436,8 +436,8 @@
       "metadataId": "metadata_import_snapshot_01"
     },
     {
-      "path": "api/02.数据盘点/02.数据库资源/17.删除已登记表资产.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/02.数据库资源/17.删除已登记表资产.ms",
+      "path": "api/02.数据盘点/02.库表资源/17.删除已登记表资产.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/02.库表资源/17.删除已登记表资产.ms",
       "rowIds": [
         "metadata_tables_delete_asset_01"
       ],
@@ -446,8 +446,8 @@
       "metadataId": "metadata_tables_delete_asset_01"
     },
     {
-      "path": "api/02.数据盘点/02.数据库资源/18.数据表分页查询.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/02.数据库资源/18.数据表分页查询.ms",
+      "path": "api/02.数据盘点/02.库表资源/18.数据表分页查询.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/02.库表资源/18.数据表分页查询.ms",
       "rowIds": [
         "datapd_db_table_page_01"
       ],
@@ -456,8 +456,8 @@
       "metadataId": "datapd_db_table_page_01"
     },
     {
-      "path": "api/02.数据盘点/02.数据库资源/19.数据表列表查询.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/02.数据库资源/19.数据表列表查询.ms",
+      "path": "api/02.数据盘点/02.库表资源/19.数据表列表查询.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/02.库表资源/19.数据表列表查询.ms",
       "rowIds": [
         "datapd_db_table_list_01"
       ],
@@ -466,8 +466,8 @@
       "metadataId": "datapd_db_table_list_01"
     },
     {
-      "path": "api/02.数据盘点/02.数据库资源/20.保存数据表.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/02.数据库资源/20.保存数据表.ms",
+      "path": "api/02.数据盘点/02.库表资源/20.保存数据表.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/02.库表资源/20.保存数据表.ms",
       "rowIds": [
         "datapd_db_table_save_01"
       ],
@@ -476,8 +476,8 @@
       "metadataId": "datapd_db_table_save_01"
     },
     {
-      "path": "api/02.数据盘点/02.数据库资源/21.保存数据表治理配置.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/02.数据库资源/21.保存数据表治理配置.ms",
+      "path": "api/02.数据盘点/02.库表资源/21.保存数据表治理配置.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/02.库表资源/21.保存数据表治理配置.ms",
       "rowIds": [
         "datapd_db_table_govern_01"
       ],
@@ -486,8 +486,8 @@
       "metadataId": "datapd_db_table_govern_01"
     },
     {
-      "path": "api/02.数据盘点/02.数据库资源/22.批量标注数据表.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/02.数据库资源/22.批量标注数据表.ms",
+      "path": "api/02.数据盘点/02.库表资源/22.批量标注数据表.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/02.库表资源/22.批量标注数据表.ms",
       "rowIds": [
         "db_table_batch_annotate_01"
       ],
@@ -496,8 +496,8 @@
       "metadataId": "db_table_batch_annotate_01"
     },
     {
-      "path": "api/02.数据盘点/02.数据库资源/23.获取字段列表.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/02.数据库资源/23.获取字段列表.ms",
+      "path": "api/02.数据盘点/02.库表资源/23.获取字段列表.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/02.库表资源/23.获取字段列表.ms",
       "rowIds": [
         "a9dc328184b7410781b389f67fad1233"
       ],
@@ -506,8 +506,8 @@
       "metadataId": "a9dc328184b7410781b389f67fad1233"
     },
     {
-      "path": "api/02.数据盘点/02.数据库资源/24.结构化来源字段.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/02.数据库资源/24.结构化来源字段.ms",
+      "path": "api/02.数据盘点/02.库表资源/24.结构化来源字段.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/02.库表资源/24.结构化来源字段.ms",
       "rowIds": [
         "metadata_structured_columns_01"
       ],
@@ -516,8 +516,8 @@
       "metadataId": "metadata_structured_columns_01"
     },
     {
-      "path": "api/02.数据盘点/02.数据库资源/25.按需采集数据表字段快照.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/02.数据库资源/25.按需采集数据表字段快照.ms",
+      "path": "api/02.数据盘点/02.库表资源/25.按需采集数据表字段快照.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/02.库表资源/25.按需采集数据表字段快照.ms",
       "rowIds": [
         null
       ],
@@ -526,8 +526,8 @@
       "metadataId": "metadata_columns_collect_24"
     },
     {
-      "path": "api/02.数据盘点/02.数据库资源/26.数据库表抽样.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/02.数据库资源/26.数据库表抽样.ms",
+      "path": "api/02.数据盘点/02.库表资源/26.数据库表抽样.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/02.库表资源/26.数据库表抽样.ms",
       "rowIds": [
         "06ee6f0e37e44762be967dbd2d764780"
       ],
@@ -536,8 +536,8 @@
       "metadataId": "06ee6f0e37e44762be967dbd2d764780"
     },
     {
-      "path": "api/02.数据盘点/02.数据库资源/27.数据表预览.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/02.数据库资源/27.数据表预览.ms",
+      "path": "api/02.数据盘点/02.库表资源/27.数据表预览.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/02.库表资源/27.数据表预览.ms",
       "rowIds": [
         "bc30a3edb1f04bceaeee373ed5952d4a"
       ],
@@ -546,8 +546,8 @@
       "metadataId": "bc30a3edb1f04bceaeee373ed5952d4a"
     },
     {
-      "path": "api/02.数据盘点/02.数据库资源/28.远程表数据操作.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/02.数据库资源/28.远程表数据操作.ms",
+      "path": "api/02.数据盘点/02.库表资源/28.远程表数据操作.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/02.库表资源/28.远程表数据操作.ms",
       "rowIds": [
         "metadata_remote_table_data_01"
       ],
@@ -556,8 +556,8 @@
       "metadataId": "metadata_remote_table_data_01"
     },
     {
-      "path": "api/02.数据盘点/02.数据库资源/29.结构化来源样例数据.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/02.数据库资源/29.结构化来源样例数据.ms",
+      "path": "api/02.数据盘点/02.库表资源/29.结构化来源样例数据.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/02.库表资源/29.结构化来源样例数据.ms",
       "rowIds": [
         "metadata_structured_sample_01"
       ],
@@ -566,48 +566,87 @@
       "metadataId": "metadata_structured_sample_01"
     },
     {
-      "path": "api/02.数据盘点/02.数据库资源/30.文件登记快照.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/02.数据库资源/30.文件登记快照.ms",
-      "rowIds": [
-        "41e11cc05b88482eae4cabe4a14e1191"
-      ],
-      "kind": "api",
-      "baseSha256": "666e26a42cd90fa96741d9778b85a2aac1a5d39063c82b44b2bee37e3ca48086",
-      "metadataId": "metadata_file_registration_01"
-    },
-    {
-      "path": "api/02.数据盘点/02.数据库资源/31.数据上报登记.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/02.数据库资源/31.数据上报登记.ms",
-      "rowIds": [
-        "759fc36820a94fc8a9fe307c5e98a6c1"
-      ],
-      "kind": "api",
-      "baseSha256": "c431f717fdfc0619276e23e800d793e12e7ad48cd9b40e6a69659fc63db50af9",
-      "metadataId": "report_registration_files_01"
-    },
-    {
-      "path": "api/02.数据盘点/02.数据库资源/32.提交上报文件.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/02.数据库资源/32.提交上报文件.ms",
-      "rowIds": [
-        "0e89b55b790347d18cea0d4f78012f94"
-      ],
-      "kind": "api",
-      "baseSha256": "213a775b78fd927c410faefe827f621cc20f8853a43adeb3e2c665801e5a920f",
-      "metadataId": "data_report_submit_01"
-    },
-    {
-      "path": "api/02.数据盘点/02.数据库资源/group.json",
-      "databasePath": "/magic-api/api/02.数据盘点/02.数据库资源/group.json",
+      "path": "api/02.数据盘点/02.库表资源/group.json",
+      "databasePath": "/magic-api/api/02.数据盘点/02.库表资源/group.json",
       "rowIds": [
         "datapd_database_group_01"
       ],
       "kind": null,
-      "baseSha256": "c2838465ca820db26c36a08f450d5207b6e251c885942102c406971d75820240",
+      "baseSha256": "e65779ff242d663bcda68828a35bdd10abcf65393923e0dcea582b2fe5bbc4b3",
       "metadataId": "datapd_database_group_01"
     },
     {
-      "path": "api/02.数据盘点/03.数据目录",
-      "databasePath": "/magic-api/api/02.数据盘点/03.数据目录/",
+      "path": "api/02.数据盘点/03.文件操作",
+      "databasePath": "/magic-api/api/02.数据盘点/03.文件操作/",
+      "rowIds": [
+        "ea30de6515dd441c9c1d909407f71c81"
+      ],
+      "kind": "directory",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
+    },
+    {
+      "path": "api/02.数据盘点/03.文件操作/01.业务附件操作.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/03.文件操作/01.业务附件操作.ms",
+      "rowIds": [
+        "6a8a78b375224683a6afbcdac223aef6"
+      ],
+      "kind": null,
+      "baseSha256": "5557d03e3fea9a3787aea9bfd8a69cdeeb3c46f4cc8d3e6857b0be4eccfd04a5",
+      "metadataId": "6a8a78b375224683a6afbcdac223aef6"
+    },
+    {
+      "path": "api/02.数据盘点/03.文件操作/02.业务附件下载.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/03.文件操作/02.业务附件下载.ms",
+      "rowIds": [
+        "347c0f505eed4457ac03b77f07eb6896"
+      ],
+      "kind": null,
+      "baseSha256": "e16ba4fda0c1b3c048f9e94c5a3f9fc2b907faa243c3f61085555ebc8c793baa",
+      "metadataId": "347c0f505eed4457ac03b77f07eb6896"
+    },
+    {
+      "path": "api/02.数据盘点/03.文件操作/03.文件登记快照.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/03.文件操作/03.文件登记快照.ms",
+      "rowIds": [
+        "41e11cc05b88482eae4cabe4a14e1191"
+      ],
+      "kind": "api",
+      "baseSha256": "dd26c035213eff97226468b43f20fa21ead92adbedcc4253f830d09c41f05459",
+      "metadataId": "metadata_file_registration_01"
+    },
+    {
+      "path": "api/02.数据盘点/03.文件操作/04.数据上报登记.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/03.文件操作/04.数据上报登记.ms",
+      "rowIds": [
+        "759fc36820a94fc8a9fe307c5e98a6c1"
+      ],
+      "kind": "api",
+      "baseSha256": "1fe3289da5ff35389f9a8c3bbb1871dff1169f8cd403ca0d27c7dfadd9498696",
+      "metadataId": "report_registration_files_01"
+    },
+    {
+      "path": "api/02.数据盘点/03.文件操作/05.提交上报文件.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/03.文件操作/05.提交上报文件.ms",
+      "rowIds": [
+        "0e89b55b790347d18cea0d4f78012f94"
+      ],
+      "kind": "api",
+      "baseSha256": "e8afad7e92f2be9d93a22d0f529f3571494551244d54ad26123fcf22ce9b1d5a",
+      "metadataId": "data_report_submit_01"
+    },
+    {
+      "path": "api/02.数据盘点/03.文件操作/group.json",
+      "databasePath": "/magic-api/api/02.数据盘点/03.文件操作/group.json",
+      "rowIds": [
+        "d243c831db604212b5773c9926d2b4ed"
+      ],
+      "kind": "api",
+      "baseSha256": "c2ea78237e28a8d7bb5381b41d2681fd82076a69ff4abb4029732714023c1d42",
+      "metadataId": "e79210b931bf5e1e9070de78883499c9"
+    },
+    {
+      "path": "api/02.数据盘点/04.数据目录",
+      "databasePath": "/magic-api/api/02.数据盘点/04.数据目录/",
       "rowIds": [
         null
       ],
@@ -615,8 +654,8 @@
       "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "api/02.数据盘点/03.数据目录/01.数据目录列表.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/03.数据目录/01.数据目录列表.ms",
+      "path": "api/02.数据盘点/04.数据目录/01.数据目录列表.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/04.数据目录/01.数据目录列表.ms",
       "rowIds": [
         "datapd_catalog_list_01"
       ],
@@ -625,8 +664,8 @@
       "metadataId": "datapd_catalog_list_01"
     },
     {
-      "path": "api/02.数据盘点/03.数据目录/02.上传文件数据(互联网).ms",
-      "databasePath": "/magic-api/api/02.数据盘点/03.数据目录/02.上传文件数据(互联网).ms",
+      "path": "api/02.数据盘点/04.数据目录/02.上传文件数据(互联网).ms",
+      "databasePath": "/magic-api/api/02.数据盘点/04.数据目录/02.上传文件数据(互联网).ms",
       "rowIds": [
         "08b503e694044829958402e3c2e4ab72"
       ],
@@ -635,8 +674,8 @@
       "metadataId": "08b503e694044829958402e3c2e4ab72"
     },
     {
-      "path": "api/02.数据盘点/03.数据目录/03.下载文件导入模板.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/03.数据目录/03.下载文件导入模板.ms",
+      "path": "api/02.数据盘点/04.数据目录/03.下载文件导入模板.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/04.数据目录/03.下载文件导入模板.ms",
       "rowIds": [
         "3002ad9de30b4d22ac0644a965f629b7"
       ],
@@ -645,8 +684,8 @@
       "metadataId": "3002ad9de30b4d22ac0644a965f629b7"
     },
     {
-      "path": "api/02.数据盘点/03.数据目录/04.导入文件数据.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/03.数据目录/04.导入文件数据.ms",
+      "path": "api/02.数据盘点/04.数据目录/04.导入文件数据.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/04.数据目录/04.导入文件数据.ms",
       "rowIds": [
         "0de479d6e10340358b40c11991375065"
       ],
@@ -655,8 +694,8 @@
       "metadataId": "0de479d6e10340358b40c11991375065"
     },
     {
-      "path": "api/02.数据盘点/03.数据目录/05.操作文件数据.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/03.数据目录/05.操作文件数据.ms",
+      "path": "api/02.数据盘点/04.数据目录/05.操作文件数据.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/04.数据目录/05.操作文件数据.ms",
       "rowIds": [
         "f7f2ee0a5eb5410fbf30a027d48ca8da"
       ],
@@ -665,8 +704,8 @@
       "metadataId": "f7f2ee0a5eb5410fbf30a027d48ca8da"
     },
     {
-      "path": "api/02.数据盘点/03.数据目录/06.文件数据物化建表.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/03.数据目录/06.文件数据物化建表.ms",
+      "path": "api/02.数据盘点/04.数据目录/06.文件数据物化建表.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/04.数据目录/06.文件数据物化建表.ms",
       "rowIds": [
         "28ab37e70de24570a2015c72d289ec89"
       ],
@@ -675,8 +714,8 @@
       "metadataId": "28ab37e70de24570a2015c72d289ec89"
     },
     {
-      "path": "api/02.数据盘点/03.数据目录/07.数据目录分页.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/03.数据目录/07.数据目录分页.ms",
+      "path": "api/02.数据盘点/04.数据目录/07.数据目录分页.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/04.数据目录/07.数据目录分页.ms",
       "rowIds": [
         "datapd_catalog_page_compat_01"
       ],
@@ -685,8 +724,8 @@
       "metadataId": "datapd_catalog_page_compat_01"
     },
     {
-      "path": "api/02.数据盘点/03.数据目录/08.数据目录详情.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/03.数据目录/08.数据目录详情.ms",
+      "path": "api/02.数据盘点/04.数据目录/08.数据目录详情.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/04.数据目录/08.数据目录详情.ms",
       "rowIds": [
         "datapd_catalog_detail_compat_01"
       ],
@@ -695,8 +734,8 @@
       "metadataId": "datapd_catalog_detail_compat_01"
     },
     {
-      "path": "api/02.数据盘点/03.数据目录/09.数据目录树统计.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/03.数据目录/09.数据目录树统计.ms",
+      "path": "api/02.数据盘点/04.数据目录/09.数据目录树统计.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/04.数据目录/09.数据目录树统计.ms",
       "rowIds": [
         "datapd_catalog_tree_stats_01"
       ],
@@ -705,8 +744,8 @@
       "metadataId": "datapd_catalog_tree_stats_01"
     },
     {
-      "path": "api/02.数据盘点/03.数据目录/10.数据目录数据项列表.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/03.数据目录/10.数据目录数据项列表.ms",
+      "path": "api/02.数据盘点/04.数据目录/10.数据目录数据项列表.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/04.数据目录/10.数据目录数据项列表.ms",
       "rowIds": [
         "datapd_catalog_items_list_01"
       ],
@@ -715,8 +754,8 @@
       "metadataId": "datapd_catalog_items_list_01"
     },
     {
-      "path": "api/02.数据盘点/03.数据目录/11.保存数据目录.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/03.数据目录/11.保存数据目录.ms",
+      "path": "api/02.数据盘点/04.数据目录/11.保存数据目录.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/04.数据目录/11.保存数据目录.ms",
       "rowIds": [
         "datapd_catalog_save_01"
       ],
@@ -725,8 +764,8 @@
       "metadataId": "datapd_table_catalog_save_01"
     },
     {
-      "path": "api/02.数据盘点/03.数据目录/12.删除数据目录.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/03.数据目录/12.删除数据目录.ms",
+      "path": "api/02.数据盘点/04.数据目录/12.删除数据目录.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/04.数据目录/12.删除数据目录.ms",
       "rowIds": [
         "datapd_catalog_delete_01"
       ],
@@ -735,18 +774,18 @@
       "metadataId": "datapd_catalog_delete_01"
     },
     {
-      "path": "api/02.数据盘点/03.数据目录/group.json",
-      "databasePath": "/magic-api/api/02.数据盘点/03.数据目录/group.json",
+      "path": "api/02.数据盘点/04.数据目录/group.json",
+      "databasePath": "/magic-api/api/02.数据盘点/04.数据目录/group.json",
       "rowIds": [
         "datapd_catalog_group_01"
       ],
       "kind": null,
-      "baseSha256": "8a19981d62586669a3d730a46dbd86986d741a5d648b926091ad89f325c77236",
+      "baseSha256": "ab657ab75d3310557f903d04a7c259c40eeb6edd7da82c8f2a221d9120e0eda9",
       "metadataId": "datapd_catalog_group_01"
     },
     {
-      "path": "api/02.数据盘点/04.盘点统计",
-      "databasePath": "/magic-api/api/02.数据盘点/04.盘点统计/",
+      "path": "api/02.数据盘点/05.盘点统计",
+      "databasePath": "/magic-api/api/02.数据盘点/05.盘点统计/",
       "rowIds": [
         null
       ],
@@ -754,8 +793,8 @@
       "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "api/02.数据盘点/04.盘点统计/01.工作台概览.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/04.盘点统计/01.工作台概览.ms",
+      "path": "api/02.数据盘点/05.盘点统计/01.工作台概览.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/05.盘点统计/01.工作台概览.ms",
       "rowIds": [
         "98d06f53128145618b4407c2a4ff35d0"
       ],
@@ -764,8 +803,8 @@
       "metadataId": "30f59993bf5b43c994b4db87eee9d94d"
     },
     {
-      "path": "api/02.数据盘点/04.盘点统计/02.工作台事项分页.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/04.盘点统计/02.工作台事项分页.ms",
+      "path": "api/02.数据盘点/05.盘点统计/02.工作台事项分页.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/05.盘点统计/02.工作台事项分页.ms",
       "rowIds": [
         "7649229f635b48e29e353ceeba8b2f94"
       ],
@@ -774,8 +813,8 @@
       "metadataId": "93fcc3a46552459d836f50a112addafd"
     },
     {
-      "path": "api/02.数据盘点/04.盘点统计/03.工作台导出.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/04.盘点统计/03.工作台导出.ms",
+      "path": "api/02.数据盘点/05.盘点统计/03.工作台导出.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/05.盘点统计/03.工作台导出.ms",
       "rowIds": [
         "25e42cc653db44be90ab7340dd31f3ef"
       ],
@@ -784,8 +823,8 @@
       "metadataId": "1d54e87126614dd88063f247ab8f1176"
     },
     {
-      "path": "api/02.数据盘点/04.盘点统计/04.通用盘点统计.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/04.盘点统计/04.通用盘点统计.ms",
+      "path": "api/02.数据盘点/05.盘点统计/04.通用盘点统计.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/05.盘点统计/04.通用盘点统计.ms",
       "rowIds": [
         "5e9d44728cfc491090f29b80def8858a"
       ],
@@ -794,8 +833,8 @@
       "metadataId": "5e9d44728cfc491090f29b80def8858a"
     },
     {
-      "path": "api/02.数据盘点/04.盘点统计/05.工作台导出统计.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/04.盘点统计/05.工作台导出统计.ms",
+      "path": "api/02.数据盘点/05.盘点统计/05.工作台导出统计.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/05.盘点统计/05.工作台导出统计.ms",
       "rowIds": [
         "69ed4e3d283845f08b908c7d81598252"
       ],
@@ -804,18 +843,18 @@
       "metadataId": "46051d94b97c46b6947516d70d0c7906"
     },
     {
-      "path": "api/02.数据盘点/04.盘点统计/group.json",
-      "databasePath": "/magic-api/api/02.数据盘点/04.盘点统计/group.json",
+      "path": "api/02.数据盘点/05.盘点统计/group.json",
+      "databasePath": "/magic-api/api/02.数据盘点/05.盘点统计/group.json",
       "rowIds": [
         "9ef163a809ec40b59d35eb27d2f584a5"
       ],
       "kind": null,
-      "baseSha256": "6c9ee4ef8627be2fda7bd4a642c1494f2d27d21dee8fdee645309c38c391969e",
+      "baseSha256": "b277441e7c105e03f2a07a509c505f896718d0d82330bc351bc2bf8d931293bb",
       "metadataId": "9ef163a809ec40b59d35eb27d2f584a5"
     },
     {
-      "path": "api/02.数据盘点/05.盘点维护",
-      "databasePath": "/magic-api/api/02.数据盘点/05.盘点维护/",
+      "path": "api/02.数据盘点/06.盘点维护",
+      "databasePath": "/magic-api/api/02.数据盘点/06.盘点维护/",
       "rowIds": [
         null
       ],
@@ -823,8 +862,8 @@
       "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "api/02.数据盘点/05.盘点维护/01.刷新单个资产索引.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/05.盘点维护/01.刷新单个资产索引.ms",
+      "path": "api/02.数据盘点/06.盘点维护/01.刷新单个资产索引.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/06.盘点维护/01.刷新单个资产索引.ms",
       "rowIds": [
         "b50ebeed318c41889f97dda1bf3716d8"
       ],
@@ -833,8 +872,8 @@
       "metadataId": "datapd_asset_refresh_01"
     },
     {
-      "path": "api/02.数据盘点/05.盘点维护/02.批量重建资产索引.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/05.盘点维护/02.批量重建资产索引.ms",
+      "path": "api/02.数据盘点/06.盘点维护/02.批量重建资产索引.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/06.盘点维护/02.批量重建资产索引.ms",
       "rowIds": [
         "b5b9ae3e7af64140910e7c1c6301935d"
       ],
@@ -843,18 +882,18 @@
       "metadataId": "datapd_assets_batch_refresh_01"
     },
     {
-      "path": "api/02.数据盘点/05.盘点维护/group.json",
-      "databasePath": "/magic-api/api/02.数据盘点/05.盘点维护/group.json",
+      "path": "api/02.数据盘点/06.盘点维护/group.json",
+      "databasePath": "/magic-api/api/02.数据盘点/06.盘点维护/group.json",
       "rowIds": [
         "datapd_maintenance_group_01"
       ],
       "kind": null,
-      "baseSha256": "42e2112495a3a6ecd6a1a44ed925518856f4832c528a762544581d50905d2bba",
+      "baseSha256": "c51d9497e97fbb6a1a6a6b06d194806429945d23c765cae6cd9a7b4682ed28a3",
       "metadataId": "datapd_maintenance_group_01"
     },
     {
-      "path": "api/02.数据盘点/06.资产管理",
-      "databasePath": "/magic-api/api/02.数据盘点/06.资产管理/",
+      "path": "api/02.数据盘点/07.资产管理",
+      "databasePath": "/magic-api/api/02.数据盘点/07.资产管理/",
       "rowIds": [
         "86ad84f154ea49ddab245f0269827608"
       ],
@@ -862,8 +901,8 @@
       "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "api/02.数据盘点/06.资产管理/01.资产模块分页.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/06.资产管理/01.资产模块分页.ms",
+      "path": "api/02.数据盘点/07.资产管理/01.资产模块分页.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/07.资产管理/01.资产模块分页.ms",
       "rowIds": [
         "d2f9faff30de4b28ade0ef9bd69c2600"
       ],
@@ -872,8 +911,8 @@
       "metadataId": "a55e7c1d2f4b4a6e9c3d8b1f5a7e2c40"
     },
     {
-      "path": "api/02.数据盘点/06.资产管理/02.资产模块保存.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/06.资产管理/02.资产模块保存.ms",
+      "path": "api/02.数据盘点/07.资产管理/02.资产模块保存.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/07.资产管理/02.资产模块保存.ms",
       "rowIds": [
         "98f475a04df14fc2aebe9b7dedfe3ffe"
       ],
@@ -882,8 +921,8 @@
       "metadataId": "a55e7c1d2f4b4a6e9c3d8b1f5a7e2c41"
     },
     {
-      "path": "api/02.数据盘点/06.资产管理/03.资产模块删除.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/06.资产管理/03.资产模块删除.ms",
+      "path": "api/02.数据盘点/07.资产管理/03.资产模块删除.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/07.资产管理/03.资产模块删除.ms",
       "rowIds": [
         "288c048bdf0645bb8c102774c5f8a8af"
       ],
@@ -892,8 +931,8 @@
       "metadataId": "a55e7c1d2f4b4a6e9c3d8b1f5a7e2c42"
     },
     {
-      "path": "api/02.数据盘点/06.资产管理/04.资产总览统计.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/06.资产管理/04.资产总览统计.ms",
+      "path": "api/02.数据盘点/07.资产管理/04.资产总览统计.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/07.资产管理/04.资产总览统计.ms",
       "rowIds": [
         "36dbd3248c314b9ab8f125317c0a18e6"
       ],
@@ -902,8 +941,8 @@
       "metadataId": "a55e7c1d2f4b4a6e9c3d8b1f5a7e2c43"
     },
     {
-      "path": "api/02.数据盘点/06.资产管理/05.智能盘点执行.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/06.资产管理/05.智能盘点执行.ms",
+      "path": "api/02.数据盘点/07.资产管理/05.智能盘点执行.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/07.资产管理/05.智能盘点执行.ms",
       "rowIds": [
         "0681c6d28504497b87fb8ff6f505a72e"
       ],
@@ -912,8 +951,8 @@
       "metadataId": "a55e7c1d2f4b4a6e9c3d8b1f5a7e2c44"
     },
     {
-      "path": "api/02.数据盘点/06.资产管理/06.资产评估执行.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/06.资产管理/06.资产评估执行.ms",
+      "path": "api/02.数据盘点/07.资产管理/06.资产评估执行.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/07.资产管理/06.资产评估执行.ms",
       "rowIds": [
         "05311a1df85b410ea9bd64fb8776aeee"
       ],
@@ -922,13 +961,13 @@
       "metadataId": "a55e7c1d2f4b4a6e9c3d8b1f5a7e2c45"
     },
     {
-      "path": "api/02.数据盘点/06.资产管理/group.json",
-      "databasePath": "/magic-api/api/02.数据盘点/06.资产管理/group.json",
+      "path": "api/02.数据盘点/07.资产管理/group.json",
+      "databasePath": "/magic-api/api/02.数据盘点/07.资产管理/group.json",
       "rowIds": [
         "39aa0a4a2a744068a693e75975d8ced3"
       ],
       "kind": "group",
-      "baseSha256": "2e24760440b3e68068cb49455d4f3989a859b92d6e6ca616b932249ef5960e2c",
+      "baseSha256": "3624d404f2fc96ad4d7462df543c2fc5ec3002c555602d60ddbc65bff3d849bd",
       "metadataId": "datapd_asset_group_01"
     },
     {
@@ -1971,7 +2010,7 @@
         "17326938ed5c4cd0a2e377a3ed68d239"
       ],
       "kind": null,
-      "baseSha256": "9577ac4956aeed30251f79f1d09a464c8f22dc2ade52cc1ff61d078a45a6f4ea",
+      "baseSha256": "0aaf0a02d6f873120dad4fb9b9ff7220551065e94b6ca93bb7d2db6f95bd0f3d",
       "metadataId": "17326938ed5c4cd0a2e377a3ed68d239"
     },
     {
@@ -2924,7 +2963,7 @@
         "c4348978915046c4af25470dd509c239"
       ],
       "kind": null,
-      "baseSha256": "2105d3d346344cd972cc8bcd55fe90389c0c71f2a060ef01a948fbfd3c6e6192",
+      "baseSha256": "044bbfa3349e93caaa8ff0199fcd66dcec2513ee60d3d35905e2e9c1a633ef95",
       "metadataId": "c4348978915046c4af25470dd509c239"
     },
     {
@@ -4175,11 +4214,11 @@
     {
       "path": "api/07.系统管理/08.组件管理/01.页面组件管理.ms",
       "databasePath": "/magic-api/api/07.系统管理/08.组件管理/01.页面组件管理.ms",
-      "baseSha256": "fb1b543f26a1b0e9cd70f038f642459a069d50e02d27619d9d76c1e7443601b6",
       "rowIds": [
         "a3b59b1dfb2c4c3989bf0a8a0e1f91cc"
       ],
       "kind": null,
+      "baseSha256": "a9e455b2ce896100ada44df6ab23c2272a74f9bfe4dcd9546d09fd9c807f61e7",
       "metadataId": "a3b59b1dfb2c4c3989bf0a8a0e1f91cc"
     },
     {
@@ -4204,11 +4243,11 @@
     {
       "path": "api/07.系统管理/09.动态表单/01.动态表单配置.ms",
       "databasePath": "/magic-api/api/07.系统管理/09.动态表单/01.动态表单配置.ms",
-      "baseSha256": "ba105db6ff740cfec1c6b16c496f98329d1fc9cf62641a35d9ac7229df9a8c3f",
       "rowIds": [
         "b5dd6283a2af4141ac6e53d31ed8f507"
       ],
       "kind": null,
+      "baseSha256": "be03c8be695d36a5a8e8bdad01146d32f15bcf8113765ef92c257e934a74c100",
       "metadataId": "b5dd6283a2af4141ac6e53d31ed8f507"
     },
     {
@@ -4222,183 +4261,126 @@
       "metadataId": "76876a4ac97856e093efe5a17539285e"
     },
     {
-      "path": "api/07.系统管理/10.字典查询",
-      "databasePath": "/magic-api/api/07.系统管理/10.字典查询/",
-      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
+      "path": "api/07.系统管理/10.数据字典",
+      "databasePath": "/magic-api/api/07.系统管理/10.数据字典/",
       "rowIds": [
         "3ac5c20895764b618ad30713cb81a310"
       ],
-      "kind": "directory"
+      "kind": "directory",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "api/07.系统管理/10.字典查询/01.数据字典查询.ms",
-      "databasePath": "/magic-api/api/07.系统管理/10.字典查询/01.数据字典查询.ms",
+      "path": "api/07.系统管理/10.数据字典/01.数据字典查询.ms",
+      "databasePath": "/magic-api/api/07.系统管理/10.数据字典/01.数据字典查询.ms",
       "rowIds": [
         "fa5e60254452443a8d512df21c6eed53"
       ],
       "kind": null,
-      "baseSha256": "e2868ef1f29ac0b2c8e4a190ecda761482f4da37ef5c32f01a0303a966dc99c1",
+      "baseSha256": "c1df2e3d35b8c1377796a22690ba0f071e3c9b26ae6eb459ff97bb9e6b374aa1",
       "metadataId": "fa5e60254452443a8d512df21c6eed53"
     },
     {
-      "path": "api/07.系统管理/10.字典查询/group.json",
-      "databasePath": "/magic-api/api/07.系统管理/10.字典查询/group.json",
-      "baseSha256": "97a2004ef4582b5b92224ac61fe33e3035e77f9990607dcc1a85b434247c2687",
-      "rowIds": [
-        "e0e289c761e346e6a094fc59f17636c2"
-      ],
-      "kind": "api",
-      "metadataId": "5a14723f65f3549a985a3ccdfb7bfcfe"
-    },
-    {
-      "path": "api/07.系统管理/11.字典树",
-      "databasePath": "/magic-api/api/07.系统管理/11.字典树/",
-      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
-      "rowIds": [
-        "68da81eb87274d04bdf42ad747d88dab"
-      ],
-      "kind": "directory"
-    },
-    {
-      "path": "api/07.系统管理/11.字典树/01.字典树查询.ms",
-      "databasePath": "/magic-api/api/07.系统管理/11.字典树/01.字典树查询.ms",
-      "baseSha256": "4840d052a037dd53e29b307a9cebbaee8bf85380fe55b6185c514efbaba502b2",
+      "path": "api/07.系统管理/10.数据字典/02.字典树查询.ms",
+      "databasePath": "/magic-api/api/07.系统管理/10.数据字典/02.字典树查询.ms",
       "rowIds": [
         "f7622ea4ac5547af954ae35a3ab56826"
       ],
       "kind": null,
+      "baseSha256": "678dba1c58733159a42fd59e8582f5520378c7819307c5ad685e285d6ad28572",
       "metadataId": "f7622ea4ac5547af954ae35a3ab56826"
     },
     {
-      "path": "api/07.系统管理/11.字典树/group.json",
-      "databasePath": "/magic-api/api/07.系统管理/11.字典树/group.json",
-      "baseSha256": "83f1c6f2a00b43280e015064babae23d672590b669c80c53a3bbc598e1135d82",
-      "rowIds": [
-        "84e8788d712940279d04ff228b681bc6"
-      ],
-      "kind": "api",
-      "metadataId": "89c9f7d224615b0a83a20ac35ba40a91"
-    },
-    {
-      "path": "api/07.系统管理/12.字典保存",
-      "databasePath": "/magic-api/api/07.系统管理/12.字典保存/",
-      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
-      "rowIds": [
-        "d2fd300dfd214483bb64152ebbecb00c"
-      ],
-      "kind": "directory"
-    },
-    {
-      "path": "api/07.系统管理/12.字典保存/01.字典保存修改.ms",
-      "databasePath": "/magic-api/api/07.系统管理/12.字典保存/01.字典保存修改.ms",
-      "baseSha256": "e40fca8f55f1556b1a357ed4405584d4fe21fcf3c5ee8bc1441919ed0be9e647",
+      "path": "api/07.系统管理/10.数据字典/03.字典保存修改.ms",
+      "databasePath": "/magic-api/api/07.系统管理/10.数据字典/03.字典保存修改.ms",
       "rowIds": [
         "05715b7dbe1b4bf5a0015cd11431a45a"
       ],
       "kind": null,
+      "baseSha256": "7688b2b0dccce2a04bc05c375c66f90c2fd861cc0309ee24418199505f7beff9",
       "metadataId": "05715b7dbe1b4bf5a0015cd11431a45a"
     },
     {
-      "path": "api/07.系统管理/12.字典保存/group.json",
-      "databasePath": "/magic-api/api/07.系统管理/12.字典保存/group.json",
-      "baseSha256": "9ecca03722785b7218b33ea953e5b4b5cf8f1e253d9171ffcbe548629d58da56",
-      "rowIds": [
-        "7b87a320f2f0420f8cb479aaf0651299"
-      ],
-      "kind": "api",
-      "metadataId": "cca6d167f68152c8ae9e98c8a778f471"
-    },
-    {
-      "path": "api/07.系统管理/13.字典排序",
-      "databasePath": "/magic-api/api/07.系统管理/13.字典排序/",
-      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
-      "rowIds": [
-        "27d12eb8622b4732b44f795f0bdbc155"
-      ],
-      "kind": "directory"
-    },
-    {
-      "path": "api/07.系统管理/13.字典排序/01.字典拖拽排序.ms",
-      "databasePath": "/magic-api/api/07.系统管理/13.字典排序/01.字典拖拽排序.ms",
-      "baseSha256": "83b18dd2d1ddd5ea5bac5680a2c7ddc51b997859f70986c0503a3e9dcd111db9",
+      "path": "api/07.系统管理/10.数据字典/04.字典拖拽排序.ms",
+      "databasePath": "/magic-api/api/07.系统管理/10.数据字典/04.字典拖拽排序.ms",
       "rowIds": [
         "fa050435331a44da84dafa64d74d39c5"
       ],
       "kind": null,
+      "baseSha256": "c3f65d3d8c8543efbfe7f42f18c5cf2249a20281a1bfd47fe51a12218fd226f5",
       "metadataId": "fa050435331a44da84dafa64d74d39c5"
     },
     {
-      "path": "api/07.系统管理/13.字典排序/group.json",
-      "databasePath": "/magic-api/api/07.系统管理/13.字典排序/group.json",
-      "baseSha256": "5530fe2ef5eeacdc2ac2b579bddc8728ee1eae248d1419587c83287852bfc439",
+      "path": "api/07.系统管理/10.数据字典/group.json",
+      "databasePath": "/magic-api/api/07.系统管理/10.数据字典/group.json",
       "rowIds": [
-        "ccdf7d59652946db9cc5c40e833b7d59"
+        "e0e289c761e346e6a094fc59f17636c2"
       ],
       "kind": "api",
-      "metadataId": "c4a7c9d156ee569bb5bde1e459b969af"
+      "baseSha256": "bdc8d6afe7f6da43bb5059f5a7032dfb51e683852626bc7f17ad3a80e0696097",
+      "metadataId": "5a14723f65f3549a985a3ccdfb7bfcfe"
     },
     {
-      "path": "api/07.系统管理/14.租户管理",
-      "databasePath": "/magic-api/api/07.系统管理/14.租户管理/",
-      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
+      "path": "api/07.系统管理/11.租户管理",
+      "databasePath": "/magic-api/api/07.系统管理/11.租户管理/",
       "rowIds": [
         "d28618bcdcca47279ce2c6f513002948"
       ],
-      "kind": "directory"
+      "kind": "directory",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "api/07.系统管理/14.租户管理/01.租户列表.ms",
-      "databasePath": "/magic-api/api/07.系统管理/14.租户管理/01.租户列表.ms",
-      "baseSha256": "96d39da77dbc5095f4cdb9e7f9b66acf62d4755ac9293c3dadf766232a5f9190",
+      "path": "api/07.系统管理/11.租户管理/01.租户列表.ms",
+      "databasePath": "/magic-api/api/07.系统管理/11.租户管理/01.租户列表.ms",
       "rowIds": [
         "tenant_list_magic_01"
       ],
       "kind": null,
+      "baseSha256": "96d39da77dbc5095f4cdb9e7f9b66acf62d4755ac9293c3dadf766232a5f9190",
       "metadataId": "tenant_list_magic_01"
     },
     {
-      "path": "api/07.系统管理/14.租户管理/02.保存租户.ms",
-      "databasePath": "/magic-api/api/07.系统管理/14.租户管理/02.保存租户.ms",
-      "baseSha256": "1739f8e3c6be43d02395e6d205de30b26e79fd659f5a931abfad63629998a7eb",
+      "path": "api/07.系统管理/11.租户管理/02.保存租户.ms",
+      "databasePath": "/magic-api/api/07.系统管理/11.租户管理/02.保存租户.ms",
       "rowIds": [
         "tenant_save_magic_01"
       ],
       "kind": null,
+      "baseSha256": "1739f8e3c6be43d02395e6d205de30b26e79fd659f5a931abfad63629998a7eb",
       "metadataId": "tenant_save_magic_01"
     },
     {
-      "path": "api/07.系统管理/14.租户管理/03.用户租户分页.ms",
-      "databasePath": "/magic-api/api/07.系统管理/14.租户管理/03.用户租户分页.ms",
-      "baseSha256": "49ef61db5afee1de68b224770003cd1e2a2c44a58703140c7468ac47307f36cd",
+      "path": "api/07.系统管理/11.租户管理/03.用户租户分页.ms",
+      "databasePath": "/magic-api/api/07.系统管理/11.租户管理/03.用户租户分页.ms",
       "rowIds": [
         "tenant_user_page_magic_01"
       ],
       "kind": null,
+      "baseSha256": "49ef61db5afee1de68b224770003cd1e2a2c44a58703140c7468ac47307f36cd",
       "metadataId": "tenant_user_page_magic_01"
     },
     {
-      "path": "api/07.系统管理/14.租户管理/04.保存用户租户关联.ms",
-      "databasePath": "/magic-api/api/07.系统管理/14.租户管理/04.保存用户租户关联.ms",
-      "baseSha256": "6e56faadb6dfe1048f612b5aa934cca3f5b57b184fdf7702403503abd2ca43f5",
+      "path": "api/07.系统管理/11.租户管理/04.保存用户租户关联.ms",
+      "databasePath": "/magic-api/api/07.系统管理/11.租户管理/04.保存用户租户关联.ms",
       "rowIds": [
         "tenant_assign_user_magic_01"
       ],
       "kind": null,
+      "baseSha256": "6e56faadb6dfe1048f612b5aa934cca3f5b57b184fdf7702403503abd2ca43f5",
       "metadataId": "tenant_assign_user_magic_01"
     },
     {
-      "path": "api/07.系统管理/14.租户管理/05.解除用户租户关联.ms",
-      "databasePath": "/magic-api/api/07.系统管理/14.租户管理/05.解除用户租户关联.ms",
-      "baseSha256": "ef32785790b28391a59f76463f8de852c29bcb795843e106523a219f6c1f24fe",
+      "path": "api/07.系统管理/11.租户管理/05.解除用户租户关联.ms",
+      "databasePath": "/magic-api/api/07.系统管理/11.租户管理/05.解除用户租户关联.ms",
       "rowIds": [
         "tenant_unassign_user_magic_01"
       ],
       "kind": null,
+      "baseSha256": "ef32785790b28391a59f76463f8de852c29bcb795843e106523a219f6c1f24fe",
       "metadataId": "tenant_unassign_user_magic_01"
     },
     {
-      "path": "api/07.系统管理/14.租户管理/06.租户列表兼容读取.ms",
-      "databasePath": "/magic-api/api/07.系统管理/14.租户管理/06.租户列表兼容读取.ms",
+      "path": "api/07.系统管理/11.租户管理/06.租户列表兼容读取.ms",
+      "databasePath": "/magic-api/api/07.系统管理/11.租户管理/06.租户列表兼容读取.ms",
       "rowIds": [
         "tenant_list_magic_get_01"
       ],
@@ -4407,18 +4389,18 @@
       "metadataId": "tenant_list_magic_get_01"
     },
     {
-      "path": "api/07.系统管理/14.租户管理/group.json",
-      "databasePath": "/magic-api/api/07.系统管理/14.租户管理/group.json",
-      "baseSha256": "d5170d1b7d9d8b5b20da6e0d9b1143856233757f48d17a7d13e820d3430e6500",
+      "path": "api/07.系统管理/11.租户管理/group.json",
+      "databasePath": "/magic-api/api/07.系统管理/11.租户管理/group.json",
       "rowIds": [
         "d28618bcdcca47279ce2c6f513002948"
       ],
       "kind": null,
+      "baseSha256": "63cec3f2095a458762cbf0932963cbc5a9a36a52dfe6fa9f24d9d7f77def0c41",
       "metadataId": "d28618bcdcca47279ce2c6f513002948"
     },
     {
-      "path": "api/07.系统管理/15.草稿预览",
-      "databasePath": "/magic-api/api/07.系统管理/15.草稿预览/",
+      "path": "api/07.系统管理/12.草稿预览",
+      "databasePath": "/magic-api/api/07.系统管理/12.草稿预览/",
       "rowIds": [
         "b3f5098ec4754171b6dc7dc087bb343b"
       ],
@@ -4426,28 +4408,28 @@
       "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "api/07.系统管理/15.草稿预览/01.预览草稿排序.ms",
-      "databasePath": "/magic-api/api/07.系统管理/15.草稿预览/01.预览草稿排序.ms",
+      "path": "api/07.系统管理/12.草稿预览/01.预览草稿排序.ms",
+      "databasePath": "/magic-api/api/07.系统管理/12.草稿预览/01.预览草稿排序.ms",
       "rowIds": [
         "cff7ffae8e9742ff828cd149d88e161f"
       ],
       "kind": "api",
-      "metadataId": "sym_draft_preview_order_v1",
-      "baseSha256": "91ebe8d29e5726208ee3dfe13f5b8836c56024391979d1325f94a5fb585d6c06"
+      "baseSha256": "91ebe8d29e5726208ee3dfe13f5b8836c56024391979d1325f94a5fb585d6c06",
+      "metadataId": "sym_draft_preview_order_v1"
     },
     {
-      "path": "api/07.系统管理/15.草稿预览/group.json",
-      "databasePath": "/magic-api/api/07.系统管理/15.草稿预览/group.json",
+      "path": "api/07.系统管理/12.草稿预览/group.json",
+      "databasePath": "/magic-api/api/07.系统管理/12.草稿预览/group.json",
       "rowIds": [
         "90266921f1aa40139e7d224ed57f2627"
       ],
       "kind": "group",
-      "metadataId": "sym_draft_preview_group_v1",
-      "baseSha256": "3f92da22f1eeb4de073b155d13c0b44a9c64374c013b56bd2d1a97d8a8317a23"
+      "baseSha256": "f9d6dbb8d6fa86d7bf0acbb3723c8f3fb0d533547c4dda5c0eb9e48a69011e44",
+      "metadataId": "sym_draft_preview_group_v1"
     },
     {
-      "path": "api/07.系统管理/16.数据范围",
-      "databasePath": "/magic-api/api/07.系统管理/16.数据范围/",
+      "path": "api/07.系统管理/13.数据范围",
+      "databasePath": "/magic-api/api/07.系统管理/13.数据范围/",
       "rowIds": [
         "7295121c34bb4bf68145fdf1ee8a18f1"
       ],
@@ -4455,44 +4437,44 @@
       "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "api/07.系统管理/16.数据范围/01.查询角色数据范围.ms",
-      "databasePath": "/magic-api/api/07.系统管理/16.数据范围/01.查询角色数据范围.ms",
+      "path": "api/07.系统管理/13.数据范围/01.查询角色数据范围.ms",
+      "databasePath": "/magic-api/api/07.系统管理/13.数据范围/01.查询角色数据范围.ms",
       "rowIds": [
         "8a0fbccc12fb4bc3877f19416dd10ed7"
       ],
       "kind": "api",
-      "metadataId": "sym_scope_role_v1",
-      "baseSha256": "a29560650baa9582121d33ab82a560c3c7b55180e34c4fec373ca8c6bec8b056"
+      "baseSha256": "a29560650baa9582121d33ab82a560c3c7b55180e34c4fec373ca8c6bec8b056",
+      "metadataId": "sym_scope_role_v1"
     },
     {
-      "path": "api/07.系统管理/16.数据范围/02.保存角色数据范围.ms",
-      "databasePath": "/magic-api/api/07.系统管理/16.数据范围/02.保存角色数据范围.ms",
+      "path": "api/07.系统管理/13.数据范围/02.保存角色数据范围.ms",
+      "databasePath": "/magic-api/api/07.系统管理/13.数据范围/02.保存角色数据范围.ms",
       "rowIds": [
         "f05955c5939a4c9ba694e9829bfe08a4"
       ],
       "kind": "api",
-      "metadataId": "sym_scope_save_v1",
-      "baseSha256": "10e33fd2fc8c0806e48a5bb57ea9416d502f9e402a240138a71e5b5b8bd4e7a4"
+      "baseSha256": "10e33fd2fc8c0806e48a5bb57ea9416d502f9e402a240138a71e5b5b8bd4e7a4",
+      "metadataId": "sym_scope_save_v1"
     },
     {
-      "path": "api/07.系统管理/16.数据范围/03.查询当前数据范围.ms",
-      "databasePath": "/magic-api/api/07.系统管理/16.数据范围/03.查询当前数据范围.ms",
+      "path": "api/07.系统管理/13.数据范围/03.查询当前数据范围.ms",
+      "databasePath": "/magic-api/api/07.系统管理/13.数据范围/03.查询当前数据范围.ms",
       "rowIds": [
         "a05db0c6f7394922a2f4daad9c2cec47"
       ],
       "kind": "api",
-      "metadataId": "sym_scope_current_v1",
-      "baseSha256": "568385d0337065326f0cc8f56418806d21aebd48bd126af493b542a28418977c"
+      "baseSha256": "568385d0337065326f0cc8f56418806d21aebd48bd126af493b542a28418977c",
+      "metadataId": "sym_scope_current_v1"
     },
     {
-      "path": "api/07.系统管理/16.数据范围/group.json",
-      "databasePath": "/magic-api/api/07.系统管理/16.数据范围/group.json",
+      "path": "api/07.系统管理/13.数据范围/group.json",
+      "databasePath": "/magic-api/api/07.系统管理/13.数据范围/group.json",
       "rowIds": [
         "c8265f507e134b878f3bbd0c3cbfcdb6"
       ],
       "kind": "group",
-      "metadataId": "sym_scope_group_v1",
-      "baseSha256": "b993360401c8126de28629152d3e2805432f85ed5959f5723f3d5cd98b1b6d83"
+      "baseSha256": "6334950ec786fbb344899a13b687904ed5026e80e9f198d94f1fb998db23c3e6",
+      "metadataId": "sym_scope_group_v1"
     },
     {
       "path": "api/07.系统管理/group.json",
@@ -4505,1772 +4487,1695 @@
       "metadataId": "9a18bf0b6a994f5aa56aa775f3de9f3d"
     },
     {
-      "path": "api/08.通用数据操作",
-      "databasePath": "/magic-api/api/08.通用数据操作/",
-      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
-      "rowIds": [
-        null
-      ],
-      "kind": "directory"
-    },
-    {
-      "path": "api/08.通用数据操作/01.文件操作",
-      "databasePath": "/magic-api/api/08.通用数据操作/01.文件操作/",
-      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
-      "rowIds": [
-        "ea30de6515dd441c9c1d909407f71c81"
-      ],
-      "kind": "directory"
-    },
-    {
-      "path": "api/08.通用数据操作/01.文件操作/01.文件操作.ms",
-      "databasePath": "/magic-api/api/08.通用数据操作/01.文件操作/01.文件操作.ms",
-      "baseSha256": "06ae900e6ab0c8200951a021a51676ed5a95d37ecb6956c185d5dea6a0103dec",
-      "rowIds": [
-        "6a8a78b375224683a6afbcdac223aef6"
-      ],
-      "kind": null,
-      "metadataId": "6a8a78b375224683a6afbcdac223aef6"
-    },
-    {
-      "path": "api/08.通用数据操作/01.文件操作/group.json",
-      "databasePath": "/magic-api/api/08.通用数据操作/01.文件操作/group.json",
-      "baseSha256": "634170418ebacaedf078dd51284352ab39a23d6a5232eb2adc563f15ec3b20b4",
-      "rowIds": [
-        "d243c831db604212b5773c9926d2b4ed"
-      ],
-      "kind": "api",
-      "metadataId": "e79210b931bf5e1e9070de78883499c9"
-    },
-    {
-      "path": "api/08.通用数据操作/02.文件下载",
-      "databasePath": "/magic-api/api/08.通用数据操作/02.文件下载/",
-      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
-      "rowIds": [
-        "72bd07722c1542cfaf172d4167e973ef"
-      ],
-      "kind": "directory"
-    },
-    {
-      "path": "api/08.通用数据操作/02.文件下载/01.文件下载接口.ms",
-      "databasePath": "/magic-api/api/08.通用数据操作/02.文件下载/01.文件下载接口.ms",
-      "baseSha256": "b0d330095921a627e5e7f3e9c28e19e8cc6d46981a2b855767c8703ff8c4515d",
-      "rowIds": [
-        "347c0f505eed4457ac03b77f07eb6896"
-      ],
-      "kind": null,
-      "metadataId": "347c0f505eed4457ac03b77f07eb6896"
-    },
-    {
-      "path": "api/08.通用数据操作/02.文件下载/group.json",
-      "databasePath": "/magic-api/api/08.通用数据操作/02.文件下载/group.json",
-      "baseSha256": "dd7c4be9e7a165ca4cd2cdee179935bb29b75c04744218659a032936e4b5e027",
-      "rowIds": [
-        "0a65e024967444f09c8a8a769ec77709"
-      ],
-      "kind": "api",
-      "metadataId": "5b8a226a90615bbd9e7226d4cfe2324c"
-    },
-    {
-      "path": "api/08.通用数据操作/group.json",
-      "databasePath": "/magic-api/api/08.通用数据操作/group.json",
-      "baseSha256": "dbe5098de81c9a829f667f9f48910438bf4f6d093018df4e21ca639df27f8aa2",
-      "rowIds": [
-        "651b3afb2fba41afbb67eb9056d8af3b"
-      ],
-      "kind": null,
-      "metadataId": "651b3afb2fba41afbb67eb9056d8af3b"
-    },
-    {
-      "path": "api/09.统一身份管理",
-      "databasePath": "/magic-api/api/09.统一身份管理/",
-      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
+      "path": "api/08.统一身份管理",
+      "databasePath": "/magic-api/api/08.统一身份管理/",
       "rowIds": [
         "a411708200964bf9bdbf3d49addd7fe2"
       ],
-      "kind": "directory"
+      "kind": "directory",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "api/09.统一身份管理/01.认证会话",
-      "databasePath": "/magic-api/api/09.统一身份管理/01.认证会话/",
-      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
+      "path": "api/08.统一身份管理/01.认证会话",
+      "databasePath": "/magic-api/api/08.统一身份管理/01.认证会话/",
       "rowIds": [
         "35793f80d0bf4eaeb85489aeba67a801"
       ],
-      "kind": "directory"
+      "kind": "directory",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "api/09.统一身份管理/01.认证会话/01.登录管理控制台.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/01.认证会话/01.登录管理控制台.ms",
-      "baseSha256": "bfac6169d357c2795d29bd26a38d2c6d0dd9ef35f50eb9bb29dc81fe229d0426",
+      "path": "api/08.统一身份管理/01.认证会话/01.登录管理控制台.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/01.认证会话/01.登录管理控制台.ms",
       "rowIds": [
         "78e703d8a47d4b2883e79f7b14566e7f"
       ],
       "kind": "api",
+      "baseSha256": "bfac6169d357c2795d29bd26a38d2c6d0dd9ef35f50eb9bb29dc81fe229d0426",
       "metadataId": "b04b913d36315a339c11a2a5c462fca6"
     },
     {
-      "path": "api/09.统一身份管理/01.认证会话/02.退出管理控制台.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/01.认证会话/02.退出管理控制台.ms",
-      "baseSha256": "2a22b4fe51980982363373cf160c48db4293405db5c9e7187099e0695dff5d19",
+      "path": "api/08.统一身份管理/01.认证会话/02.退出管理控制台.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/01.认证会话/02.退出管理控制台.ms",
       "rowIds": [
         "eb2532b6f1b14c7997939892ef542c21"
       ],
       "kind": "api",
+      "baseSha256": "2a22b4fe51980982363373cf160c48db4293405db5c9e7187099e0695dff5d19",
       "metadataId": "4bd2f846272751cab344701a3258027c"
     },
     {
-      "path": "api/09.统一身份管理/01.认证会话/03.读取登录页设置.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/01.认证会话/03.读取登录页设置.ms",
-      "baseSha256": "6f2f6e63dd348c10d2aeb02348c1a9e7ae89d43c43825351dc8cfebdb50c4b98",
+      "path": "api/08.统一身份管理/01.认证会话/03.读取登录页设置.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/01.认证会话/03.读取登录页设置.ms",
       "rowIds": [
         "3b13b476daa042d0911f4de52da35158"
       ],
       "kind": "api",
+      "baseSha256": "6f2f6e63dd348c10d2aeb02348c1a9e7ae89d43c43825351dc8cfebdb50c4b98",
       "metadataId": "c5e8f3f5dc9d52d5b23709f6e3c2ec15"
     },
     {
-      "path": "api/09.统一身份管理/01.认证会话/group.json",
-      "databasePath": "/magic-api/api/09.统一身份管理/01.认证会话/group.json",
-      "baseSha256": "535c1efa96adb2f2fc422dc72f352d613323100f233b52cf5bf6b6a1dd335160",
+      "path": "api/08.统一身份管理/01.认证会话/group.json",
+      "databasePath": "/magic-api/api/08.统一身份管理/01.认证会话/group.json",
       "rowIds": [
         "984da8c316b44771867662f1469823d3"
       ],
       "kind": null,
+      "baseSha256": "535c1efa96adb2f2fc422dc72f352d613323100f233b52cf5bf6b6a1dd335160",
       "metadataId": "846e66f7a9365dc4a13942533f262c0a"
     },
     {
-      "path": "api/09.统一身份管理/02.当前会话",
-      "databasePath": "/magic-api/api/09.统一身份管理/02.当前会话/",
-      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
+      "path": "api/08.统一身份管理/02.当前会话",
+      "databasePath": "/magic-api/api/08.统一身份管理/02.当前会话/",
       "rowIds": [
         "669919e2c67248348c9f31d7b0fd09fa"
       ],
-      "kind": "directory"
+      "kind": "directory",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "api/09.统一身份管理/02.当前会话/01.读取当前操作账号.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/02.当前会话/01.读取当前操作账号.ms",
-      "baseSha256": "379af92d7db12b4687b65e527f4919ceb0eedfe60a6af49ca476cc866e06cc19",
+      "path": "api/08.统一身份管理/02.当前会话/01.读取当前操作账号.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/02.当前会话/01.读取当前操作账号.ms",
       "rowIds": [
         "76457ab635814e0a8dd6ebc6e564df4c"
       ],
       "kind": "api",
+      "baseSha256": "379af92d7db12b4687b65e527f4919ceb0eedfe60a6af49ca476cc866e06cc19",
       "metadataId": "787f8928738b51ad96291bd03969907e"
     },
     {
-      "path": "api/09.统一身份管理/02.当前会话/02.切换当前身份域.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/02.当前会话/02.切换当前身份域.ms",
-      "baseSha256": "1318a5b3c14bd54f07b2aeddbb443a60f38d32fae9d12c2fa4f36802d2110bee",
+      "path": "api/08.统一身份管理/02.当前会话/02.切换当前身份域.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/02.当前会话/02.切换当前身份域.ms",
       "rowIds": [
         "cc39ca29f8c549e1a84038385cb7f9e6"
       ],
       "kind": "api",
+      "baseSha256": "1318a5b3c14bd54f07b2aeddbb443a60f38d32fae9d12c2fa4f36802d2110bee",
       "metadataId": "e52368d8d58458c096bd3323746f85b9"
     },
     {
-      "path": "api/09.统一身份管理/02.当前会话/group.json",
-      "databasePath": "/magic-api/api/09.统一身份管理/02.当前会话/group.json",
-      "baseSha256": "3c9a412f2e7dd39be598e4c223cba2e154b6bec69462cf80f977ec6b0987b504",
+      "path": "api/08.统一身份管理/02.当前会话/group.json",
+      "databasePath": "/magic-api/api/08.统一身份管理/02.当前会话/group.json",
       "rowIds": [
         "5eb1f16f513f461d84096aab9387f5fb"
       ],
       "kind": null,
+      "baseSha256": "3c9a412f2e7dd39be598e4c223cba2e154b6bec69462cf80f977ec6b0987b504",
       "metadataId": "38dfb5ef9c2052b0acee3e477054544d"
     },
     {
-      "path": "api/09.统一身份管理/03.工作区",
-      "databasePath": "/magic-api/api/09.统一身份管理/03.工作区/",
-      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
+      "path": "api/08.统一身份管理/03.工作区",
+      "databasePath": "/magic-api/api/08.统一身份管理/03.工作区/",
       "rowIds": [
         "578bf90235974c5b9db24e67158916a5"
       ],
-      "kind": "directory"
+      "kind": "directory",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "api/09.统一身份管理/03.工作区/01.加载平台工作区.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/03.工作区/01.加载平台工作区.ms",
-      "baseSha256": "c9ad1821f2f105db19826ed8d6dcf3fc32f6dec4c77557168e705e70196cad61",
+      "path": "api/08.统一身份管理/03.工作区/01.加载平台工作区.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/03.工作区/01.加载平台工作区.ms",
       "rowIds": [
         "e789f62c9eba4a76abc9fe5cdc833931"
       ],
       "kind": "api",
+      "baseSha256": "c9ad1821f2f105db19826ed8d6dcf3fc32f6dec4c77557168e705e70196cad61",
       "metadataId": "9d76df5fd4ad5e05ba9ff2f10dfa75e4"
     },
     {
-      "path": "api/09.统一身份管理/03.工作区/02.预览草稿排序.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/03.工作区/02.预览草稿排序.ms",
+      "path": "api/08.统一身份管理/03.工作区/02.预览草稿排序.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/03.工作区/02.预览草稿排序.ms",
       "rowIds": [
         "f73a709a19564733be96e7912d54c6d0"
       ],
       "kind": "api",
-      "metadataId": "idaas_draft_preview_order_v1",
-      "baseSha256": "be13729a22df2e288bb786685e640b8c8e33245c8248d9b965c54cf8f71fa400"
+      "baseSha256": "be13729a22df2e288bb786685e640b8c8e33245c8248d9b965c54cf8f71fa400",
+      "metadataId": "idaas_draft_preview_order_v1"
     },
     {
-      "path": "api/09.统一身份管理/03.工作区/group.json",
-      "databasePath": "/magic-api/api/09.统一身份管理/03.工作区/group.json",
-      "baseSha256": "19b1716bc34085b00da99a6d575f87ec6ab95faddfc8543afda28849dabc5350",
+      "path": "api/08.统一身份管理/03.工作区/group.json",
+      "databasePath": "/magic-api/api/08.统一身份管理/03.工作区/group.json",
       "rowIds": [
         "873c3d5ef8004bb8a87189b58781b0b7"
       ],
       "kind": null,
+      "baseSha256": "19b1716bc34085b00da99a6d575f87ec6ab95faddfc8543afda28849dabc5350",
       "metadataId": "af2400b9cd0d518c8a01dfc98665b222"
     },
     {
-      "path": "api/09.统一身份管理/04.应用管理",
-      "databasePath": "/magic-api/api/09.统一身份管理/04.应用管理/",
-      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
+      "path": "api/08.统一身份管理/04.应用管理",
+      "databasePath": "/magic-api/api/08.统一身份管理/04.应用管理/",
       "rowIds": [
         "bdce0c67f9fa45c3a8aa451c7cdde059"
       ],
-      "kind": "directory"
+      "kind": "directory",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "api/09.统一身份管理/04.应用管理/01.查询应用列表.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/04.应用管理/01.查询应用列表.ms",
-      "baseSha256": "2ac45519deda264e8bafb2ae70691ebba870abf8df9cbcd015c13c9f34877987",
+      "path": "api/08.统一身份管理/04.应用管理/01.查询应用列表.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/04.应用管理/01.查询应用列表.ms",
       "rowIds": [
         "6cbf83a89d534737b8cc9200cbb48144"
       ],
       "kind": "api",
+      "baseSha256": "2ac45519deda264e8bafb2ae70691ebba870abf8df9cbcd015c13c9f34877987",
       "metadataId": "1c1cbd2c3b35549e9ded9eb532e5db53"
     },
     {
-      "path": "api/09.统一身份管理/04.应用管理/02.保存应用.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/04.应用管理/02.保存应用.ms",
-      "baseSha256": "536f8fb08c903ba99c674e352a70994e230ab1712a931417cb885c2b796cdd0f",
+      "path": "api/08.统一身份管理/04.应用管理/02.保存应用.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/04.应用管理/02.保存应用.ms",
       "rowIds": [
         "e843b9498b304966a295cfdd44ff760b"
       ],
       "kind": "api",
+      "baseSha256": "536f8fb08c903ba99c674e352a70994e230ab1712a931417cb885c2b796cdd0f",
       "metadataId": "7a008c9916c45a4aaa460d2085bf954c"
     },
     {
-      "path": "api/09.统一身份管理/04.应用管理/03.归档应用.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/04.应用管理/03.归档应用.ms",
-      "baseSha256": "d1d24040691bdaabd6a39f8a4b32d5e62d4c3257a0f98440964e68e8498df044",
+      "path": "api/08.统一身份管理/04.应用管理/03.归档应用.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/04.应用管理/03.归档应用.ms",
       "rowIds": [
         "03a83c79d2a948a48cff3aa3bf50400c"
       ],
       "kind": "api",
+      "baseSha256": "d1d24040691bdaabd6a39f8a4b32d5e62d4c3257a0f98440964e68e8498df044",
       "metadataId": "a760b9ee968459319e61298b087f200e"
     },
     {
-      "path": "api/09.统一身份管理/04.应用管理/04.调整应用展示顺序.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/04.应用管理/04.调整应用展示顺序.ms",
-      "baseSha256": "5d6f98ce0c20fcbc0104a203ea82fe1360fe838778316ba412f03f85d8279e27",
+      "path": "api/08.统一身份管理/04.应用管理/04.调整应用展示顺序.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/04.应用管理/04.调整应用展示顺序.ms",
       "rowIds": [
         "0d0ffb408ee74cc6812957fd91ab3723"
       ],
       "kind": "api",
+      "baseSha256": "5d6f98ce0c20fcbc0104a203ea82fe1360fe838778316ba412f03f85d8279e27",
       "metadataId": "dd8968d7f8b15b97a01ade4c88d10c34"
     },
     {
-      "path": "api/09.统一身份管理/04.应用管理/05.保存应用运行绑定.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/04.应用管理/05.保存应用运行绑定.ms",
-      "baseSha256": "eb8e679f2879255c7585b3b2d73fd328b465f890f966ca50a573f01f6a521ca5",
+      "path": "api/08.统一身份管理/04.应用管理/05.保存应用运行绑定.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/04.应用管理/05.保存应用运行绑定.ms",
       "rowIds": [
         "3e613aa0cea445ed9ee5591ef7ba67e9"
       ],
       "kind": "api",
+      "baseSha256": "eb8e679f2879255c7585b3b2d73fd328b465f890f966ca50a573f01f6a521ca5",
       "metadataId": "b1e014a17e445892a5a311480b75a2d6"
     },
     {
-      "path": "api/09.统一身份管理/04.应用管理/06.读取应用本地资料.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/04.应用管理/06.读取应用本地资料.ms",
-      "baseSha256": "604bfacd4345c4280f82da235c7ab128a6641f91d3fd4114b92d1b2beef8bb2c",
+      "path": "api/08.统一身份管理/04.应用管理/06.读取应用本地资料.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/04.应用管理/06.读取应用本地资料.ms",
       "rowIds": [
         "3be72a759ed24404a0f2b6186fd08255"
       ],
       "kind": "api",
+      "baseSha256": "604bfacd4345c4280f82da235c7ab128a6641f91d3fd4114b92d1b2beef8bb2c",
       "metadataId": "7e158ace27ea5f6d89811d934a5588e0"
     },
     {
-      "path": "api/09.统一身份管理/04.应用管理/07.比较应用目录差异.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/04.应用管理/07.比较应用目录差异.ms",
-      "baseSha256": "0878805986580381cfa57ac44f52cb9a639e5f5f0abd1e8ae682608f2b61b16f",
+      "path": "api/08.统一身份管理/04.应用管理/07.比较应用目录差异.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/04.应用管理/07.比较应用目录差异.ms",
       "rowIds": [
         "7bd0afaff84b478090be4771a3ee8549"
       ],
       "kind": "api",
+      "baseSha256": "0878805986580381cfa57ac44f52cb9a639e5f5f0abd1e8ae682608f2b61b16f",
       "metadataId": "2ee9fcbb39945c999ac6ac109947d492"
     },
     {
-      "path": "api/09.统一身份管理/04.应用管理/08.确认导入应用目录.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/04.应用管理/08.确认导入应用目录.ms",
-      "baseSha256": "117584a0837f2932bd02ca910741528bfc6096d79ebb5dae992f7abe0514d27b",
+      "path": "api/08.统一身份管理/04.应用管理/08.确认导入应用目录.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/04.应用管理/08.确认导入应用目录.ms",
       "rowIds": [
         "e57b1b0990d74f6d8fb539f93b7472ed"
       ],
       "kind": "api",
+      "baseSha256": "117584a0837f2932bd02ca910741528bfc6096d79ebb5dae992f7abe0514d27b",
       "metadataId": "70125b723bc452648ef74d6ec085f2ca"
     },
     {
-      "path": "api/09.统一身份管理/04.应用管理/09.手动下发应用界面配置.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/04.应用管理/09.手动下发应用界面配置.ms",
-      "baseSha256": "b8f59388e3c8beb1caed8b49be06dd1a4537b4db75812638c115134e98439a0e",
+      "path": "api/08.统一身份管理/04.应用管理/09.手动下发应用界面配置.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/04.应用管理/09.手动下发应用界面配置.ms",
       "rowIds": [
         "27deb428c52b4ea7a7c3508c6bc2a593"
       ],
       "kind": "api",
+      "baseSha256": "b8f59388e3c8beb1caed8b49be06dd1a4537b4db75812638c115134e98439a0e",
       "metadataId": "7cb4e9d431d85d5a8c2c865c98c80b96"
     },
     {
-      "path": "api/09.统一身份管理/04.应用管理/group.json",
-      "databasePath": "/magic-api/api/09.统一身份管理/04.应用管理/group.json",
-      "baseSha256": "30beaa19c6cd0ae7d796fb4ea454b19aa75da5cce66697f13b2786507bcf564d",
+      "path": "api/08.统一身份管理/04.应用管理/group.json",
+      "databasePath": "/magic-api/api/08.统一身份管理/04.应用管理/group.json",
       "rowIds": [
         "8d9ef0889ec24b27b3f3c34f4007344a"
       ],
       "kind": null,
+      "baseSha256": "30beaa19c6cd0ae7d796fb4ea454b19aa75da5cce66697f13b2786507bcf564d",
       "metadataId": "8e1839fbe6a55ce7aafaae3dcf2d15b4"
     },
     {
-      "path": "api/09.统一身份管理/05.应用分组",
-      "databasePath": "/magic-api/api/09.统一身份管理/05.应用分组/",
-      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
+      "path": "api/08.统一身份管理/05.应用分组",
+      "databasePath": "/magic-api/api/08.统一身份管理/05.应用分组/",
       "rowIds": [
         "2ca2490e690b44079c08fe0ad551b2d6"
       ],
-      "kind": "directory"
+      "kind": "directory",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "api/09.统一身份管理/05.应用分组/01.保存应用分组.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/05.应用分组/01.保存应用分组.ms",
-      "baseSha256": "a8e0cea85d67f5f6a230715e16208abc3cee39d025dae84ebc99e7362d7519c2",
+      "path": "api/08.统一身份管理/05.应用分组/01.保存应用分组.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/05.应用分组/01.保存应用分组.ms",
       "rowIds": [
         "ad143714faa6495787cb4fc6504f3d8f"
       ],
       "kind": "api",
+      "baseSha256": "a8e0cea85d67f5f6a230715e16208abc3cee39d025dae84ebc99e7362d7519c2",
       "metadataId": "e61411e62bc5562fb8e3e453e3b63340"
     },
     {
-      "path": "api/09.统一身份管理/05.应用分组/02.归档应用分组.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/05.应用分组/02.归档应用分组.ms",
-      "baseSha256": "1998a54a612e2ad66451781f132e1a39dd20000b45e083eec99a57bf381b04b7",
+      "path": "api/08.统一身份管理/05.应用分组/02.归档应用分组.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/05.应用分组/02.归档应用分组.ms",
       "rowIds": [
         "99662f5070e04e968cefb4f595acf6ee"
       ],
       "kind": "api",
+      "baseSha256": "1998a54a612e2ad66451781f132e1a39dd20000b45e083eec99a57bf381b04b7",
       "metadataId": "ab76991d24435043bff63e1fef264ddd"
     },
     {
-      "path": "api/09.统一身份管理/05.应用分组/group.json",
-      "databasePath": "/magic-api/api/09.统一身份管理/05.应用分组/group.json",
-      "baseSha256": "3d3af4daa53982b3f47fdce979b468933075ca37604d08328be06baba22adfba",
+      "path": "api/08.统一身份管理/05.应用分组/group.json",
+      "databasePath": "/magic-api/api/08.统一身份管理/05.应用分组/group.json",
       "rowIds": [
         "b0c39b84a76b4f329dd2b212d2db73bb"
       ],
       "kind": null,
+      "baseSha256": "3d3af4daa53982b3f47fdce979b468933075ca37604d08328be06baba22adfba",
       "metadataId": "66a86e6604e9528e80208f8083448b77"
     },
     {
-      "path": "api/09.统一身份管理/06.平台账号",
-      "databasePath": "/magic-api/api/09.统一身份管理/06.平台账号/",
-      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
+      "path": "api/08.统一身份管理/06.平台账号",
+      "databasePath": "/magic-api/api/08.统一身份管理/06.平台账号/",
       "rowIds": [
         "13a88c47a80641888772cd2b977db2d3"
       ],
-      "kind": "directory"
+      "kind": "directory",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "api/09.统一身份管理/06.平台账号/01.查询平台操作账号列表.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/06.平台账号/01.查询平台操作账号列表.ms",
-      "baseSha256": "37f01560c67b7b68df75754082687e43c6be54504593e29fb850461a796dd276",
+      "path": "api/08.统一身份管理/06.平台账号/01.查询平台操作账号列表.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/06.平台账号/01.查询平台操作账号列表.ms",
       "rowIds": [
         "001fd31ec98348ffba3a393da9a103dc"
       ],
       "kind": "api",
+      "baseSha256": "37f01560c67b7b68df75754082687e43c6be54504593e29fb850461a796dd276",
       "metadataId": "5e04ef923b49583a816bb928384d2985"
     },
     {
-      "path": "api/09.统一身份管理/06.平台账号/02.保存平台操作账号.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/06.平台账号/02.保存平台操作账号.ms",
-      "baseSha256": "f8be5e1c96acdfbbf519b9cc06cc43e17e5a15b1c14a14f8befc9647e2cf45c6",
+      "path": "api/08.统一身份管理/06.平台账号/02.保存平台操作账号.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/06.平台账号/02.保存平台操作账号.ms",
       "rowIds": [
         "1d4ebb3c875d439eb3e84c80b733bf23"
       ],
       "kind": "api",
+      "baseSha256": "f8be5e1c96acdfbbf519b9cc06cc43e17e5a15b1c14a14f8befc9647e2cf45c6",
       "metadataId": "5c56009a3c805d3a90bd53cf23e8245c"
     },
     {
-      "path": "api/09.统一身份管理/06.平台账号/03.重置平台操作账号密码.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/06.平台账号/03.重置平台操作账号密码.ms",
-      "baseSha256": "0fa0e70ab18a6c402da97f458e18a59bbd78982da559ec48f15de948787a239c",
+      "path": "api/08.统一身份管理/06.平台账号/03.重置平台操作账号密码.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/06.平台账号/03.重置平台操作账号密码.ms",
       "rowIds": [
         "0c11eeaf3a83472880cc761b84ae4e6e"
       ],
       "kind": "api",
+      "baseSha256": "0fa0e70ab18a6c402da97f458e18a59bbd78982da559ec48f15de948787a239c",
       "metadataId": "2049857ef4b552d5a47490851cb25d97"
     },
     {
-      "path": "api/09.统一身份管理/06.平台账号/04.解除平台账号锁定.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/06.平台账号/04.解除平台账号锁定.ms",
-      "baseSha256": "15b06594f8432f22fe230b45e65320978ae2f8cbebc2c44a23f2be90e2354ec9",
+      "path": "api/08.统一身份管理/06.平台账号/04.解除平台账号锁定.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/06.平台账号/04.解除平台账号锁定.ms",
       "rowIds": [
         "4b7a0c6290974f9b8080efdf0163c987"
       ],
       "kind": "api",
+      "baseSha256": "15b06594f8432f22fe230b45e65320978ae2f8cbebc2c44a23f2be90e2354ec9",
       "metadataId": "8f03bf6ef638590086272b685efc3035"
     },
     {
-      "path": "api/09.统一身份管理/06.平台账号/group.json",
-      "databasePath": "/magic-api/api/09.统一身份管理/06.平台账号/group.json",
-      "baseSha256": "14828416cd0729e8b78b3a1465090870ab2e0c93745390b95e52ff51c0822885",
+      "path": "api/08.统一身份管理/06.平台账号/group.json",
+      "databasePath": "/magic-api/api/08.统一身份管理/06.平台账号/group.json",
       "rowIds": [
         "ff41f380ea624c2ea333eb1e991c8856"
       ],
       "kind": null,
+      "baseSha256": "14828416cd0729e8b78b3a1465090870ab2e0c93745390b95e52ff51c0822885",
       "metadataId": "64e411148c13506897632e1f5bbe2c15"
     },
     {
-      "path": "api/09.统一身份管理/07.平台角色",
-      "databasePath": "/magic-api/api/09.统一身份管理/07.平台角色/",
-      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
+      "path": "api/08.统一身份管理/07.平台角色",
+      "databasePath": "/magic-api/api/08.统一身份管理/07.平台角色/",
       "rowIds": [
         "be60554785384db3992339b1331d196d"
       ],
-      "kind": "directory"
+      "kind": "directory",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "api/09.统一身份管理/07.平台角色/01.查询平台角色列表.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/07.平台角色/01.查询平台角色列表.ms",
-      "baseSha256": "6fa23b34f11401ba4fca6d115085d116c8fc2741e5a50a53cb2e0f0d4ae39d5b",
+      "path": "api/08.统一身份管理/07.平台角色/01.查询平台角色列表.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/07.平台角色/01.查询平台角色列表.ms",
       "rowIds": [
         "4066ea85777a497287b4b155f17c534b"
       ],
       "kind": "api",
+      "baseSha256": "6fa23b34f11401ba4fca6d115085d116c8fc2741e5a50a53cb2e0f0d4ae39d5b",
       "metadataId": "0f9b0c2c3dc4513686c90ec2bfedf5e6"
     },
     {
-      "path": "api/09.统一身份管理/07.平台角色/02.保存平台角色.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/07.平台角色/02.保存平台角色.ms",
-      "baseSha256": "c7ad0c36122a4a1ec84b6b02cf63a6bae74dadfe654727cf06f8bace7ead6c8a",
+      "path": "api/08.统一身份管理/07.平台角色/02.保存平台角色.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/07.平台角色/02.保存平台角色.ms",
       "rowIds": [
         "398dfee984f14f7996c538a42837a8cd"
       ],
       "kind": "api",
+      "baseSha256": "c7ad0c36122a4a1ec84b6b02cf63a6bae74dadfe654727cf06f8bace7ead6c8a",
       "metadataId": "8ee3dabd4da15e23be8e7d24c8ccdf5b"
     },
     {
-      "path": "api/09.统一身份管理/07.平台角色/03.查询平台功能资源.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/07.平台角色/03.查询平台功能资源.ms",
-      "baseSha256": "d34f7f1603c3af3e8e9d8ec5cff8a31360a8bac8adc1509b19dc2a3c211ded27",
+      "path": "api/08.统一身份管理/07.平台角色/03.查询平台功能资源.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/07.平台角色/03.查询平台功能资源.ms",
       "rowIds": [
         "cea95a2e4cd349ba924441d847979e0b"
       ],
       "kind": "api",
+      "baseSha256": "d34f7f1603c3af3e8e9d8ec5cff8a31360a8bac8adc1509b19dc2a3c211ded27",
       "metadataId": "06d8db502b255e098024ef3a7ef595f1"
     },
     {
-      "path": "api/09.统一身份管理/07.平台角色/04.查询平台角色分配.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/07.平台角色/04.查询平台角色分配.ms",
-      "baseSha256": "7dd4c918edc608af806510c4614b0c8a39710b81a77e68319588f62dac88e99c",
+      "path": "api/08.统一身份管理/07.平台角色/04.查询平台角色分配.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/07.平台角色/04.查询平台角色分配.ms",
       "rowIds": [
         "d46af7e9162543d1bbf6cd320a69f916"
       ],
       "kind": "api",
+      "baseSha256": "7dd4c918edc608af806510c4614b0c8a39710b81a77e68319588f62dac88e99c",
       "metadataId": "703537903bf65870bad007eea877180b"
     },
     {
-      "path": "api/09.统一身份管理/07.平台角色/05.分配平台角色与范围.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/07.平台角色/05.分配平台角色与范围.ms",
-      "baseSha256": "e13b18430139185125d14f305b1df5b3a8db383ee80b9b03aec29b5b00904859",
+      "path": "api/08.统一身份管理/07.平台角色/05.分配平台角色与范围.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/07.平台角色/05.分配平台角色与范围.ms",
       "rowIds": [
         "4d4b36cc5cf74b62a433a484427c4b8a"
       ],
       "kind": "api",
+      "baseSha256": "e13b18430139185125d14f305b1df5b3a8db383ee80b9b03aec29b5b00904859",
       "metadataId": "0ebea9ab19a951019a530accee61f353"
     },
     {
-      "path": "api/09.统一身份管理/07.平台角色/group.json",
-      "databasePath": "/magic-api/api/09.统一身份管理/07.平台角色/group.json",
-      "baseSha256": "5a628bfb04481c95d5744b6ad8f1c14166dba6a187238e66617ccef08c4ee798",
+      "path": "api/08.统一身份管理/07.平台角色/group.json",
+      "databasePath": "/magic-api/api/08.统一身份管理/07.平台角色/group.json",
       "rowIds": [
         "3f8bb2960a474d11aeebe0c573ab6f0c"
       ],
       "kind": null,
+      "baseSha256": "5a628bfb04481c95d5744b6ad8f1c14166dba6a187238e66617ccef08c4ee798",
       "metadataId": "1e0dee785fc65df8a070fb6a38c924ad"
     },
     {
-      "path": "api/09.统一身份管理/08.平台配置",
-      "databasePath": "/magic-api/api/09.统一身份管理/08.平台配置/",
-      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
+      "path": "api/08.统一身份管理/08.平台配置",
+      "databasePath": "/magic-api/api/08.统一身份管理/08.平台配置/",
       "rowIds": [
         "ce5c0c5de9ac40cda9446fb663535111"
       ],
-      "kind": "directory"
+      "kind": "directory",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "api/09.统一身份管理/08.平台配置/01.保存平台策略.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/08.平台配置/01.保存平台策略.ms",
-      "baseSha256": "10bb8bdfac8671d78f94a6bdcc496978aed791ca97641c4cf4c4e3445070d6b8",
+      "path": "api/08.统一身份管理/08.平台配置/01.保存平台策略.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/08.平台配置/01.保存平台策略.ms",
       "rowIds": [
         "604c7dd98ab546f1b186bd819ec35641"
       ],
       "kind": "api",
+      "baseSha256": "10bb8bdfac8671d78f94a6bdcc496978aed791ca97641c4cf4c4e3445070d6b8",
       "metadataId": "b6989040ccbe588abe6c9169ad23ee82"
     },
     {
-      "path": "api/09.统一身份管理/08.平台配置/group.json",
-      "databasePath": "/magic-api/api/09.统一身份管理/08.平台配置/group.json",
-      "baseSha256": "9844c3f6a57a4b2d3d6f6b46ec2d40258889d48777bd5b3fe3426199660302a3",
+      "path": "api/08.统一身份管理/08.平台配置/group.json",
+      "databasePath": "/magic-api/api/08.统一身份管理/08.平台配置/group.json",
       "rowIds": [
         "a00d5d2ff9cf4f0f9c2f8a9c793339b3"
       ],
       "kind": null,
+      "baseSha256": "9844c3f6a57a4b2d3d6f6b46ec2d40258889d48777bd5b3fe3426199660302a3",
       "metadataId": "b131d8f0696755519b08adfc5918a7c7"
     },
     {
-      "path": "api/09.统一身份管理/09.个人中心",
-      "databasePath": "/magic-api/api/09.统一身份管理/09.个人中心/",
-      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
+      "path": "api/08.统一身份管理/09.个人中心",
+      "databasePath": "/magic-api/api/08.统一身份管理/09.个人中心/",
       "rowIds": [
         "e758ed3401194452a89fa0af819ac789"
       ],
-      "kind": "directory"
+      "kind": "directory",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "api/09.统一身份管理/09.个人中心/01.修改本人资料.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/09.个人中心/01.修改本人资料.ms",
-      "baseSha256": "e7843f24ebe69a3335f2bb970c7b7eb505050854b39466513852f5fa7559ff77",
+      "path": "api/08.统一身份管理/09.个人中心/01.修改本人资料.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/09.个人中心/01.修改本人资料.ms",
       "rowIds": [
         "ab7d5fe5332e43fca75145df2540dbf2"
       ],
       "kind": "api",
+      "baseSha256": "e7843f24ebe69a3335f2bb970c7b7eb505050854b39466513852f5fa7559ff77",
       "metadataId": "58695a5f7a255701bfa51ae44c00b26e"
     },
     {
-      "path": "api/09.统一身份管理/09.个人中心/02.修改本人密码.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/09.个人中心/02.修改本人密码.ms",
-      "baseSha256": "14d4f1b7289247a4014bd92e2f4a4f304f0d898662c2b1d804afe7478c97ea18",
+      "path": "api/08.统一身份管理/09.个人中心/02.修改本人密码.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/09.个人中心/02.修改本人密码.ms",
       "rowIds": [
         "9b1a2cd222d844ff8770de50e4256ba4"
       ],
       "kind": "api",
+      "baseSha256": "14d4f1b7289247a4014bd92e2f4a4f304f0d898662c2b1d804afe7478c97ea18",
       "metadataId": "b053321931715e798c0c032e180ca907"
     },
     {
-      "path": "api/09.统一身份管理/09.个人中心/group.json",
-      "databasePath": "/magic-api/api/09.统一身份管理/09.个人中心/group.json",
-      "baseSha256": "2ee13c3f92efd931a73d579703048f7abceba369adcfcd645cde5765d59d1cf7",
+      "path": "api/08.统一身份管理/09.个人中心/group.json",
+      "databasePath": "/magic-api/api/08.统一身份管理/09.个人中心/group.json",
       "rowIds": [
         "902365dfa82442b1a9288f59848ecdc3"
       ],
       "kind": null,
+      "baseSha256": "2ee13c3f92efd931a73d579703048f7abceba369adcfcd645cde5765d59d1cf7",
       "metadataId": "1813da709f3a559fa44c0f77be8cb11a"
     },
     {
-      "path": "api/09.统一身份管理/10.审计查询",
-      "databasePath": "/magic-api/api/09.统一身份管理/10.审计查询/",
-      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
+      "path": "api/08.统一身份管理/10.审计查询",
+      "databasePath": "/magic-api/api/08.统一身份管理/10.审计查询/",
       "rowIds": [
         "7151ec43f04348e6abce0947cb7ab6f0"
       ],
-      "kind": "directory"
+      "kind": "directory",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "api/09.统一身份管理/10.审计查询/01.分页查询审计记录.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/10.审计查询/01.分页查询审计记录.ms",
-      "baseSha256": "95052d83a733493e0939c547ab2a502f4787ae0f8fcd518cd22592c40573134c",
+      "path": "api/08.统一身份管理/10.审计查询/01.分页查询审计记录.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/10.审计查询/01.分页查询审计记录.ms",
       "rowIds": [
         "857f1867fdb64756aa1f2584c325fd6d"
       ],
       "kind": "api",
+      "baseSha256": "95052d83a733493e0939c547ab2a502f4787ae0f8fcd518cd22592c40573134c",
       "metadataId": "442547f994c85528842eaab529f84850"
     },
     {
-      "path": "api/09.统一身份管理/10.审计查询/group.json",
-      "databasePath": "/magic-api/api/09.统一身份管理/10.审计查询/group.json",
-      "baseSha256": "9716bd77bd849f8ceeef03a9c667f4d578eb76605a63d48e165c7c8cfc50a1a9",
+      "path": "api/08.统一身份管理/10.审计查询/group.json",
+      "databasePath": "/magic-api/api/08.统一身份管理/10.审计查询/group.json",
       "rowIds": [
         "b5d54c2cb8b14972aabf741ef5de5124"
       ],
       "kind": null,
+      "baseSha256": "9716bd77bd849f8ceeef03a9c667f4d578eb76605a63d48e165c7c8cfc50a1a9",
       "metadataId": "a2d73d152a83535d9993586812fb257f"
     },
     {
-      "path": "api/09.统一身份管理/11.人员目录",
-      "databasePath": "/magic-api/api/09.统一身份管理/11.人员目录/",
-      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
+      "path": "api/08.统一身份管理/11.人员目录",
+      "databasePath": "/magic-api/api/08.统一身份管理/11.人员目录/",
       "rowIds": [
         "589071a470ab47f89cd75f3f1a5e8a3a"
       ],
-      "kind": "directory"
+      "kind": "directory",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "api/09.统一身份管理/11.人员目录/01.查询中央人员列表.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/11.人员目录/01.查询中央人员列表.ms",
-      "baseSha256": "76d50122cd6d535c3bd59f2c0a8e66674c6ca228edf84550d683514617df0fbe",
+      "path": "api/08.统一身份管理/11.人员目录/01.查询中央人员列表.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/11.人员目录/01.查询中央人员列表.ms",
       "rowIds": [
         "e1cc0858d35f469ab8919e5b61a412d3"
       ],
       "kind": "api",
+      "baseSha256": "76d50122cd6d535c3bd59f2c0a8e66674c6ca228edf84550d683514617df0fbe",
       "metadataId": "a933e818d7bf53468de98461fe26d5f9"
     },
     {
-      "path": "api/09.统一身份管理/11.人员目录/02.保存中央人员.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/11.人员目录/02.保存中央人员.ms",
-      "baseSha256": "220ec89e0858e9d2efb34ee746962f6d871af68d014806b6f2fa77f264aff3d5",
+      "path": "api/08.统一身份管理/11.人员目录/02.保存中央人员.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/11.人员目录/02.保存中央人员.ms",
       "rowIds": [
         "61bb3b703754417d9a4059dc19c637b7"
       ],
       "kind": "api",
+      "baseSha256": "220ec89e0858e9d2efb34ee746962f6d871af68d014806b6f2fa77f264aff3d5",
       "metadataId": "8dedf6d666c55613a4cf9c1b46001b15"
     },
     {
-      "path": "api/09.统一身份管理/11.人员目录/03.归档中央人员.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/11.人员目录/03.归档中央人员.ms",
-      "baseSha256": "10af37a16195cc288af492d6a82cfa6a36c64ad32d36dae75ba52a911e544129",
+      "path": "api/08.统一身份管理/11.人员目录/03.归档中央人员.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/11.人员目录/03.归档中央人员.ms",
       "rowIds": [
         "5a537c02af344ae9a51ef8b632b25449"
       ],
       "kind": "api",
+      "baseSha256": "10af37a16195cc288af492d6a82cfa6a36c64ad32d36dae75ba52a911e544129",
       "metadataId": "e064863bbc0d537d909fbba98c60b2e0"
     },
     {
-      "path": "api/09.统一身份管理/11.人员目录/04.人员目录操作占位查询.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/11.人员目录/04.人员目录操作占位查询.ms",
-      "baseSha256": "9cfd4aebe1fb84bc09dec14d056f16a1fcf6f97362735a50b2c7d1d6f87afe2e",
+      "path": "api/08.统一身份管理/11.人员目录/04.人员目录操作占位查询.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/11.人员目录/04.人员目录操作占位查询.ms",
       "rowIds": [
         "8d16429080e44e21a6283ca7f1816f84"
       ],
       "kind": "api",
+      "baseSha256": "9cfd4aebe1fb84bc09dec14d056f16a1fcf6f97362735a50b2c7d1d6f87afe2e",
       "metadataId": "dc4619ca6349542791baee8cb1cb9f25"
     },
     {
-      "path": "api/09.统一身份管理/11.人员目录/05.人员目录重试待开通.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/11.人员目录/05.人员目录重试待开通.ms",
-      "baseSha256": "40f3771603b09b0307b6f866eca9eb518805d621cf667f98c891f1c1d98d66c6",
+      "path": "api/08.统一身份管理/11.人员目录/05.人员目录重试待开通.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/11.人员目录/05.人员目录重试待开通.ms",
       "rowIds": [
         "42ac64480d1f474b83f139d8d8c8a121"
       ],
       "kind": "api",
+      "baseSha256": "40f3771603b09b0307b6f866eca9eb518805d621cf667f98c891f1c1d98d66c6",
       "metadataId": "ce1b7dafa9405755b263b849c2c9dc96"
     },
     {
-      "path": "api/09.统一身份管理/11.人员目录/06.批量停用中央人员.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/11.人员目录/06.批量停用中央人员.ms",
-      "baseSha256": "54bc977fd900335ec25917234cbbb0fb2e0c6c1640d238d3d7eff7b2116017c1",
+      "path": "api/08.统一身份管理/11.人员目录/06.批量停用中央人员.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/11.人员目录/06.批量停用中央人员.ms",
       "rowIds": [
         "ec4feceafbe94977943f17ecde63d723"
       ],
       "kind": "api",
+      "baseSha256": "54bc977fd900335ec25917234cbbb0fb2e0c6c1640d238d3d7eff7b2116017c1",
       "metadataId": "062a1e8f5b825797baf08ddc8654daa8"
     },
     {
-      "path": "api/09.统一身份管理/11.人员目录/07.批量导入中央人员.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/11.人员目录/07.批量导入中央人员.ms",
-      "baseSha256": "095123fabe0c5aedae76fd359bf58fe2d05e57e18a626510f38cd65855b065b4",
+      "path": "api/08.统一身份管理/11.人员目录/07.批量导入中央人员.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/11.人员目录/07.批量导入中央人员.ms",
       "rowIds": [
         "46238b0f3ae244fa946ea94e313bcab4"
       ],
       "kind": "api",
+      "baseSha256": "095123fabe0c5aedae76fd359bf58fe2d05e57e18a626510f38cd65855b065b4",
       "metadataId": "29012d6e76a753cfa2d44cc5d086165c"
     },
     {
-      "path": "api/09.统一身份管理/11.人员目录/group.json",
-      "databasePath": "/magic-api/api/09.统一身份管理/11.人员目录/group.json",
-      "baseSha256": "68d76df0611cf3493bf877c777d0f5e2adb136963c142d117e55103915dbcc3d",
+      "path": "api/08.统一身份管理/11.人员目录/group.json",
+      "databasePath": "/magic-api/api/08.统一身份管理/11.人员目录/group.json",
       "rowIds": [
         "1502f30aa65b47f48264c18858cd82b6"
       ],
       "kind": null,
+      "baseSha256": "68d76df0611cf3493bf877c777d0f5e2adb136963c142d117e55103915dbcc3d",
       "metadataId": "b3202123a27e56198aed6211ec0f770f"
     },
     {
-      "path": "api/09.统一身份管理/12.机构目录",
-      "databasePath": "/magic-api/api/09.统一身份管理/12.机构目录/",
-      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
+      "path": "api/08.统一身份管理/12.机构目录",
+      "databasePath": "/magic-api/api/08.统一身份管理/12.机构目录/",
       "rowIds": [
         "d33cc92b15d64457b798a33150a9fd41"
       ],
-      "kind": "directory"
+      "kind": "directory",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "api/09.统一身份管理/12.机构目录/01.保存中央机构.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/12.机构目录/01.保存中央机构.ms",
-      "baseSha256": "16666a7ecc9bffecd49c435e56d031399e86e963ae23bf2a08ad6e788cceebc0",
+      "path": "api/08.统一身份管理/12.机构目录/01.保存中央机构.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/12.机构目录/01.保存中央机构.ms",
       "rowIds": [
         "4d99ef0127e242c895da05452a0e8663"
       ],
       "kind": "api",
+      "baseSha256": "16666a7ecc9bffecd49c435e56d031399e86e963ae23bf2a08ad6e788cceebc0",
       "metadataId": "f35cf38baa1455b085cfc3ae6d7473b3"
     },
     {
-      "path": "api/09.统一身份管理/12.机构目录/02.归档中央机构.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/12.机构目录/02.归档中央机构.ms",
-      "baseSha256": "659185d3f3fec768b31df2717efa195d7b93ab0e67b96d74a172e410b81974bf",
+      "path": "api/08.统一身份管理/12.机构目录/02.归档中央机构.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/12.机构目录/02.归档中央机构.ms",
       "rowIds": [
         "ece2f57de7e04b1b918c4d634ddcfb9b"
       ],
       "kind": "api",
+      "baseSha256": "659185d3f3fec768b31df2717efa195d7b93ab0e67b96d74a172e410b81974bf",
       "metadataId": "67cd460119445b64a9652e73c102e0eb"
     },
     {
-      "path": "api/09.统一身份管理/12.机构目录/group.json",
-      "databasePath": "/magic-api/api/09.统一身份管理/12.机构目录/group.json",
-      "baseSha256": "8375290889c38322ad45bee13a67fc68b00bbed17b8a08ac0063aa61685d1f2a",
+      "path": "api/08.统一身份管理/12.机构目录/group.json",
+      "databasePath": "/magic-api/api/08.统一身份管理/12.机构目录/group.json",
       "rowIds": [
         "36c3cf9f9ab84ee28c210d82d0bfeba3"
       ],
       "kind": null,
+      "baseSha256": "8375290889c38322ad45bee13a67fc68b00bbed17b8a08ac0063aa61685d1f2a",
       "metadataId": "862919dc32c65a92b119a012b4e39477"
     },
     {
-      "path": "api/09.统一身份管理/13.标准下发",
-      "databasePath": "/magic-api/api/09.统一身份管理/13.标准下发/",
-      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
+      "path": "api/08.统一身份管理/13.标准下发",
+      "databasePath": "/magic-api/api/08.统一身份管理/13.标准下发/",
       "rowIds": [
         "16070f718c3747cdb0dcf1c288951473"
       ],
-      "kind": "directory"
+      "kind": "directory",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "api/09.统一身份管理/13.标准下发/01.读取下发目标选项.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/13.标准下发/01.读取下发目标选项.ms",
-      "baseSha256": "bdd514bbee863b1625a68e378ff86719636888bd3f6ff99340cc0455020766b9",
+      "path": "api/08.统一身份管理/13.标准下发/01.读取下发目标选项.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/13.标准下发/01.读取下发目标选项.ms",
       "rowIds": [
         "89c14d76c74a4374a2030298c2dc1064"
       ],
       "kind": "api",
+      "baseSha256": "bdd514bbee863b1625a68e378ff86719636888bd3f6ff99340cc0455020766b9",
       "metadataId": "696383013abe5008aae8fe5ed01ac834"
     },
     {
-      "path": "api/09.统一身份管理/13.标准下发/02.查询下发接入配置.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/13.标准下发/02.查询下发接入配置.ms",
-      "baseSha256": "787667fcc37113308fd6855de108dbaabdfebad7fae954f7cc6c4e7219c4ae3c",
+      "path": "api/08.统一身份管理/13.标准下发/02.查询下发接入配置.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/13.标准下发/02.查询下发接入配置.ms",
       "rowIds": [
         "2ef28179052c4bed8d5a41ef41133eb1"
       ],
       "kind": "api",
+      "baseSha256": "787667fcc37113308fd6855de108dbaabdfebad7fae954f7cc6c4e7219c4ae3c",
       "metadataId": "01aae8ea3467573180daa39b2c0f2480"
     },
     {
-      "path": "api/09.统一身份管理/13.标准下发/03.查询下发任务记录.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/13.标准下发/03.查询下发任务记录.ms",
-      "baseSha256": "bd6250d01732aa13fd61628e1dd73ca1fe418d21596f6a251fc0ee9b8af3bcd1",
+      "path": "api/08.统一身份管理/13.标准下发/03.查询下发任务记录.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/13.标准下发/03.查询下发任务记录.ms",
       "rowIds": [
         "85966ac37bc14515981687731b788f0c"
       ],
       "kind": "api",
+      "baseSha256": "bd6250d01732aa13fd61628e1dd73ca1fe418d21596f6a251fc0ee9b8af3bcd1",
       "metadataId": "d3584c2bbce4543ca25ffbc5654a8c46"
     },
     {
-      "path": "api/09.统一身份管理/13.标准下发/04.保存下发接入配置.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/13.标准下发/04.保存下发接入配置.ms",
-      "baseSha256": "0bb58900add0b9cbce4dbc8f63b26ad66bbc5d649276947dab723191edcaf3ab",
+      "path": "api/08.统一身份管理/13.标准下发/04.保存下发接入配置.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/13.标准下发/04.保存下发接入配置.ms",
       "rowIds": [
         "78e3e30a0cfd44a9895102855377a3f2"
       ],
       "kind": "api",
+      "baseSha256": "0bb58900add0b9cbce4dbc8f63b26ad66bbc5d649276947dab723191edcaf3ab",
       "metadataId": "ba7b2a02b6ff551186d4dee95781f743"
     },
     {
-      "path": "api/09.统一身份管理/13.标准下发/05.测试下发接收端.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/13.标准下发/05.测试下发接收端.ms",
-      "baseSha256": "f86c48a475de77c90504774e03808e1f8b99034fdd6d90a50b221268e04d7e8f",
+      "path": "api/08.统一身份管理/13.标准下发/05.测试下发接收端.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/13.标准下发/05.测试下发接收端.ms",
       "rowIds": [
         "8adfbefd60384b348184e1f06f883c91"
       ],
       "kind": "api",
+      "baseSha256": "f86c48a475de77c90504774e03808e1f8b99034fdd6d90a50b221268e04d7e8f",
       "metadataId": "440df30da8fa582e9ce22c24c6693e06"
     },
     {
-      "path": "api/09.统一身份管理/13.标准下发/06.创建手动下发任务.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/13.标准下发/06.创建手动下发任务.ms",
-      "baseSha256": "ef60a6d303dcc9cee9e4b5fe6ffc557ce14bf5e41eceb706d9795ae3080e7f83",
+      "path": "api/08.统一身份管理/13.标准下发/06.创建手动下发任务.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/13.标准下发/06.创建手动下发任务.ms",
       "rowIds": [
         "22fd880d7d914031911b844f2f1f25b6"
       ],
       "kind": "api",
+      "baseSha256": "ef60a6d303dcc9cee9e4b5fe6ffc557ce14bf5e41eceb706d9795ae3080e7f83",
       "metadataId": "d2ae39bdaaf355b98c48d3f1ae366416"
     },
     {
-      "path": "api/09.统一身份管理/13.标准下发/07.执行手动下发任务.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/13.标准下发/07.执行手动下发任务.ms",
-      "baseSha256": "4ee4c8c5b504cf080935d2fae24235071928f17a9f01030ddca6d63544702c03",
+      "path": "api/08.统一身份管理/13.标准下发/07.执行手动下发任务.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/13.标准下发/07.执行手动下发任务.ms",
       "rowIds": [
         "2f1fb391afcc47ea9a4265b2189e6c0e"
       ],
       "kind": "api",
+      "baseSha256": "4ee4c8c5b504cf080935d2fae24235071928f17a9f01030ddca6d63544702c03",
       "metadataId": "98326ef1fc5558f4816375a354792250"
     },
     {
-      "path": "api/09.统一身份管理/13.标准下发/08.取消下发任务.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/13.标准下发/08.取消下发任务.ms",
-      "baseSha256": "4f3b96a3e95e671df12f9c1342ed16ed53b065f0b2b43b2f32a97fabfc8a6f1d",
+      "path": "api/08.统一身份管理/13.标准下发/08.取消下发任务.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/13.标准下发/08.取消下发任务.ms",
       "rowIds": [
         "f9f95ac48c504f4982971abba618889c"
       ],
       "kind": "api",
+      "baseSha256": "4f3b96a3e95e671df12f9c1342ed16ed53b065f0b2b43b2f32a97fabfc8a6f1d",
       "metadataId": "7b1d8aae55725bdda939675bd29b2c2a"
     },
     {
-      "path": "api/09.统一身份管理/13.标准下发/09.重试下发任务.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/13.标准下发/09.重试下发任务.ms",
-      "baseSha256": "380ab72f4647634975f002aa4bd87825f237dba33d4bb3ee82739ac6d6b48390",
+      "path": "api/08.统一身份管理/13.标准下发/09.重试下发任务.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/13.标准下发/09.重试下发任务.ms",
       "rowIds": [
         "033a341f797d45458eb1a683bb7417d2"
       ],
       "kind": "api",
+      "baseSha256": "380ab72f4647634975f002aa4bd87825f237dba33d4bb3ee82739ac6d6b48390",
       "metadataId": "bdadee3c54325c0c8c04c28dc02c0281"
     },
     {
-      "path": "api/09.统一身份管理/13.标准下发/10.分页查询可下发对象.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/13.标准下发/10.分页查询可下发对象.ms",
-      "baseSha256": "d92c77d4f6870f84af67d257df30f7eb6a9b9f5cf03c7ee6bfaaa433d48fbcb7",
+      "path": "api/08.统一身份管理/13.标准下发/10.分页查询可下发对象.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/13.标准下发/10.分页查询可下发对象.ms",
       "rowIds": [
         "4075121696d141b3b46f6f314d8f2803"
       ],
       "kind": "api",
+      "baseSha256": "d92c77d4f6870f84af67d257df30f7eb6a9b9f5cf03c7ee6bfaaa433d48fbcb7",
       "metadataId": "43af23446f825dd09c5c88784e8d0425"
     },
     {
-      "path": "api/09.统一身份管理/13.标准下发/11.设置应用本地初始密码.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/13.标准下发/11.设置应用本地初始密码.ms",
-      "baseSha256": "02f8ba62691301195f9f9060c4469322a51512d696ac7307eaaa09f6c3370104",
+      "path": "api/08.统一身份管理/13.标准下发/11.设置应用本地初始密码.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/13.标准下发/11.设置应用本地初始密码.ms",
       "rowIds": [
         "e13a7814924c40be9c3a64f5d33e0cc2"
       ],
       "kind": "api",
+      "baseSha256": "02f8ba62691301195f9f9060c4469322a51512d696ac7307eaaa09f6c3370104",
       "metadataId": "cf026ce5125b49338d2941874f0cbd62"
     },
     {
-      "path": "api/09.统一身份管理/13.标准下发/group.json",
-      "databasePath": "/magic-api/api/09.统一身份管理/13.标准下发/group.json",
-      "baseSha256": "0c6f2c850c3994fb25b8bcfbfbd9f2b1688469f97051226198f10553b39589ab",
+      "path": "api/08.统一身份管理/13.标准下发/group.json",
+      "databasePath": "/magic-api/api/08.统一身份管理/13.标准下发/group.json",
       "rowIds": [
         "5491e73333154a99b8357b61f5f6babd"
       ],
       "kind": null,
+      "baseSha256": "0c6f2c850c3994fb25b8bcfbfbd9f2b1688469f97051226198f10553b39589ab",
       "metadataId": "07899fe85f4d59fd90de0507c7f4d188"
     },
     {
-      "path": "api/09.统一身份管理/14.目录字典",
-      "databasePath": "/magic-api/api/09.统一身份管理/14.目录字典/",
-      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
+      "path": "api/08.统一身份管理/14.目录字典",
+      "databasePath": "/magic-api/api/08.统一身份管理/14.目录字典/",
       "rowIds": [
         "6118d72da2cc47b6a188b7fe4bead626"
       ],
-      "kind": "directory"
+      "kind": "directory",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "api/09.统一身份管理/14.目录字典/01.保存目录字典.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/14.目录字典/01.保存目录字典.ms",
-      "baseSha256": "86ba05752e541e664fa33238865db91b81e0bca81fe84802371d9422ee787bb8",
+      "path": "api/08.统一身份管理/14.目录字典/01.保存目录字典.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/14.目录字典/01.保存目录字典.ms",
       "rowIds": [
         "965fb491e17344a3a9cf8921e4b6ce91"
       ],
       "kind": "api",
+      "baseSha256": "86ba05752e541e664fa33238865db91b81e0bca81fe84802371d9422ee787bb8",
       "metadataId": "e2e6dfb77ad95241aba08dd2a4c3fb53"
     },
     {
-      "path": "api/09.统一身份管理/14.目录字典/02.归档目录字典.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/14.目录字典/02.归档目录字典.ms",
-      "baseSha256": "6ab7c4f323adb5403ea33cc2dafb6826c82fd1bc31826fceaab3c4cb1a86cf22",
+      "path": "api/08.统一身份管理/14.目录字典/02.归档目录字典.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/14.目录字典/02.归档目录字典.ms",
       "rowIds": [
         "7274eddd4bfb4418aeed42cd2d057fb0"
       ],
       "kind": "api",
+      "baseSha256": "6ab7c4f323adb5403ea33cc2dafb6826c82fd1bc31826fceaab3c4cb1a86cf22",
       "metadataId": "a3821384bf4151ce85fdb396aa898d9b"
     },
     {
-      "path": "api/09.统一身份管理/14.目录字典/group.json",
-      "databasePath": "/magic-api/api/09.统一身份管理/14.目录字典/group.json",
-      "baseSha256": "34096660ed961f92a01fa4af5390b5d1d88424cfc6079b7fcecf9188921d4235",
+      "path": "api/08.统一身份管理/14.目录字典/group.json",
+      "databasePath": "/magic-api/api/08.统一身份管理/14.目录字典/group.json",
       "rowIds": [
         "c9f314f6c6f243d58661d8b4acd186d5"
       ],
       "kind": null,
+      "baseSha256": "34096660ed961f92a01fa4af5390b5d1d88424cfc6079b7fcecf9188921d4235",
       "metadataId": "60b5f490ea45578aa23c7d583cb788ce"
     },
     {
-      "path": "api/09.统一身份管理/15.扩展字段定义",
-      "databasePath": "/magic-api/api/09.统一身份管理/15.扩展字段定义/",
-      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
+      "path": "api/08.统一身份管理/15.扩展字段定义",
+      "databasePath": "/magic-api/api/08.统一身份管理/15.扩展字段定义/",
       "rowIds": [
         "7cb7763100fa4355ae4fedfecb971094"
       ],
-      "kind": "directory"
+      "kind": "directory",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "api/09.统一身份管理/15.扩展字段定义/01.保存扩展字段定义.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/15.扩展字段定义/01.保存扩展字段定义.ms",
-      "baseSha256": "e631598f57e17c554f5bca7b742317fb087b0894cb5c18fc0a8474ecb639e576",
+      "path": "api/08.统一身份管理/15.扩展字段定义/01.保存扩展字段定义.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/15.扩展字段定义/01.保存扩展字段定义.ms",
       "rowIds": [
         "0d618d3163ed4c6ebf7e017f23f0aa01"
       ],
       "kind": "api",
+      "baseSha256": "e631598f57e17c554f5bca7b742317fb087b0894cb5c18fc0a8474ecb639e576",
       "metadataId": "419dd6a6040c519c83df3583bad95aa2"
     },
     {
-      "path": "api/09.统一身份管理/15.扩展字段定义/02.归档扩展字段定义.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/15.扩展字段定义/02.归档扩展字段定义.ms",
-      "baseSha256": "e8441bb36f12e5cf8230f402f29afa5ccb1c038e40610079341d2188155a8dca",
+      "path": "api/08.统一身份管理/15.扩展字段定义/02.归档扩展字段定义.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/15.扩展字段定义/02.归档扩展字段定义.ms",
       "rowIds": [
         "2ba12965514f457e89f43406d7169172"
       ],
       "kind": "api",
+      "baseSha256": "e8441bb36f12e5cf8230f402f29afa5ccb1c038e40610079341d2188155a8dca",
       "metadataId": "7b835c29c6115af8a691831c8fb631df"
     },
     {
-      "path": "api/09.统一身份管理/15.扩展字段定义/group.json",
-      "databasePath": "/magic-api/api/09.统一身份管理/15.扩展字段定义/group.json",
-      "baseSha256": "6646a2ecf5a3a0dfef13ba4511e18646d5ee738610d18d87e596d75fb73aab5e",
+      "path": "api/08.统一身份管理/15.扩展字段定义/group.json",
+      "databasePath": "/magic-api/api/08.统一身份管理/15.扩展字段定义/group.json",
       "rowIds": [
         "5add55ba41de407bbfd6004ef85d40cb"
       ],
       "kind": null,
+      "baseSha256": "6646a2ecf5a3a0dfef13ba4511e18646d5ee738610d18d87e596d75fb73aab5e",
       "metadataId": "d2672fef1964556f8f5fcdc1f380d090"
     },
     {
-      "path": "api/09.统一身份管理/16.应用资料分配",
-      "databasePath": "/magic-api/api/09.统一身份管理/16.应用资料分配/",
-      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
+      "path": "api/08.统一身份管理/16.应用资料分配",
+      "databasePath": "/magic-api/api/08.统一身份管理/16.应用资料分配/",
       "rowIds": [
         "66bbb5eee75d4c12a13dcd201de670a4"
       ],
-      "kind": "directory"
+      "kind": "directory",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "api/09.统一身份管理/16.应用资料分配/01.查询应用人员资料分配列表.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/16.应用资料分配/01.查询应用人员资料分配列表.ms",
-      "baseSha256": "e09e5e1d40e4f2a69d221faf72920cc56898eaf24ce4e3475061bc7d03a67839",
+      "path": "api/08.统一身份管理/16.应用资料分配/01.查询应用人员资料分配列表.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/16.应用资料分配/01.查询应用人员资料分配列表.ms",
       "rowIds": [
         "40155c8e7414425aacc4f2b5d9b9d70f"
       ],
       "kind": "api",
+      "baseSha256": "e09e5e1d40e4f2a69d221faf72920cc56898eaf24ce4e3475061bc7d03a67839",
       "metadataId": "3bb4ca383d1e58e6971c458ef78eb6b8"
     },
     {
-      "path": "api/09.统一身份管理/16.应用资料分配/02.保存应用人员资料分配.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/16.应用资料分配/02.保存应用人员资料分配.ms",
-      "baseSha256": "69ea69c015750d09c2cd938194939ba7c88682a4ad35a2441a35ee123d5f47e6",
+      "path": "api/08.统一身份管理/16.应用资料分配/02.保存应用人员资料分配.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/16.应用资料分配/02.保存应用人员资料分配.ms",
       "rowIds": [
         "8e7e5884ea6d4fcea5c6e624381eb904"
       ],
       "kind": "api",
+      "baseSha256": "69ea69c015750d09c2cd938194939ba7c88682a4ad35a2441a35ee123d5f47e6",
       "metadataId": "6f389c31a29c5cbea2ee5f94acdc70ec"
     },
     {
-      "path": "api/09.统一身份管理/16.应用资料分配/03.归档应用人员资料分配.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/16.应用资料分配/03.归档应用人员资料分配.ms",
-      "baseSha256": "2640b99000e48a0b2685b3b46efc4c0c6e82073945369d2e37d9b2806d8a6513",
+      "path": "api/08.统一身份管理/16.应用资料分配/03.归档应用人员资料分配.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/16.应用资料分配/03.归档应用人员资料分配.ms",
       "rowIds": [
         "ba9e1879ced84ea182f925c75840d755"
       ],
       "kind": "api",
+      "baseSha256": "2640b99000e48a0b2685b3b46efc4c0c6e82073945369d2e37d9b2806d8a6513",
       "metadataId": "130e0dc6612c5250b7abfd777d1fd1be"
     },
     {
-      "path": "api/09.统一身份管理/16.应用资料分配/group.json",
-      "databasePath": "/magic-api/api/09.统一身份管理/16.应用资料分配/group.json",
-      "baseSha256": "23f3e8406092bbc9446522d4f71548d24d89023736b986b6ec3ccc36b4da9906",
+      "path": "api/08.统一身份管理/16.应用资料分配/group.json",
+      "databasePath": "/magic-api/api/08.统一身份管理/16.应用资料分配/group.json",
       "rowIds": [
         "9558b803319e46f3bd0c6869415ef722"
       ],
       "kind": null,
+      "baseSha256": "23f3e8406092bbc9446522d4f71548d24d89023736b986b6ec3ccc36b4da9906",
       "metadataId": "58dc0d18e4185b67bf18980e9a47e878"
     },
     {
-      "path": "api/09.统一身份管理/17.应用业务角色",
-      "databasePath": "/magic-api/api/09.统一身份管理/17.应用业务角色/",
-      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
+      "path": "api/08.统一身份管理/17.应用业务角色",
+      "databasePath": "/magic-api/api/08.统一身份管理/17.应用业务角色/",
       "rowIds": [
         "e2a5a13f605c4425ad53187421c159c8"
       ],
-      "kind": "directory"
+      "kind": "directory",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "api/09.统一身份管理/17.应用业务角色/01.保存应用业务角色.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/17.应用业务角色/01.保存应用业务角色.ms",
-      "baseSha256": "40b421966d2a7904bbce2759a471a60e819bd6e4eb2b64549d9cc11d304279cb",
+      "path": "api/08.统一身份管理/17.应用业务角色/01.保存应用业务角色.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/17.应用业务角色/01.保存应用业务角色.ms",
       "rowIds": [
         "4eef540ec9194331a3e2fc357425434b"
       ],
       "kind": "api",
+      "baseSha256": "40b421966d2a7904bbce2759a471a60e819bd6e4eb2b64549d9cc11d304279cb",
       "metadataId": "198cc4bcf30754adb17aafd004e44b34"
     },
     {
-      "path": "api/09.统一身份管理/17.应用业务角色/02.归档应用业务角色.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/17.应用业务角色/02.归档应用业务角色.ms",
-      "baseSha256": "755e7188fe8308c71415f0d60a5634694ffe10cc1c002a557eee519f96c387dd",
+      "path": "api/08.统一身份管理/17.应用业务角色/02.归档应用业务角色.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/17.应用业务角色/02.归档应用业务角色.ms",
       "rowIds": [
         "a55fddb41b3445e8a4da899f9caa2b9e"
       ],
       "kind": "api",
+      "baseSha256": "755e7188fe8308c71415f0d60a5634694ffe10cc1c002a557eee519f96c387dd",
       "metadataId": "b9c145c0fe395dadb51ee4eb896d7b78"
     },
     {
-      "path": "api/09.统一身份管理/17.应用业务角色/group.json",
-      "databasePath": "/magic-api/api/09.统一身份管理/17.应用业务角色/group.json",
-      "baseSha256": "5f946837e53e19aaa437dafdf63635b0b7e2eda3e268c0215371b1326f3f68bd",
+      "path": "api/08.统一身份管理/17.应用业务角色/group.json",
+      "databasePath": "/magic-api/api/08.统一身份管理/17.应用业务角色/group.json",
       "rowIds": [
         "b2ceb74a096748e1bdbea4b2ae2e5f8f"
       ],
       "kind": null,
+      "baseSha256": "5f946837e53e19aaa437dafdf63635b0b7e2eda3e268c0215371b1326f3f68bd",
       "metadataId": "b34c35bb56695d918186c7c7928a69cf"
     },
     {
-      "path": "api/09.统一身份管理/18.应用资源",
-      "databasePath": "/magic-api/api/09.统一身份管理/18.应用资源/",
-      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
+      "path": "api/08.统一身份管理/18.应用资源",
+      "databasePath": "/magic-api/api/08.统一身份管理/18.应用资源/",
       "rowIds": [
         "83a3ceb0c1be4c4abff500cd9304c7dd"
       ],
-      "kind": "directory"
+      "kind": "directory",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "api/09.统一身份管理/18.应用资源/01.保存应用资源.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/18.应用资源/01.保存应用资源.ms",
-      "baseSha256": "a5e5ce72f35afe97819769f2b1899a902a6894bb89e89af7abf6cef8fc77245c",
+      "path": "api/08.统一身份管理/18.应用资源/01.保存应用资源.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/18.应用资源/01.保存应用资源.ms",
       "rowIds": [
         "4c7b8ff6ccfb476299f75469b112bfc8"
       ],
       "kind": "api",
+      "baseSha256": "a5e5ce72f35afe97819769f2b1899a902a6894bb89e89af7abf6cef8fc77245c",
       "metadataId": "81d9266d4fe052f090cc0631d8e3cd2c"
     },
     {
-      "path": "api/09.统一身份管理/18.应用资源/02.归档应用资源.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/18.应用资源/02.归档应用资源.ms",
-      "baseSha256": "1328abe232eee1a9f70db8604c618faeee8b45c0a993cc68b837ebb88ebb8791",
+      "path": "api/08.统一身份管理/18.应用资源/02.归档应用资源.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/18.应用资源/02.归档应用资源.ms",
       "rowIds": [
         "8c9d4d51e6334677a69e7233c714c4e2"
       ],
       "kind": "api",
+      "baseSha256": "1328abe232eee1a9f70db8604c618faeee8b45c0a993cc68b837ebb88ebb8791",
       "metadataId": "551fcded58c1543ea75dfd5a72b9f0c0"
     },
     {
-      "path": "api/09.统一身份管理/18.应用资源/group.json",
-      "databasePath": "/magic-api/api/09.统一身份管理/18.应用资源/group.json",
-      "baseSha256": "fa0cc6f414c49b6b551b781963b9f1cb22be3ec13a7162d11d137d1c0e37311e",
+      "path": "api/08.统一身份管理/18.应用资源/group.json",
+      "databasePath": "/magic-api/api/08.统一身份管理/18.应用资源/group.json",
       "rowIds": [
         "0f02bce56bed4cf69be06e7b1f4eb930"
       ],
       "kind": null,
+      "baseSha256": "fa0cc6f414c49b6b551b781963b9f1cb22be3ec13a7162d11d137d1c0e37311e",
       "metadataId": "dfa10519bbb5591d9fbf0f7215f608f3"
     },
     {
-      "path": "api/09.统一身份管理/19.访问授权",
-      "databasePath": "/magic-api/api/09.统一身份管理/19.访问授权/",
-      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
+      "path": "api/08.统一身份管理/19.访问授权",
+      "databasePath": "/magic-api/api/08.统一身份管理/19.访问授权/",
       "rowIds": [
         "804c8588606948ad9d2a2a6ebd084756"
       ],
-      "kind": "directory"
+      "kind": "directory",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "api/09.统一身份管理/19.访问授权/01.保存应用访问授权.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/19.访问授权/01.保存应用访问授权.ms",
-      "baseSha256": "99055306f468bbeeea8f88e0a8d9d51203c5383075c18b92165d563bc7225538",
+      "path": "api/08.统一身份管理/19.访问授权/01.保存应用访问授权.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/19.访问授权/01.保存应用访问授权.ms",
       "rowIds": [
         "cb87e645421945b4b956b2626950af51"
       ],
       "kind": "api",
+      "baseSha256": "99055306f468bbeeea8f88e0a8d9d51203c5383075c18b92165d563bc7225538",
       "metadataId": "3271b28c612650c88db8832fc5eda9b0"
     },
     {
-      "path": "api/09.统一身份管理/19.访问授权/02.归档应用访问授权.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/19.访问授权/02.归档应用访问授权.ms",
-      "baseSha256": "69d68464e165b084fc6694cbeea45426a0bf1081abc397322e176f1d6e2e4d26",
+      "path": "api/08.统一身份管理/19.访问授权/02.归档应用访问授权.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/19.访问授权/02.归档应用访问授权.ms",
       "rowIds": [
         "44bbad9ed4994e59917bdb6e2a0c12c7"
       ],
       "kind": "api",
+      "baseSha256": "69d68464e165b084fc6694cbeea45426a0bf1081abc397322e176f1d6e2e4d26",
       "metadataId": "f8189bdc4eda5d2f8e2c7238365bbc35"
     },
     {
-      "path": "api/09.统一身份管理/19.访问授权/group.json",
-      "databasePath": "/magic-api/api/09.统一身份管理/19.访问授权/group.json",
-      "baseSha256": "c541179e79efc49b13cd3c5330da3a8cff66d4cf9d13d985e7bf2cc8079791f7",
+      "path": "api/08.统一身份管理/19.访问授权/group.json",
+      "databasePath": "/magic-api/api/08.统一身份管理/19.访问授权/group.json",
       "rowIds": [
         "e61569d786034fdf89f603c8ae5e0b42"
       ],
       "kind": null,
+      "baseSha256": "c541179e79efc49b13cd3c5330da3a8cff66d4cf9d13d985e7bf2cc8079791f7",
       "metadataId": "d7e5646b56d156198bbf3826dfe4771c"
     },
     {
-      "path": "api/09.统一身份管理/20.权限组",
-      "databasePath": "/magic-api/api/09.统一身份管理/20.权限组/",
-      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
+      "path": "api/08.统一身份管理/20.权限组",
+      "databasePath": "/magic-api/api/08.统一身份管理/20.权限组/",
       "rowIds": [
         "37bab961fb544e88a76e477a3e899629"
       ],
-      "kind": "directory"
+      "kind": "directory",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "api/09.统一身份管理/20.权限组/01.保存权限组.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/20.权限组/01.保存权限组.ms",
-      "baseSha256": "bd0d648b980436c6a2b1e12e418041ad671a034cfeff99461118ee3f56050819",
+      "path": "api/08.统一身份管理/20.权限组/01.保存权限组.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/20.权限组/01.保存权限组.ms",
       "rowIds": [
         "91b5cb16f40b4e7ebce295eefe59c98b"
       ],
       "kind": "api",
+      "baseSha256": "bd0d648b980436c6a2b1e12e418041ad671a034cfeff99461118ee3f56050819",
       "metadataId": "0ce64f83f20e56769be48ddba696af99"
     },
     {
-      "path": "api/09.统一身份管理/20.权限组/02.归档权限组.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/20.权限组/02.归档权限组.ms",
-      "baseSha256": "cb2a33cc53566916b9f86a9953a65d5b537bd3d36b649ac5f2d35d1f1f99b174",
+      "path": "api/08.统一身份管理/20.权限组/02.归档权限组.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/20.权限组/02.归档权限组.ms",
       "rowIds": [
         "4b1ea5eb2e024f0ea126545cb0e387e8"
       ],
       "kind": "api",
+      "baseSha256": "cb2a33cc53566916b9f86a9953a65d5b537bd3d36b649ac5f2d35d1f1f99b174",
       "metadataId": "ed4e9afa31fe5fd9bdfb3cf54a7e2db5"
     },
     {
-      "path": "api/09.统一身份管理/20.权限组/group.json",
-      "databasePath": "/magic-api/api/09.统一身份管理/20.权限组/group.json",
-      "baseSha256": "ba384f194916b23b394d234e8727110332b50882a141d8d132d7ac5351dc694d",
+      "path": "api/08.统一身份管理/20.权限组/group.json",
+      "databasePath": "/magic-api/api/08.统一身份管理/20.权限组/group.json",
       "rowIds": [
         "78618074d08549dca55e688032eee49a"
       ],
       "kind": null,
+      "baseSha256": "ba384f194916b23b394d234e8727110332b50882a141d8d132d7ac5351dc694d",
       "metadataId": "b2dabd7a0ef25609852aa2dc1d6eadb1"
     },
     {
-      "path": "api/09.统一身份管理/21.应用客户端",
-      "databasePath": "/magic-api/api/09.统一身份管理/21.应用客户端/",
-      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
+      "path": "api/08.统一身份管理/21.应用客户端",
+      "databasePath": "/magic-api/api/08.统一身份管理/21.应用客户端/",
       "rowIds": [
         "7cb856f487f040e988d5b2993cfbffc3"
       ],
-      "kind": "directory"
+      "kind": "directory",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "api/09.统一身份管理/21.应用客户端/01.查询应用客户端列表.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/21.应用客户端/01.查询应用客户端列表.ms",
-      "baseSha256": "496d3c2f0cccabe044bada17efd95b6271301e8ff7b21240fc806eaf0a2edfb2",
+      "path": "api/08.统一身份管理/21.应用客户端/01.查询应用客户端列表.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/21.应用客户端/01.查询应用客户端列表.ms",
       "rowIds": [
         "0ce0a869b2564c20a32f15a12122b6b6"
       ],
       "kind": "api",
+      "baseSha256": "496d3c2f0cccabe044bada17efd95b6271301e8ff7b21240fc806eaf0a2edfb2",
       "metadataId": "a00b226b4fd35e91a584718eb4b9a2f1"
     },
     {
-      "path": "api/09.统一身份管理/21.应用客户端/02.保存应用客户端.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/21.应用客户端/02.保存应用客户端.ms",
-      "baseSha256": "efbe3ffc5246d51ef2fb6a5666cfcf2d41c7210f7108ecf6414b56670d6dfba4",
+      "path": "api/08.统一身份管理/21.应用客户端/02.保存应用客户端.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/21.应用客户端/02.保存应用客户端.ms",
       "rowIds": [
         "cd43b34d94f84938bab7b9ef685648d7"
       ],
       "kind": "api",
+      "baseSha256": "efbe3ffc5246d51ef2fb6a5666cfcf2d41c7210f7108ecf6414b56670d6dfba4",
       "metadataId": "3fbdbbf3b526546f9c9fbcb38a38784d"
     },
     {
-      "path": "api/09.统一身份管理/21.应用客户端/03.归档应用客户端.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/21.应用客户端/03.归档应用客户端.ms",
-      "baseSha256": "e04480e8f135455f93ea15a6166e0ce1d4d6d5e21c8288d262ead7dc3d8f7747",
+      "path": "api/08.统一身份管理/21.应用客户端/03.归档应用客户端.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/21.应用客户端/03.归档应用客户端.ms",
       "rowIds": [
         "d45b385d7a6e415e90eb4e03b137c972"
       ],
       "kind": "api",
+      "baseSha256": "e04480e8f135455f93ea15a6166e0ce1d4d6d5e21c8288d262ead7dc3d8f7747",
       "metadataId": "db01a757fc205fee8debb0e3cdf6da31"
     },
     {
-      "path": "api/09.统一身份管理/21.应用客户端/group.json",
-      "databasePath": "/magic-api/api/09.统一身份管理/21.应用客户端/group.json",
-      "baseSha256": "01bc193c47b6ce758cb6ab0846371e4cc2bfd896dc59ad71a415c2b34ff55cfa",
+      "path": "api/08.统一身份管理/21.应用客户端/group.json",
+      "databasePath": "/magic-api/api/08.统一身份管理/21.应用客户端/group.json",
       "rowIds": [
         "c44931a9d2d84687a85df97cb6a5d217"
       ],
       "kind": null,
+      "baseSha256": "01bc193c47b6ce758cb6ab0846371e4cc2bfd896dc59ad71a415c2b34ff55cfa",
       "metadataId": "22234a256a485757b6f81c2c1c3885ed"
     },
     {
-      "path": "api/09.统一身份管理/22.租户资料接收",
-      "databasePath": "/magic-api/api/09.统一身份管理/22.租户资料接收/",
-      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
+      "path": "api/08.统一身份管理/22.租户资料接收",
+      "databasePath": "/magic-api/api/08.统一身份管理/22.租户资料接收/",
       "rowIds": [
         "9e20352c7af04f3daf0e3159597ef5fc"
       ],
-      "kind": "directory"
+      "kind": "directory",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "api/09.统一身份管理/22.租户资料接收/01.接收中央资料下发.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/22.租户资料接收/01.接收中央资料下发.ms",
-      "baseSha256": "88cd8343c45b1e110e99848ee7aad9a502e7b80edc98a3839026c391e2b3d3ad",
+      "path": "api/08.统一身份管理/22.租户资料接收/01.接收中央资料下发.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/22.租户资料接收/01.接收中央资料下发.ms",
       "rowIds": [
         "c032f0402a39415f8b07bea82b007fb6"
       ],
       "kind": "api",
+      "baseSha256": "88cd8343c45b1e110e99848ee7aad9a502e7b80edc98a3839026c391e2b3d3ad",
       "metadataId": "d523319ceb2b56edbabedb12112417d7"
     },
     {
-      "path": "api/09.统一身份管理/22.租户资料接收/02.管理本地接收配置.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/22.租户资料接收/02.管理本地接收配置.ms",
-      "baseSha256": "c345a26e2ea56cafe258dfb18a939f1d3798dd2e6a4c40b8f8320cb64e7edbc4",
+      "path": "api/08.统一身份管理/22.租户资料接收/02.管理本地接收配置.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/22.租户资料接收/02.管理本地接收配置.ms",
       "rowIds": [
         "1cb0fca6458d46af9541298b105daa82"
       ],
       "kind": "api",
+      "baseSha256": "c345a26e2ea56cafe258dfb18a939f1d3798dd2e6a4c40b8f8320cb64e7edbc4",
       "metadataId": "8b7e7875e5f35f1bbd3b2ba81fea5373"
     },
     {
-      "path": "api/09.统一身份管理/22.租户资料接收/group.json",
-      "databasePath": "/magic-api/api/09.统一身份管理/22.租户资料接收/group.json",
-      "baseSha256": "95808d3a645e2cba89770fcab1f44b523acf4d021f7a26bfdd4631210c1a5bcb",
+      "path": "api/08.统一身份管理/22.租户资料接收/group.json",
+      "databasePath": "/magic-api/api/08.统一身份管理/22.租户资料接收/group.json",
       "rowIds": [
         "eeb4a669e6104570b21b9bc76b670783"
       ],
       "kind": null,
+      "baseSha256": "95808d3a645e2cba89770fcab1f44b523acf4d021f7a26bfdd4631210c1a5bcb",
       "metadataId": "955acd903650573fbe414d610962a487"
     },
     {
-      "path": "api/09.统一身份管理/23.统一认证账号",
-      "databasePath": "/magic-api/api/09.统一身份管理/23.统一认证账号/",
-      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
+      "path": "api/08.统一身份管理/23.统一认证账号",
+      "databasePath": "/magic-api/api/08.统一身份管理/23.统一认证账号/",
       "rowIds": [
         "18ed293736b645abab4005f2435ee5c4"
       ],
-      "kind": "directory"
+      "kind": "directory",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "api/09.统一身份管理/23.统一认证账号/01.查询统一认证账号列表.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/23.统一认证账号/01.查询统一认证账号列表.ms",
-      "baseSha256": "184f54d83f9f82cab4099644d28b085cb50f6864fd72baf270b2f8d7695d0715",
+      "path": "api/08.统一身份管理/23.统一认证账号/01.查询统一认证账号列表.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/23.统一认证账号/01.查询统一认证账号列表.ms",
       "rowIds": [
         "96ce839fed9446d38eca5cc63b24402d"
       ],
       "kind": "api",
+      "baseSha256": "184f54d83f9f82cab4099644d28b085cb50f6864fd72baf270b2f8d7695d0715",
       "metadataId": "868fca7d381256fd95e5d01079062df0"
     },
     {
-      "path": "api/09.统一身份管理/23.统一认证账号/02.保存统一认证账号.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/23.统一认证账号/02.保存统一认证账号.ms",
-      "baseSha256": "8bf257a2d0299755be1a501b058924b4e3d86cef1bea0d9e16b583e5025c0337",
+      "path": "api/08.统一身份管理/23.统一认证账号/02.保存统一认证账号.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/23.统一认证账号/02.保存统一认证账号.ms",
       "rowIds": [
         "460d3cd8cb4f4c27b4f582beedfb3de1"
       ],
       "kind": "api",
+      "baseSha256": "8bf257a2d0299755be1a501b058924b4e3d86cef1bea0d9e16b583e5025c0337",
       "metadataId": "ac7b2ac7fc9155e7937e23909b279301"
     },
     {
-      "path": "api/09.统一身份管理/23.统一认证账号/03.重置统一认证账号密码.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/23.统一认证账号/03.重置统一认证账号密码.ms",
-      "baseSha256": "c57c58615fff9276fbc3a1c9a480474f7309b2c9c598a323ae78bcae2f185fee",
+      "path": "api/08.统一身份管理/23.统一认证账号/03.重置统一认证账号密码.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/23.统一认证账号/03.重置统一认证账号密码.ms",
       "rowIds": [
         "7396146c8ae54a34b7d406d631d7923c"
       ],
       "kind": "api",
+      "baseSha256": "c57c58615fff9276fbc3a1c9a480474f7309b2c9c598a323ae78bcae2f185fee",
       "metadataId": "0f99e70984075175aeb9b134185c0932"
     },
     {
-      "path": "api/09.统一身份管理/23.统一认证账号/04.绑定法人办理身份.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/23.统一认证账号/04.绑定法人办理身份.ms",
-      "baseSha256": "fe716bffdda30757faacd77e96b9cb18c5a69cd40bf69fbe0f3f7ea26676138e",
+      "path": "api/08.统一身份管理/23.统一认证账号/04.绑定法人办理身份.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/23.统一认证账号/04.绑定法人办理身份.ms",
       "rowIds": [
         "abaf6ff8b88e4755a7d45a267d680653"
       ],
       "kind": "api",
+      "baseSha256": "fe716bffdda30757faacd77e96b9cb18c5a69cd40bf69fbe0f3f7ea26676138e",
       "metadataId": "1fc70fed3a2c53f5af5fbd6dd694076d"
     },
     {
-      "path": "api/09.统一身份管理/23.统一认证账号/group.json",
-      "databasePath": "/magic-api/api/09.统一身份管理/23.统一认证账号/group.json",
-      "baseSha256": "096f4187daf88a73b255f9e72f645ea3375a9148daccab82eb7555da3c1dd5d6",
+      "path": "api/08.统一身份管理/23.统一认证账号/group.json",
+      "databasePath": "/magic-api/api/08.统一身份管理/23.统一认证账号/group.json",
       "rowIds": [
         "875ae4e7358a4aeb978e34e30e764ec9"
       ],
       "kind": null,
+      "baseSha256": "096f4187daf88a73b255f9e72f645ea3375a9148daccab82eb7555da3c1dd5d6",
       "metadataId": "e325afaf57bd5e38b68f38837525b3b0"
     },
     {
-      "path": "api/09.统一身份管理/24.认证协议配置",
-      "databasePath": "/magic-api/api/09.统一身份管理/24.认证协议配置/",
-      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
+      "path": "api/08.统一身份管理/24.认证协议配置",
+      "databasePath": "/magic-api/api/08.统一身份管理/24.认证协议配置/",
       "rowIds": [
         "b6eea3c03301468c944aceca2e7432c5"
       ],
-      "kind": "directory"
+      "kind": "directory",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "api/09.统一身份管理/24.认证协议配置/01.读取应用认证协议配置.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/24.认证协议配置/01.读取应用认证协议配置.ms",
-      "baseSha256": "185c0bf1369564dc74d48a02c3c711ac4d25310df2cfc76ded7fb226e09b84b4",
+      "path": "api/08.统一身份管理/24.认证协议配置/01.读取应用认证协议配置.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/24.认证协议配置/01.读取应用认证协议配置.ms",
       "rowIds": [
         "cfbf91170e874d92ac8e67a5f0989c5a"
       ],
       "kind": "api",
+      "baseSha256": "185c0bf1369564dc74d48a02c3c711ac4d25310df2cfc76ded7fb226e09b84b4",
       "metadataId": "f4c91e5297f253d7a83356038bfbf6cd"
     },
     {
-      "path": "api/09.统一身份管理/24.认证协议配置/02.配置应用认证协议.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/24.认证协议配置/02.配置应用认证协议.ms",
-      "baseSha256": "7e77abbd5881794ed19a5eec2f468b2532b5a573fc6eedbfb45275b84e0324cc",
+      "path": "api/08.统一身份管理/24.认证协议配置/02.配置应用认证协议.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/24.认证协议配置/02.配置应用认证协议.ms",
       "rowIds": [
         "d63d05f49f7a455b894f2e08bb0759de"
       ],
       "kind": "api",
+      "baseSha256": "7e77abbd5881794ed19a5eec2f468b2532b5a573fc6eedbfb45275b84e0324cc",
       "metadataId": "219e2839013d5af28fbc5ea6a701674e"
     },
     {
-      "path": "api/09.统一身份管理/24.认证协议配置/03.停用应用认证协议.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/24.认证协议配置/03.停用应用认证协议.ms",
-      "baseSha256": "a6af8806138846e44e572239305fd26b0bac8970b15dc3159fbbc1934e6d6a25",
+      "path": "api/08.统一身份管理/24.认证协议配置/03.停用应用认证协议.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/24.认证协议配置/03.停用应用认证协议.ms",
       "rowIds": [
         "c9cf5af4f33c42aaa67492e7e99f4d41"
       ],
       "kind": "api",
+      "baseSha256": "a6af8806138846e44e572239305fd26b0bac8970b15dc3159fbbc1934e6d6a25",
       "metadataId": "260bd09d1f005dd7831242a478ee823c"
     },
     {
-      "path": "api/09.统一身份管理/24.认证协议配置/04.配置应用联邦认证.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/24.认证协议配置/04.配置应用联邦认证.ms",
-      "baseSha256": "b6d6defa251f8455c6cd74dceb0eab72b976dcd1bd2db8b625ff12c54c1e55a9",
+      "path": "api/08.统一身份管理/24.认证协议配置/04.配置应用联邦认证.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/24.认证协议配置/04.配置应用联邦认证.ms",
       "rowIds": [
         "e0a21e765e6b47d9a6ae6bea8c01d0ef"
       ],
       "kind": "api",
+      "baseSha256": "b6d6defa251f8455c6cd74dceb0eab72b976dcd1bd2db8b625ff12c54c1e55a9",
       "metadataId": "67ab9a470ab355e69bc3627aeb505d80"
     },
     {
-      "path": "api/09.统一身份管理/24.认证协议配置/group.json",
-      "databasePath": "/magic-api/api/09.统一身份管理/24.认证协议配置/group.json",
-      "baseSha256": "87d954caccab3e544d1da5a4597d10ea7566a96f21682c5a0cc99f92967e1d08",
+      "path": "api/08.统一身份管理/24.认证协议配置/group.json",
+      "databasePath": "/magic-api/api/08.统一身份管理/24.认证协议配置/group.json",
       "rowIds": [
         "92ba33c200144a7598a4a7aa33593485"
       ],
       "kind": null,
+      "baseSha256": "87d954caccab3e544d1da5a4597d10ea7566a96f21682c5a0cc99f92967e1d08",
       "metadataId": "1e4c952752445b3b8a68635e161010ed"
     },
     {
-      "path": "api/09.统一身份管理/25.认证账号会话",
-      "databasePath": "/magic-api/api/09.统一身份管理/25.认证账号会话/",
-      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
+      "path": "api/08.统一身份管理/25.认证账号会话",
+      "databasePath": "/magic-api/api/08.统一身份管理/25.认证账号会话/",
       "rowIds": [
         "264f2057f53c4524a53d834aea9dac5d"
       ],
-      "kind": "directory"
+      "kind": "directory",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "api/09.统一身份管理/25.认证账号会话/01.注册统一认证账号.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/25.认证账号会话/01.注册统一认证账号.ms",
-      "baseSha256": "e825dac1e4758a8ee48f0f6634d6e326bdc14bf188d81dae1a52e909de72d705",
+      "path": "api/08.统一身份管理/25.认证账号会话/01.注册统一认证账号.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/25.认证账号会话/01.注册统一认证账号.ms",
       "rowIds": [
         "38b294f7dd6c4b44a69fa7cbb740ac78"
       ],
       "kind": "api",
+      "baseSha256": "e825dac1e4758a8ee48f0f6634d6e326bdc14bf188d81dae1a52e909de72d705",
       "metadataId": "c1eeec0de90e5f5fac276c075e9bfae5"
     },
     {
-      "path": "api/09.统一身份管理/25.认证账号会话/02.登录统一认证账号.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/25.认证账号会话/02.登录统一认证账号.ms",
-      "baseSha256": "c45cd9429a80aaf61bbcf7799403361fec475a0980265b3c2910141d75563d1c",
+      "path": "api/08.统一身份管理/25.认证账号会话/02.登录统一认证账号.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/25.认证账号会话/02.登录统一认证账号.ms",
       "rowIds": [
         "9863608b5c9e4d55bc516dbc38e67e2c"
       ],
       "kind": "api",
+      "baseSha256": "c45cd9429a80aaf61bbcf7799403361fec475a0980265b3c2910141d75563d1c",
       "metadataId": "e3a6dbd17bac5e63b83ff8c1bd7cd0d2"
     },
     {
-      "path": "api/09.统一身份管理/25.认证账号会话/03.退出统一认证会话.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/25.认证账号会话/03.退出统一认证会话.ms",
-      "baseSha256": "abcec774646d215edcad7686fcb6c743db1f1878a44c57d4a568dcd9dac57fe3",
+      "path": "api/08.统一身份管理/25.认证账号会话/03.退出统一认证会话.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/25.认证账号会话/03.退出统一认证会话.ms",
       "rowIds": [
         "df625f416df548c39dd0f34277316a9a"
       ],
       "kind": "api",
+      "baseSha256": "abcec774646d215edcad7686fcb6c743db1f1878a44c57d4a568dcd9dac57fe3",
       "metadataId": "15180e2b284a51a3b055e10e0602eaf7"
     },
     {
-      "path": "api/09.统一身份管理/25.认证账号会话/04.读取当前认证账号.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/25.认证账号会话/04.读取当前认证账号.ms",
-      "baseSha256": "08f21b4046bb04587c3045f95223c966c9501f41f4ce8daa18194fafa3cc31fc",
+      "path": "api/08.统一身份管理/25.认证账号会话/04.读取当前认证账号.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/25.认证账号会话/04.读取当前认证账号.ms",
       "rowIds": [
         "7a18023668b64376865808f502dfa3ba"
       ],
       "kind": "api",
+      "baseSha256": "08f21b4046bb04587c3045f95223c966c9501f41f4ce8daa18194fafa3cc31fc",
       "metadataId": "374ffc103bc25d9096db402786b68d74"
     },
     {
-      "path": "api/09.统一身份管理/25.认证账号会话/05.修改认证账号密码.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/25.认证账号会话/05.修改认证账号密码.ms",
-      "baseSha256": "71554399311f7d65d18c3053a948126afef5d4831e577efe9db5f4d0a45ef401",
+      "path": "api/08.统一身份管理/25.认证账号会话/05.修改认证账号密码.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/25.认证账号会话/05.修改认证账号密码.ms",
       "rowIds": [
         "3f167680d863495eba69546e06df3078"
       ],
       "kind": "api",
+      "baseSha256": "71554399311f7d65d18c3053a948126afef5d4831e577efe9db5f4d0a45ef401",
       "metadataId": "3532f978386e5de2ac75a50c0aee3fbd"
     },
     {
-      "path": "api/09.统一身份管理/25.认证账号会话/06.查询认证账号会话.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/25.认证账号会话/06.查询认证账号会话.ms",
-      "baseSha256": "7baed3dcf5139755edc41ec5bfad72980b6f8793d1163a92a1a9d301c54ba45b",
+      "path": "api/08.统一身份管理/25.认证账号会话/06.查询认证账号会话.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/25.认证账号会话/06.查询认证账号会话.ms",
       "rowIds": [
         "6379e409f96749d9942a47fad18f9327"
       ],
       "kind": "api",
+      "baseSha256": "7baed3dcf5139755edc41ec5bfad72980b6f8793d1163a92a1a9d301c54ba45b",
       "metadataId": "08cb9880a0935a23801d7a1e38ff6f3f"
     },
     {
-      "path": "api/09.统一身份管理/25.认证账号会话/07.撤销认证账号会话.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/25.认证账号会话/07.撤销认证账号会话.ms",
-      "baseSha256": "14ed3bc59a940bd2c321efdae5948f00d7f2e65c9040d1e98590c7d4fadb1565",
+      "path": "api/08.统一身份管理/25.认证账号会话/07.撤销认证账号会话.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/25.认证账号会话/07.撤销认证账号会话.ms",
       "rowIds": [
         "136fa035fc8246f4862ea3cbbd12e28f"
       ],
       "kind": "api",
+      "baseSha256": "14ed3bc59a940bd2c321efdae5948f00d7f2e65c9040d1e98590c7d4fadb1565",
       "metadataId": "892b44094da6586a9051c75b0b4f5893"
     },
     {
-      "path": "api/09.统一身份管理/25.认证账号会话/08.选择法人办理身份.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/25.认证账号会话/08.选择法人办理身份.ms",
-      "baseSha256": "0b4466159896b5e3a95d2c8299d5a970d6f70f58f5e5b77f324fbe05dea9fca6",
+      "path": "api/08.统一身份管理/25.认证账号会话/08.选择法人办理身份.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/25.认证账号会话/08.选择法人办理身份.ms",
       "rowIds": [
         "d3b23c0c46504bb4b11ff6043ee92774"
       ],
       "kind": "api",
+      "baseSha256": "0b4466159896b5e3a95d2c8299d5a970d6f70f58f5e5b77f324fbe05dea9fca6",
       "metadataId": "c4e2fec90a6f57c899b72b88c894a814"
     },
     {
-      "path": "api/09.统一身份管理/25.认证账号会话/group.json",
-      "databasePath": "/magic-api/api/09.统一身份管理/25.认证账号会话/group.json",
-      "baseSha256": "056b6793a953342656249707512b6cb91c87633e5e001a7dc659f282e901b612",
+      "path": "api/08.统一身份管理/25.认证账号会话/group.json",
+      "databasePath": "/magic-api/api/08.统一身份管理/25.认证账号会话/group.json",
       "rowIds": [
         "a4657af6f95b4d478a667c23a81592f5"
       ],
       "kind": null,
+      "baseSha256": "056b6793a953342656249707512b6cb91c87633e5e001a7dc659f282e901b612",
       "metadataId": "0d24c0ffb0bf58e59cf30e12786d94fe"
     },
     {
-      "path": "api/09.统一身份管理/26.多因子认证",
-      "databasePath": "/magic-api/api/09.统一身份管理/26.多因子认证/",
-      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
+      "path": "api/08.统一身份管理/26.多因子认证",
+      "databasePath": "/magic-api/api/08.统一身份管理/26.多因子认证/",
       "rowIds": [
         "80c3cdc6ae724e4e977b1727534123f5"
       ],
-      "kind": "directory"
+      "kind": "directory",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "api/09.统一身份管理/26.多因子认证/01.查询多因子状态.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/26.多因子认证/01.查询多因子状态.ms",
-      "baseSha256": "afc2cbdca3f2d9ef917cb30eee1f5821dd4d5dc4bc1f36ee3598324f9e14dfe0",
+      "path": "api/08.统一身份管理/26.多因子认证/01.查询多因子状态.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/26.多因子认证/01.查询多因子状态.ms",
       "rowIds": [
         "b619c17fbbaa445e9c0ff7a9d855986a"
       ],
       "kind": "api",
+      "baseSha256": "afc2cbdca3f2d9ef917cb30eee1f5821dd4d5dc4bc1f36ee3598324f9e14dfe0",
       "metadataId": "f1817a5e1f1a55e3a6b0c3ed41985043"
     },
     {
-      "path": "api/09.统一身份管理/26.多因子认证/02.发起多因子绑定.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/26.多因子认证/02.发起多因子绑定.ms",
-      "baseSha256": "e05acb24b25c1ddf13e15361eb46453ca103ef01bf5a463d1642109fd06f27fc",
+      "path": "api/08.统一身份管理/26.多因子认证/02.发起多因子绑定.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/26.多因子认证/02.发起多因子绑定.ms",
       "rowIds": [
         "4ffb709f56d34c30975a6a9653fc839f"
       ],
       "kind": "api",
+      "baseSha256": "e05acb24b25c1ddf13e15361eb46453ca103ef01bf5a463d1642109fd06f27fc",
       "metadataId": "d56ef41bf6e655aaae8554c7de8399e3"
     },
     {
-      "path": "api/09.统一身份管理/26.多因子认证/03.确认多因子绑定.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/26.多因子认证/03.确认多因子绑定.ms",
-      "baseSha256": "10b15682c98d75fdfa86773644ae5822086869127c192153316468129c5ae8a6",
+      "path": "api/08.统一身份管理/26.多因子认证/03.确认多因子绑定.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/26.多因子认证/03.确认多因子绑定.ms",
       "rowIds": [
         "52a2c56509a848cd945cc26125c2ecd7"
       ],
       "kind": "api",
+      "baseSha256": "10b15682c98d75fdfa86773644ae5822086869127c192153316468129c5ae8a6",
       "metadataId": "716347fdd5f258c1b7176786483b6286"
     },
     {
-      "path": "api/09.统一身份管理/26.多因子认证/04.关闭多因子认证.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/26.多因子认证/04.关闭多因子认证.ms",
-      "baseSha256": "f6e9f49ec37f18f29a1ddc47eea9a68bf1c3c13c0f3f3e1a178585cfa019d554",
+      "path": "api/08.统一身份管理/26.多因子认证/04.关闭多因子认证.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/26.多因子认证/04.关闭多因子认证.ms",
       "rowIds": [
         "3afaf76838324c35972b88b607871148"
       ],
       "kind": "api",
+      "baseSha256": "f6e9f49ec37f18f29a1ddc47eea9a68bf1c3c13c0f3f3e1a178585cfa019d554",
       "metadataId": "ba8ca2ef66bd58489112eda1c6cbf90a"
     },
     {
-      "path": "api/09.统一身份管理/26.多因子认证/05.验证登录二次口令.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/26.多因子认证/05.验证登录二次口令.ms",
-      "baseSha256": "8f772d643aff2edcc55dcb8a90c8f646052d78ab59be531e020aad63ff3cb9a6",
+      "path": "api/08.统一身份管理/26.多因子认证/05.验证登录二次口令.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/26.多因子认证/05.验证登录二次口令.ms",
       "rowIds": [
         "63c49c9406974c33a966bb3848d86808"
       ],
       "kind": "api",
+      "baseSha256": "8f772d643aff2edcc55dcb8a90c8f646052d78ab59be531e020aad63ff3cb9a6",
       "metadataId": "53ef5b91495854feaf2420d17dfa1677"
     },
     {
-      "path": "api/09.统一身份管理/26.多因子认证/group.json",
-      "databasePath": "/magic-api/api/09.统一身份管理/26.多因子认证/group.json",
-      "baseSha256": "ae77bce368825415984772bd254583d6ac08dc4a72d6b7a37178495e7b964c6a",
+      "path": "api/08.统一身份管理/26.多因子认证/group.json",
+      "databasePath": "/magic-api/api/08.统一身份管理/26.多因子认证/group.json",
       "rowIds": [
         "702e7240852c4a51936324b625648dbf"
       ],
       "kind": null,
+      "baseSha256": "ae77bce368825415984772bd254583d6ac08dc4a72d6b7a37178495e7b964c6a",
       "metadataId": "863c54676e095a4aa6daf16770e35259"
     },
     {
-      "path": "api/09.统一身份管理/27.公众法人",
-      "databasePath": "/magic-api/api/09.统一身份管理/27.公众法人/",
-      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
+      "path": "api/08.统一身份管理/27.公众法人",
+      "databasePath": "/magic-api/api/08.统一身份管理/27.公众法人/",
       "rowIds": [
         "83f52ff2d64d468c8afdf27feac3e9ec"
       ],
-      "kind": "directory"
+      "kind": "directory",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "api/09.统一身份管理/27.公众法人/01.保存公众法人.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/27.公众法人/01.保存公众法人.ms",
-      "baseSha256": "0a7d02cb982ca936717697862c295ec50a1864334575653651c6654100e27624",
+      "path": "api/08.统一身份管理/27.公众法人/01.保存公众法人.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/27.公众法人/01.保存公众法人.ms",
       "rowIds": [
         "5a69e3e621284e5a9483fe428360f4bf"
       ],
       "kind": "api",
+      "baseSha256": "0a7d02cb982ca936717697862c295ec50a1864334575653651c6654100e27624",
       "metadataId": "a68117ccd109513bb96afc0f12c6e7fb"
     },
     {
-      "path": "api/09.统一身份管理/27.公众法人/02.归档公众法人.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/27.公众法人/02.归档公众法人.ms",
-      "baseSha256": "9882f489064314c64eae1b3a7da526cdb465f468b8b2d8cd6216dfdcb0828d3a",
+      "path": "api/08.统一身份管理/27.公众法人/02.归档公众法人.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/27.公众法人/02.归档公众法人.ms",
       "rowIds": [
         "4cce9ff8d68a42788c913d8ad4f68ab7"
       ],
       "kind": "api",
+      "baseSha256": "9882f489064314c64eae1b3a7da526cdb465f468b8b2d8cd6216dfdcb0828d3a",
       "metadataId": "c3125d61a134575c8b34951315d5e897"
     },
     {
-      "path": "api/09.统一身份管理/27.公众法人/group.json",
-      "databasePath": "/magic-api/api/09.统一身份管理/27.公众法人/group.json",
-      "baseSha256": "b015545134b92aefc67b2e67d67b484daa010390db4e6fdba1ec62feb7581599",
+      "path": "api/08.统一身份管理/27.公众法人/group.json",
+      "databasePath": "/magic-api/api/08.统一身份管理/27.公众法人/group.json",
       "rowIds": [
         "342e42ce4a6946b3add3cae3da5b9e3e"
       ],
       "kind": null,
+      "baseSha256": "b015545134b92aefc67b2e67d67b484daa010390db4e6fdba1ec62feb7581599",
       "metadataId": "a1d9f7b3309256e7baebe11719797bac"
     },
     {
-      "path": "api/09.统一身份管理/28.实名核验",
-      "databasePath": "/magic-api/api/09.统一身份管理/28.实名核验/",
-      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
+      "path": "api/08.统一身份管理/28.实名核验",
+      "databasePath": "/magic-api/api/08.统一身份管理/28.实名核验/",
       "rowIds": [
         "13b4c34d663f4cf1a37a257d7671d6cd"
       ],
-      "kind": "directory"
+      "kind": "directory",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "api/09.统一身份管理/28.实名核验/01.读取实名核验服务配置.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/28.实名核验/01.读取实名核验服务配置.ms",
-      "baseSha256": "afa0973ddad85c616f80cf38efada43ee7c709dc4556590ab4209b51d20cef3d",
+      "path": "api/08.统一身份管理/28.实名核验/01.读取实名核验服务配置.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/28.实名核验/01.读取实名核验服务配置.ms",
       "rowIds": [
         "e5f7bc383fa7460994bcae945950a135"
       ],
       "kind": "api",
+      "baseSha256": "afa0973ddad85c616f80cf38efada43ee7c709dc4556590ab4209b51d20cef3d",
       "metadataId": "548164e3c6de52b3b8e8b9563dcec75b"
     },
     {
-      "path": "api/09.统一身份管理/28.实名核验/02.保存实名核验服务配置.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/28.实名核验/02.保存实名核验服务配置.ms",
-      "baseSha256": "e7debcca7e468cb3a799dc21a482498a807c8a67b31c8da7c9b759122eb48049",
+      "path": "api/08.统一身份管理/28.实名核验/02.保存实名核验服务配置.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/28.实名核验/02.保存实名核验服务配置.ms",
       "rowIds": [
         "a6a53f92c7c64d34b71d0a298eb9e936"
       ],
       "kind": "api",
+      "baseSha256": "e7debcca7e468cb3a799dc21a482498a807c8a67b31c8da7c9b759122eb48049",
       "metadataId": "cc4c1981178f58e3aa80aeff3ece02e8"
     },
     {
-      "path": "api/09.统一身份管理/28.实名核验/03.查询实名核验记录.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/28.实名核验/03.查询实名核验记录.ms",
-      "baseSha256": "9916fdffb9960878adabde6d5c68cfa778d1da19fec46ccbc9dd15e9dfce1ecb",
+      "path": "api/08.统一身份管理/28.实名核验/03.查询实名核验记录.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/28.实名核验/03.查询实名核验记录.ms",
       "rowIds": [
         "f76eae703c024502bfcccad73f2b03e8"
       ],
       "kind": "api",
+      "baseSha256": "9916fdffb9960878adabde6d5c68cfa778d1da19fec46ccbc9dd15e9dfce1ecb",
       "metadataId": "a8690a99453c517383574e097c0d5fc2"
     },
     {
-      "path": "api/09.统一身份管理/28.实名核验/04.查询本人实名核验.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/28.实名核验/04.查询本人实名核验.ms",
-      "baseSha256": "f57d8a01c2977b4297d2f3ba32c1389fffde13f2e743f0095641dab4a6ff87ba",
+      "path": "api/08.统一身份管理/28.实名核验/04.查询本人实名核验.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/28.实名核验/04.查询本人实名核验.ms",
       "rowIds": [
         "8277b29531894dcca082566121af37dc"
       ],
       "kind": "api",
+      "baseSha256": "f57d8a01c2977b4297d2f3ba32c1389fffde13f2e743f0095641dab4a6ff87ba",
       "metadataId": "7e75adea4f3b53b2884b460faf58f385"
     },
     {
-      "path": "api/09.统一身份管理/28.实名核验/05.提交实名核验申请.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/28.实名核验/05.提交实名核验申请.ms",
-      "baseSha256": "12a5a3de2d2fa64d0ea32589eb6ec4ea4f35389f47318e79663bfbefc2b579ad",
+      "path": "api/08.统一身份管理/28.实名核验/05.提交实名核验申请.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/28.实名核验/05.提交实名核验申请.ms",
       "rowIds": [
         "2d2ed39f83724fad874e0f148c5c7430"
       ],
       "kind": "api",
+      "baseSha256": "12a5a3de2d2fa64d0ea32589eb6ec4ea4f35389f47318e79663bfbefc2b579ad",
       "metadataId": "55c1602a7e8856a8833195aa7be6d16c"
     },
     {
-      "path": "api/09.统一身份管理/28.实名核验/group.json",
-      "databasePath": "/magic-api/api/09.统一身份管理/28.实名核验/group.json",
-      "baseSha256": "00325a6a6353c68472b1ab83a26137faf80caa84cec7939aebca4e53d03ec111",
+      "path": "api/08.统一身份管理/28.实名核验/group.json",
+      "databasePath": "/magic-api/api/08.统一身份管理/28.实名核验/group.json",
       "rowIds": [
         "dd31222bb38c45bd924a6ec8ffd1d680"
       ],
       "kind": null,
+      "baseSha256": "00325a6a6353c68472b1ab83a26137faf80caa84cec7939aebca4e53d03ec111",
       "metadataId": "36e1ceb97f9550bcb7092a621f8ee8bd"
     },
     {
-      "path": "api/09.统一身份管理/29.法人自主登记",
-      "databasePath": "/magic-api/api/09.统一身份管理/29.法人自主登记/",
-      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
+      "path": "api/08.统一身份管理/29.法人自主登记",
+      "databasePath": "/magic-api/api/08.统一身份管理/29.法人自主登记/",
       "rowIds": [
         "d4d1496b4a3c47f18bb10e05d349cfd9"
       ],
-      "kind": "directory"
+      "kind": "directory",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "api/09.统一身份管理/29.法人自主登记/01.自主登记法人.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/29.法人自主登记/01.自主登记法人.ms",
-      "baseSha256": "521304882297f8cd895103317ee12a569c2c2f70713832764db14f544cb30dfc",
+      "path": "api/08.统一身份管理/29.法人自主登记/01.自主登记法人.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/29.法人自主登记/01.自主登记法人.ms",
       "rowIds": [
         "406b39217e3044b0b847b944755d320f"
       ],
       "kind": "api",
+      "baseSha256": "521304882297f8cd895103317ee12a569c2c2f70713832764db14f544cb30dfc",
       "metadataId": "c97fb943c17750e8a59547fbb5f9ca03"
     },
     {
-      "path": "api/09.统一身份管理/29.法人自主登记/02.查询本人法人登记.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/29.法人自主登记/02.查询本人法人登记.ms",
-      "baseSha256": "127c1ec37280b6823f92b5cdd7a34ff6334560f49345fc9e5e0b2ac6317ae75f",
+      "path": "api/08.统一身份管理/29.法人自主登记/02.查询本人法人登记.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/29.法人自主登记/02.查询本人法人登记.ms",
       "rowIds": [
         "fcbd3dc7ec04416e83c9fe3f045d0315"
       ],
       "kind": "api",
+      "baseSha256": "127c1ec37280b6823f92b5cdd7a34ff6334560f49345fc9e5e0b2ac6317ae75f",
       "metadataId": "54371175f20c5b8cb28c1769c05e2180"
     },
     {
-      "path": "api/09.统一身份管理/29.法人自主登记/group.json",
-      "databasePath": "/magic-api/api/09.统一身份管理/29.法人自主登记/group.json",
-      "baseSha256": "ce6f53503aa3bb85bd237de865a93265e2b7adfcca2f19ea6c86e7423713d0e3",
+      "path": "api/08.统一身份管理/29.法人自主登记/group.json",
+      "databasePath": "/magic-api/api/08.统一身份管理/29.法人自主登记/group.json",
       "rowIds": [
         "b6186494367447b0bd8808363e79b77a"
       ],
       "kind": null,
+      "baseSha256": "ce6f53503aa3bb85bd237de865a93265e2b7adfcca2f19ea6c86e7423713d0e3",
       "metadataId": "2c7d2be6a1f65dcc917d9d26722a0a72"
     },
     {
-      "path": "api/09.统一身份管理/30.接口认证执行",
-      "databasePath": "/magic-api/api/09.统一身份管理/30.接口认证执行/",
-      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
+      "path": "api/08.统一身份管理/30.接口认证执行",
+      "databasePath": "/magic-api/api/08.统一身份管理/30.接口认证执行/",
       "rowIds": [
         "e8746ff555b749debc04e78940abd7fb"
       ],
-      "kind": "directory"
+      "kind": "directory",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "api/09.统一身份管理/30.接口认证执行/01.查询接口调用身份.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/30.接口认证执行/01.查询接口调用身份.ms",
-      "baseSha256": "45afa3fc9929a88b4286711f19585ee143ad18ef2026326b88c0758f1b4c17c2",
+      "path": "api/08.统一身份管理/30.接口认证执行/01.查询接口调用身份.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/30.接口认证执行/01.查询接口调用身份.ms",
       "rowIds": [
         "7f63412a549b40f7aef2b901c4219a5b"
       ],
       "kind": "api",
+      "baseSha256": "45afa3fc9929a88b4286711f19585ee143ad18ef2026326b88c0758f1b4c17c2",
       "metadataId": "8733f3234268544bbe84d00927f55e99"
     },
     {
-      "path": "api/09.统一身份管理/30.接口认证执行/group.json",
-      "databasePath": "/magic-api/api/09.统一身份管理/30.接口认证执行/group.json",
-      "baseSha256": "f166b825bbc19c29142f7e2b5be4a9f13db2634e6e5ae8f4f4010e2f69a5b87c",
+      "path": "api/08.统一身份管理/30.接口认证执行/group.json",
+      "databasePath": "/magic-api/api/08.统一身份管理/30.接口认证执行/group.json",
       "rowIds": [
         "17e2e42333ac47f5b9de7e8b2de5bd9c"
       ],
       "kind": null,
+      "baseSha256": "f166b825bbc19c29142f7e2b5be4a9f13db2634e6e5ae8f4f4010e2f69a5b87c",
       "metadataId": "69d8099e140554c19b063ba451355aad"
     },
     {
-      "path": "api/09.统一身份管理/31.密码找回",
-      "databasePath": "/magic-api/api/09.统一身份管理/31.密码找回/",
-      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
+      "path": "api/08.统一身份管理/31.密码找回",
+      "databasePath": "/magic-api/api/08.统一身份管理/31.密码找回/",
       "rowIds": [
         "25d9c342edda4c57b20df143e9f401a8"
       ],
-      "kind": "directory"
+      "kind": "directory",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "api/09.统一身份管理/31.密码找回/01.提交密码找回申请.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/31.密码找回/01.提交密码找回申请.ms",
-      "baseSha256": "267a4a542e565db555e01f19f16e1da53c9860a6383990e086f7fb8bcde3e39e",
+      "path": "api/08.统一身份管理/31.密码找回/01.提交密码找回申请.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/31.密码找回/01.提交密码找回申请.ms",
       "rowIds": [
         "2a0e84408249413e92827738d5782813"
       ],
       "kind": "api",
+      "baseSha256": "267a4a542e565db555e01f19f16e1da53c9860a6383990e086f7fb8bcde3e39e",
       "metadataId": "16fe18be7f815f8a90784acaa3a32b12"
     },
     {
-      "path": "api/09.统一身份管理/31.密码找回/02.分页查询待核验申请.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/31.密码找回/02.分页查询待核验申请.ms",
-      "baseSha256": "43ff45c9b949e17bcc5283f3c4e4c1d781f26eee8fba9160a0bc53d81e7635b2",
+      "path": "api/08.统一身份管理/31.密码找回/02.分页查询待核验申请.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/31.密码找回/02.分页查询待核验申请.ms",
       "rowIds": [
         "02fce5215b7043e49d420d9a2590eda6"
       ],
       "kind": "api",
+      "baseSha256": "43ff45c9b949e17bcc5283f3c4e4c1d781f26eee8fba9160a0bc53d81e7635b2",
       "metadataId": "a7aa191e975b505e96298e4aacfb365f"
     },
     {
-      "path": "api/09.统一身份管理/31.密码找回/group.json",
-      "databasePath": "/magic-api/api/09.统一身份管理/31.密码找回/group.json",
-      "baseSha256": "8ff1c7244d7f5d40b54110a600d4f5987a27d88bcd899e17f373304424281c7f",
+      "path": "api/08.统一身份管理/31.密码找回/group.json",
+      "databasePath": "/magic-api/api/08.统一身份管理/31.密码找回/group.json",
       "rowIds": [
         "8fafb880c75a4c8a83ae379f71be0572"
       ],
       "kind": null,
+      "baseSha256": "8ff1c7244d7f5d40b54110a600d4f5987a27d88bcd899e17f373304424281c7f",
       "metadataId": "039920aa11d55b4faed04ad7b00bbf94"
     },
     {
-      "path": "api/09.统一身份管理/32.日志管理",
-      "databasePath": "/magic-api/api/09.统一身份管理/32.日志管理/",
-      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56",
+      "path": "api/08.统一身份管理/32.日志管理",
+      "databasePath": "/magic-api/api/08.统一身份管理/32.日志管理/",
       "rowIds": [
         "00cd71d5536f4aa198709fb650fbd301"
       ],
-      "kind": "directory"
+      "kind": "directory",
+      "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "api/09.统一身份管理/32.日志管理/01.日志查询.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/32.日志管理/01.日志查询.ms",
-      "baseSha256": "8b7459cde2c318f46d760576b1b9bb410b77072e47bd4b5d2b4ba7d54ba8f8b6",
+      "path": "api/08.统一身份管理/32.日志管理/01.日志查询.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/32.日志管理/01.日志查询.ms",
       "rowIds": [
         "b09df9c817bb45bd9a9381337fa8de55"
       ],
       "kind": "api",
+      "baseSha256": "8b7459cde2c318f46d760576b1b9bb410b77072e47bd4b5d2b4ba7d54ba8f8b6",
       "metadataId": "log_query_platform_v1"
     },
     {
-      "path": "api/09.统一身份管理/32.日志管理/02.日志管理操作.ms",
-      "databasePath": "/magic-api/api/09.统一身份管理/32.日志管理/02.日志管理操作.ms",
-      "baseSha256": "8b316ce9ca684b82f8f6c92253f28c9fc2c570916fd68e91503374f0591f835e",
+      "path": "api/08.统一身份管理/32.日志管理/02.日志管理操作.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/32.日志管理/02.日志管理操作.ms",
       "rowIds": [
         "e2d9f04247944f5bacec4edd29475221"
       ],
       "kind": "api",
+      "baseSha256": "8b316ce9ca684b82f8f6c92253f28c9fc2c570916fd68e91503374f0591f835e",
       "metadataId": "log_command_platform_v1"
     },
     {
-      "path": "api/09.统一身份管理/32.日志管理/group.json",
-      "databasePath": "/magic-api/api/09.统一身份管理/32.日志管理/group.json",
-      "baseSha256": "140a1a99814e62ed96cbb42c233fe7328a1254967497bda667ca545ef735019a",
+      "path": "api/08.统一身份管理/32.日志管理/group.json",
+      "databasePath": "/magic-api/api/08.统一身份管理/32.日志管理/group.json",
       "rowIds": [
         "1122f2749b5b452cbd87be7290934376"
       ],
       "kind": "group",
+      "baseSha256": "140a1a99814e62ed96cbb42c233fe7328a1254967497bda667ca545ef735019a",
       "metadataId": "log_management_api_group_v1"
     },
     {
-      "path": "api/09.统一身份管理/group.json",
-      "databasePath": "/magic-api/api/09.统一身份管理/group.json",
-      "baseSha256": "63fe55af5bc8d1c86d3138d0e35b49c3d6159d990393c7187db5c64d233f41ea",
+      "path": "api/08.统一身份管理/group.json",
+      "databasePath": "/magic-api/api/08.统一身份管理/group.json",
       "rowIds": [
         "2a3eae0f23c94be9b424afcda19d9a21"
       ],
       "kind": null,
+      "baseSha256": "77f5fcf2a4de7d1694b2b29b6b8c01836ddca467eaab74b41ca81a2189a14b4e",
       "metadataId": "1ae52a0ba8565e9d820f00dec5d199af"
     },
     {
-      "path": "api/10.海通流程接口",
-      "databasePath": "/magic-api/api/10.海通流程接口/",
+      "path": "api/09.海通流程接口",
+      "databasePath": "/magic-api/api/09.海通流程接口/",
       "rowIds": [
         "b0abd29b9ed44113bc51cd9e9ba4c225"
       ],
@@ -6278,8 +6183,8 @@
       "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "api/10.海通流程接口/01.组件清单",
-      "databasePath": "/magic-api/api/10.海通流程接口/01.组件清单/",
+      "path": "api/09.海通流程接口/01.组件清单",
+      "databasePath": "/magic-api/api/09.海通流程接口/01.组件清单/",
       "rowIds": [
         "4db9a3cf6cac5e48b7fcbd83e3bcf5f6"
       ],
@@ -6287,8 +6192,8 @@
       "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "api/10.海通流程接口/01.组件清单/01.查询组件清单.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/01.组件清单/01.查询组件清单.ms",
+      "path": "api/09.海通流程接口/01.组件清单/01.查询组件清单.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/01.组件清单/01.查询组件清单.ms",
       "rowIds": [
         "cb6df2b8a5244f17884c87af4d9500fc"
       ],
@@ -6297,8 +6202,8 @@
       "metadataId": "7de6ec08dc2c43fdad58182334f49b38"
     },
     {
-      "path": "api/10.海通流程接口/01.组件清单/02.核验组件清单.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/01.组件清单/02.核验组件清单.ms",
+      "path": "api/09.海通流程接口/01.组件清单/02.核验组件清单.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/01.组件清单/02.核验组件清单.ms",
       "rowIds": [
         "91b81c65bb2748c8b717a26f6b73aa1b"
       ],
@@ -6307,8 +6212,8 @@
       "metadataId": "96dd5aefa9014a1b9b4a2218f17df25f"
     },
     {
-      "path": "api/10.海通流程接口/01.组件清单/03.查询组件清单详情.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/01.组件清单/03.查询组件清单详情.ms",
+      "path": "api/09.海通流程接口/01.组件清单/03.查询组件清单详情.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/01.组件清单/03.查询组件清单详情.ms",
       "rowIds": [
         "b91c73bdfab2452c95883e9731bf728c"
       ],
@@ -6317,8 +6222,8 @@
       "metadataId": "371116c2d3de4fefa447494c7bf96d6b"
     },
     {
-      "path": "api/10.海通流程接口/01.组件清单/04.核验组件清单详情.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/01.组件清单/04.核验组件清单详情.ms",
+      "path": "api/09.海通流程接口/01.组件清单/04.核验组件清单详情.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/01.组件清单/04.核验组件清单详情.ms",
       "rowIds": [
         "9a38cc59eec74876a2f1ea022fea6a4f"
       ],
@@ -6327,8 +6232,8 @@
       "metadataId": "65a9bf8cb3854fd483d7dc4cfc43169d"
     },
     {
-      "path": "api/10.海通流程接口/01.组件清单/05.查询画布接口健康.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/01.组件清单/05.查询画布接口健康.ms",
+      "path": "api/09.海通流程接口/01.组件清单/05.查询画布接口健康.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/01.组件清单/05.查询画布接口健康.ms",
       "rowIds": [
         "8cedcc54594f41bd9e4f5f6f803a7260"
       ],
@@ -6337,8 +6242,8 @@
       "metadataId": "nifi_canvas_ping_get_v1"
     },
     {
-      "path": "api/10.海通流程接口/01.组件清单/06.核验画布接口健康.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/01.组件清单/06.核验画布接口健康.ms",
+      "path": "api/09.海通流程接口/01.组件清单/06.核验画布接口健康.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/01.组件清单/06.核验画布接口健康.ms",
       "rowIds": [
         "2e3772e5082f40cda986961382cc5938"
       ],
@@ -6347,8 +6252,8 @@
       "metadataId": "nifi_canvas_ping_head_v1"
     },
     {
-      "path": "api/10.海通流程接口/01.组件清单/group.json",
-      "databasePath": "/magic-api/api/10.海通流程接口/01.组件清单/group.json",
+      "path": "api/09.海通流程接口/01.组件清单/group.json",
+      "databasePath": "/magic-api/api/09.海通流程接口/01.组件清单/group.json",
       "rowIds": [
         "cac81593620256f7bbd981c59e5bb52b"
       ],
@@ -6357,8 +6262,8 @@
       "metadataId": "ed632abc84ec5701953f73df073154ae"
     },
     {
-      "path": "api/10.海通流程接口/02.流程设计",
-      "databasePath": "/magic-api/api/10.海通流程接口/02.流程设计/",
+      "path": "api/09.海通流程接口/02.流程设计",
+      "databasePath": "/magic-api/api/09.海通流程接口/02.流程设计/",
       "rowIds": [
         "e3b6d487fe914cf380445e20500242bb"
       ],
@@ -6366,8 +6271,8 @@
       "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "api/10.海通流程接口/02.流程设计/01.查询流程列表.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/02.流程设计/01.查询流程列表.ms",
+      "path": "api/09.海通流程接口/02.流程设计/01.查询流程列表.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/02.流程设计/01.查询流程列表.ms",
       "rowIds": [
         "edd084eaf7d649a4a3687358e06c3f63"
       ],
@@ -6376,8 +6281,8 @@
       "metadataId": "nifi_pipe_list_get_v1"
     },
     {
-      "path": "api/10.海通流程接口/02.流程设计/02.核验流程列表.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/02.流程设计/02.核验流程列表.ms",
+      "path": "api/09.海通流程接口/02.流程设计/02.核验流程列表.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/02.流程设计/02.核验流程列表.ms",
       "rowIds": [
         "b5e4db2b79a64677b85de5cc4975828a"
       ],
@@ -6386,8 +6291,8 @@
       "metadataId": "nifi_pipe_list_head_v1"
     },
     {
-      "path": "api/10.海通流程接口/02.流程设计/03.创建流程.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/02.流程设计/03.创建流程.ms",
+      "path": "api/09.海通流程接口/02.流程设计/03.创建流程.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/02.流程设计/03.创建流程.ms",
       "rowIds": [
         "2d5d7ffa98e04dc9a965eaa0b40fac74"
       ],
@@ -6396,8 +6301,8 @@
       "metadataId": "faf0e7885f4429edbeaa5add552fe155"
     },
     {
-      "path": "api/10.海通流程接口/02.流程设计/04.查询流程分页.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/02.流程设计/04.查询流程分页.ms",
+      "path": "api/09.海通流程接口/02.流程设计/04.查询流程分页.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/02.流程设计/04.查询流程分页.ms",
       "rowIds": [
         "b5d2e0b7419645b2aeff4281d8963b8c"
       ],
@@ -6406,8 +6311,8 @@
       "metadataId": "nifi_pipeline_page_get_v1"
     },
     {
-      "path": "api/10.海通流程接口/02.流程设计/05.核验流程分页.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/02.流程设计/05.核验流程分页.ms",
+      "path": "api/09.海通流程接口/02.流程设计/05.核验流程分页.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/02.流程设计/05.核验流程分页.ms",
       "rowIds": [
         "a1f3714979da455abded3b33ee575c78"
       ],
@@ -6416,8 +6321,8 @@
       "metadataId": "nifi_pipeline_page_head_v1"
     },
     {
-      "path": "api/10.海通流程接口/02.流程设计/06.查询流程详情.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/02.流程设计/06.查询流程详情.ms",
+      "path": "api/09.海通流程接口/02.流程设计/06.查询流程详情.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/02.流程设计/06.查询流程详情.ms",
       "rowIds": [
         "36c90154729a4a6d81221a78d3402975"
       ],
@@ -6426,8 +6331,8 @@
       "metadataId": "nifi_pipe_detail_get_v1"
     },
     {
-      "path": "api/10.海通流程接口/02.流程设计/07.核验流程详情.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/02.流程设计/07.核验流程详情.ms",
+      "path": "api/09.海通流程接口/02.流程设计/07.核验流程详情.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/02.流程设计/07.核验流程详情.ms",
       "rowIds": [
         "dd8625ed76ce43a6bc75a407ec591b19"
       ],
@@ -6436,8 +6341,8 @@
       "metadataId": "nifi_pipe_detail_head_v1"
     },
     {
-      "path": "api/10.海通流程接口/02.流程设计/08.保存流程.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/02.流程设计/08.保存流程.ms",
+      "path": "api/09.海通流程接口/02.流程设计/08.保存流程.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/02.流程设计/08.保存流程.ms",
       "rowIds": [
         "b1a177148ead4952bc248be6bb0387a9"
       ],
@@ -6446,8 +6351,8 @@
       "metadataId": "660b71dbe633aaa4bd79dd68e0baad70"
     },
     {
-      "path": "api/10.海通流程接口/02.流程设计/09.删除流程.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/02.流程设计/09.删除流程.ms",
+      "path": "api/09.海通流程接口/02.流程设计/09.删除流程.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/02.流程设计/09.删除流程.ms",
       "rowIds": [
         "d27a881ca85b40b586dc33b5db751345"
       ],
@@ -6456,8 +6361,8 @@
       "metadataId": "c6f76e36f0106bc81f93a2f372c80571"
     },
     {
-      "path": "api/10.海通流程接口/02.流程设计/10.查询流程原生地址.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/02.流程设计/10.查询流程原生地址.ms",
+      "path": "api/09.海通流程接口/02.流程设计/10.查询流程原生地址.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/02.流程设计/10.查询流程原生地址.ms",
       "rowIds": [
         "fd00594c2ebd4e23a98a67e56ec7d0eb"
       ],
@@ -6466,8 +6371,8 @@
       "metadataId": "nifi_pipeline_ui_link_get_v1"
     },
     {
-      "path": "api/10.海通流程接口/02.流程设计/11.核验流程原生地址.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/02.流程设计/11.核验流程原生地址.ms",
+      "path": "api/09.海通流程接口/02.流程设计/11.核验流程原生地址.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/02.流程设计/11.核验流程原生地址.ms",
       "rowIds": [
         "994e5d555a064931bf90d764a74b2349"
       ],
@@ -6476,8 +6381,8 @@
       "metadataId": "nifi_pipeline_ui_link_head_v1"
     },
     {
-      "path": "api/10.海通流程接口/02.流程设计/group.json",
-      "databasePath": "/magic-api/api/10.海通流程接口/02.流程设计/group.json",
+      "path": "api/09.海通流程接口/02.流程设计/group.json",
+      "databasePath": "/magic-api/api/09.海通流程接口/02.流程设计/group.json",
       "rowIds": [
         "a789fd49f3424ba297055d736dd855b1"
       ],
@@ -6486,8 +6391,8 @@
       "metadataId": "cc4166baa42e4584900fcef4d877ed83"
     },
     {
-      "path": "api/10.海通流程接口/03.画布模板",
-      "databasePath": "/magic-api/api/10.海通流程接口/03.画布模板/",
+      "path": "api/09.海通流程接口/03.画布模板",
+      "databasePath": "/magic-api/api/09.海通流程接口/03.画布模板/",
       "rowIds": [
         "39eaaf6aadca55fc81b90e3bf4672863"
       ],
@@ -6495,18 +6400,18 @@
       "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "api/10.海通流程接口/03.画布模板/01.生成画布模板.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/03.画布模板/01.生成画布模板.ms",
+      "path": "api/09.海通流程接口/03.画布模板/01.生成画布模板.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/03.画布模板/01.生成画布模板.ms",
       "rowIds": [
         "5ec922d5ddc942c49dde190d6ef43c65"
       ],
       "kind": "api",
-      "baseSha256": "9cd73a05545dd91e876b0152e5caee3e837ead19f6d06294b26958d6e80bac98",
+      "baseSha256": "62bbef5393435e384cf1c70f7deaa5aaf684460f997e43255ef7a0518abe7c70",
       "metadataId": "nifi_canvas_template_post_v1"
     },
     {
-      "path": "api/10.海通流程接口/03.画布模板/02.生成单节点模板.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/03.画布模板/02.生成单节点模板.ms",
+      "path": "api/09.海通流程接口/03.画布模板/02.生成单节点模板.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/03.画布模板/02.生成单节点模板.ms",
       "rowIds": [
         "c518d7d0aa014370a4b0c17c44a75ef8"
       ],
@@ -6515,8 +6420,8 @@
       "metadataId": "2e2c144806278f8c48faf98938ca63f5"
     },
     {
-      "path": "api/10.海通流程接口/03.画布模板/group.json",
-      "databasePath": "/magic-api/api/10.海通流程接口/03.画布模板/group.json",
+      "path": "api/09.海通流程接口/03.画布模板/group.json",
+      "databasePath": "/magic-api/api/09.海通流程接口/03.画布模板/group.json",
       "rowIds": [
         "af3f8a6ed82d5f31b9844a23697aa97c"
       ],
@@ -6525,8 +6430,8 @@
       "metadataId": "061bd630dc3758bdaf894b4508985387"
     },
     {
-      "path": "api/10.海通流程接口/04.接入链路",
-      "databasePath": "/magic-api/api/10.海通流程接口/04.接入链路/",
+      "path": "api/09.海通流程接口/04.接入链路",
+      "databasePath": "/magic-api/api/09.海通流程接口/04.接入链路/",
       "rowIds": [
         "edae52bdf38b5cb7b9fced5e163ce140"
       ],
@@ -6534,8 +6439,8 @@
       "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "api/10.海通流程接口/04.接入链路/01.按任务查询接入链路.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/04.接入链路/01.按任务查询接入链路.ms",
+      "path": "api/09.海通流程接口/04.接入链路/01.按任务查询接入链路.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/04.接入链路/01.按任务查询接入链路.ms",
       "rowIds": [
         "eeabc2f89e6d421facdba37ceec46f2a"
       ],
@@ -6544,8 +6449,8 @@
       "metadataId": "62c1acd0237345fab3b9817f6bc1b4c4"
     },
     {
-      "path": "api/10.海通流程接口/04.接入链路/02.按流程查询接入链路.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/04.接入链路/02.按流程查询接入链路.ms",
+      "path": "api/09.海通流程接口/04.接入链路/02.按流程查询接入链路.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/04.接入链路/02.按流程查询接入链路.ms",
       "rowIds": [
         "bb1882e6ca4d4fc6bb30d8dad6a01261"
       ],
@@ -6554,8 +6459,8 @@
       "metadataId": "4c8f2cc3d01446059d4d6cd4fd19570a"
     },
     {
-      "path": "api/10.海通流程接口/04.接入链路/03.查询任务链路原生入口.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/04.接入链路/03.查询任务链路原生入口.ms",
+      "path": "api/09.海通流程接口/04.接入链路/03.查询任务链路原生入口.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/04.接入链路/03.查询任务链路原生入口.ms",
       "rowIds": [
         "b1cbffb76d6449dd92f7ef75d1f138d5"
       ],
@@ -6564,8 +6469,8 @@
       "metadataId": "0dc8254bb39040ebad3a1ad704fb1a31"
     },
     {
-      "path": "api/10.海通流程接口/04.接入链路/04.按任务核验接入链路.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/04.接入链路/04.按任务核验接入链路.ms",
+      "path": "api/09.海通流程接口/04.接入链路/04.按任务核验接入链路.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/04.接入链路/04.按任务核验接入链路.ms",
       "rowIds": [
         "8b03af73a54f433c871e17001a5f3de6"
       ],
@@ -6574,8 +6479,8 @@
       "metadataId": "e847115bc8794012a94eda07750a7403"
     },
     {
-      "path": "api/10.海通流程接口/04.接入链路/05.按流程核验接入链路.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/04.接入链路/05.按流程核验接入链路.ms",
+      "path": "api/09.海通流程接口/04.接入链路/05.按流程核验接入链路.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/04.接入链路/05.按流程核验接入链路.ms",
       "rowIds": [
         "06c86ed852064f94a25ecd045d32802b"
       ],
@@ -6584,8 +6489,8 @@
       "metadataId": "3654e9c8061c4f5e9c34bb3dce0fec11"
     },
     {
-      "path": "api/10.海通流程接口/04.接入链路/06.核验任务链路原生入口.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/04.接入链路/06.核验任务链路原生入口.ms",
+      "path": "api/09.海通流程接口/04.接入链路/06.核验任务链路原生入口.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/04.接入链路/06.核验任务链路原生入口.ms",
       "rowIds": [
         "cdc849b013884c18a68b8d4788476a09"
       ],
@@ -6594,8 +6499,8 @@
       "metadataId": "bf4107f30b0b479fabd2c236c186e340"
     },
     {
-      "path": "api/10.海通流程接口/04.接入链路/group.json",
-      "databasePath": "/magic-api/api/10.海通流程接口/04.接入链路/group.json",
+      "path": "api/09.海通流程接口/04.接入链路/group.json",
+      "databasePath": "/magic-api/api/09.海通流程接口/04.接入链路/group.json",
       "rowIds": [
         "e191b81fee5958d8aa87862cd6f70ebd"
       ],
@@ -6604,8 +6509,8 @@
       "metadataId": "dc910e69a395588a85505154089816f4"
     },
     {
-      "path": "api/10.海通流程接口/05.运行状态",
-      "databasePath": "/magic-api/api/10.海通流程接口/05.运行状态/",
+      "path": "api/09.海通流程接口/05.运行状态",
+      "databasePath": "/magic-api/api/09.海通流程接口/05.运行状态/",
       "rowIds": [
         "7ea1b5a5b1775906ad33b3f921b08413"
       ],
@@ -6613,8 +6518,8 @@
       "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "api/10.海通流程接口/05.运行状态/01.查询流程运行总览.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/05.运行状态/01.查询流程运行总览.ms",
+      "path": "api/09.海通流程接口/05.运行状态/01.查询流程运行总览.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/05.运行状态/01.查询流程运行总览.ms",
       "rowIds": [
         "3578ca9006fd45b1b760f6f596e6f040"
       ],
@@ -6623,8 +6528,8 @@
       "metadataId": "nifi_runtime_overview_get_v1"
     },
     {
-      "path": "api/10.海通流程接口/05.运行状态/02.核验流程运行总览.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/05.运行状态/02.核验流程运行总览.ms",
+      "path": "api/09.海通流程接口/05.运行状态/02.核验流程运行总览.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/05.运行状态/02.核验流程运行总览.ms",
       "rowIds": [
         "2fea2d5302bd4780a5e3a3ab5539a402"
       ],
@@ -6633,8 +6538,8 @@
       "metadataId": "nifi_runtime_overview_head_v1"
     },
     {
-      "path": "api/10.海通流程接口/05.运行状态/03.查询流程运行列表.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/05.运行状态/03.查询流程运行列表.ms",
+      "path": "api/09.海通流程接口/05.运行状态/03.查询流程运行列表.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/05.运行状态/03.查询流程运行列表.ms",
       "rowIds": [
         "3687acbd36df4cc09ab2ea053df30a8e"
       ],
@@ -6643,8 +6548,8 @@
       "metadataId": "nifi_pipe_runtime_list_get_v1"
     },
     {
-      "path": "api/10.海通流程接口/05.运行状态/04.核验流程运行列表.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/05.运行状态/04.核验流程运行列表.ms",
+      "path": "api/09.海通流程接口/05.运行状态/04.核验流程运行列表.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/05.运行状态/04.核验流程运行列表.ms",
       "rowIds": [
         "c177c1699eed4423b7dbfa8730c5c87f"
       ],
@@ -6653,8 +6558,8 @@
       "metadataId": "nifi_pipe_runtime_list_head_v1"
     },
     {
-      "path": "api/10.海通流程接口/05.运行状态/05.查询流程运行状态.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/05.运行状态/05.查询流程运行状态.ms",
+      "path": "api/09.海通流程接口/05.运行状态/05.查询流程运行状态.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/05.运行状态/05.查询流程运行状态.ms",
       "rowIds": [
         "497930f50c884d88aa71e6bbab66c423"
       ],
@@ -6663,8 +6568,8 @@
       "metadataId": "nifi_pipeline_status_get_v1"
     },
     {
-      "path": "api/10.海通流程接口/05.运行状态/06.核验流程运行状态.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/05.运行状态/06.核验流程运行状态.ms",
+      "path": "api/09.海通流程接口/05.运行状态/06.核验流程运行状态.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/05.运行状态/06.核验流程运行状态.ms",
       "rowIds": [
         "823dc592ef644e96a4b2e43fb246c47f"
       ],
@@ -6673,8 +6578,8 @@
       "metadataId": "nifi_pipeline_status_head_v1"
     },
     {
-      "path": "api/10.海通流程接口/05.运行状态/07.查询处理器状态分页.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/05.运行状态/07.查询处理器状态分页.ms",
+      "path": "api/09.海通流程接口/05.运行状态/07.查询处理器状态分页.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/05.运行状态/07.查询处理器状态分页.ms",
       "rowIds": [
         "c44c3c52afde4e53886da33e3dade6a6"
       ],
@@ -6683,8 +6588,8 @@
       "metadataId": "nifi_processor_page_get_v1"
     },
     {
-      "path": "api/10.海通流程接口/05.运行状态/08.核验处理器状态分页.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/05.运行状态/08.核验处理器状态分页.ms",
+      "path": "api/09.海通流程接口/05.运行状态/08.核验处理器状态分页.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/05.运行状态/08.核验处理器状态分页.ms",
       "rowIds": [
         "76de3efb8ed5463b80d4299d73f88d4c"
       ],
@@ -6693,8 +6598,8 @@
       "metadataId": "nifi_processor_page_head_v1"
     },
     {
-      "path": "api/10.海通流程接口/05.运行状态/group.json",
-      "databasePath": "/magic-api/api/10.海通流程接口/05.运行状态/group.json",
+      "path": "api/09.海通流程接口/05.运行状态/group.json",
+      "databasePath": "/magic-api/api/09.海通流程接口/05.运行状态/group.json",
       "rowIds": [
         "e05989319e2e5cec95c7a300637effcf"
       ],
@@ -6703,8 +6608,8 @@
       "metadataId": "139cd4c65b0f5440a2d10b3650aeacab"
     },
     {
-      "path": "api/10.海通流程接口/06.部署与启停",
-      "databasePath": "/magic-api/api/10.海通流程接口/06.部署与启停/",
+      "path": "api/09.海通流程接口/06.部署与启停",
+      "databasePath": "/magic-api/api/09.海通流程接口/06.部署与启停/",
       "rowIds": [
         "39152d536abd54cc9806540348f402fc"
       ],
@@ -6712,8 +6617,8 @@
       "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "api/10.海通流程接口/06.部署与启停/01.部署流程.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/06.部署与启停/01.部署流程.ms",
+      "path": "api/09.海通流程接口/06.部署与启停/01.部署流程.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/06.部署与启停/01.部署流程.ms",
       "rowIds": [
         "aef49fd436d54631b6a399428c6a1fca"
       ],
@@ -6722,8 +6627,8 @@
       "metadataId": "nifi_pipeline_deploy_post_v1"
     },
     {
-      "path": "api/10.海通流程接口/06.部署与启停/02.切换候选流程.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/06.部署与启停/02.切换候选流程.ms",
+      "path": "api/09.海通流程接口/06.部署与启停/02.切换候选流程.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/06.部署与启停/02.切换候选流程.ms",
       "rowIds": [
         "4d2e86dd38b443ffa65e9f3d04e359d1"
       ],
@@ -6732,8 +6637,8 @@
       "metadataId": "nifi_candidate_activate_post_v1"
     },
     {
-      "path": "api/10.海通流程接口/06.部署与启停/03.启动流程.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/06.部署与启停/03.启动流程.ms",
+      "path": "api/09.海通流程接口/06.部署与启停/03.启动流程.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/06.部署与启停/03.启动流程.ms",
       "rowIds": [
         "cea036cd36d647b6adfb0ab18a8424bf"
       ],
@@ -6742,8 +6647,8 @@
       "metadataId": "nifi_pipeline_start_post_v1"
     },
     {
-      "path": "api/10.海通流程接口/06.部署与启停/04.停止流程.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/06.部署与启停/04.停止流程.ms",
+      "path": "api/09.海通流程接口/06.部署与启停/04.停止流程.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/06.部署与启停/04.停止流程.ms",
       "rowIds": [
         "4f6138e6542b435b8cea6aaf77a7d47a"
       ],
@@ -6752,8 +6657,8 @@
       "metadataId": "nifi_pipeline_stop_post_v1"
     },
     {
-      "path": "api/10.海通流程接口/06.部署与启停/05.卸载流程.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/06.部署与启停/05.卸载流程.ms",
+      "path": "api/09.海通流程接口/06.部署与启停/05.卸载流程.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/06.部署与启停/05.卸载流程.ms",
       "rowIds": [
         "04118061c7b14b3eadc234fd73c1f2b3"
       ],
@@ -6762,8 +6667,8 @@
       "metadataId": "nifi_pipeline_undeploy_post_v1"
     },
     {
-      "path": "api/10.海通流程接口/06.部署与启停/group.json",
-      "databasePath": "/magic-api/api/10.海通流程接口/06.部署与启停/group.json",
+      "path": "api/09.海通流程接口/06.部署与启停/group.json",
+      "databasePath": "/magic-api/api/09.海通流程接口/06.部署与启停/group.json",
       "rowIds": [
         "78135c897ced548996309f5e4b98d471"
       ],
@@ -6772,8 +6677,8 @@
       "metadataId": "56eecf4a0fcb5b6cac8df60e39962bb0"
     },
     {
-      "path": "api/10.海通流程接口/07.流程组",
-      "databasePath": "/magic-api/api/10.海通流程接口/07.流程组/",
+      "path": "api/09.海通流程接口/07.流程组",
+      "databasePath": "/magic-api/api/09.海通流程接口/07.流程组/",
       "rowIds": [
         "59e0b1897f665a71bff2bde30f27e5a6"
       ],
@@ -6781,8 +6686,8 @@
       "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "api/10.海通流程接口/07.流程组/01.按组标识删除流程组.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/07.流程组/01.按组标识删除流程组.ms",
+      "path": "api/09.海通流程接口/07.流程组/01.按组标识删除流程组.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/07.流程组/01.按组标识删除流程组.ms",
       "rowIds": [
         "155451203121477380a98a6647d3e497"
       ],
@@ -6791,8 +6696,8 @@
       "metadataId": "0f217152c7fa1555211a98ac7d1db9d4"
     },
     {
-      "path": "api/10.海通流程接口/07.流程组/02.按父组标识删除流程树.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/07.流程组/02.按父组标识删除流程树.ms",
+      "path": "api/09.海通流程接口/07.流程组/02.按父组标识删除流程树.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/07.流程组/02.按父组标识删除流程树.ms",
       "rowIds": [
         "95ac7e0ed0114509862c5543e26f845a"
       ],
@@ -6801,8 +6706,8 @@
       "metadataId": "5d340458be2a074424507a72e8f13c6e"
     },
     {
-      "path": "api/10.海通流程接口/07.流程组/group.json",
-      "databasePath": "/magic-api/api/10.海通流程接口/07.流程组/group.json",
+      "path": "api/09.海通流程接口/07.流程组/group.json",
+      "databasePath": "/magic-api/api/09.海通流程接口/07.流程组/group.json",
       "rowIds": [
         "3ff965ef0b1853d19fc7493b56c8fe17"
       ],
@@ -6811,8 +6716,8 @@
       "metadataId": "0e40cea1b8ca55c0be54e49d37e1746f"
     },
     {
-      "path": "api/10.海通流程接口/08.节点运行",
-      "databasePath": "/magic-api/api/10.海通流程接口/08.节点运行/",
+      "path": "api/09.海通流程接口/08.节点运行",
+      "databasePath": "/magic-api/api/09.海通流程接口/08.节点运行/",
       "rowIds": [
         "b6ac6affc2675ac1addc9c6fc71c545e"
       ],
@@ -6820,8 +6725,8 @@
       "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "api/10.海通流程接口/08.节点运行/01.查询节点血缘.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/08.节点运行/01.查询节点血缘.ms",
+      "path": "api/09.海通流程接口/08.节点运行/01.查询节点血缘.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/08.节点运行/01.查询节点血缘.ms",
       "rowIds": [
         "63dd6562fca144e28f5c21ed4f1092c4"
       ],
@@ -6830,8 +6735,8 @@
       "metadataId": "0a119f2475974554a8b3547dd70febf0"
     },
     {
-      "path": "api/10.海通流程接口/08.节点运行/02.查询原生属性差异.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/08.节点运行/02.查询原生属性差异.ms",
+      "path": "api/09.海通流程接口/08.节点运行/02.查询原生属性差异.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/08.节点运行/02.查询原生属性差异.ms",
       "rowIds": [
         "aee3c0c742ef411282dc629be537e793"
       ],
@@ -6840,8 +6745,8 @@
       "metadataId": "nifi_attribute_sync_get_v1"
     },
     {
-      "path": "api/10.海通流程接口/08.节点运行/03.核验原生属性差异.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/08.节点运行/03.核验原生属性差异.ms",
+      "path": "api/09.海通流程接口/08.节点运行/03.核验原生属性差异.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/08.节点运行/03.核验原生属性差异.ms",
       "rowIds": [
         "30eb8f59dd1d405e9ffb06a2d66d5c03"
       ],
@@ -6850,8 +6755,8 @@
       "metadataId": "nifi_attribute_sync_head_v1"
     },
     {
-      "path": "api/10.海通流程接口/08.节点运行/04.同步原生属性.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/08.节点运行/04.同步原生属性.ms",
+      "path": "api/09.海通流程接口/08.节点运行/04.同步原生属性.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/08.节点运行/04.同步原生属性.ms",
       "rowIds": [
         "fd513d684499469dad241c1d993c6d13"
       ],
@@ -6860,8 +6765,8 @@
       "metadataId": "nifi_attribute_sync_post_v1"
     },
     {
-      "path": "api/10.海通流程接口/08.节点运行/group.json",
-      "databasePath": "/magic-api/api/10.海通流程接口/08.节点运行/group.json",
+      "path": "api/09.海通流程接口/08.节点运行/group.json",
+      "databasePath": "/magic-api/api/09.海通流程接口/08.节点运行/group.json",
       "rowIds": [
         "9712b18cc6ee50f6ae1e411b46e2b24d"
       ],
@@ -6870,8 +6775,8 @@
       "metadataId": "32618128861a58318b8524b74df21a23"
     },
     {
-      "path": "api/10.海通流程接口/09.错误与公告",
-      "databasePath": "/magic-api/api/10.海通流程接口/09.错误与公告/",
+      "path": "api/09.海通流程接口/09.错误与公告",
+      "databasePath": "/magic-api/api/09.海通流程接口/09.错误与公告/",
       "rowIds": [
         "723f882ddf70531c845a60745d71ec8c"
       ],
@@ -6879,8 +6784,8 @@
       "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "api/10.海通流程接口/09.错误与公告/01.查询流程错误历史.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/09.错误与公告/01.查询流程错误历史.ms",
+      "path": "api/09.海通流程接口/09.错误与公告/01.查询流程错误历史.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/09.错误与公告/01.查询流程错误历史.ms",
       "rowIds": [
         "9c64f83155da4b5ea826b929c425fa23"
       ],
@@ -6889,8 +6794,8 @@
       "metadataId": "nifi_pipe_error_history_get_v1"
     },
     {
-      "path": "api/10.海通流程接口/09.错误与公告/02.核验流程错误历史.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/09.错误与公告/02.核验流程错误历史.ms",
+      "path": "api/09.海通流程接口/09.错误与公告/02.核验流程错误历史.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/09.错误与公告/02.核验流程错误历史.ms",
       "rowIds": [
         "a51345bba3d1475eabc32ab12229a201"
       ],
@@ -6899,8 +6804,8 @@
       "metadataId": "nifi_pipe_error_history_head_v1"
     },
     {
-      "path": "api/10.海通流程接口/09.错误与公告/03.查询流程实时公告.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/09.错误与公告/03.查询流程实时公告.ms",
+      "path": "api/09.海通流程接口/09.错误与公告/03.查询流程实时公告.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/09.错误与公告/03.查询流程实时公告.ms",
       "rowIds": [
         "83590e9cf58a4f289bf74d1b7f762e3f"
       ],
@@ -6909,8 +6814,8 @@
       "metadataId": "nifi_pipe_error_bulletin_get_v1"
     },
     {
-      "path": "api/10.海通流程接口/09.错误与公告/04.核验流程实时公告.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/09.错误与公告/04.核验流程实时公告.ms",
+      "path": "api/09.海通流程接口/09.错误与公告/04.核验流程实时公告.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/09.错误与公告/04.核验流程实时公告.ms",
       "rowIds": [
         "ff8694b0448a4d1c9d401eb1e340263d"
       ],
@@ -6919,8 +6824,8 @@
       "metadataId": "nifi_pipe_error_bulletin_head_v1"
     },
     {
-      "path": "api/10.海通流程接口/09.错误与公告/05.清理流程错误.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/09.错误与公告/05.清理流程错误.ms",
+      "path": "api/09.海通流程接口/09.错误与公告/05.清理流程错误.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/09.错误与公告/05.清理流程错误.ms",
       "rowIds": [
         "5618e59142e44a01a3efc39a83a743e1"
       ],
@@ -6929,8 +6834,8 @@
       "metadataId": "nifi_pipe_error_clear_post_v1"
     },
     {
-      "path": "api/10.海通流程接口/09.错误与公告/group.json",
-      "databasePath": "/magic-api/api/10.海通流程接口/09.错误与公告/group.json",
+      "path": "api/09.海通流程接口/09.错误与公告/group.json",
+      "databasePath": "/magic-api/api/09.海通流程接口/09.错误与公告/group.json",
       "rowIds": [
         "c5381d294dd65382a5766e0fef2366c3"
       ],
@@ -6939,8 +6844,8 @@
       "metadataId": "65f6980fe7f15f87b5db13b102130ac7"
     },
     {
-      "path": "api/10.海通流程接口/10.映射计划",
-      "databasePath": "/magic-api/api/10.海通流程接口/10.映射计划/",
+      "path": "api/09.海通流程接口/10.映射计划",
+      "databasePath": "/magic-api/api/09.海通流程接口/10.映射计划/",
       "rowIds": [
         "6c0db56f32525fa5a39b1e6ed2397045"
       ],
@@ -6948,8 +6853,8 @@
       "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "api/10.海通流程接口/10.映射计划/01.查询映射计划历史.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/10.映射计划/01.查询映射计划历史.ms",
+      "path": "api/09.海通流程接口/10.映射计划/01.查询映射计划历史.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/10.映射计划/01.查询映射计划历史.ms",
       "rowIds": [
         "df21df67d85240f4a0bcdadde2b03af4"
       ],
@@ -6958,8 +6863,8 @@
       "metadataId": "nifi_map_plans_get_v1"
     },
     {
-      "path": "api/10.海通流程接口/10.映射计划/02.核验映射计划历史.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/10.映射计划/02.核验映射计划历史.ms",
+      "path": "api/09.海通流程接口/10.映射计划/02.核验映射计划历史.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/10.映射计划/02.核验映射计划历史.ms",
       "rowIds": [
         "4b725516b16c48808e2f3e69154120c1"
       ],
@@ -6968,8 +6873,8 @@
       "metadataId": "nifi_map_plans_head_v1"
     },
     {
-      "path": "api/10.海通流程接口/10.映射计划/03.查询映射计划版本.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/10.映射计划/03.查询映射计划版本.ms",
+      "path": "api/09.海通流程接口/10.映射计划/03.查询映射计划版本.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/10.映射计划/03.查询映射计划版本.ms",
       "rowIds": [
         "b7779a7b704040c4a7974f78bba03e39"
       ],
@@ -6978,8 +6883,8 @@
       "metadataId": "nifi_map_plan_get_v1"
     },
     {
-      "path": "api/10.海通流程接口/10.映射计划/04.核验映射计划版本.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/10.映射计划/04.核验映射计划版本.ms",
+      "path": "api/09.海通流程接口/10.映射计划/04.核验映射计划版本.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/10.映射计划/04.核验映射计划版本.ms",
       "rowIds": [
         "0af5ee7d4ac44723bdcb906f8e6eb311"
       ],
@@ -6988,8 +6893,8 @@
       "metadataId": "nifi_map_plan_head_v1"
     },
     {
-      "path": "api/10.海通流程接口/10.映射计划/05.查询映射版本保留策略.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/10.映射计划/05.查询映射版本保留策略.ms",
+      "path": "api/09.海通流程接口/10.映射计划/05.查询映射版本保留策略.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/10.映射计划/05.查询映射版本保留策略.ms",
       "rowIds": [
         "bf31de8cc27d45aa8439264e7a247442"
       ],
@@ -6998,8 +6903,8 @@
       "metadataId": "nifi_map_retention_get_v1"
     },
     {
-      "path": "api/10.海通流程接口/10.映射计划/06.核验映射版本保留策略.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/10.映射计划/06.核验映射版本保留策略.ms",
+      "path": "api/09.海通流程接口/10.映射计划/06.核验映射版本保留策略.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/10.映射计划/06.核验映射版本保留策略.ms",
       "rowIds": [
         "8ca27a7e4b944c21a0cdd25a4057e117"
       ],
@@ -7008,8 +6913,8 @@
       "metadataId": "nifi_map_retention_head_v1"
     },
     {
-      "path": "api/10.海通流程接口/10.映射计划/07.恢复映射计划草稿.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/10.映射计划/07.恢复映射计划草稿.ms",
+      "path": "api/09.海通流程接口/10.映射计划/07.恢复映射计划草稿.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/10.映射计划/07.恢复映射计划草稿.ms",
       "rowIds": [
         "096a5c360950425eae358dcd461aa20e"
       ],
@@ -7018,8 +6923,8 @@
       "metadataId": "nifi_map_restore_post_v1"
     },
     {
-      "path": "api/10.海通流程接口/10.映射计划/group.json",
-      "databasePath": "/magic-api/api/10.海通流程接口/10.映射计划/group.json",
+      "path": "api/09.海通流程接口/10.映射计划/group.json",
+      "databasePath": "/magic-api/api/09.海通流程接口/10.映射计划/group.json",
       "rowIds": [
         "1bbfdeb8da0f5ce6a48386296fe406b1"
       ],
@@ -7028,8 +6933,8 @@
       "metadataId": "64f711bbc78e59fd86e03d6f0ba9a1c9"
     },
     {
-      "path": "api/10.海通流程接口/11.映射模板",
-      "databasePath": "/magic-api/api/10.海通流程接口/11.映射模板/",
+      "path": "api/09.海通流程接口/11.映射模板",
+      "databasePath": "/magic-api/api/09.海通流程接口/11.映射模板/",
       "rowIds": [
         "8555b5f3ebb75f67a3d94dc0e7e08cb3"
       ],
@@ -7037,8 +6942,8 @@
       "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "api/10.海通流程接口/11.映射模板/01.查询映射模板版本.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/11.映射模板/01.查询映射模板版本.ms",
+      "path": "api/09.海通流程接口/11.映射模板/01.查询映射模板版本.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/11.映射模板/01.查询映射模板版本.ms",
       "rowIds": [
         "d4947089316d4a599bcd039154217790"
       ],
@@ -7047,8 +6952,8 @@
       "metadataId": "nifi_map_templates_get_v1"
     },
     {
-      "path": "api/10.海通流程接口/11.映射模板/02.核验映射模板版本.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/11.映射模板/02.核验映射模板版本.ms",
+      "path": "api/09.海通流程接口/11.映射模板/02.核验映射模板版本.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/11.映射模板/02.核验映射模板版本.ms",
       "rowIds": [
         "f4c1b20359604a10ae412c63df5de339"
       ],
@@ -7057,8 +6962,8 @@
       "metadataId": "nifi_map_templates_head_v1"
     },
     {
-      "path": "api/10.海通流程接口/11.映射模板/03.查询映射模板详情.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/11.映射模板/03.查询映射模板详情.ms",
+      "path": "api/09.海通流程接口/11.映射模板/03.查询映射模板详情.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/11.映射模板/03.查询映射模板详情.ms",
       "rowIds": [
         "7069d654e50c4b51ba103d3c3a48389b"
       ],
@@ -7067,8 +6972,8 @@
       "metadataId": "nifi_map_template_get_v1"
     },
     {
-      "path": "api/10.海通流程接口/11.映射模板/04.核验映射模板详情.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/11.映射模板/04.核验映射模板详情.ms",
+      "path": "api/09.海通流程接口/11.映射模板/04.核验映射模板详情.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/11.映射模板/04.核验映射模板详情.ms",
       "rowIds": [
         "acd942b680944f21a25a03acc5647b30"
       ],
@@ -7077,8 +6982,8 @@
       "metadataId": "nifi_map_template_head_v1"
     },
     {
-      "path": "api/10.海通流程接口/11.映射模板/05.导入映射模板.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/11.映射模板/05.导入映射模板.ms",
+      "path": "api/09.海通流程接口/11.映射模板/05.导入映射模板.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/11.映射模板/05.导入映射模板.ms",
       "rowIds": [
         "880848121d57416c957c9b42e1e554c9"
       ],
@@ -7087,8 +6992,8 @@
       "metadataId": "nifi_map_template_import_v1"
     },
     {
-      "path": "api/10.海通流程接口/11.映射模板/06.保存映射模板.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/11.映射模板/06.保存映射模板.ms",
+      "path": "api/09.海通流程接口/11.映射模板/06.保存映射模板.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/11.映射模板/06.保存映射模板.ms",
       "rowIds": [
         "2766a6de50364706833bfb9c1273ca5a"
       ],
@@ -7097,8 +7002,8 @@
       "metadataId": "nifi_map_templates_post_v1"
     },
     {
-      "path": "api/10.海通流程接口/11.映射模板/group.json",
-      "databasePath": "/magic-api/api/10.海通流程接口/11.映射模板/group.json",
+      "path": "api/09.海通流程接口/11.映射模板/group.json",
+      "databasePath": "/magic-api/api/09.海通流程接口/11.映射模板/group.json",
       "rowIds": [
         "b57c437201de54e7ab0566413114255b"
       ],
@@ -7107,8 +7012,8 @@
       "metadataId": "94cec97bdd3858bdb107530b5facca22"
     },
     {
-      "path": "api/10.海通流程接口/12.映射字典",
-      "databasePath": "/magic-api/api/10.海通流程接口/12.映射字典/",
+      "path": "api/09.海通流程接口/12.映射字典",
+      "databasePath": "/magic-api/api/09.海通流程接口/12.映射字典/",
       "rowIds": [
         "4bfa52c742fa57649ef6f122c0286851"
       ],
@@ -7116,8 +7021,8 @@
       "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "api/10.海通流程接口/12.映射字典/01.查询字典候选表.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/12.映射字典/01.查询字典候选表.ms",
+      "path": "api/09.海通流程接口/12.映射字典/01.查询字典候选表.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/12.映射字典/01.查询字典候选表.ms",
       "rowIds": [
         "ad2b7da268f94e808a7fb4ff514ce309"
       ],
@@ -7126,8 +7031,8 @@
       "metadataId": "nifi_map_dict_tables_get_v1"
     },
     {
-      "path": "api/10.海通流程接口/12.映射字典/02.核验字典候选表.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/12.映射字典/02.核验字典候选表.ms",
+      "path": "api/09.海通流程接口/12.映射字典/02.核验字典候选表.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/12.映射字典/02.核验字典候选表.ms",
       "rowIds": [
         "d496ef34d395445ea2f742ff0c04080d"
       ],
@@ -7136,8 +7041,8 @@
       "metadataId": "nifi_map_dict_tables_head_v1"
     },
     {
-      "path": "api/10.海通流程接口/12.映射字典/03.查询字典候选字段.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/12.映射字典/03.查询字典候选字段.ms",
+      "path": "api/09.海通流程接口/12.映射字典/03.查询字典候选字段.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/12.映射字典/03.查询字典候选字段.ms",
       "rowIds": [
         "babad349657748e29066619f41a58514"
       ],
@@ -7146,8 +7051,8 @@
       "metadataId": "nifi_map_dict_cols_get_v1"
     },
     {
-      "path": "api/10.海通流程接口/12.映射字典/04.核验字典候选字段.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/12.映射字典/04.核验字典候选字段.ms",
+      "path": "api/09.海通流程接口/12.映射字典/04.核验字典候选字段.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/12.映射字典/04.核验字典候选字段.ms",
       "rowIds": [
         "d6632db61d0441ceba291690dfa9f223"
       ],
@@ -7156,8 +7061,8 @@
       "metadataId": "nifi_map_dict_cols_head_v1"
     },
     {
-      "path": "api/10.海通流程接口/12.映射字典/05.生成字典快照.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/12.映射字典/05.生成字典快照.ms",
+      "path": "api/09.海通流程接口/12.映射字典/05.生成字典快照.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/12.映射字典/05.生成字典快照.ms",
       "rowIds": [
         "c727c1ad7ee245d2b087e3c5e45b63da"
       ],
@@ -7166,8 +7071,8 @@
       "metadataId": "nifi_map_dict_snapshot_post_v1"
     },
     {
-      "path": "api/10.海通流程接口/12.映射字典/06.生成字典查询模板.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/12.映射字典/06.生成字典查询模板.ms",
+      "path": "api/09.海通流程接口/12.映射字典/06.生成字典查询模板.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/12.映射字典/06.生成字典查询模板.ms",
       "rowIds": [
         "e8d4ac2c777c44b68197a7a631b799ec"
       ],
@@ -7176,8 +7081,8 @@
       "metadataId": "nifi_field_map_lookup_v1"
     },
     {
-      "path": "api/10.海通流程接口/12.映射字典/group.json",
-      "databasePath": "/magic-api/api/10.海通流程接口/12.映射字典/group.json",
+      "path": "api/09.海通流程接口/12.映射字典/group.json",
+      "databasePath": "/magic-api/api/09.海通流程接口/12.映射字典/group.json",
       "rowIds": [
         "1a05739039fa5667b47ce855dd737e5b"
       ],
@@ -7186,8 +7091,8 @@
       "metadataId": "e156354f7d79565aa8ed30f16bf35ed1"
     },
     {
-      "path": "api/10.海通流程接口/13.字段映射",
-      "databasePath": "/magic-api/api/10.海通流程接口/13.字段映射/",
+      "path": "api/09.海通流程接口/13.字段映射",
+      "databasePath": "/magic-api/api/09.海通流程接口/13.字段映射/",
       "rowIds": [
         "2ed5394593d755adbbd9397b0cc2a296"
       ],
@@ -7195,8 +7100,8 @@
       "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "api/10.海通流程接口/13.字段映射/01.构造映射字段结构.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/13.字段映射/01.构造映射字段结构.ms",
+      "path": "api/09.海通流程接口/13.字段映射/01.构造映射字段结构.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/13.字段映射/01.构造映射字段结构.ms",
       "rowIds": [
         "f5c3489a9e6047588644765e3614e724"
       ],
@@ -7205,8 +7110,8 @@
       "metadataId": "nifi_map_schema_post_v1"
     },
     {
-      "path": "api/10.海通流程接口/13.字段映射/02.取样预览映射.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/13.字段映射/02.取样预览映射.ms",
+      "path": "api/09.海通流程接口/13.字段映射/02.取样预览映射.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/13.字段映射/02.取样预览映射.ms",
       "rowIds": [
         "1e5fa03630664e94b756ccf0f044bf75"
       ],
@@ -7215,8 +7120,8 @@
       "metadataId": "nifi_map_sample_post_v1"
     },
     {
-      "path": "api/10.海通流程接口/13.字段映射/03.查询字段映射能力.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/13.字段映射/03.查询字段映射能力.ms",
+      "path": "api/09.海通流程接口/13.字段映射/03.查询字段映射能力.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/13.字段映射/03.查询字段映射能力.ms",
       "rowIds": [
         "2db0db3a508a4df2a2303347c75495ba"
       ],
@@ -7225,8 +7130,8 @@
       "metadataId": "nifi_field_map_caps_get_v1"
     },
     {
-      "path": "api/10.海通流程接口/13.字段映射/04.核验字段映射能力.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/13.字段映射/04.核验字段映射能力.ms",
+      "path": "api/09.海通流程接口/13.字段映射/04.核验字段映射能力.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/13.字段映射/04.核验字段映射能力.ms",
       "rowIds": [
         "3415a37481654c999efe96f6c83ca206"
       ],
@@ -7235,8 +7140,8 @@
       "metadataId": "nifi_field_map_caps_head_v1"
     },
     {
-      "path": "api/10.海通流程接口/13.字段映射/05.校验字段映射.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/13.字段映射/05.校验字段映射.ms",
+      "path": "api/09.海通流程接口/13.字段映射/05.校验字段映射.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/13.字段映射/05.校验字段映射.ms",
       "rowIds": [
         "a9c7b3391ef0452d838895159f932646"
       ],
@@ -7245,8 +7150,8 @@
       "metadataId": "nifi_field_map_validate_v1"
     },
     {
-      "path": "api/10.海通流程接口/13.字段映射/06.预览字段映射.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/13.字段映射/06.预览字段映射.ms",
+      "path": "api/09.海通流程接口/13.字段映射/06.预览字段映射.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/13.字段映射/06.预览字段映射.ms",
       "rowIds": [
         "5010349117d5457099b187ab9c5a8ba4"
       ],
@@ -7255,8 +7160,8 @@
       "metadataId": "nifi_field_map_preview_v1"
     },
     {
-      "path": "api/10.海通流程接口/13.字段映射/07.推荐字段映射.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/13.字段映射/07.推荐字段映射.ms",
+      "path": "api/09.海通流程接口/13.字段映射/07.推荐字段映射.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/13.字段映射/07.推荐字段映射.ms",
       "rowIds": [
         "f7f5a4ff7e9a4b92b5b15172712e18e4"
       ],
@@ -7265,8 +7170,8 @@
       "metadataId": "nifi_field_map_recommend_v1"
     },
     {
-      "path": "api/10.海通流程接口/13.字段映射/08.编译字段映射.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/13.字段映射/08.编译字段映射.ms",
+      "path": "api/09.海通流程接口/13.字段映射/08.编译字段映射.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/13.字段映射/08.编译字段映射.ms",
       "rowIds": [
         "e7a46f591ffd4c4ab51a622c046ffd38"
       ],
@@ -7275,8 +7180,8 @@
       "metadataId": "nifi_field_map_compile_v1"
     },
     {
-      "path": "api/10.海通流程接口/13.字段映射/09.转换旧字段映射.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/13.字段映射/09.转换旧字段映射.ms",
+      "path": "api/09.海通流程接口/13.字段映射/09.转换旧字段映射.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/13.字段映射/09.转换旧字段映射.ms",
       "rowIds": [
         "b9269595e80f4908914fafba21d69079"
       ],
@@ -7285,8 +7190,8 @@
       "metadataId": "nifi_field_map_legacy_v1"
     },
     {
-      "path": "api/10.海通流程接口/13.字段映射/group.json",
-      "databasePath": "/magic-api/api/10.海通流程接口/13.字段映射/group.json",
+      "path": "api/09.海通流程接口/13.字段映射/group.json",
+      "databasePath": "/magic-api/api/09.海通流程接口/13.字段映射/group.json",
       "rowIds": [
         "68c0a290ccad5ac7a54618019255456a"
       ],
@@ -7295,8 +7200,8 @@
       "metadataId": "d49f0cc7292f543b89a960eed54923c1"
     },
     {
-      "path": "api/10.海通流程接口/14.映射运行",
-      "databasePath": "/magic-api/api/10.海通流程接口/14.映射运行/",
+      "path": "api/09.海通流程接口/14.映射运行",
+      "databasePath": "/magic-api/api/09.海通流程接口/14.映射运行/",
       "rowIds": [
         "0eaf95c3196255548beb0179432172a6"
       ],
@@ -7304,8 +7209,8 @@
       "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "api/10.海通流程接口/14.映射运行/01.升级运行字段节点.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/14.映射运行/01.升级运行字段节点.ms",
+      "path": "api/09.海通流程接口/14.映射运行/01.升级运行字段节点.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/14.映射运行/01.升级运行字段节点.ms",
       "rowIds": [
         "2015a9d9959f4bf580721b834650c6cf"
       ],
@@ -7314,8 +7219,8 @@
       "metadataId": "nifi_map_upgrade_post_v1"
     },
     {
-      "path": "api/10.海通流程接口/14.映射运行/02.启动已发布映射流程.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/14.映射运行/02.启动已发布映射流程.ms",
+      "path": "api/09.海通流程接口/14.映射运行/02.启动已发布映射流程.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/14.映射运行/02.启动已发布映射流程.ms",
       "rowIds": [
         "273e66d1636240ceb1c8e500e83bab74"
       ],
@@ -7324,8 +7229,8 @@
       "metadataId": "nifi_map_start_pub_post_v1"
     },
     {
-      "path": "api/10.海通流程接口/14.映射运行/group.json",
-      "databasePath": "/magic-api/api/10.海通流程接口/14.映射运行/group.json",
+      "path": "api/09.海通流程接口/14.映射运行/group.json",
+      "databasePath": "/magic-api/api/09.海通流程接口/14.映射运行/group.json",
       "rowIds": [
         "29436985b96053ef9e92f625e8281dcd"
       ],
@@ -7334,8 +7239,8 @@
       "metadataId": "701972acc05f55a89609ca99c376725c"
     },
     {
-      "path": "api/10.海通流程接口/15.连接探查",
-      "databasePath": "/magic-api/api/10.海通流程接口/15.连接探查/",
+      "path": "api/09.海通流程接口/15.连接探查",
+      "databasePath": "/magic-api/api/09.海通流程接口/15.连接探查/",
       "rowIds": [
         "7ab49f108a8d40188a4dda77018bf558"
       ],
@@ -7343,53 +7248,53 @@
       "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "api/10.海通流程接口/15.连接探查/01.测试连接.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/15.连接探查/01.测试连接.ms",
+      "path": "api/09.海通流程接口/15.连接探查/01.测试连接.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/15.连接探查/01.测试连接.ms",
       "rowIds": [
         "58819bee760449df94ce6d3c53a3fe45"
       ],
       "kind": "api",
-      "metadataId": "nifi_connection_test_post_v1",
-      "baseSha256": "41d41cff0f89daaae708f48f6e7d503238460ebce7e44fe3fea58af5d050f59d"
+      "baseSha256": "41d41cff0f89daaae708f48f6e7d503238460ebce7e44fe3fea58af5d050f59d",
+      "metadataId": "nifi_connection_test_post_v1"
     },
     {
-      "path": "api/10.海通流程接口/15.连接探查/02.探查字段.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/15.连接探查/02.探查字段.ms",
+      "path": "api/09.海通流程接口/15.连接探查/02.探查字段.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/15.连接探查/02.探查字段.ms",
       "rowIds": [
         "67cbbf06f45f4e2abb5c0a6bace30bf6"
       ],
       "kind": "api",
-      "metadataId": "nifi_columns_probe_post_v1",
-      "baseSha256": "7d5a19d4327c9c64396c854e8babba5fce315b669e1c82eba5aa921e8a2f00d9"
+      "baseSha256": "7d5a19d4327c9c64396c854e8babba5fce315b669e1c82eba5aa921e8a2f00d9",
+      "metadataId": "nifi_columns_probe_post_v1"
     },
     {
-      "path": "api/10.海通流程接口/15.连接探查/03.探查数据表.ms",
-      "databasePath": "/magic-api/api/10.海通流程接口/15.连接探查/03.探查数据表.ms",
+      "path": "api/09.海通流程接口/15.连接探查/03.探查数据表.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/15.连接探查/03.探查数据表.ms",
       "rowIds": [
         "a9f6eec6a04f407190c7edea2d60edc4"
       ],
       "kind": "api",
-      "metadataId": "nifi_tables_probe_post_v1",
-      "baseSha256": "db0e3473b9945c0c185dae4662723b3ab19e16c62cb500c2c6dcd358ab52f1e5"
+      "baseSha256": "db0e3473b9945c0c185dae4662723b3ab19e16c62cb500c2c6dcd358ab52f1e5",
+      "metadataId": "nifi_tables_probe_post_v1"
     },
     {
-      "path": "api/10.海通流程接口/15.连接探查/group.json",
-      "databasePath": "/magic-api/api/10.海通流程接口/15.连接探查/group.json",
+      "path": "api/09.海通流程接口/15.连接探查/group.json",
+      "databasePath": "/magic-api/api/09.海通流程接口/15.连接探查/group.json",
       "rowIds": [
         "872f7069a8f3400ab09c3dfe92769226"
       ],
       "kind": "group",
-      "metadataId": "nifi_connection_probe_group_v1",
-      "baseSha256": "16b87e38770d9e15f87669deeb3385a96a55b5958336d825198595b9e7908efd"
+      "baseSha256": "16b87e38770d9e15f87669deeb3385a96a55b5958336d825198595b9e7908efd",
+      "metadataId": "nifi_connection_probe_group_v1"
     },
     {
-      "path": "api/10.海通流程接口/group.json",
-      "databasePath": "/magic-api/api/10.海通流程接口/group.json",
+      "path": "api/09.海通流程接口/group.json",
+      "databasePath": "/magic-api/api/09.海通流程接口/group.json",
       "rowIds": [
         "accc7b67aa1a4c2fbf1efd75973e8396"
       ],
       "kind": "group",
-      "baseSha256": "c9b23046c1e84334429f59a38877a4777a22fce9737715ca675f9ed291a7e18c",
+      "baseSha256": "04d7f515ab8f789ef6b13886aff177290ab02fbda7d9d89253fd8d7331c9b58e",
       "metadataId": "1c9e694656894c3d8b859d78c7158165"
     },
     {

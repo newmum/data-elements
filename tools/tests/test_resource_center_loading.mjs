@@ -147,8 +147,8 @@ reorderedForm.domains[1].sortNo = 23;
 reordered.actual.configDialog.value = reorderedForm;
 const move = reordered.actual.moveDomain(0, 1);
 assert.deepEqual(reordered.saves, [
-  { path: '/sym/dictSaveOrUpdate', body: { tid: 'domain-0', sortNo: 23 } },
-  { path: '/sym/dictSaveOrUpdate', body: { tid: 'domain-1', sortNo: 0 } },
+  { path: '/sym/dict/save', body: { tid: 'domain-0', sortNo: 23 } },
+  { path: '/sym/dict/save', body: { tid: 'domain-1', sortNo: 0 } },
 ]);
 assert.deepEqual(reorderedForm.domains.map(({ targetId, sortNo }) => [targetId, sortNo]),
   [['domain-0', 0], ['domain-1', 23]]);

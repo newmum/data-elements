@@ -365,7 +365,7 @@ const loadCountMap = () => {
 const fetchTreeData = async () => {
   treeLoading.value = true;
   try {
-    const dictTreeList = await $common.get("/sym/dict", { code: "dataSourceType" });
+    const dictTreeList = await $common.get("/sym/dict/query", { code: "dataSourceType" });
     treeData.value = dictTreeList.filter((el: any) => el.value === layer);
     rootDictNode.value = treeData.value[0] || null;
     defaultExpandedKeys.value = rootDictNode.value?.tid ? [rootDictNode.value.tid] : [];
@@ -441,7 +441,7 @@ const handleDeleteNode = (data: any) => {
     return;
   }
   $common.handle({
-    url: "/sym/dictSaveOrUpdate",
+    url: "/sym/dict/save",
     info: `确认删除"${data.label}"？`,
     action: "删除",
     data: { tid: data.tid, action: "delete" },
@@ -466,7 +466,7 @@ const handleDialogConfirm = async () => {
     if (dialogMode.value === "edit") {
       payload.tid = dialogEditTid.value;
     }
-    await $common.post("/sym/dictSaveOrUpdate", payload);
+    await $common.post("/sym/dict/save", payload);
     $message.success(dialogMode.value === "add" ? "新增成功" : "保存成功");
     dialogVisible.value = false;
     refreshTree();

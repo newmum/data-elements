@@ -90,7 +90,7 @@ export const catalogRegistrationApi = {
     return [...catalogs.values()];
   },
   async choices(): Promise<CatalogChoices> {
-    const dict = await platformApi<Record<string, { options?: unknown }>>('/sym/dict');
+    const dict = await platformApi<Record<string, { options?: unknown }>>('/sym/dict/query');
     return Object.fromEntries(Object.entries(dict).map(([key, value]) => [key, sourceOptions(value.options)]));
   },
   async detail(tid: string) {

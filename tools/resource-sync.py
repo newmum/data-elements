@@ -621,7 +621,7 @@ def publish(connection, config, file, compiled=None, backup=True):
                 or not isinstance(bundle.get('compileJs'), str) or not isinstance(bundle.get('compileCss'), str)
                 or 'return __sfc__' not in bundle['compileJs']):
             raise ValueError('Compilation does not match current source/runtime factory')
-        runtime_source = runtime_call(config, '/sym/component?action=getSourceCode&tid=' + urllib.parse.quote(entry['id'], safe=''), {})
+        runtime_source = runtime_call(config, '/sym/component/manage?action=getSourceCode&tid=' + urllib.parse.quote(entry['id'], safe=''), {})
         if digest(runtime_source) != digest(remote['content']):
             raise ValueError('Runtime source differs from control database; do not publish')
     # Private, ignored rollback material: never a second versioned source location.
@@ -678,9 +678,9 @@ def publish(connection, config, file, compiled=None, backup=True):
             verify_runtime_magic(loaded, meta, script)
         else:
             runtime_call(config, '/sym/component/cache/refresh', {})
-            if digest(runtime_call(config, '/sym/component?action=getSourceCode&tid=' + urllib.parse.quote(entry['id'], safe=''), {})) != digest(local):
+            if digest(runtime_call(config, '/sym/component/manage?action=getSourceCode&tid=' + urllib.parse.quote(entry['id'], safe=''), {})) != digest(local):
                 raise ValueError('Low-code source verification failed')
-            items = runtime_call(config, '/sym/component?action=list', {})
+            items = runtime_call(config, '/sym/component/manage?action=list', {})
             candidates = [r for r in items if r['name'] == entry['name']]
             item = candidates[0] if len(candidates) == 1 else None
             if not item or item.get('compileJs') != bundle['compileJs'] or item.get('compileCss') != bundle['compileCss']:
@@ -712,7 +712,7 @@ def repair_compiled(connection, config, bundles):
         query.execute('SELECT tid,pid,name,remark,type,tenant_id,source_code,compile_js,compile_css '
                       'FROM ui_component_t WHERE is_del=0 AND tid IN (' + placeholders + ')', ids)
         rows = {row['tid']: row for row in query.fetchall()}
-    runtime = runtime_call(config, '/sym/component?action=list', {})
+    runtime = runtime_call(config, '/sym/component/manage?action=list', {})
     runtime_by_name = {}
     for item in runtime:
         runtime_by_name.setdefault(item['name'], []).append(item)
@@ -767,7 +767,7 @@ def repair_compiled(connection, config, bundles):
         connection.rollback()
         raise
     runtime_call(config, '/sym/component/cache/refresh', {})
-    loaded = runtime_call(config, '/sym/component?action=list', {})
+    loaded = runtime_call(config, '/sym/component/manage?action=list', {})
     by_name = {item['name']: item for item in loaded}
     for bundle in bundles:
         item = by_name.get(entries[bundle['componentId']]['name'], {})

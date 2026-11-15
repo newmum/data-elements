@@ -503,7 +503,7 @@ const loadLayerDomains = async (layer: any, existingDomains: any[]) => {
     };
   });
   try {
-    const tree = await $common.get("/sym/dict", { code: "dataSourceType" });
+    const tree = await $common.get("/sym/dict/query", { code: "dataSourceType" });
     const all = dictionaryOptionsOf(tree, "dataSourceType");
     const root = all.find((item: any) => codeOf(item) === String(layer?.name || "").toLowerCase());
     const children = Array.isArray(root?.children) && root.children.length
@@ -585,7 +585,7 @@ const addDomain = async () => {
     ElMessage.warning("当前分层已存在相同的分域编码");
     return;
   }
-  const created = await $common.post("/sym/dictSaveOrUpdate", {
+  const created = await $common.post("/sym/dict/save", {
     dictName: name,
     dictCode: code,
     parentId: form.categoryRootId,
@@ -627,7 +627,7 @@ const addDomain = async () => {
 const removeDomain = async (domain: any) => {
   if (domain?.readonly) return;
   if (!domain?.targetId) return;
-  await $common.post("/sym/dictSaveOrUpdate", { action: "delete", tid: domain.targetId });
+  await $common.post("/sym/dict/save", { action: "delete", tid: domain.targetId });
   configDialog.value.domains = configDialog.value.domains.filter((item: any) => item.targetId !== domain.targetId);
   reindexDomains();
   ElMessage.success("分域已删除");
@@ -643,8 +643,8 @@ const moveDomain = async (index: number, step: number) => {
   const currentSortNo = current.sortNo;
   const targetSortNo = target.sortNo;
   await Promise.all([
-    $common.post("/sym/dictSaveOrUpdate", { tid: current.targetId, sortNo: targetSortNo }),
-    $common.post("/sym/dictSaveOrUpdate", { tid: target.targetId, sortNo: currentSortNo }),
+    $common.post("/sym/dict/save", { tid: current.targetId, sortNo: targetSortNo }),
+    $common.post("/sym/dict/save", { tid: target.targetId, sortNo: currentSortNo }),
   ]);
   // 同步已保存的排序值，后续整层保存会继续提交这个顺序。
   if (targetSortNo != null) current.sortNo = targetSortNo;
@@ -745,7 +745,7 @@ const handleDomainCommand = (
       "删除分域",
       { confirmButtonText: "删除", cancelButtonText: "取消", type: "warning" },
     ).then(async () => {
-      await $common.post("/sym/dictSaveOrUpdate", { action: "delete", tid: targetId });
+      await $common.post("/sym/dict/save", { action: "delete", tid: targetId });
       ElMessage.success("分域已删除");
       handleAction("init", null);
     }).catch(() => undefined);

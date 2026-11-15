@@ -106,7 +106,7 @@
           ref="treeRef"
           highlight-current
           class="flex-1 mr-2 overflow-y-auto"
-          url="/sym/component?action=tree"
+          url="/sym/component/manage?action=tree"
           :expand="false"
           :default-expand-all="true"
           search
@@ -267,7 +267,7 @@
     >
       <u-tree
         ref="exportTreeRef"
-        url="/sym/component?action=tree"
+        url="/sym/component/manage?action=tree"
         :checked="false"
         show-checkbox
         :default-expand-all="true"
@@ -439,7 +439,7 @@ const createComponentByAuto = (pid) => {
   // 生成随机英文名
   const name = "sfc-" + Math.random().toString(36).substring(2, 10);
   request({
-    url: "/sym/component?action=save",
+    url: "/sym/component/manage?action=save",
     data: {
       pid,
       name,
@@ -459,7 +459,7 @@ __sfc__.__file = "mb-sfc-compiler.vue"
 return __sfc__`;
     const compileCss = `/* No <style> tags present */`;
     request({
-      url: "/sym/component?action=saveCode",
+      url: "/sym/component/manage?action=saveCode",
       data: {
         tid: data,
         sourceCode,
@@ -513,7 +513,7 @@ const updateComponentInfo = async (tab, type) => {
 
   try {
     await request({
-      url: "/sym/component?action=save",
+      url: "/sym/component/manage?action=save",
       method: "POST",
       data: {
         type: 1,
@@ -539,7 +539,7 @@ function historyTableSelect(row) {
   tableRef.value.setCurIndex(i);
   currentHistoryOldDate.value = row.createdTime;
   request({
-    url: "/sym/component?action=historyDetail",
+    url: "/sym/component/manage?action=historyDetail",
     params: { tid: row.tid },
     method: "post",
   }).then((data) => {
@@ -589,7 +589,7 @@ const treeContextmenu = ref([
     label: "删除",
     click: (node) => {
       $common.handle({
-        url: "/sym/component?action=del",
+        url: "/sym/component/manage?action=del",
         params: { tid: node.tid },
         method: "post",
         done: () => {
@@ -619,14 +619,14 @@ function openHistory(node) {
   historyTableWhere.componentId = node.tid;
 
   request({
-    url: "/sym/component?action=history",
+    url: "/sym/component/manage?action=history",
     method: "POST",
     params: { componentId: node.tid },
   }).then((data) => {
     tableData.value = data.list;
   });
   request({
-    url: "/sym/component?action=getLastCode",
+    url: "/sym/component/manage?action=getLastCode",
     params: { componentId: node.tid },
     method: "POST",
   }).then((data) => {
@@ -666,7 +666,7 @@ async function saveComponent() {
     savingText.value = "正在保存...";
 
     const data = await request({
-      url: "/sym/component?action=save",
+      url: "/sym/component/manage?action=save",
       data: {
         [updateComponent.value ? "tid" : "pid"]: currentNodeId.value,
         ...(updateComponent.value ? { pid: currentNodePid.value } : {}),
@@ -688,7 +688,7 @@ __sfc__.__file = "mb-sfc-compiler.vue"
 return __sfc__`;
       const compileCss = `/* No <style> tags present */`;
       await request({
-        url: "/sym/component?action=saveCode",
+        url: "/sym/component/manage?action=saveCode",
         data: { tid: data, sourceCode, compileJs, compileCss },
         method: "POST",
       });
@@ -733,7 +733,7 @@ function nodeClick(option) {
       tabs.value[index].pid = option.pid;
     } else {
       request({
-        url: "/sym/component?action=getSourceCode&tid=" + option.tid,
+        url: "/sym/component/manage?action=getSourceCode&tid=" + option.tid,
         method: "post",
       }).then((data) => {
         tabs.value.push({
@@ -926,7 +926,7 @@ async function saveCode(showRun) {
       savingText.value = "正在保存编译产物...";
 
       await request({
-        url: "/sym/component?action=saveCode",
+        url: "/sym/component/manage?action=saveCode",
         data: {
           tid,
           sourceCode,
@@ -1119,7 +1119,7 @@ const handlePreview = async () => {
   try {
     // 预览始终直读数据库，不使用浏览器运行时组件缓存，也不使用未保存的编辑器内容。
     const sourceCode = await request({
-      url: `/sym/component?action=getSourceCode&tid=${tid}`,
+      url: `/sym/component/manage?action=getSourceCode&tid=${tid}`,
       method: "post",
     });
     readingSource = false;

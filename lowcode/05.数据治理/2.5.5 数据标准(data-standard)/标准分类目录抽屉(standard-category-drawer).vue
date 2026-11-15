@@ -196,7 +196,7 @@ const handleSave = async () => {
       payload.tid = currentNode.value.tid;
     }
 
-    await $common.post("/sym/dictSaveOrUpdate", payload);
+    await $common.post("/sym/dict/save", payload);
 
     ElMessage.success(isEdit.value ? "编辑成功" : "新增成功");
     // Close only after the request succeeds so the form remains available if

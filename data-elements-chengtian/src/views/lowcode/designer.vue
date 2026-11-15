@@ -162,7 +162,7 @@ const handleSave = async (data: any) => {
     // 保存设计规则
     const options = JSON.parse(data?.options || "{}");
     savingText.value = "正在保存表单...";
-    const res = (await $common.post("/sym/form?action=save", {
+    const res = (await $common.post("/sym/form/config?action=save", {
       tid: tid.value || undefined,
       env: pid.value,
       formName: options?.formName || "未定义",
@@ -199,7 +199,7 @@ const handleSave = async (data: any) => {
 
 const refresh = async () => {
   if (!tid.value || !pid.value) return;
-  const res = (await $common.post("/sym/form?action=get", {
+  const res = (await $common.post("/sym/form/config?action=get", {
     tid: tid.value,
     env: pid.value,
   })) as any;

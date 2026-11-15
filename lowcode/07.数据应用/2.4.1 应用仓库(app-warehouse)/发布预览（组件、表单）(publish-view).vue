@@ -48,7 +48,7 @@ const app = instance?.appContext.app;
 const getSourceCode = async (tid: string) => {
   if (!tid) return;
   const res = (await $common.post(
-    `/sym/component?action=getSourceCode&tid=${tid}`
+    `/sym/component/manage?action=getSourceCode&tid=${tid}`
   )) as unknown as string;
   if (res) {
     state.code = res;
@@ -105,7 +105,7 @@ const getFormData = async () => {
   }
 
   try {
-    const res = (await $common.post("/sym/form?action=get", {
+    const res = (await $common.post("/sym/form/config?action=get", {
       tid: tid.value,
       env: pid.value,
     })) as any;

@@ -196,7 +196,7 @@ const getRulesArray = (value: any): any[] => {
 
 const loadForms = async (env = currentEnv.value) => {
   try {
-    const data = await $common.post("/sym/form?action=get", { env });
+    const data = await $common.post("/sym/form/config?action=get", { env });
     if (!Array.isArray(data) || !data.every(isFormDefinition))
       throw new Error("表单列表格式不正确");
     configStore[env] = data.map((el: FormListItem) => {
@@ -239,7 +239,7 @@ const handleEditorChange = () => {
 
 // Preserve server-owned metadata and refuse to overwrite another editor's rules.
 const readCurrentDefinition = async (form: FormListItem): Promise<FormListItem> => {
-  const rows = await $common.post("/sym/form?action=get", {
+  const rows = await $common.post("/sym/form/config?action=get", {
     tid: form.tid,
     env: form.env,
   });
@@ -262,7 +262,7 @@ const handleSave = async () => {
   saving.value = true;
   try {
     const latest = await readCurrentDefinition(selected);
-    await $common.post("/sym/form?action=save", {
+    await $common.post("/sym/form/config?action=save", {
       tid: latest.tid,
       env: latest.env,
       formName: latest.formName,
@@ -325,7 +325,7 @@ const handleAddForm = () => {
         return;
       }
       try {
-        await $common.post("/sym/form?action=save", {
+        await $common.post("/sym/form/config?action=save", {
           env: currentEnv.value,
           formName: value,
           formJson: DEFAULT_FORM_JSON,
@@ -362,7 +362,7 @@ const handleRenameForm = (form: FormListItem | undefined) => {
       }
       try {
         const latest = await readCurrentDefinition(form);
-        await $common.post("/sym/form?action=save", {
+        await $common.post("/sym/form/config?action=save", {
           env: latest.env,
           formName: value,
           tid: latest.tid,
@@ -391,7 +391,7 @@ const handleDeleteForm = async (form: FormListItem) => {
       cancelButtonText: "取消",
       dangerMode: true,
     });
-    await $common.post("/sym/form?action=delete", { tid: form.tid });
+    await $common.post("/sym/form/config?action=delete", { tid: form.tid });
 
     const newForms = (configStore[currentEnv.value] || []).filter((item) => item.tid !== form.tid);
     configStore[currentEnv.value] = newForms;

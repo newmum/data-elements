@@ -1,7 +1,5 @@
 {
-  "properties": {
-    "leafRoute": true
-  },
+  "properties": {},
   "id": "a3b59b1dfb2c4c3989bf0a8a0e1f91cc",
   "script": null,
   "groupId": "233bd95551195c3dadc60ddcdb34c654",
@@ -11,7 +9,7 @@
   "lock": null,
   "createBy": null,
   "updateBy": null,
-  "path": "/",
+  "path": "/manage",
   "method": "POST",
   "parameters": [
     {
@@ -58,7 +56,7 @@
   "requestBody": "{\n    \"tid\": \"2e83a7abf33140c7a3df27d0c79e98c1\",\n    \"type\": \"app\",\n    \"name\": \"测试\",\n    \"pid\": \"测试\",\n    \"sourceCode\": \"测试\",\n    \"compileJs\": \"测试\",\n    \"compileCss\": \"测试\"\n}",
   "headers": [],
   "paths": [],
-  "responseBody": "{\n    \"code\": 400,\n    \"msg\": \"body[type]不合法\",\n    \"message\": \"body[type]不合法\",\n    \"success\": false,\n    \"data\": null,\n    \"timestamp\": 1785741933452,\n    \"error\": {\n        \"code\": \"MAGIC-BUSINESS-400\",\n        \"message\": \"body[type]不合法\",\n        \"detail\": \"body[type]不合法\",\n        \"traceId\": \"959F15F9974C452A\",\n        \"type\": \"BusinessException\",\n        \"method\": \"POST\",\n        \"path\": \"/sym/component\"\n    }\n}",
+  "responseBody": "{\n    \"code\": 400,\n    \"msg\": \"body[type]不合法\",\n    \"message\": \"body[type]不合法\",\n    \"success\": false,\n    \"data\": null,\n    \"timestamp\": 1785741933452,\n    \"error\": {\n        \"code\": \"MAGIC-BUSINESS-400\",\n        \"message\": \"body[type]不合法\",\n        \"detail\": \"body[type]不合法\",\n        \"traceId\": \"959F15F9974C452A\",\n        \"type\": \"BusinessException\",\n        \"method\": \"POST\",\n        \"path\": \"/sym/component/manage\"\n    }\n}",
   "description": "根据 action 查询页面组件列表或树，或调用组件管理服务执行保存与维护操作。",
   "requestBodyDefinition": {
     "name": "root",
@@ -544,7 +542,7 @@ import java.util.Locale
 import uiComponentCache
 import uiComponentAdmin
 
-// POST /sym/component：按 action 读取共享编译包、树和历史，或调用管理服务维护组件。
+// POST /sym/component/manage 按 action 读取共享组件编译包、组件树和历史，或维护组件及其编译结果。
 // runtimeBatch 接收 body.root，在同一已认证路由返回入口包或兼容的全量包。
 if (action == 'list') {
     return uiComponentCache.list()

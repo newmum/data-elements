@@ -187,7 +187,7 @@ onNifiSessionChange(clearDataassetsSessionCache);
 
 /**
  * 获取数据库字典列表（带模块级缓存）
- * GET /sym/dict?code=db
+ * GET /sym/dict/query?code=db
  *
  * 同一会话内只请求一次，后续调用直接返回缓存结果。
  * 并发调用共享同一个 Promise，避免 StrictMode 双重挂载导致的重复请求。
@@ -211,7 +211,7 @@ export async function fetchDatabases(): Promise<DbDictItem[]> {
         return databasesCache;
       }
 
-      const { data } = await axios.get<unknown>(`${dataassetsBase}/sym/dict`, {
+      const { data } = await axios.get<unknown>(`${dataassetsBase}/sym/dict/query`, {
         params: { code: 'db' },
         headers: authHeaders(token),
         timeout: requestTimeout,

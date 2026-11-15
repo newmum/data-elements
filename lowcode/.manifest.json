@@ -52,7 +52,7 @@
       "type": "1",
       "sortOrder": 1,
       "path": "01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource)/01.登记数据源(register-db).vue",
-      "baseSha256": "70b7993692a4d97c32914c94824907ffe3ecadedb2bdbdc5f2c91c4c8001f4a6"
+      "baseSha256": "81496665873f3ab6fcf133b16be652473d441afa5f0c5bc7b3a6da85036e1d8c"
     },
     {
       "id": "2074806689771094016",
@@ -82,7 +82,7 @@
       "type": "1",
       "sortOrder": 4,
       "path": "01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource)/04.登记内容审查(register-confirm).vue",
-      "baseSha256": "8c6cf9dcf5762ebd6fa8fb04caf3fcd43719fc8e6395e8cdd9d6df49970ae0d6"
+      "baseSha256": "ac468639e928e90fa86f538f1b06aa5cc9c226ee3a45205aaee5a7349a4b3949"
     },
     {
       "id": "2008087014782078976",
@@ -752,7 +752,7 @@
       "type": "1",
       "sortOrder": 1,
       "path": "05.数据治理/2.5.1 数据中心(data-warehouse).vue",
-      "baseSha256": "5c79ac64d36b1f32810e84a2282a5126e6d422aca63b4e5ff7fbb3f26fe0b5bb"
+      "baseSha256": "deb2711dafd021d3b1c22e79888feb0c44f4221c16d7313d74c66eb4d207c5df"
     },
     {
       "id": "2018975669541220352",
@@ -762,7 +762,7 @@
       "type": "1",
       "sortOrder": 1,
       "path": "05.数据治理/2.5.1 数据中心(data-warehouse)/基础层详情(dwd-detail).vue",
-      "baseSha256": "981ced82d13e9575d14789d9c5c6104aa418860b064f4dbb8ac5a3e447d7541f"
+      "baseSha256": "58ecfdb0d376d11dae1cd7923a987001573e187dbde3c37a4b6056626bf53d17"
     },
     {
       "id": "2014274065852338176",
@@ -802,7 +802,7 @@
       "type": "1",
       "sortOrder": 2,
       "path": "05.数据治理/2.5.1 数据中心(data-warehouse)/整合层详情(dwm-detail)/规划图组件(dwm-visual-tree).vue",
-      "baseSha256": "5d36815db3fcac9db5a6eaf581c39a2970aaa622b5be7ae7f5e539769faffc4f"
+      "baseSha256": "ec7e86e21faa06c41bd5e7c7208dac2b60714fb6b08b10dd24dec13ce06bf4c9"
     },
     {
       "id": "2016090152789151744",
@@ -862,7 +862,7 @@
       "type": "1",
       "sortOrder": 1,
       "path": "05.数据治理/2.5.2 数据目录(data-category)/字段管理(field-display-drawer).vue",
-      "baseSha256": "a5b0a4d07b68de07e2146c5c9cb2c322d95c3fa4a490ba5c863b68a82528d04e"
+      "baseSha256": "52c65adb3457bab0b79611bfd83300f81bf913d8c40c58fd12c9dc9666ad2f61"
     },
     {
       "id": "2006256270447284224",
@@ -962,7 +962,7 @@
       "type": "1",
       "sortOrder": 5,
       "path": "05.数据治理/2.5.5 数据标准(data-standard).vue",
-      "baseSha256": "e691f21f71e9b7f2a2bf458a3b952186626dbf464e9fc039f509cb2c052d4337"
+      "baseSha256": "d467bbdf8483c17dc4b02e02211a5ee495d88f951fe0308c6a29f72103c7b003"
     },
     {
       "id": "2059526706911858688",
@@ -1002,7 +1002,7 @@
       "type": "1",
       "sortOrder": 4,
       "path": "05.数据治理/2.5.5 数据标准(data-standard)/标准分类目录抽屉(standard-category-drawer).vue",
-      "baseSha256": "22ae5ddc64390e90c54c4ac2ba37969b1556356cd063a717b20d37215bd0b2bd"
+      "baseSha256": "d88871822f7f3be1f427d731d0b9e5afbac1af1982af154f9ecbb5df9ef7649f"
     },
     {
       "id": "2014605325493669888",
@@ -1042,7 +1042,7 @@
       "type": "1",
       "sortOrder": 2,
       "path": "06.数据服务/02.数据超市/超市列表页(market).vue",
-      "baseSha256": "2da2017f7416f3d89c07e540655a45cae8a2260c98445da31ad59f9b8ea3d9f6"
+      "baseSha256": "afa45bd213e43871ed4cc490e83021ad4391e167294e71f9ac9af62d5eeff14b"
     },
     {
       "id": "2015737672091897856",
@@ -1262,7 +1262,7 @@
       "type": "1",
       "sortOrder": 2,
       "path": "07.数据应用/2.4.1 应用仓库(app-warehouse)/发布预览（组件、表单）(publish-view).vue",
-      "baseSha256": "df1deed6377286353dfe05741aefd9706236fe1b0b0aa18b609f62041b06fabb"
+      "baseSha256": "b26291444ede9fa3e5b6de258eece80a919f279654684e24ebf7096f4524c769"
     },
     {
       "id": "2029457633557684224",
@@ -1503,7 +1503,7 @@
       "type": "1",
       "sortOrder": 5,
       "path": "09.系统管理/1.3 表单配置页(form-config).vue",
-      "baseSha256": "fb77e802b4f0ecea8445861e66527037506f6aa8227aed526136597aeead66f1"
+      "baseSha256": "21ff26450444dd45c50222ddd4eeac87ec2a7bcd42caa0ca0091031e6cd5e6b4"
     },
     {
       "id": "2037465914704191488",
@@ -1513,7 +1513,7 @@
       "type": "1",
       "sortOrder": 6,
       "path": "09.系统管理/1.4 字典管理(dict-manage).vue",
-      "baseSha256": "4facd1ad5027ccae9326811a6e3df57a3470a15a96650663fd3a8e9c2418aa61"
+      "baseSha256": "d4eb716ac03638b72d1e7f9fdccf10771f4a3ba8b5a83d13835f735f801ea1d1"
     },
     {
       "id": "ui_group_common_20260731",

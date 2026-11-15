@@ -1,6 +1,6 @@
 import { tenantConfiguration } from "./configuration.mjs";
 
-/** 本地场景表单定义；沿用真实 /sym/form 返回格式和现有 JsonForm 渲染器。 */
+/** 本地场景表单定义；沿用真实 /sym/form/config 返回格式和现有 JsonForm 渲染器。 */
 export function detailForms(database) {
   const field = (title, name, type = "input", extra = {}) => ({
     type,

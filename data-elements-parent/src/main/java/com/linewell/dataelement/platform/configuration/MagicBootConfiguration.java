@@ -19,10 +19,7 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.web.filter.OncePerRequestFilter;
 import org.springframework.web.util.ContentCachingRequestWrapper;
-import org.ssssssss.magicapi.core.config.MagicAPIProperties;
 import org.ssssssss.magicapi.core.config.MagicConfiguration;
-import org.ssssssss.magicapi.core.model.ApiInfo;
-import org.ssssssss.magicapi.core.service.impl.ApiInfoMagicResourceStorage;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
@@ -38,22 +35,6 @@ public class MagicBootConfiguration {
     private static final Pattern MAPPING_JSON = Pattern.compile(
             "/nifi/(template/(save|import)|dict/(snapshot|lookup)|map/(schema|sample|check|preview|recommend|compile|convert)"
                     + "|plan/restore|maprun/(upgrade|start))");
-
-    @Bean
-    ApiInfoMagicResourceStorage apiInfoMagicResourceStorage(MagicAPIProperties properties) {
-        return new ApiInfoMagicResourceStorage(properties.getPrefix()) {
-            @Override
-            public String buildMappingKey(ApiInfo api, String groupPath) {
-                String key = super.buildMappingKey(api, groupPath);
-                // 仅在资源显式声明叶组根路由时，保留迁移前没有末尾斜杠的地址。
-                if ("/".equals(api.getPath()) && api.getProperties() != null
-                        && Boolean.TRUE.equals(api.getAttribute("leafRoute")) && !key.endsWith(":/")) {
-                    return key.substring(0, key.length() - 1);
-                }
-                return key;
-            }
-        };
-    }
 
     /** Preserve exact decimal JSON for mapping scripts without changing the other Magic or MVC converters. */
     @Bean

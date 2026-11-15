@@ -31,16 +31,16 @@ const before = readFileSync(new URL("backups/global-nav-menu-20261003/before.vue
 const sourceCode = readFileSync(new URL("global-nav.vue", directory), "utf8");
 const compileJs = readFileSync(new URL("global-nav.compile.js", directory), "utf8");
 const compileCss = readFileSync(new URL("global-nav.compile.css", directory), "utf8");
-const onlineSource = await request(`/sym/component?action=getSourceCode&tid=${tid}`);
+const onlineSource = await request(`/sym/component/manage?action=getSourceCode&tid=${tid}`);
 let updated = false;
 if (onlineSource !== sourceCode) {
   assert.equal(onlineSource, before, "Online component changed after backup; stopped to preserve concurrent work");
-  await request("/sym/component?action=saveCode", { tid, sourceCode, compileJs, compileCss });
+  await request("/sym/component/manage?action=saveCode", { tid, sourceCode, compileJs, compileCss });
   await request("/sym/component/cache/refresh");
   updated = true;
 }
-assert.equal(await request(`/sym/component?action=getSourceCode&tid=${tid}`), sourceCode);
-const rows = await request("/sym/component?action=list");
+assert.equal(await request(`/sym/component/manage?action=getSourceCode&tid=${tid}`), sourceCode);
+const rows = await request("/sym/component/manage?action=list");
 const runtime = rows.find((row) => row.name === "global-nav");
 assert.ok(runtime, "Global navigation missing from released component list");
 assert.equal(runtime.compileJs, compileJs);

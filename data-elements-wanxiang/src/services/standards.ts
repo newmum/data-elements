@@ -43,7 +43,7 @@ export function classesOf(value:unknown):Row[] {
 export async function standardChoices(signal?:AbortSignal) {
  const [classes,codes,types,rules]=await Promise.all([
   platformApi('/dwm/standard/standard-class-list',{}, {signal}),listCodes(signal),
-  platformApi<Row[]>('/sym/dict?code=colType',undefined,{signal}),platformApi<Row[]>('/dwm/quality/list',{}, {signal}),
+  platformApi<Row[]>('/sym/dict/query?code=colType',undefined,{signal}),platformApi<Row[]>('/dwm/quality/list',{}, {signal}),
  ]);
  if(!Array.isArray(types)||!Array.isArray(rules))throw new Error('标准表单选项返回格式不正确');
  return {classes:classesOf(classes),codes,types:types.map(r=>({value:string(r.value??r.dictCode),label:string(r.label??r.dictName)})),rules:rules.map(r=>({value:string(r.tid),label:string(r.ruleName)}))};

@@ -9,7 +9,9 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import cn.dev33.satoken.stp.StpUtil;
+import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.linewell.dataelement.dataassets.base.mapper.DataApplyFormTMapper;
 import com.linewell.dataelement.dataassets.base.service.IDataApplyFormTService;
 import com.linewell.dataelement.elasticsearch.EsCommonService;
 import com.linewell.dataelement.feature.approval.domain.ApprovalEngineModels.EngineInstance;
@@ -72,5 +74,25 @@ class ApprovalFlowAssociationTest {
         verify(associations).requireCompatible(business, "haoyueSubscription");
         verify(bridge).complete("haoyueSubscription", "form", 2);
         verifyNoInteractions(forms, search, delivery);
+    }
+
+    @Test void approvedCatalogApplicationStillTriggersDelivery() {
+        new MybatisConfiguration().addMapper(DataApplyFormTMapper.class);
+        var catalogApplication = new ApprovalBusinessAssociationService.Business(
+                "form", "tenant-a", "applyForm", "目录申请", "org-a", "owner", "owner", "catalogSubscribe");
+        when(associations.load("form")).thenReturn(catalogApplication);
+        ApprovalCallbackRequest request = new ApprovalCallbackRequest();
+        request.setBusinessId("form");
+        request.setApproveType("catalogSubscribe");
+        request.setHandleType("PASS");
+        request.setNextNodeCode("end");
+
+        assertThat(service.finshHandle(request)).isEqualTo(true);
+
+        verify(associations).requireCompatible(catalogApplication, "catalogSubscribe");
+        verify(forms).update(any());
+        verify(search).saveOrUpdate("dataassets_apply_form", "form", "{\"flowStatus\":2}", true);
+        verify(delivery).completeApprovedApplication("form");
+        verifyNoInteractions(bridge);
     }
 }

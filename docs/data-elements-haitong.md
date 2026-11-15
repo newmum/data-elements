@@ -86,7 +86,7 @@ pnpm run dev
 
 TXT 按带表头的分隔文本读取，自动识别制表符、逗号、分号、竖线，也可在“设置解析”中选择分隔符及 UTF-8 / GB18030 编码。JSON 必须使用 UTF-8，支持普通对象、对象数组及 `data`、`rows`、`list` 中单一记录数组；各记录字段取并集，缺失值留空，长整数与高精度数值按原始文本保留，嵌套对象或数组须先展开为普通字段。所有来源格式进入同一规范编辑、预览与上报流程，投递时统一生成单表 UTF-8 CSV，继续使用现有接收规则。
 
-上传原件使用既有文件API。`POST /dst/db/register` 用 `parse` 一次批量校验文件归属并识别区域，`list` 读取当前源配置，`save` 以版本和事务校验保存。新工作流提交 `workflowVersion:2` 和明确的 `normalizedTableKeys`，只有选定且检查通过的表才更新登记快照；浏览器提交的 `normalized` 不能授予通过状态，规范修改会使原批准失效，正在上报的表在处理结束前拒绝并发保存；成功后允许继续修改规范。成功回执保存registrationSnapshot元数据快照，旧成功回执在首次后续保存时从服务端原登记补齐，客户端不能伪造或覆盖回执及历史快照。通过状态及解析配置保存在现有 `pool_cfg.reportRegistration`，无表结构变更。20/100项的清单保存均为4次读取；快照导入另有4次SQL、一次索引准备和一次批量更新，不逐表exists或mapping补查。逐ID校验当前租户、数据源、文件及表关联，批量参数不能扩大访问范围。解析响应及登记JSON只保存来源和元数据，不包含业务数据单元格。CSV/TXT 使用服务器现有 CSV 库原生扫描，保留引号、多行值、空行及 UTF-8/GB18030 兼容，避免在脚本解释器中逐字符处理大文件。对象存储读取使用请求独立客户端，连接、无数据读取和单次调用分别限制为5、15和20秒；按实际字节数限制20 MiB并关闭流，超时返回待解析记录，提示通过“设置解析”重试。批量识别仍只发起一次接口调用，页面等待时间按文件数分配每份30秒预算、最多20份，避免20份文件共用单份文件的30秒截止时间。前端单文件上传上限仍为10 MiB；存储读取失败不能标记为识别或规范成功。
+上传原件使用既有文件API。`POST /dst/file/register` 用 `parse` 一次批量校验文件归属并识别区域，`list` 读取当前源配置，`save` 以版本和事务校验保存。新工作流提交 `workflowVersion:2` 和明确的 `normalizedTableKeys`，只有选定且检查通过的表才更新登记快照；浏览器提交的 `normalized` 不能授予通过状态，规范修改会使原批准失效，正在上报的表在处理结束前拒绝并发保存；成功后允许继续修改规范。成功回执保存registrationSnapshot元数据快照，旧成功回执在首次后续保存时从服务端原登记补齐，客户端不能伪造或覆盖回执及历史快照。通过状态及解析配置保存在现有 `pool_cfg.reportRegistration`，无表结构变更。20/100项的清单保存均为4次读取；快照导入另有4次SQL、一次索引准备和一次批量更新，不逐表exists或mapping补查。逐ID校验当前租户、数据源、文件及表关联，批量参数不能扩大访问范围。解析响应及登记JSON只保存来源和元数据，不包含业务数据单元格。CSV/TXT 使用服务器现有 CSV 库原生扫描，保留引号、多行值、空行及 UTF-8/GB18030 兼容，避免在脚本解释器中逐字符处理大文件。对象存储读取使用请求独立客户端，连接、无数据读取和单次调用分别限制为5、15和20秒；按实际字节数限制20 MiB并关闭流，超时返回待解析记录，提示通过“设置解析”重试。批量识别仍只发起一次接口调用，页面等待时间按文件数分配每份30秒预算、最多20份，避免20份文件共用单份文件的30秒截止时间。前端单文件上传上限仍为10 MiB；存储读取失败不能标记为识别或规范成功。
 
 上传失败反馈沿用源数据管理平台的结构化错误契约。HTTP 200 内的 `success:false`/失败 `code` 与 HTTP 4xx/5xx 都读取 `error.message/detail/code/traceId/type/method/path`；页面按文件列出失败原因，提供“查看详情”和“复制错误信息”。从异常链最后一个 `Caused by` 提取已返回的具体原因，完整异常仍可展开；不猜测服务端未返回的根因。网关返回 HTML 的 413 显示上传限制提示，不将其误报为 JSON 解析错误。展示和复制前隐藏可识别的口令、token、签名与认证头，不附带请求正文或文件内容。初始化、列表查询及提交错误使用同一详情入口。
 
@@ -94,10 +94,10 @@ TXT 按带表头的分隔文本读取，自动识别制表符、逗号、分号�
 
 原件全部上传失败时立即结束该次上传，不调用解析或清单保存，不新增无文件的“待解析”项，也不提示上传成功。部分成功时只将成功原件进入一次批量解析/保存，并显示成功和失败份数；会话失效或切换立即停止剩余上传。上传错误详情仅保留在当前页面内存，避免将异常堆栈写入数据源清单；重新上传后按当次结果更新。
 
-生产排查以 `POST /data/file?action=upload` 的完整 `error.detail` 或同一 `traceId` 的服务端异常为依据。`MAGIC-SCRIPT-001` 只是脚本异常包装，不能据此判断文件格式不支持。现行脚本先通过 `configData()` 读取 `minio_url/minio_user`，再调用后端 `systemConfig.legacyMinioPassword()` 读取 `data-element.legacy-integration.minio-password`（Nacos 使用环境变量 `NACOS_DATA_ELEMENT_LEGACY_INTEGRATION_MINIO_PASSWORD`），随后写 MinIO 并保存当前租户 `file_upload_t`。应按实际异常核对运行配置是否有效、对象存储网络/认证/存储桶写入权限、文件记录写入，以及 Magic 与后端模块版本是否匹配；不能把空凭据、脱敏占位符或其他环境配置覆盖到生产。生产不可访问且缺少具体异常时，只能确认失败阶段，不能宣称生产上传故障已经解决。
+生产排查以 `POST /dst/file/manage?action=upload` 的完整 `error.detail` 或同一 `traceId` 的服务端异常为依据。`MAGIC-SCRIPT-001` 只是脚本异常包装，不能据此判断文件格式不支持。现行脚本先通过 `configData()` 读取 `minio_url/minio_user`，再调用后端 `systemConfig.legacyMinioPassword()` 读取 `data-element.legacy-integration.minio-password`（Nacos 使用环境变量 `NACOS_DATA_ELEMENT_LEGACY_INTEGRATION_MINIO_PASSWORD`），随后写 MinIO 并保存当前租户 `file_upload_t`。应按实际异常核对运行配置是否有效、对象存储网络/认证/存储桶写入权限、文件记录写入，以及 Magic 与后端模块版本是否匹配；不能把空凭据、脱敏占位符或其他环境配置覆盖到生产。生产不可访问且缺少具体异常时，只能确认失败阶段，不能宣称生产上传故障已经解决。
 
 
-`POST /dst/db/submit` 接收规范化文件及 `datasourceId`、`tableId`、`fileId`、`requestId`，校验可信租户、文件/表/源关联及服务端规范通过标记；未通过时在任何投递或回执写入之前拒绝。通过后在事务内保留请求记录，调用既有 `FtpReportUploadService`，持久化真实结果。重复请求标识不重复投递；同一表和文件正在投递或已成功时，新请求标识也不会启动第二次投递；明确失败后可重试。服务解析当前行业 ODS 数据域 `FJGHCC` 的绑定，在目标配置的根目录下按“数据源ID/英文表名/”子目录投递到既有FTP/FTPS/SFTP目标，文件名为report_时间戳_随机码.csv。成功只代表该规范化文件已传入目标存储，后续目标系统是否解析入库需要其另行回执。凭据不返回浏览器，不把行数据写入 `test1` 作为成功依据。每源最多1000次回执，达到上限时明确拒绝并要求归档，不静默丢弃历史。
+`POST /dst/file/submit` 接收规范化文件及 `datasourceId`、`tableId`、`fileId`、`requestId`，校验可信租户、文件/表/源关联及服务端规范通过标记；未通过时在任何投递或回执写入之前拒绝。通过后在事务内保留请求记录，调用既有 `FtpReportUploadService`，持久化真实结果。重复请求标识不重复投递；同一表和文件正在投递或已成功时，新请求标识也不会启动第二次投递；明确失败后可重试。服务解析当前行业 ODS 数据域 `FJGHCC` 的绑定，在目标配置的根目录下按“数据源ID/英文表名/”子目录投递到既有FTP/FTPS/SFTP目标，文件名为report_时间戳_随机码.csv。成功只代表该规范化文件已传入目标存储，后续目标系统是否解析入库需要其另行回执。凭据不返回浏览器，不把行数据写入 `test1` 作为成功依据。每源最多1000次回执，达到上限时明确拒绝并要求归档，不静默丢弃历史。
 
 提交先锁定来源行并保存待投递回执，释放锁后调用传输服务，再重新加锁保存实际结果。最后一次写入只更新本次请求预留且仍处于待投递状态的回执，同时保留其他请求和无关表的最新配置。MagicScript 路由本身的首次投递和幂等重试分别执行 4 次和 3 次读取，传输组件的目标解析另计。
 
@@ -1581,7 +1581,7 @@ LIVE_BATCH在两次执行间被外部修改时不能强求旧结果，测试需�
 | [画布编辑器](../data-elements-haitong/src/nifi/panels/FieldMappingEditor.tsx:120) | 10个UI函数、条件配置、模板/预览/编译入口；1851附近为合成样例 |
 | [ODS模板工具](../data-elements-haitong/src/nifi/utils/fieldMapping.ts:24) | 系统主键生成模板，与编辑器另一模板存在差异 |
 | [映射服务](../data-elements-parent/src/main/java/com/linewell/dataelement/integration/nifi/canvas/mapping/FieldMappingService.java:763) | 编译分支、函数白名单、预览实现和全局策略差距；1536附近为51函数名单 |
-| [映射接口](../magic/api/10.海通流程接口/13.字段映射/03.查询字段映射能力.ms) | `/nifi/map` 的能力、校验、预览、推荐、编译、旧规则转换和兼容字典模板 |
+| [映射接口](../magic/api/09.海通流程接口/13.字段映射/03.查询字段映射能力.ms) | `/nifi/map` 的能力、校验、预览、推荐、编译、旧规则转换和兼容字典模板 |
 | [NiFi发布编译](../data-elements-parent/src/main/java/com/linewell/dataelement/integration/nifi/canvas/compile/DslCompiler.java:1866) | 单值/多值展开链、组件数量；2797附近为来源下推边界 |
 | [多值运行脚本](../data-elements-parent/src/main/resources/nifi/multi-value-translation.groovy:43) | 100记录、500键、重复键与部分命中语义 |
 | [多值脚本测试](../data-elements-parent/src/test/java/com/linewell/dataelement/integration/nifi/canvas/compile/RecordLookupScriptTest.java:25) | 20/100/201记录与元数据/查询次数断言；本次未执行 |
@@ -1592,8 +1592,8 @@ LIVE_BATCH在两次执行间被外部修改时不能强求旧结果，测试需�
 | [目标物化Magic](../magic/api/03.数据接入/12.目标数据/01.数据接入物化建表.ms:501) | fieldTransformBindings及目标列落位 |
 | [模板Magic](../magic/api/03.数据接入/12.目标数据/03.根据表或目录获取建表申请模板.ms:357) | 译名列、系统字段、来源类型和显式清空 |
 | [部署规则Binder](../data-elements-parent/src/main/java/com/linewell/dataelement/integration/nifi/canvas/mapping/AccessTaskFieldMappingBinder.java:62) | 补齐旧映射、默认策略和按目标列恢复的边界 |
-| [画布保存](../magic/api/10.海通流程接口/02.流程设计/08.保存流程.ms) | 在共享写锁和同一事务内校验设计版本、保存 DSL 及同步字段规则投影 |
-| [部署入口](../magic/api/10.海通流程接口/06.部署与启停/01.部署流程.ms)、[共用部署实现](../magic/function/01.通用函数/56.海通部署画布.ms) | 当前租户画布校验、队列检查、原生编译、候选切换和失败清理 |
+| [画布保存](../magic/api/09.海通流程接口/02.流程设计/08.保存流程.ms) | 在共享写锁和同一事务内校验设计版本、保存 DSL 及同步字段规则投影 |
+| [部署入口](../magic/api/09.海通流程接口/06.部署与启停/01.部署流程.ms)、[共用部署实现](../magic/function/01.通用函数/56.海通部署画布.ms) | 当前租户画布校验、队列检查、原生编译、候选切换和失败清理 |
 | [NiFi客户端](../data-elements-parent/src/main/java/com/linewell/dataelement/integration/nifi/canvas/nifi/NifiClient.java:706) | failure/retry自环、队列保护和简单类型匹配 |
 | [部署指纹](../data-elements-parent/src/main/java/com/linewell/dataelement/integration/nifi/canvas/pipeline/DslHasher.java:27) | 现有编译版本和DSL摘要机制 |
 | [任务映射实体](../data-elements-parent/src/main/java/com/linewell/dataelement/feature/dataaccess/infrastructure/persistence/entity/DataAccessFieldMapping.java:17) | 现有列与租户/版本字段 |
@@ -2890,7 +2890,7 @@ MySQL分页会将完整查询包进`SELECT COUNT(*) FROM (...) count_`，因此�
 | 能力 | 现有基础与确切缺口 | 建议的补充 |
 | --- | --- | --- |
 | 多表统一执行 | 已有两张租户内编组表、五个 Magic 接口，可对已有单表任务编组并查看各自状态。编组成员仍各有独立 NiFi 流程，没有组级统一启动、调度或一次事务的执行语义。 | 若业务确需统一执行，先定义组级调度、逐表运行记录、失败恢复和权限模型，再补真实编排服务；不能把管理编组当成单个多表 NiFi 流程。 |
-| 分发监控 | `data_distribution_task_t` 已有任务状态和进度；租户级只读分页 `/ods/dist/page` 和任务详情 `/ods/dist/detail` 已补，当前租户没有分发记录。现有 `/v1/dataassets/delivery/detail` 只按申请单返回本人明细，尚无完整 NiFi 执行关联或独立状态历史。 | 若分发由 NiFi 执行，为分发任务补充 `pipeline_id` 或独立的任务—流程关联结构，再增加真实运行记录/状态历史；不能从任务名称猜测 NiFi 关联。 |
+| 分发监控 | `data_distribution_task_t` 保存任务状态和进度。分发监控使用租户级只读分页 `/ods/dist/page` 和任务详情 `/ods/dist/detail`。任务与 NiFi 执行及独立状态历史的稳定关联仍待补充。 | 若分发由 NiFi 执行，为分发任务补充 `pipeline_id` 或独立的任务—流程关联结构，再增加真实运行记录/状态历史；不能从任务名称猜测 NiFi 关联。 |
 | 跨网传输 | 节点 `network_code` 与接入任务 `nifiNetworkCode` 只表达单侧网络，现有任务没有目标网络、发送批次、签收及目标写入确认。用户已确认目前**尚无**实际发送与回执服务；统一身份的 `idaas_receiver_receipt_t` 用途不同，不能复用为数据传输回执。 | 先建设或指定实际传输与回执服务，再定义租户内任务/批次/回执持久化契约，至少保存来源与目标网络、批次、发送状态、接收签收、目标写入确认及关联流程；之后用 Magic API 提供任务分页、批次详情和回执查询。 |
 | 即时账单核销 | 现有对账实例和脱敏差异可查询，但没有“预期交付—确认接收”的双边账单、人工核销及复核证据接口。 | 先确定账单与证据的持久化模型及不可覆盖的核销记录，再提供 Magic API 的账单分页/详情/核销/复核接口。当前页不允许伪核销。 |
 | 真正的自动批量建任务 | 持久作业、逐项结果、停止和重试已落地；页面不会自动循环调用单表接口。现有 `/ods/job/fill` 及其数据源配置、API 拉取和目标表结构帮助入口仍按单项读库或访问外部库，包装调用会造成 20/100 项请求及读查询线性增长。现有单表任务表也没有按活跃来源防并发重复创建的唯一约束。 | 按[批量确保改造设计](#guide-a328d01d)实现有界预取、共用纯生成器、新旧入口共享的并发防重和服务端批次执行，并用 20/100 项真实 SQL 计数与新旧 DSL 等价验收后才能开启自动执行。 |
@@ -2926,18 +2926,7 @@ Magic 接口和低代码只从根 `magic/`、`lowcode/` 的当前可维护源逐
 已在本地完成的画布修复、会话衔接和其他改动应逐项保留；核对时不得执行
 `git reset` 或用旧版源码整目录覆盖现有工作区。
 
-截至本次核对，原仓库该提交之后的 `0477279`（2026-09-29 17:44:05）和
-`fa76d2d`（2026-10-01 12:39:24）加入了结构化数据布控引擎相关逻辑，包括
-`structured-surveillance` 启动参数、Kafka 通道/资源桥接、按布控资源自动生成节点、
-资源专用流程选择和布控专用画布缩放/名称。这些功能**没有迁入**海通的
-`src/nifi/`，后续同步不得直接从原仓库当前 `master` 或 `origin/master` 覆盖。
-源数据管理平台的“结构化数据布控引擎”画布入口因此暂时停用，并显示未迁入提示；
-海通画布收到带 `engine` 的专用链接时拒绝按普通 NiFi 流程打开。
-
-后续若需移入原工程的某项修复，应先以该基线比较所选提交，逐项审查变更与海通已有的
-会话适配，再单独移植并验证。海通已实现的“等待登录 Token 再请求组件清单”等
-通用会话适配应保留；它不依赖布控引擎。集成任务列表展示的任务名称来自后端数据，
-出现“布控”字样不等于画布迁入了布控代码，也不应在前端擅自过滤该租户的任务。
+海通画布沿用该基线。第 98 批已退役共享后端的布控专用模板与组件。普通 Kafka 组件和画布会话继续使用当前接口，历史退役范围见[后端接手记录](data-elements-parent.md#backend-simplification-handoff)。
 
 <a id="guide-a328d01d"></a>
 

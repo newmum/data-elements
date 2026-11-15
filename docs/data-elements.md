@@ -248,19 +248,19 @@ mysql --host=127.0.0.1 --port=3306 --user=DBA_USER --password --default-characte
 | 角色 | 实际数据库 | 方言 | 表数量 |
 | --- | --- | --- | ---: |
 | 控制库 | `baseline` | MySQL | 55 |
-| 公安 | `baseline_ga` | MySQL | 219 |
-| 澄天 | `baseline_ct`，schema `public` | 人大金仓 KingbaseES | 176 |
-| 海渔 | `baseline_sea_fishery` | MySQL | 219 |
-| 广电 | `baseline_beijing_gd`，运行配置绑定 `BASELINE_BEIJING_GD` | 达梦 | 219 |
+| 公安 | `baseline_ga` | MySQL | 206 |
+| 澄天 | `baseline_ct`，schema `public` | 人大金仓 KingbaseES | 163 |
+| 海渔 | `baseline_sea_fishery` | MySQL | 206 |
+| 广电 | `baseline_beijing_gd`，运行配置绑定 `BASELINE_BEIJING_GD` | 达梦 | 206 |
 | 海通数据推送服务（独立工程） | `haitong` | MySQL | 15 |
 
 `haitong-data-pull` 对应的独立库完整结构为 [haitong/init.sql](../db/haitong/init.sql)，已通过真实 MySQL 的 `SHOW CREATE` 导出：15 张表、51 个索引（含主键及唯一索引）、5 个外键，没有视图、触发器、例程或事件。它不属于四行业同构基线。历史工程内 `sql/` 已整合移除，后续只在本目录更新完整定义；对账查询归入[海通推送服务文档](haitong-data-pull.md#reconciliation-queries)。
 
 原有达梦适配定义保存在 [haitong/compatibility/dameng.sql](../db/haitong/compatibility/dameng.sql)，明确标记为未连接实库核验的 9 表模板，缺少 MySQL 中的推送凭据和 Magic 资源表；不能作为当前 15 表结构、完整兼容承诺或已有库升级脚本。应用打包使用的 H2 本地初始化资源继续保留在应用 `src/main/resources/db/h2.sql`，不作为生产 MySQL 基线。
 
-**当前实测（86 日志参数快照批次）**：上表行业数量来自本批五库完整导出，见[结构清单](../db/schema-manifest.json)及[原生验证报告](../logs/audit-parameters/native-86/result.json)。[全库结构检查](../tools/check-db.py)仍失败：澄天缺 43 张表、9 列及 1 项索引差异，共 53 项；DDL 前后报告相同，本批新增差异为 0，其余三行业差异为 0。导出成功仅表示如实保存各库现状，**不表示四库结构一致**。缺失仍是未解决项，不作为正常方言差异跳过，也不在本批进行全库修复。
+**当前实测（第 99 批）**：86 的四个行业库各移除 13 张布控专用表及其索引。控制库与行业库完整导出见[结构清单](../db/schema-manifest.json)。[全库结构检查](../tools/check-db.py)在执行前后均报告澄天缺 43 张表、9 列和 1 个索引差异。其余三行业结果为零差异。公安历史记录和各库原生恢复定义已存入受限备份。已有库按 [MySQL 增量](../db/increments/000010_retire_surveillance_tables.mysql.sql)、[达梦增量](../db/increments/000010_retire_surveillance_tables.dameng.sql)和 [金仓增量](../db/increments/000010_retire_surveillance_tables.kingbase.sql)核对绑定及依赖后执行。
 
-86 的 `da_asset_t` 兼容视图已在公安、海渔和广电退役，澄天金仓原无此对象。三库各保留 219 张表和 4 个业务视图，`da_catalog_t` 的列与全量数据指纹一致。五库重新导出后，完整定义只移除这三个视图。结构比较的澄天 53 项既有差异仍记录在案。已有库分别按 [MySQL 增量](../db/increments/000009_retire_legacy_asset_view.mysql.sql) 和 [达梦增量](../db/increments/000009_retire_legacy_asset_view.dameng.sql) 的前置核对和恢复要求升级，具体部署目标以实际绑定为准。
+86 的 `da_asset_t` 兼容视图已在公安、海渔和广电退役，澄天金仓原无此对象。该批验收时三库各为 219 张表和 4 个业务视图，`da_catalog_t` 的列与全量数据指纹一致。五库重新导出后，完整定义只移除这三个视图。结构比较的澄天 53 项既有差异仍记录在案。已有库分别按 [MySQL 增量](../db/increments/000009_retire_legacy_asset_view.mysql.sql) 和 [达梦增量](../db/increments/000009_retire_legacy_asset_view.dameng.sql) 的前置核对和恢复要求升级，具体部署目标以实际绑定为准。
 
 14 公网演示环境使用四个 `baseline_demo_*` 库，目录数据保存在 `da_catalog_t`。本轮后端精简的验证目标是本机 8088 连接的 86 开发环境，见 [后端接手记录](data-elements-parent.md#backend-simplification-handoff)。
 
@@ -310,7 +310,7 @@ mysql --host=127.0.0.1 --port=3306 --user=DBA_USER --password --default-characte
 
 达梦初始化使用原生 DDL，保留实际引号标识符、大小写、MAIN 表空间及存储属性。由已有权限的 DBA 在兼容设置一致的环境初始化；本目录不创建数据库用户。JSON/长文本映射为原生长文本，无符号整数按范围表示，自动更新时间使用原生触发器；目前有 20 个自动更新时间触发器。
 
-登录名字段为 `VARCHAR(50)`，有效登录名生成规则为 `CASE WHEN deleted=0 THEN lower(trim(user_name)) ELSE NULL END`，联合唯一约束为租户 ID 与有效登录名。达梦以虚拟列/函数索引表达；其系统索引元数据会展开依赖列，因此校验使用实际索引 DDL 核对逻辑列。布控连接引用生成列采用同一JSON路径与回退常量；达梦将COALESCE展开为CASE，结构检查逐路径、逐分支和回退值比较。标识值的MySQL前缀索引在达梦以SUBSTR(列,1,128)函数索引表达，检查保留前缀长度、列序和排序方向。
+登录名字段为 `VARCHAR(50)`，有效登录名生成规则为 `CASE WHEN deleted=0 THEN lower(trim(user_name)) ELSE NULL END`，联合唯一约束为租户 ID 与有效登录名。达梦以虚拟列/函数索引表达；其系统索引元数据会展开依赖列，因此校验使用实际索引 DDL 核对逻辑列。
 
 以下是明确的方言表示，初始化文件保存各库真实结构：
 
@@ -326,7 +326,7 @@ mysql --host=127.0.0.1 --port=3306 --user=DBA_USER --password --default-characte
 
 本机澄天使用 KingbaseES V008R006C008B0014 的 Oracle 兼容实例，独立数据库 `baseline_ct` 以 UTF8 创建，表统一放在 `public`，应用标识符统一为小写。数据库与 schema 分别承担租户物理边界和库内对象命名空间，不再额外创建与库同名的 schema。JDBC 使用 `com.kingbase8.Driver`，显式选择 `currentSchema=public`，每条应用连接设置 `ora_input_emptystr_isnull=off`，保留原业务空字符串与 NULL 的区别；不改变服务器全局兼容模式。
 
-原 MySQL JSON 使用金仓原生 JSON；无符号整数使用足够范围的原生整数/NUMERIC，并保留上下界 CHECK；生成列保留实际表达式；20 个自动更新时间规则以原生触发器表达。外键引用的既有唯一索引绑定为原生 UNIQUE 约束，保留原列序及更新/删除行为。原生导出包含 176 张表、624 个索引、2 个外键、20 个触发器和 49 个函数，不导出数据库扩展自身的对象。
+原 MySQL JSON 使用金仓原生 JSON；无符号整数使用足够范围的原生整数/NUMERIC，并保留上下界 CHECK；生成列保留实际表达式；20 个自动更新时间规则以原生触发器表达。外键引用的既有唯一索引绑定为原生 UNIQUE 约束，保留原列序及更新/删除行为。第 99 批原生导出包含 163 张表、589 个索引、2 个外键、20 个触发器、49 个函数，不导出数据库扩展自身的对象。
 
 `KingbaseSqlFilter` 安装在明确配置为金仓的租户或控制库连接池，处理反引号标识符、schema 元数据查询、SIGNED 转型、JSON_TABLE 和已审阅的原子 UPSERT；JSON_TABLE 改为原生 LATERAL 查询并保持绑定参数个数。金仓控制库的任务状态与推送调用方登记分别使用已审阅的唯一键适配 UPSERT。执行 JSON 兼容 SQL 的数据库须具备相应辅助函数；未审阅 UPSERT 表拒绝执行，不能推测唯一键。MySQL 及达梦连接不安装该过滤器。共享 Magic/低代码源码保持同一份，不复制成金仓专用资源。
 
@@ -495,13 +495,13 @@ Magic 资源可先导出当前启用脚本，再用静态扫描寻找循环内�
 
 数源层详情与分层公共入口共用 `/dst/db/tblpage`。接口从当前认证租户的有效数据表和数据源中先选每个物理表的代表记录，再按调用方传入的来源、目录、组织、状态和关键词筛选。关键字按字面匹配，排序值相同时按记录 ID 排列，由数据库完成分页。目录排序取注释前 512 字符的回退键，表名显示排序按完整注释回退。旧 `/dst/db/tbllist` 保留原列表形状；各分层入口继续使用自己的筛选和回退规则。
 
-两层工具栏的「新建目录」使用侧栏同一个字典目录表单，新增时以当前选中的有效分类为父级。侧栏根节点的新增入口以根分类为父级。缺少有效父级时禁用新增，表单保存沿用 `/sym/dictSaveOrUpdate` 的租户上下文。
+两层工具栏的「新建目录」使用侧栏同一个字典目录表单，新增时以当前选中的有效分类为父级。侧栏根节点的新增入口以根分类为父级。缺少有效父级时禁用新增，表单通过 `POST /sym/dict/save` 在当前租户保存。
 
 万象数据质量的模板、SQL条件边界、任务快照、分页与执行契约见[万象数据质量模板与执行](data-elements-wanxiang.md#quality-templates)。新增模板沿用现有质量规则表，管理与选择编排保留在Magic，不新增等价业务主表或执行引擎。
 
 四个前端独立安装和发布。涉及相同业务能力时复用当前后端、公共 Magic 契约、权威表及租户边界，不能复制业务主表或等价后端；不因这个要求强制抽取会话桥、导航、图标等共同前端包。运行配置中的能力入口若跳转到其他独立应用，应保持对象 ID 和当前认证租户上下文；同页跳转，URL 不携带 token/密码，生产地址从环境配置取得。认证或 API 失败不得默默退回 mock 数据。
 
-数仓分层/分域共用低代码组件 `data-warehouse` 和 `/register/zl-sjzz/list`，契约为 `GET /dwm/center/layer-list`、`POST /dwm/center/datasource-options`、`POST /dwm/center/node/save`、`GET /sym/dict?code=dataSourceType`、`POST /sym/dictSaveOrUpdate` 和 `/portal/sso/session`。层与逻辑域使用租户 `sym_dict_t`，绑定使用 `dwm_center_layer_source_t`，数据源主表为 `db_datasource_t`。这里的“分库”指逻辑分域，不能执行物理 CREATE DATABASE；无字典 ID 的 DST 组织汇总不作为可编辑分域。绑定将节点类型标为数据中心，不搬移物理数据，解绑不自动恢复历史节点类型。绑定成功不能充当真实连接测试，构建成功不能充当部署完成。
+数仓分层/分域共用低代码组件 `data-warehouse` 和 `/register/zl-sjzz/list`，契约为 `GET /dwm/center/layer-list`、`POST /dwm/center/datasource-options`、`POST /dwm/center/node/save`、`GET /sym/dict/query?code=dataSourceType`、`POST /sym/dict/save` 和 `/portal/sso/session`。层与逻辑域使用租户 `sym_dict_t`，绑定使用 `dwm_center_layer_source_t`，数据源主表为 `db_datasource_t`。这里的“分库”指逻辑分域，不能执行物理 CREATE DATABASE；无字典 ID 的 DST 组织汇总不作为可编辑分域。绑定将节点类型标为数据中心，不搬移物理数据，解绑不自动恢复历史节点类型。绑定成功不能充当真实连接测试，构建成功不能充当部署完成。
 
 整层维护向 `/dwm/center/node/save` 一次提交 `layerId`、分层名称、关联数据源及分域列表。每个分域提供现有 ID、名称、编码、排序和关联数据源。接口最多接收 500 个分域和 500 个不同数据源，先校验租户、字典父子关系、同级编码和数据源有效性，再在同一事务写入字典、绑定及数据源标记。空数据源表示解绑，未提交的分域保留原配置。旧单节点和整层关联参数继续可用。重新绑定可以复用已解绑记录。历史上同时有活动绑定与已解绑记录的节点，再次解绑会返回冲突并回滚整次保存。
 
@@ -572,7 +572,7 @@ When testing locally, try the frontend proxy path first if the page uses `dev-ap
 ### Low-Code Runtime Publishing and Registration Modal Rules
 
 - Treat `baseline.ui_component_t.compile_js` and `compile_css` as the released runtime artifacts. Saving only `source_code` does not fix a browser page.
-- Before accepting a low-code fix, inspect the target component through `POST /sym/component?action=list`. Its compiled JS must be non-empty and, for an SFC compiled by this project, contain a factory that ends by returning the component (normally `return __sfc__`).
+- Before accepting a low-code fix, inspect the target component through `POST /sym/component/manage?action=list`. The compiled JS for an SFC contains a factory that returns the component, normally `return __sfc__`.
 - A registration dialog whose header, steps, and bottom actions render while one step is blank usually means that the dynamic step component's compiled artifact is stale or invalid. Inspect that named component directly; do not diagnose it only from the parent wrapper or static frontend source.
 - First reconcile the local `lowcode/` source with the current control-database source; compile the confirmed local source and save source + compiled JS + compiled CSS together through `action=saveCode`, then call `/sym/component/cache/refresh`. Verify the refreshed component again through the list endpoint. Do not overwrite newer database source with an old local copy; compare source hashes before publication.
 - The component-cache refresh must be usable by ordinary authorized users; do not add a separate platform-administrator gate to `/sym/component/cache/refresh` unless a future explicit authorization model requires it.
@@ -596,8 +596,8 @@ The frontend uses `@form-create/element-ui` to render configurable business form
 - The form-configuration page is the released low-code component named `form-config`, available at `/setting/form-config`. It lists, edits, previews, creates, renames, and soft-deletes form definitions for the active environment.
 - Dynamic form definitions are stored in **each selected tenant's business database**, in `sym_form`; they are not stored in `baseline.ui_component_t`, `baseline.api_file_t`, or another control-plane table. Resolve and record the active tenant/database before inspecting or changing a form.
 - `sym_form` fields are: `tid`, `form_name`, `form_json`, `form_config`, `env`, `created_time`, `updated_time`, `is_del`, and `tenant_id`. `form_json` and `env` are required; deletion is logical (`is_del=1`). The delivered schema has no physical uniqueness key for `(form_name, env)`, so preserve the application's duplicate check and audit for duplicates when directly repairing data.
-- All form read/write/delete requests use `POST /sym/form?action=get|save|delete`. The Magic resource is `/magic-api/api/07.系统管理/09.动态表单/01.动态表单配置.ms`; it delegates to the backend `tenantForm` Magic module.
-- The backend module `TenantFormMagicModule` obtains the database only from `TenantContext.requireTenantId()` and `TenantDataSourceRegistry.dataSourceForTenant(...)`. Never add a request `tenantId`, route/query tenant value, form record's historic `tenant_id`, or browser-selected value as an alternate source of business-data ownership. A missing tenant context must fail closed.
+- 表单查询、保存和删除使用 `POST /sym/form/config?action=get|save|delete` 下的同一 Magic 入口。表单规则和结构化读写位于 `magic/api/07.系统管理/09.动态表单/01.动态表单配置.ms`。
+- 入口由 `tenantRuntime.id()` 取得认证租户，使用该数据源并按行校验 `tenant_id`。已删除记录和外租户标识无法经此入口读写。缺少认证租户时拒绝请求。
 - `tenant_id` is recorded from the active server-side tenant when a row is inserted. Do not let the client choose it. Preserve the current tenant's data-source routing even if the physical schema also contains `tenant_id`.
 
 
@@ -634,7 +634,7 @@ The frontend uses `@form-create/element-ui` to render configurable business form
 1. Identify the target form name, `env`, active tenant, and tenant database. Query only the tenant `sym_form` row(s), including `tid`, `form_json`, `form_config`, `is_del`, and timestamps; do not confuse it with the shared `form-config` page source in `baseline.ui_component_t`.
 2. Back up the exact form record before a persistent tenant-database change. For page code changes, first compare the current `form-config` runtime source/artifacts against its canonical `lowcode/` file and reconcile any changes according to the local-first publishing workflow.
 3. Keep the existing storage format for the selected form. Verify that every form-create `type` is registered/importable in the runtime, custom effect names exist in `formCreate.ts`, each persisted data field is unique, and rule references/slots still match the consuming page.
-4. Test with a real authenticated session in the intended tenant: load `POST /sym/form?action=get` with the target `env`, render the actual consuming page, populate values, validate required fields, verify preview/read-only behavior when applicable, and inspect the API payload (including `baseData`/`dynamicData` where used). Repeat after switching to another tenant to prove definitions neither leak nor overwrite across tenant databases.
+4. Test with a real authenticated session in the intended tenant: load `POST /sym/form/config?action=get` with the target `env`, render the actual consuming page, populate values, validate required fields, verify preview/read-only behavior when applicable, and inspect the API payload (including `baseData`/`dynamicData` where used). Repeat after switching to another tenant to prove definitions neither leak nor overwrite across tenant databases.
 5. If the changed artifact is the shared `/setting/form-config` UI itself, publish `source_code`, `compile_js`, and `compile_css` together to `baseline.ui_component_t`, invoke `/sym/component/cache/refresh`, and re-open the page. A `sym_form` data-only update does not require component-cache refresh or a backend restart.
 
 
@@ -660,7 +660,7 @@ The frontend uses `@form-create/element-ui` to render configurable business form
 - The `是否可连通` field binds to `connectionStatus` / `connection_status`, is display-only in the detail form, and its result may be updated only by an actual connection test or the deliberate removal of connection information. Enforce this in the save API as well as by disabling the form control.
 - Before changing a detail page, audit the complete runtime path: the consuming component, `base-detail`, `json-form`, all custom rule components, and the selected tenant's `sym_form` row. Move any discovered page-specific visual element or behavior into the applicable form configuration, unless it is a truly generic renderer capability or an authorization/data-integrity rule that must stay server-side.
 - Saving the authoritative tenant database record must complete before success is returned. Non-authoritative search/index projection is best effort and must not hold the edit dialog open: request `deferIndexRefresh` for database-detail saves, return `indexRefreshPending: true` from the save API when accepted, then schedule `/dst/maintenance/refresh` after the UI has returned to view mode. Preserve error logging and reconciliation capability; a background index failure must not make a successfully persisted form save appear to fail.
-- Validate a dynamic-detail change in an authenticated intended tenant: confirm `/sym/form?action=get` returns the configured actions/options, verify no duplicate hardcoded buttons/options remain, open edit mode, check type icons in both selector and read-only display, save a representative record, and measure that user-visible completion no longer waits on search-index refresh. Repeat against a second tenant where that form exists to prove tenant isolation.
+- Validate a dynamic-detail change in an authenticated intended tenant: confirm `/sym/form/config?action=get` returns the configured actions/options, verify no duplicate hardcoded buttons/options remain, open edit mode, check type icons in both selector and read-only display, save a representative record, and measure that user-visible completion no longer waits on search-index refresh. Repeat against a second tenant where that form exists to prove tenant isolation.
 
 
 <a id="lowcode-magic--data-access-page-interaction-and-responsive-layout-rules"></a>
@@ -747,7 +747,7 @@ Use the released `my-db` page at `/register/register-sjkb/list` as the default v
 ### Magic API 目录组织
 
 - 现有对外路由按以下旧前缀盘点。路由改造按新的业务分组逐批切换，旧前缀作为实际调用和回退的核查基线。
-  - `/dst`: data inventory. Its direct children are `/application`, `/db`, and `/catalog`.
+  - `/dst` 管理数据盘点，包含库表资源 `/db`、文件操作 `/file` 和数据目录 `/catalog` 等叶组。
   - `/ods`: data access, ETL, and NiFi orchestration.
   - `/dwm`: data governance.
   - `/dws`: data services and cloud-gateway operations.
@@ -759,7 +759,10 @@ Use the released `my-db` page at `/register/register-sjkb/list` as the default v
 - 同级分组、接口、函数和任务各自从 `01.` 连续编号，同一序列无缺号、重号或未编号资源。移动、退役或新增后核对所涉同级序列。文件和分组名称与在线编辑器的显示名称一致。
 - 路由改造先制定分组路径。每个分组和 API 的 `path` 各提供一个有名字的 URL 段，用简短的小写英文单词或通用缩写，避免用连字符拼接长词组。门户登录由 `/portal`、`/sso`、`/login` 三段组成。按照业务对象、页面职责或协议边界设置叶组，规模较大的叶组按可说明的职责继续划分。
 - 编号和文件名只控制显示顺序。先列出旧、新的完整 HTTP 方法、路由、参数和资源 ID，核对所有实际调用。在改址同批更新真实前端、Magic 导入、Java 调用及权限、低代码源码及编译产物、配置、任务、Mock 契约和已知外部回调，演练恢复并验证切换。合并 GET 与 HEAD 前核对当前框架的隐式 HEAD、认证、状态、响应头及无响应体契约。
-- 现有 `properties.leafRoute` 是原尾斜杠兼容标记。迁移对应接口时改用有名字的单段 API 路径，并同步现役调用方。编辑器回读、真实 HTTP 及冷启动用于验证资源和调用切换。
+- 独立海通旧资源中的 `properties.leafRoute` 是原尾斜杠兼容标记。迁移对应接口时改用有名字的单段 API 路径，并同步现役调用方。编辑器回读、真实 HTTP 及冷启动用于验证资源和调用切换。
+- 系统管理的 `/sym/dict` 叶组提供 `GET /query`、`POST /tree`、`POST /save` 和 `POST /sort`。字典保存和排序以认证租户中的有效字典项为边界，保存时校验普通父节点的租户归属。
+- 系统管理的组件和动态表单使用 `POST /sym/component/manage` 与 `POST /sym/form/config`。两项入口通过 `action` 选择各自的业务操作，组件缓存刷新使用 `/sym/component/cache/refresh`。
+- 业务附件与上报位于 `02.数据盘点/03.文件操作`。在 `/dst/file` 下，`POST /manage` 操作附件，`GET /download` 读取二进制，`POST /snapshot` 维护非结构化文件登记快照，`POST /register` 处理数据上报登记、历史和回执，`POST /submit` 提交规范化文件。Web 层在会话校验前将已保存的 `GET /data/download?fileId=…` 映射到同一 Magic 下载入口，保留查询参数及文件归属校验。
 - Direct database moves must preserve the complete resource tree:
   - Every group has one `group.json`.
   - Every physical folder has one active directory row ending in `/` with `file_content='this is directory'`.
@@ -771,10 +774,10 @@ Use the released `my-db` page at `/register/register-sjkb/list` as the default v
 - Shared inventory aggregations such as `/dst/statistics/common` belong in the dedicated `02.数据盘点/05.盘点统计` group. Do not move a shared endpoint into one page domain merely because one caller is being debugged; verify every low-code caller first.
 - 系统门户 Magic 资源位于 `01.系统门户`，门户首页为 `GET /portal/main/index`，本人改密为 `POST /portal/profile/password`。
 - `/portal/sso` 管理登录和会话。`POST /login` 和 `POST /logout` 分别登录和登出，`GET /ticket` 签发票据，`GET /redeem` 兑换票据或授权码。`GET /options` 和 `GET /settings` 提供登录选项与设置。`GET /session`、`GET /tenants` 和 `POST /switch` 校验已登录会话和租户成员关系。登录继续使用 SM3 入参。
-- 数据库资源 Magic API 位于 `02.数据盘点/02.数据库资源`，完整前缀为 `/dst/db`。两层叶目录内按数据源、库结构、登记表、字段、数据行、文件和上报顺序编号。数据源卡片及展开表格用 `POST /dst/db/dept` 的 `cards`、`tables` 模式，字段列表为 `GET /dst/db/fields`，分页预览为 `POST /dst/db/preview`，上报登记为 `POST /dst/db/register`。
+- 库表资源 Magic API 位于 `02.数据盘点/02.库表资源`，完整前缀为 `/dst/db`。叶组按数据源、库结构、登记表、字段和数据行编号。数据源卡片及展开表格用 `POST /dst/db/dept` 的 `cards`、`tables` 模式，字段列表为 `GET /dst/db/fields`，分页预览为 `POST /dst/db/preview`。
 - `04.数据治理/03.资源中心/14.资源操作` 使用 `POST /dwm/center/command`，供万象目录编目、资源表格和共享低代码资产中心查询与操作资源。
 - 数据接入业务 Magic API 位于 `03.数据接入`，根路径为 `/ods`。任务分页为 `POST /ods/job/page`，多表编组分页为 `POST /ods/multi/page`，汇聚与分发分页分别为 `POST /ods/ingest/page` 和 `POST /ods/dist/page`，即时对账实例分页为 `POST /ods/recon/page`，ETL 分组树为 `GET /ods/job/groups`。完整叶组按同步节点、服务节点、接入任务、字段映射、任务监控、多表编组、接入登记、对账策略、对账执行、分发、汇聚、目标数据和 API 拉取组织。
-- 共享海通流程的 Magic 业务 API 位于 `10.海通流程接口`，根路径为 `/nifi`。流程设计与模板使用 `/flow`、`/canvas`，接入链路使用 `/chain`，运行状态、部署、流程组、节点及错误公告分别使用 `/run`、`/life`、`/group`、`/node`、`/event`。组件清单用 `/catalog`，字段映射按计划 `/plan`、模板 `/template`、字典 `/dict`、编辑规则 `/map`、运行版本 `/maprun` 组织。流程、组件或节点标识以查询参数传递，例如 `GET /nifi/flow/detail?id=<流程ID>`。
+- 共享海通流程的 Magic 业务 API 位于 `09.海通流程接口`，根路径为 `/nifi`。流程设计与模板使用 `/flow`、`/canvas`，接入链路使用 `/chain`，运行状态、部署、流程组、节点及错误公告分别使用 `/run`、`/life`、`/group`、`/node`、`/event`。组件清单用 `/catalog`，字段映射按计划 `/plan`、模板 `/template`、字典 `/dict`、编辑规则 `/map`、运行版本 `/maprun` 组织。流程、组件或节点标识以查询参数传递，例如 `GET /nifi/flow/detail?id=<流程ID>`。
 - `15.连接探查` 下的连接测试、字段探查和表探查沿用海通画布的 `/nifi/api/connection-test`、`/nifi/api/columns-probe`、`/nifi/api/tables-probe`。Magic 负责校验和当前租户的 Hive 登记配置，Java 负责协议连接与诊断。数据源登记的 `/dst/db/srctest` 复用其中的连接探查能力。
 - Data-application Magic resources belong under `06.数据应用` and use `/das` as the public root. Do not retain `/workshop` calls in low-code source/compiled JS or any frontend project.
 - 应用仓库按应用管理 `/das/app`、应用图标 `/das/icon` 和应用页签 `/das/tab` 归类。应用和页签分页使用 `POST /das/app/page`、`POST /das/tab/page`。取应用详情使用 `POST /das/app/detail`，澄天编辑器向 `POST /das/tab/bind` 绑定页面，通过 `POST /das/tab/thumb` 保存缩略图。
@@ -798,7 +801,7 @@ Use the released `my-db` page at `/register/register-sjkb/list` as the default v
 
 ### Magic API Metadata Management
 
-- The Magic API folder `/magic-api/api/02.数据盘点/02.数据库资源/` contains metadata operations that were formerly implemented in Java. Do not assume an interface is unused just because the current script is empty, `null`, or only calls `MetadataAssetService`.
+- The Magic API folder `/magic-api/api/02.数据盘点/02.库表资源/` contains metadata operations that were formerly implemented in Java. Do not assume an interface is unused just because the current script is empty, `null`, or only calls `MetadataAssetService`.
 - For 06 metadata interfaces, classify each file before deleting or rewriting:
   - **Useful and implemented**: keep, verify with an authenticated HTTP request, and preserve route compatibility.
   - **Useful but only a Java wrapper/empty shell**: implement the Magic script instead of deleting it.
@@ -1205,7 +1208,7 @@ SFTP 验证来源为演示服务器端口 22 下的独立模拟文件目录 `/ho
 
 **当前通用安全参数快照与关键词链路已在已授权的本机 86 环境发布并验证。** 本机后端已换包重启，所选 31 个 class 字节与当前 Maven classes 全部相等；所选日志 Magic 与唯一 `log-management` 组件已发布，组件两级缓存刷新及运行回读完成，新增函数冷加载时脚本存在，所选资源无未发布差异。该结论仅限本机 86，不代表 14 演示或生产已升级，也不代表全仓门禁通过。
 
-86 当前实测控制库为 55 张表，公安、海渔、广电各 219 张，澄天 176 张。全库检查仍有澄天既有 53 项差异（缺 43 表、9 列、1 项索引），本批前后未变；不能沿用“四行业 176 表且完全一致”的历史结论，详见[当前数据库与统一结构](#database-schema--当前数据库与统一结构)。演示、生产、控制库及 IDAAS 不在本批 DDL 范围。
+该批实测控制库为 55 张表，公安、海渔、广电各 219 张，澄天 176 张。全库检查仍有澄天既有 53 项差异（缺 43 表、9 列、1 项索引），本批前后未变；不能沿用“四行业 176 表且完全一致”的历史结论，详见[当前数据库与统一结构](#database-schema--当前数据库与统一结构)。演示、生产、控制库及 IDAAS 不在本批 DDL 范围。
 
 日志管理保留唯一共享组件，原八个入口／统计组件经引用核查后软删除，编辑器历史保留。行业日志菜单沿用各库有效根节点及角色范围，不复用停用菜单。共享页面不改变 IDAAS 身份域、参数能力或现有角色授权。
 
@@ -1969,8 +1972,8 @@ token、password 等历史列应先确认写入点、读取点、备份与外部
 | magic/api/01.系统门户/03.系统登出/01.系统登出.ms | 当前退出实际逻辑与历史分支 |
 | magic/function/13.统一身份管理/03.记录脱敏审计.ms | 中央审计字段与当前 trace 生成方式 |
 | magic/function/13.统一身份管理/09.接口访问与审计封装.ms | API 包装、最终结果及补充更新方式 |
-| magic/api/09.统一身份管理/10.审计查询/01.分页查询审计记录.ms | 当前查询、人员关联与分页排序 |
-| magic/api/09.统一身份管理/01.认证会话/01.登录管理控制台.ms | 当前密码认证、MFA 与成功事件时序 |
+| magic/api/08.统一身份管理/10.审计查询/01.分页查询审计记录.ms | 当前查询、人员关联与分页排序 |
+| magic/api/08.统一身份管理/01.认证会话/01.登录管理控制台.ms | 当前密码认证、MFA 与成功事件时序 |
 | shared/error 与 platform/web/error | 当前错误编号、错误返回及诊断接入 |
 | feature/diagnostics/DiagnosticStore.java | Redis 用户及租户隔离的临时排错会话 |
 | src/main/resources/logback.xml | 文件阈值、滚动、容量与保留配置 |

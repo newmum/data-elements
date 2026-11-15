@@ -437,7 +437,7 @@ const formRules = {
 // ─── 加载父节点选项 ───────────────────────────────────────────────────────────
 const loadParentOptions = async () => {
   try {
-    const data = await $common.get("/sym/dict", { code: "broadcast_root" });
+    const data = await $common.get("/sym/dict/query", { code: "broadcast_root" });
     parentOptions.value = data || [];
   } catch (error) {
     console.error("加载父节点选项失败:", error);
@@ -469,7 +469,7 @@ const callDragSort = (
   params: DictDragSortParams,
   options?: { refreshTree?: boolean; refreshTable?: boolean }
 ) => {
-  $common.post("/sym/dictDragSort", params).then(() => {
+  $common.post("/sym/dict/sort", params).then(() => {
     $message.success("排序已更新");
     if (options?.refreshTree) handleAction("initTree");
     if (options?.refreshTable && state.selectedNode) handleAction("nodeClick", state.selectedNode);
@@ -529,7 +529,7 @@ const filterTable = () => {
   const kw = state.tableKeyword.toLowerCase();
   state.loading = true;
   $common
-    .post("/sym/getDict", { parentId: state.selectedNode.tid, dictName: kw })
+    .post("/sym/dict/tree", { parentId: state.selectedNode.tid, dictName: kw })
     .then((data: DictItem[]) => {
       state.tableData = data || [];
     })
@@ -591,8 +591,8 @@ const handleAction = (type: string, item?: DictTreeNode | DictItem | null) => {
       // 加载左侧字典列表：仅二级字典类型，同时统计子项数量
       state.treeLoading = true;
       Promise.all([
-        $common.post("/sym/getDict", { levelNo: 2, showRow: true }),
-        $common.post("/sym/getDict"), // 不限制层级，获取所有字典项
+        $common.post("/sym/dict/tree", { levelNo: 2, showRow: true }),
+        $common.post("/sym/dict/tree"), // 不限制层级，获取所有字典项
       ])
         .then(([level2Data, allItems]: [DictItem[], DictItem[]]) => {
           // 递归统计所有层级子节点数量
@@ -641,7 +641,7 @@ const handleAction = (type: string, item?: DictTreeNode | DictItem | null) => {
       // 加载该字典类型下所有子项
       state.loading = true;
       $common
-        .post("/sym/getDict", { dictCode: item.dictCode, showRow: true,...dictionaryOrder.value })
+        .post("/sym/dict/tree", { dictCode: item.dictCode, showRow: true,...dictionaryOrder.value })
         .then((data: DictItem[]) => {
           // 接口返回扁平列表，vxe-table treeConfig.transform:true 根据 parentId 自动构建树
           state.tableData = data || [];
@@ -680,7 +680,7 @@ const handleAction = (type: string, item?: DictTreeNode | DictItem | null) => {
       state.modalParentId = item.parentId ?? item.parent_id ?? null;
       // 加载父节点选项（每次打开弹框都重新请求）
       loadParentOptions();
-      $common.post("/sym/getDict", { tid: item.tid }).then((data: DictItem | DictItem[]) => {
+      $common.post("/sym/dict/tree", { tid: item.tid }).then((data: DictItem | DictItem[]) => {
         const formData = Array.isArray(data) ? { ...(data[0] ?? item) } : { ...(data ?? item) };
         // 确保 parentId 在 modalForm 中，供 dict-select 绑定
         if (!formData.parentId && state.modalParentId) {
@@ -718,7 +718,7 @@ const handleAction = (type: string, item?: DictTreeNode | DictItem | null) => {
           delete payload.tid;
         }
         $common
-          .post("/sym/dictSaveOrUpdate", payload)
+          .post("/sym/dict/save", payload)
           .then((res: any) => {
             $message.success(isAdd ? "新增成功" : "保存成功");
             state.modalVisible = false;
@@ -751,7 +751,7 @@ const handleAction = (type: string, item?: DictTreeNode | DictItem | null) => {
       // 若删除的是当前选中的字典类型，先置空让 initTree 自动选首个
       const isSelectedDeleted = state.selectedNode?.tid === item.tid;
       $common.handle({
-        url: "/sym/dictSaveOrUpdate",
+        url: "/sym/dict/save",
         info: `确认删除"${item.dictName}"？`,
         action: "删除",
         data: { tid: item.tid, action: "delete" },

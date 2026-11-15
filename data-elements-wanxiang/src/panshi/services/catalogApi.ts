@@ -99,7 +99,7 @@ export const directoryDetail = (tid: string) => resourcePost<DirectoryDetail>('/
 export const directoryItems = (tid: string) => resourcePost<DirectoryItem[]>('/dst/catalog/catalog-items/list', { tid });
 /** Load the tenant's dictionary tree once instead of issuing a request for each form field. */
 export async function directoryDictionaries(codes: readonly string[]): Promise<Record<string, DirectoryDictionary[]>> {
-  const all = await resourceGet<Record<string, { options?: DirectoryDictionary[] | null }>>('/sym/dict');
+  const all = await resourceGet<Record<string, { options?: DirectoryDictionary[] | null }>>('/sym/dict/query');
   if (!all || typeof all !== 'object' || Array.isArray(all)) throw new Error('数据目录字典返回格式不正确');
   return Object.fromEntries(codes.map(code => [code, Array.isArray(all[code]?.options) ? all[code].options : []]));
 }

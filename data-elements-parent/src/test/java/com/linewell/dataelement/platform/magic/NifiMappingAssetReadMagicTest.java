@@ -74,7 +74,7 @@ import org.ssssssss.script.runtime.function.MagicScriptLambdaFunction;
 
 class NifiMappingAssetReadMagicTest {
     private static final String COMMON = "function/01.通用函数/";
-    private static final String API = "api/10.海通流程接口/";
+    private static final String API = "api/09.海通流程接口/";
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final Timestamp CREATED = Timestamp.from(Instant.parse("2025-01-02T00:00:00Z"));
 

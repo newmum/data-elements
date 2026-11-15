@@ -88,12 +88,12 @@
       "review": "首阶段按现行澄天调用方与真实实现核对；仅覆盖数据源闭环。内部重构且契约不变时，可保留模拟实现，完成回归后更新本项审阅摘要和说明。 第 78 批调整目录，保留原地址和方法。"
     },
     {
-      "operation": "GET /sym/dict",
+      "operation": "GET /sym/dict/query",
       "source": {
         "kind": "magic",
         "id": "fa5e60254452443a8d512df21c6eed53",
-        "file": "magic/api/07.系统管理/10.字典查询/01.数据字典查询.ms",
-        "reviewedSha256": "e2868ef1f29ac0b2c8e4a190ecda761482f4da37ef5c32f01a0303a966dc99c1"
+        "file": "magic/api/07.系统管理/10.数据字典/01.数据字典查询.ms",
+        "reviewedSha256": "c1df2e3d35b8c1377796a22690ba0f071e3c9b26ae6eb459ff97bb9e6b374aa1"
       },
       "request": {
         "type": "object"
@@ -120,12 +120,12 @@
       "review": "首阶段按现行澄天调用方与真实实现核对；仅覆盖数据源闭环。内部重构且契约不变时，可保留模拟实现，完成回归后更新本项审阅摘要和说明。 第 78 批调整目录，保留原地址和方法。"
     },
     {
-      "operation": "POST /sym/component",
+      "operation": "POST /sym/component/manage",
       "source": {
         "kind": "magic",
         "id": "a3b59b1dfb2c4c3989bf0a8a0e1f91cc",
         "file": "magic/api/07.系统管理/08.组件管理/01.页面组件管理.ms",
-        "reviewedSha256": "fb1b543f26a1b0e9cd70f038f642459a069d50e02d27619d9d76c1e7443601b6"
+        "reviewedSha256": "a9e455b2ce896100ada44df6ab23c2272a74f9bfe4dcd9546d09fd9c807f61e7"
       },
       "request": {
         "type": "object"
@@ -133,15 +133,15 @@
       "response": {
         "type": "any"
       },
-      "review": "首阶段按现行澄天调用方与真实实现核对；仅覆盖数据源闭环。内部重构且契约不变时，可保留模拟实现，完成回归后更新本项审阅摘要和说明。 第 78 批调整目录，保留原地址和方法。"
+      "review": "第 102 批已核对新路由与读取契约，Mock 继续覆盖实际页面读取。"
     },
     {
-      "operation": "POST /sym/form",
+      "operation": "POST /sym/form/config",
       "source": {
         "kind": "magic",
         "id": "b5dd6283a2af4141ac6e53d31ed8f507",
         "file": "magic/api/07.系统管理/09.动态表单/01.动态表单配置.ms",
-        "reviewedSha256": "ba105db6ff740cfec1c6b16c496f98329d1fc9cf62641a35d9ac7229df9a8c3f"
+        "reviewedSha256": "be03c8be695d36a5a8e8bdad01146d32f15bcf8113765ef92c257e934a74c100"
       },
       "request": {
         "type": "object"
@@ -149,14 +149,14 @@
       "response": {
         "type": "array"
       },
-      "review": "首阶段按现行澄天调用方与真实实现核对；仅覆盖数据源闭环。内部重构且契约不变时，可保留模拟实现，完成回归后更新本项审阅摘要和说明。 第 78 批调整目录，保留原地址和方法。"
+      "review": "第 102 批已核对新路由与读取契约，Mock 继续覆盖实际页面读取。"
     },
     {
       "operation": "POST /dst/db/stats",
       "source": {
         "kind": "magic",
         "id": "datapd_database_tree_statistics_01",
-        "file": "magic/api/02.数据盘点/02.数据库资源/09.数据源组织业务系统统计.ms",
+        "file": "magic/api/02.数据盘点/02.库表资源/09.数据源组织业务系统统计.ms",
         "reviewedSha256": "2533953b21366dcf90d3c64ede4e2a3b03f17d5a8cfe0ff6a72068f4145527fb"
       },
       "request": {
@@ -172,7 +172,7 @@
       "source": {
         "kind": "magic",
         "id": "datapd_database_page_01",
-        "file": "magic/api/02.数据盘点/02.数据库资源/03.数据源分页查询.ms",
+        "file": "magic/api/02.数据盘点/02.库表资源/03.数据源分页查询.ms",
         "reviewedSha256": "6c23027f2decd2dd6a91a9808440da66b76f982c190554c6ceb5eca7d9cbb90f"
       },
       "request": {
@@ -218,7 +218,7 @@
       "source": {
         "kind": "magic",
         "id": "datapd_dept_datasources_01",
-        "file": "magic/api/02.数据盘点/02.数据库资源/08.本部门数据源清单.ms",
+        "file": "magic/api/02.数据盘点/02.库表资源/08.本部门数据源清单.ms",
         "reviewedSha256": "8c36a0b239aa17dc92299f7e1762b5bf6178e0978e13a146a4d1406ff12818dc"
       },
       "request": {
@@ -264,7 +264,7 @@
       "source": {
         "kind": "magic",
         "id": "datapd_database_detail_01",
-        "file": "magic/api/02.数据盘点/02.数据库资源/05.数据源详情.ms",
+        "file": "magic/api/02.数据盘点/02.库表资源/05.数据源详情.ms",
         "reviewedSha256": "02dccb8739b1e0c3c83db05d410a14036f3710209493cd6c03aed0d9abfc2451"
       },
       "request": {
@@ -288,7 +288,7 @@
       "source": {
         "kind": "magic",
         "id": "datapd_save_update_datasource_01",
-        "file": "magic/api/02.数据盘点/02.数据库资源/06.保存数据源.ms",
+        "file": "magic/api/02.数据盘点/02.库表资源/06.保存数据源.ms",
         "reviewedSha256": "7fae91c4de6b180dffdc92640e54784bbe9ce9b4bd53eff4c62701ac29d90efc"
       },
       "request": {
@@ -307,7 +307,7 @@
       "source": {
         "kind": "magic",
         "id": "datapd_database_delete_01",
-        "file": "magic/api/02.数据盘点/02.数据库资源/07.删除数据源.ms",
+        "file": "magic/api/02.数据盘点/02.库表资源/07.删除数据源.ms",
         "reviewedSha256": "6c98c35a43b90011c9930a9f2d071755b750182065b7b7eaec28985b146e962f"
       },
       "request": {
@@ -323,7 +323,7 @@
       "source": {
         "kind": "magic",
         "id": "datapd_asset_refresh_01",
-        "file": "magic/api/02.数据盘点/05.盘点维护/01.刷新单个资产索引.ms",
+        "file": "magic/api/02.数据盘点/06.盘点维护/01.刷新单个资产索引.ms",
         "reviewedSha256": "909134a7ae378b8ea32f8eea2d82aaaac9e298472d445812cfe6964cd23cd003"
       },
       "request": {
@@ -339,7 +339,7 @@
       "source": {
         "kind": "magic",
         "id": "metadata_db_info_01",
-        "file": "magic/api/02.数据盘点/02.数据库资源/12.查询数据库元信息.ms",
+        "file": "magic/api/02.数据盘点/02.库表资源/12.查询数据库元信息.ms",
         "reviewedSha256": "b306ae939b467d90b5c4ca8b2b966965da076bff434cd9a81a6d1c3450dda9a1"
       },
       "request": {
@@ -355,7 +355,7 @@
       "source": {
         "kind": "magic",
         "id": "metadata_refresh_db_info_01",
-        "file": "magic/api/02.数据盘点/02.数据库资源/13.刷新数据库元信息.ms",
+        "file": "magic/api/02.数据盘点/02.库表资源/13.刷新数据库元信息.ms",
         "reviewedSha256": "13a1c40fdb7f197a0862fdc10929bfb33d66ff7d35e5dc722dc491cbe1f5c6e3"
       },
       "request": {
@@ -371,7 +371,7 @@
       "source": {
         "kind": "magic",
         "id": "52e398a9f2fc429da79048b9ea719b37",
-        "file": "magic/api/02.数据盘点/02.数据库资源/11.获取表列表.ms",
+        "file": "magic/api/02.数据盘点/02.库表资源/11.获取表列表.ms",
         "reviewedSha256": "8e0b1fe6082e7b1aa2ea4e74c7c54708dfe9e65af773a67f4acffd7029bcdcae"
       },
       "request": {
@@ -555,7 +555,7 @@
       "source": {
         "kind": "magic",
         "id": "a9dc328184b7410781b389f67fad1233",
-        "file": "magic/api/02.数据盘点/02.数据库资源/23.获取字段列表.ms",
+        "file": "magic/api/02.数据盘点/02.库表资源/23.获取字段列表.ms",
         "reviewedSha256": "047a20b0323ddaafc4d36cf97d0bebf84ed380109bcf512380f5397e610c3467"
       },
       "request": {
@@ -571,7 +571,7 @@
       "source": {
         "kind": "magic",
         "id": "bc30a3edb1f04bceaeee373ed5952d4a",
-        "file": "magic/api/02.数据盘点/02.数据库资源/27.数据表预览.ms",
+        "file": "magic/api/02.数据盘点/02.库表资源/27.数据表预览.ms",
         "reviewedSha256": "adcf8ef2b58d5200237a88422934454926acc96254b0341ca96540aaf888c46e"
       },
       "request": {
@@ -587,7 +587,7 @@
       "source": {
         "kind": "magic",
         "id": "06ee6f0e37e44762be967dbd2d764780",
-        "file": "magic/api/02.数据盘点/02.数据库资源/26.数据库表抽样.ms",
+        "file": "magic/api/02.数据盘点/02.库表资源/26.数据库表抽样.ms",
         "reviewedSha256": "78ebf789d065c1f588f590a42d7245480ff5e5e56273ac8675c97e094dc5d0e2"
       },
       "request": {

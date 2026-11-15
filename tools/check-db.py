@@ -101,12 +101,6 @@ def dameng_metadata(schema, options):
         # DM expands virtual-column dependencies in DBA_IND_COLUMNS. Its actual
         # INDEX DDL records the logical indexed columns; verify that representation.
         generated_tables = {c['TABLE_NAME'] for c in columns if c['DATA_DEFAULT'] and ' CASE ' in str(c['DATA_DEFAULT']).upper()}
-        # DM reports the base column of SUBSTR indexes without MySQL's SUB_PART.
-        # Read the exact DDL for tables containing a source prefix index as well.
-        q.execute('SELECT TABLE_NAME,INDEX_NAME FROM DBA_INDEXES WHERE OWNER=?', [schema])
-        for table, name in q.fetchall():
-            if table == 'surveillance_control_item_t':
-                generated_tables.add(table)
         for table in generated_tables:
             names = {r['INDEX_NAME'] for r in indexes if r['TABLE_NAME']==table}
             replacement = []
@@ -213,18 +207,9 @@ def native_index_part(part):
 
 
 def native_generated_matches(table, column, wanted, found):
-    if (table, column) == ('rm_user_t', 'active_login_name'):
-        return generated_expression(wanted) == generated_expression(found)
-    if table == 'surveillance_resource_topic_t' and column in {'input_connection_ref', 'output_connection_ref'}:
-        # Native DM expands COALESCE into this precise CASE. Compare every path,
-        # fallback literal and branch, rather than exempting generated expressions.
-        args = index_parts(re.sub(r'^coalesce\((.*)\)$', r'\1', wanted, flags=re.I))
-        if len(args) != 3:
-            return False
-        expected = 'CASE ' + ''.join('WHEN NOT ('+arg+' IS NULL) THEN '+arg+' ' for arg in args[:2])
-        expected += 'WHEN NOT (FALSE) THEN '+args[2]+' ELSE NULL END'
-        return generated_expression(expected) == generated_expression(found)
-    return False
+    return (table, column) == ('rm_user_t', 'active_login_name') and (
+        generated_expression(wanted) == generated_expression(found)
+    )
 
 
 def compare(source, target, tenant, source_tenant):

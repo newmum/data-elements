@@ -51,7 +51,7 @@ const renderer = vue.createRenderer({
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 const listPath = "/dws/mall/page";
 const countPath = "/dws/mall/count";
-const appPath = "/sym/dict";
+const appPath = "/sym/dict/query";
 const collectPath = "/dws/mall/collect";
 const addPath = "/dws/cart/save";
 const detailPath = "/dws/mall/detail";

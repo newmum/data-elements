@@ -944,7 +944,7 @@ async function refreshReviewSummary(tid, requestId, showLoading) {
     if (isUnstructuredPushSource(sources.value[0])) {
       const [detailResult,fileResult]=await Promise.allSettled([
         requestWithTimeout(()=>$common.post("/dst/db/srcdetail",{tid}),"数据源详情"),
-        requestWithTimeout(()=>$common.post("/dst/db/file",{dbId:tid,action:"read"}),"文件登记快照"),
+        requestWithTimeout(()=>$common.post("/dst/file/snapshot",{dbId:tid,action:"read"}),"文件登记快照"),
       ]);
       if (requestId!==sourceDetailRequestId || sourceTid.value!==tid) return;
       if (detailResult.status==="fulfilled") sourceDetail.value=detailResult.value;
@@ -4171,7 +4171,7 @@ async function persistCompletion(items) {
     completeOnly: true,
   };
   const result = pushIsAttachmentMode.value
-    ? await $common.post("/dst/db/file",{dbId:completedSource.tid,action:"complete"})
+    ? await $common.post("/dst/file/snapshot",{dbId:completedSource.tid,action:"complete"})
     : await $common.post("/dst/db/srcsave", {tid:completedSource.tid,propList});
   completedSource.assetStatus = Number(result.assetStatus);
 }

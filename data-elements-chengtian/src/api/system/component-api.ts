@@ -1,7 +1,7 @@
 import request from "@/utils/request";
 import requestPolicy from "@/utils/request-policy";
 
-const COMPONENT_BASE_URL = "/sym/component";
+const COMPONENT_BASE_URL = "/sym/component/manage";
 
 interface CompiledComponent {
   name: string;

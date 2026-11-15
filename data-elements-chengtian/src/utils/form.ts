@@ -152,7 +152,7 @@ export class FormUtils {
    */
   private async requestFormData(params: Record<string, any>): Promise<FormItem[]> {
     try {
-      const data: unknown = await $common.post("/sym/form?action=get", {
+      const data: unknown = await $common.post("/sym/form/config?action=get", {
         ...params,
         env: $setting.systemCode,
       });

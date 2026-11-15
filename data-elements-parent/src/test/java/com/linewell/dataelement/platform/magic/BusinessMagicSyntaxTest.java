@@ -15,11 +15,11 @@ import org.ssssssss.script.MagicScript;
 /** Compile each selected business, identity, audit, and sorting script once. */
 class BusinessMagicSyntaxTest {
     private static final String TENANT_ACCOUNTS = "function/09.租户账号";
-    private static final String IDAAS_LOGGING = "api/09.统一身份管理/32.日志管理";
+    private static final String IDAAS_LOGGING = "api/08.统一身份管理/32.日志管理";
     private static final List<String> IDENTITY_GROUPS = List.of("api/07.系统管理", TENANT_ACCOUNTS,
-            "api/09.统一身份管理", "function/13.统一身份管理");
+            "api/08.统一身份管理", "function/13.统一身份管理");
     private static final List<String> BUSINESS_GROUPS = List.of(
-            "api/01.系统门户", "api/02.数据盘点/02.数据库资源", "api/07.系统管理/07.审批中心",
+            "api/01.系统门户", "api/02.数据盘点/02.库表资源", "api/02.数据盘点/03.文件操作", "api/07.系统管理/07.审批中心",
             "api/07.系统管理/05.权限管理", "api/03.数据接入");
     private static final List<String> MULTI_VALUE_IDS = List.of(
             "e3320ec899a24426adf5f77e2dab36f9", "ods_data_agg_task_ensure_01");
@@ -85,11 +85,11 @@ class BusinessMagicSyntaxTest {
         for (String path : List.of(
                 "api/07.系统管理/03.机构管理/02.机构保存修改.ms",
                 "api/07.系统管理/03.机构管理/04.机构删除.ms",
-                "api/09.统一身份管理/01.认证会话/01.登录管理控制台.ms",
-                "api/09.统一身份管理/01.认证会话/02.退出管理控制台.ms",
-                "api/09.统一身份管理/25.认证账号会话/02.登录统一认证账号.ms",
-                "api/09.统一身份管理/25.认证账号会话/03.退出统一认证会话.ms",
-                "api/09.统一身份管理/26.多因子认证/05.验证登录二次口令.ms",
+                "api/08.统一身份管理/01.认证会话/01.登录管理控制台.ms",
+                "api/08.统一身份管理/01.认证会话/02.退出管理控制台.ms",
+                "api/08.统一身份管理/25.认证账号会话/02.登录统一认证账号.ms",
+                "api/08.统一身份管理/25.认证账号会话/03.退出统一认证会话.ms",
+                "api/08.统一身份管理/26.多因子认证/05.验证登录二次口令.ms",
                 "function/13.统一身份管理/02.功能与对象范围校验.ms",
                 "function/13.统一身份管理/03.记录脱敏审计.ms",
                 "function/13.统一身份管理/09.接口访问与审计封装.ms",

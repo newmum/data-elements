@@ -30,7 +30,7 @@ import org.ssssssss.script.MagicScriptContext;
 import org.ssssssss.script.runtime.ExitValue;
 
 class BatchAnnotationRegistrationTest {
-    private static final String PATH = "api/02.数据盘点/02.数据库资源/22.批量标注数据表.ms";
+    private static final String PATH = "api/02.数据盘点/02.库表资源/22.批量标注数据表.ms";
     private static final String RESOURCE_ID = "db_table_batch_annotate_01";
 
     @ParameterizedTest

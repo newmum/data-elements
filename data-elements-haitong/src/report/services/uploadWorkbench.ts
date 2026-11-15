@@ -26,7 +26,7 @@ export interface UploadTable {
 export interface ReportReceipt { id: string; fileId: string; tableId: string; tableName: string; fileName: string; status: string; rowCount: number; reportedAt: string; message?: string; registrationSnapshot?:UploadTable }
 export interface UploadManifest { revision: string; files: Array<{fileId: string; fileName: string}>; tables: UploadTable[]; failedTables?: UploadTable[]; receipts?: ReportReceipt[] }
 export interface UploadContext { context: ReportContext; sources: Array<{id: string; name: string}> }
-const endpoint='/dst/db/register';
+const endpoint='/dst/file/register';
 export async function loadUploadContext(preferred=''): Promise<UploadContext> {
   await platformSessionToken();
   const [user,tenant,summary]=await Promise.all([
@@ -81,7 +81,7 @@ export const parseUploadedFiles=(fileIds:string[])=>platformApi<{files:Array<{fi
 export const loadReportReceipts=(dbId:string,pageNo=1,pageSize=10,sortField='reportedAt',sortDir='desc')=>platformApi<{list:ReportReceipt[];total:number}>(endpoint,{method:'POST',body:{action:'receipts',dbId,pageNo,pageSize,sortField,sortDir}});
 export async function uploadOriginal(file:File):Promise<string>{
   const form=new FormData();form.append('file',file);
-  const result=await platformApi<{tid:string}>('/data/file?action=upload',{method:'POST',body:form});
+  const result=await platformApi<{tid:string}>('/dst/file/manage?action=upload',{method:'POST',body:form});
   if(!result.tid)throw new Error('上传未返回文件编号');return result.tid;
 }
 export interface OriginalUploadFailure {fileName:string;cause:unknown}
@@ -109,7 +109,7 @@ export async function readUploadedOriginal(fileId:string,fileName:string):Promis
   const revision=getSessionRevision(),token=await platformSessionToken();
   if(!reconcilePlatformSessionToken(token,revision))throw new Error('登录会话已切换，请重新打开数据预览');
   const base=import.meta.env.VITE_DATA_ELEMENTS_API_BASE_URL||(import.meta.env.DEV?'/dev-api':'/prod-api');
-  const response=await fetch(`${base}/data/download?fileId=${encodeURIComponent(fileId)}`,{headers:{token},signal:AbortSignal.timeout(30000)});
+  const response=await fetch(`${base}/dst/file/download?fileId=${encodeURIComponent(fileId)}`,{headers:{token},signal:AbortSignal.timeout(30000)});
   if(revision!==getSessionRevision())throw new Error('登录身份已变化，请重新打开工作台');
   if(!response.ok)throw new Error('读取已上传原文件失败，请重新上传该文件');
   const contents=await response.blob();
@@ -150,6 +150,6 @@ export async function submitUploadTable(datasourceId:string,table:UploadTable,re
   if(!table.tid)throw new Error('请先完成第二步并保存数据规范');
   const form=new FormData();form.append('datasourceId',datasourceId);form.append('tableId',table.tid);form.append('fileId',table.fileId);
   form.append('requestId',reportRandomId());form.append('file',options.file||await prepareReportFile(resource,undefined,options.signal));
-  const result=await platformApi<ReportReceipt>('/dst/db/submit',{method:'POST',body:form,timeoutMs:120_000,signal:options.signal,onUploadProgress:options.onUploadProgress});
+  const result=await platformApi<ReportReceipt>('/dst/file/submit',{method:'POST',body:form,timeoutMs:120_000,signal:options.signal,onUploadProgress:options.onUploadProgress});
   if(result.status!=='success')throw new Error(result.message||'上报尚未成功，请查看记录');return result;
 }

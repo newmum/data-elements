@@ -157,7 +157,7 @@ class NifiPipelineLegacyListMagicTest {
 
     private static final class Fixture {
         private static final String COMMON = "function/01.通用函数/";
-        private static final String API = "api/10.海通流程接口/";
+        private static final String API = "api/09.海通流程接口/";
         final JdbcTemplate jdbc = new JdbcTemplate(new DriverManagerDataSource(
                 "jdbc:h2:mem:nifi_list_" + UUID.randomUUID() + ";MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1"));
         final StructuredTableReadMagicModule tableRead = new StructuredTableReadMagicModule(jdbc);

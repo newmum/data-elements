@@ -2,6 +2,7 @@ package com.linewell.dataelement.platform.magic;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.linewell.dataelement.platform.tenant.domain.TenantContext;
@@ -10,6 +11,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
@@ -30,6 +32,35 @@ import org.ssssssss.script.runtime.ExitValue;
 
 class DictionaryDragSortMagicTest {
     private static final String RESOURCE_ID = "fa050435331a44da84dafa64d74d39c5";
+    private static final String SAVE_RESOURCE_ID = "05715b7dbe1b4bf5a0015cd11431a45a";
+
+    @Test
+    void saveCannotModifyDeleteOrLinkAnItemFromAnotherTenant() throws Exception {
+        var fixture = new Fixture();
+        fixture.node("owned", "tenant-a", "0", 1, 2, "0.owned", 0);
+        fixture.node("foreign", "tenant-b", "0", 1, 2, "0.foreign", 0);
+        fixture.node("deleted", "tenant-a", "0", 2, 2, "0.deleted", 1);
+        String source = CanonicalMagicSources.byId(SAVE_RESOURCE_ID)
+            .replaceAll("(?m)^import (log|tenantRuntime)\\r?\\n", "");
+        var save = MagicScript.create("var date_format = value => '2026-01-01 00:00:00'\n" + source, null);
+        try (var ignored = TenantContext.use("tenant-a")) {
+            Function<Map<String, String>, Object> execute = body -> save.execute(new MagicScriptContext(Map.of(
+                "db", fixture.db, "tenantRuntime", new Tenant(), "log", new ScriptLog(), "body", body)));
+            assertInstanceOf(ExitValue.class,
+                execute.apply(Map.of("tid", "foreign", "dictName", "modified", "tenantId", "tenant-b")));
+            execute.apply(Map.of("action", "delete", "tid", "foreign"));
+            assertInstanceOf(ExitValue.class, execute.apply(Map.of("tid", "owned", "parentId", "foreign")));
+            assertInstanceOf(ExitValue.class, execute.apply(Map.of("tid", "deleted", "dictName", "modified")));
+            assertEquals(true, execute.apply(Map.of("tid", "owned", "dictName", "updated", "tenantId", "tenant-b")));
+        }
+        assertEquals(0, fixture.row("foreign").get("is_del"));
+        assertEquals("tenant-b", fixture.row("foreign").get("tenant_id"));
+        assertNull(fixture.row("foreign").get("dict_name"));
+        assertEquals("0", fixture.row("owned").get("parent_id"));
+        assertEquals("updated", fixture.row("owned").get("dict_name"));
+        assertEquals("tenant-a", fixture.row("owned").get("tenant_id"));
+        assertNull(fixture.row("deleted").get("dict_name"));
+    }
 
     @Test
     void siblingReorderUsesFourReadsAndOneSetWriteAtTwentyAndOneHundredRows() throws Exception {
@@ -146,6 +177,10 @@ class DictionaryDragSortMagicTest {
         }
     }
 
+    public static class ScriptLog {
+        public void info(String description, Object... values) {}
+    }
+
     private static class CountingJdbc extends JdbcTemplate {
         int reads;
         int writes;
@@ -195,7 +230,8 @@ class DictionaryDragSortMagicTest {
             setup.execute("""
                 CREATE TABLE sym_dict_t (
                     tid VARCHAR(32) PRIMARY KEY, tenant_id VARCHAR(32) NOT NULL, parent_id VARCHAR(32),
-                    sort_no INT, level_no INT, tree_path VARCHAR(1000), is_del INT NOT NULL
+                    sort_no INT, level_no INT, tree_path VARCHAR(1000), is_del INT NOT NULL,
+                    dict_name VARCHAR(80), updated_by VARCHAR(32), updated_time VARCHAR(32)
                 )
                 """);
             var sources = new MagicDynamicDataSource();
@@ -241,8 +277,10 @@ class DictionaryDragSortMagicTest {
         }
 
         void node(String id, String tenant, String parent, int order, int level, String path, int deleted) {
-            assertEquals(1, setup.update("INSERT INTO sym_dict_t VALUES(?, ?, ?, ?, ?, ?, ?)",
-                id, tenant, parent, order, level, path, deleted));
+            assertEquals(1, setup.update("""
+                INSERT INTO sym_dict_t (tid, tenant_id, parent_id, sort_no, level_no, tree_path, is_del)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, id, tenant, parent, order, level, path, deleted));
         }
 
         Map<String, Object> row(String id) {

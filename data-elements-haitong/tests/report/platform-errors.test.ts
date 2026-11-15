@@ -9,7 +9,7 @@ import {setBridgeToken} from '../../src/nifi/api/bridgeSession';
 const response={code:500,success:false,msg:'接口脚本执行失败，请联系管理员并提供错误码和跟踪号。',error:{
   code:'MAGIC-SCRIPT-001',message:'接口脚本执行失败，请联系管理员并提供错误码和跟踪号。',
   detail:'org.ssssssss.script.exception.MagicScriptException: upload failed\n at script.file(upload.ms:50)\nCaused by: java.lang.IllegalStateException: 请配置 data-element.legacy-integration.minio-password',
-  traceId:'validation-upload-trace',type:'org.ssssssss.script.exception.MagicScriptException',method:'POST',path:'/data/file',
+  traceId:'validation-upload-trace',type:'org.ssssssss.script.exception.MagicScriptException',method:'POST',path:'/dst/file/manage',
 }};
 
 function setup(t:TestContext){
@@ -28,11 +28,11 @@ test('HTTP 200 business errors and HTTP 500 both retain the actual cause, trace 
   setup(t);
   for(const status of [200,500]){
     globalThis.fetch=async()=>new Response(JSON.stringify(response),{status});
-    await assert.rejects(platformApi('/data/file?action=upload',new FormData()),cause=>{
+    await assert.rejects(platformApi('/dst/file/manage?action=upload',new FormData()),cause=>{
       assert.ok(cause instanceof PlatformApiError);assert.equal(cause.status,status);
       assert.equal(cause.info.code,'MAGIC-SCRIPT-001');assert.equal(cause.info.traceId,'validation-upload-trace');
       assert.match(cause.info.reason!,/请配置 data-element\.legacy-integration\.minio-password/);
-      assert.equal(cause.info.detail,response.error.detail);assert.equal(cause.info.method,'POST');assert.equal(cause.info.path,'/data/file');
+      assert.equal(cause.info.detail,response.error.detail);assert.equal(cause.info.method,'POST');assert.equal(cause.info.path,'/dst/file/manage');
       assert.doesNotMatch(diagnosticText(cause.info),/validation-session-value/);return true;
     });
   }
@@ -41,7 +41,7 @@ test('HTTP 200 business errors and HTTP 500 both retain the actual cause, trace 
 test('proxy HTML 413 is actionable and 502/invalid JSON never replaces a structured error with a parse error',async t=>{
   setup(t);
   globalThis.fetch=async()=>new Response('<html>Request Entity Too Large</html>',{status:413});
-  await assert.rejects(platformApi('/data/file?action=upload',new FormData()),cause=>{
+  await assert.rejects(platformApi('/dst/file/manage?action=upload',new FormData()),cause=>{
     assert.ok(cause instanceof PlatformApiError);assert.equal(cause.status,413);assert.match(cause.message,/服务端或网关/);assert.doesNotMatch(cause.info.detail||'',/<html>/);return true;
   });
   globalThis.fetch=async()=>new Response('<html>Bad Gateway</html>',{status:502});
@@ -51,14 +51,14 @@ test('proxy HTML 413 is actionable and 502/invalid JSON never replaces a structu
 
 test('details and copy text redact secrets while preserving error codes and root causes',()=>{
   const raw='Caused by: AccessDenied: object storage rejected upload\nAuthorization: AWS4-HMAC-SHA256 Credential=validation-credential, Signature=validation-signature\n{"password":"validation-password","token":"validation-token","secretKey":"validation-secret"}\nhttps://validation-user:validation-pass@storage.test/path?X-Amz-Credential=validation-signed-credential&X-Amz-Signature=validation-signed-value';
-  const error=platformResponseError({...response,error:{...response.error,detail:raw}},'/data/file','上传失败',500,'POST');
+  const error=platformResponseError({...response,error:{...response.error,detail:raw}},'/dst/file/manage','上传失败',500,'POST');
   const text=diagnosticText(error.info);assert.match(text,/AccessDenied/);assert.match(text,/validation-upload-trace/);
   for(const secret of ['validation-credential','validation-signature','validation-password','validation-token','validation-secret','validation-user','validation-pass','validation-signed-credential','validation-signed-value'])assert.equal(text.includes(secret),false,secret);
   assert.match(text,/已隐藏/);assert.equal(safeDiagnostic({token:'validation-value'}),'');
 });
 
 test('a concrete business message takes priority over a generic wrapper; no stack is invented',()=>{
-  const error=platformResponseError({msg:'文件为空，请选择有内容的数据文件',error:{message:'接口处理失败',code:'FILE-EMPTY'}},'/data/file','失败',400,'POST');
+  const error=platformResponseError({msg:'文件为空，请选择有内容的数据文件',error:{message:'接口处理失败',code:'FILE-EMPTY'}},'/dst/file/manage','失败',400,'POST');
   assert.equal(error.message,'文件为空，请选择有内容的数据文件');assert.equal(error.info.reason,undefined);assert.equal(error.info.detail,error.message);
 });
 
@@ -70,7 +70,7 @@ test('all failed original uploads produce individual errors and no parse/save re
   assert.equal(result.uploaded.length,0);assert.equal(result.failures.length,2);assert.deepEqual(progress,[1,2]);
   assert.deepEqual(result.failures.map(item=>item.fileName),files.map(file=>file.name));
   assert.ok(result.failures.every(item=>item.cause instanceof PlatformApiError&&item.cause.info.traceId==='validation-upload-trace'));
-  assert.equal(calls.length,2);assert.ok(calls.every(path=>path.endsWith('/data/file?action=upload')));
+  assert.equal(calls.length,2);assert.ok(calls.every(path=>path.endsWith('/dst/file/manage?action=upload')));
 });
 
 test('mixed uploads retain only successful originals, local validation makes no request, auth expiry stops subsequent uploads',async t=>{

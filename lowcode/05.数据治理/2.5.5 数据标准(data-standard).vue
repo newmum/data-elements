@@ -272,7 +272,7 @@ const deleteCategoryNode = (node: any) => {
     confirmButtonClass: "el-button--danger",
   })
     .then(async () => {
-      await $common.post("/sym/dictSaveOrUpdate", {
+      await $common.post("/sym/dict/save", {
         action: "delete",
         tid: data.tid,
       });

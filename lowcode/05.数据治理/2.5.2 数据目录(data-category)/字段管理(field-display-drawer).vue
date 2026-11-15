@@ -263,7 +263,7 @@ const handleSave = async () => {
       formJson: serialized,
     };
 
-    await (window as any).$common.post("/sym/form?action=save", params);
+    await (window as any).$common.post("/sym/form/config?action=save", params);
 
     ElMessage.success("保存成功");
     emit("saved", sortableItems.value);

@@ -185,7 +185,7 @@ class NifiPipelineTemplateMagicTest {
 
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final String COMMON = "function/01.通用函数/";
-    private static final String API = "api/10.海通流程接口/";
+    private static final String API = "api/09.海通流程接口/";
 
     private static class Fixture {
         final JdbcTemplate jdbc;

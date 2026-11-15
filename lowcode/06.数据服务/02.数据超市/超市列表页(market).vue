@@ -395,7 +395,7 @@ async function loadApps() {
   appsLoading = true;
   appError.value = false;
   try {
-    const result: ApplicationOption[] = await $common.getSilently("/sym/dict", { code: "app" });
+    const result: ApplicationOption[] = await $common.getSilently("/sym/dict/query", { code: "app" });
     if (request !== appRequest || !isCurrentSession(revision)) return;
     if (!Array.isArray(result)) throw new Error("业务系统响应无效");
     apps.value = result;

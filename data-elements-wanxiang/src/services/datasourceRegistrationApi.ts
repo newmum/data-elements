@@ -99,7 +99,7 @@ export function draftFromDetail(detail: Record<string, unknown>): SourceDraft {
 export const datasourceRegistrationApi = {
   async choices(): Promise<SourceChoices> {
     const [dict, applications, organizations] = await Promise.all([
-      platformApi<Record<string, { options?: unknown }>>('/sym/dict'),
+      platformApi<Record<string, { options?: unknown }>>('/sym/dict/query'),
       // Same tenant-scoped registered application/ES list as the platform business-system page.
       platformApi<unknown>('/dst/application/list', {}),
       platformApi<unknown>('/sym/org/pageOrg'),

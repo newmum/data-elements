@@ -265,12 +265,15 @@ test('report uploads retain the native multipart body and discard results after 
   const workbook = new FormData();
   workbook.set('file', new Blob(['synthetic workbook']), 'test.xlsx');
   workbook.set('datasourceId', 'visible-source');
+  workbook.set('tableId', 'registered-table');
+  workbook.set('fileId', 'uploaded-file');
+  workbook.set('requestId', 'validation-report');
   global.fetch = async (_url, options) => {
     request = options;
     return new Promise(resolve => { finish = resolve; });
   };
   try {
-    const pending = api.platformApi('/dst/database/report-file', workbook);
+    const pending = api.platformApi('/dst/file/submit', workbook);
     await new Promise(resolve => setImmediate(resolve));
     assert.equal(request.method, 'POST');
     assert.equal(request.body, workbook);

@@ -498,13 +498,13 @@ const INTEGRATION_LAYER_TID = "2b550e9f09e243cd94b1ce981f960559";
 
 /**
  * 请求字典树数据并刷新视图
- * GET /sym/dict?code=dataSourceType 返回树形结构，
+ * GET /sym/dict/query?code=dataSourceType 返回树形结构，
  * 取整合层节点的 children 作为根数据。
  */
 const fetchTreeData = async () => {
   treeLoading.value = true;
   try {
-    const treeData: DictNode[] = await $common.get("/sym/dict?code=dataSourceType");
+    const treeData: DictNode[] = await $common.get("/sym/dict/query?code=dataSourceType");
     // 查找整合层节点
     const integrationNode = findNodeByTid(treeData, INTEGRATION_LAYER_TID);
     if (!integrationNode) {
@@ -625,7 +625,7 @@ const saveSortOrder = async (items: Array<{ tid: string }>) => {
   sortSaving.value = true;
   try {
     for (let i = 0; i < items.length; i++) {
-      await $common.post("/sym/dictSaveOrUpdate", {
+      await $common.post("/sym/dict/save", {
         tid: items[i].tid,
         sortNo: i + 1,
       });
@@ -714,7 +714,7 @@ const handleCreate = async (ctx: ActionContext, formData: NodeFormData) => {
     parentId = ctx.parent.tid;
   }
 
-  await $common.post("/sym/dictSaveOrUpdate", {
+  await $common.post("/sym/dict/save", {
     parentId,
     dictCode: formData.dictCode,
     dictName: formData.dictName,
@@ -736,7 +736,7 @@ const handleEdit = async (ctx: ActionContext, formData: NodeFormData) => {
     return;
   }
 
-  await $common.post("/sym/dictSaveOrUpdate", {
+  await $common.post("/sym/dict/save", {
     tid,
     parentId: original.parentId,
     dictCode: formData.dictCode,
@@ -764,7 +764,7 @@ const confirmDelete = async (type: NodeType, target: DictNode) => {
       }
     );
 
-    await $common.post("/sym/dictSaveOrUpdate", {
+    await $common.post("/sym/dict/save", {
       tid: target.tid,
       action: "delete",
     });

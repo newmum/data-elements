@@ -21,7 +21,7 @@ const user=await call('/sym/user/me',{}),userId=user.id||user.userId||user.tid;
 const originalPage=await call('/dwm/standard/element/page',{pageNum:1,pageSize:1000});
 const originalCodes=await call('/dwm/standard/code/list',{});
 assert.ok(Array.isArray(originalPage.list)&&Array.isArray(originalCodes));checks.push('shared-element-and-code-list');
-const [classes,types,rules]=await Promise.all([call('/dwm/standard/standard-class-list',{}),call('/sym/dict?code=colType'),call('/dwm/quality/list',{})]);
+const [classes,types,rules]=await Promise.all([call('/dwm/standard/standard-class-list',{}),call('/sym/dict/query?code=colType'),call('/dwm/quality/list',{})]);
 assert.ok(classes&&Array.isArray(types)&&Array.isArray(rules));checks.push('original-form-options');
 for(const id of ['dwm_standard_landing_list_01','dwm_standard_landing_save_01']){const file=await call('/api/web/resource/file/'+id);assert.ok(file.script&&file.script.includes('tenantRuntime.id()'));}checks.push('both-live-magic-scripts-loaded');
 const originalLanding=await call('/dwm/standard/landing/list',{});assert.ok(Array.isArray(originalLanding.items));checks.push('real-field-coverage-not-preview-counts');

@@ -5,7 +5,7 @@ const FileAPI = {
   /** 上传文件 （传入 FormData，上传进度回调） */
   upload(formData: FormData, onProgress?: (percent: number) => void) {
     return request<any, FileInfo>({
-      url: "/data/file?action=upload",
+      url: "/dst/file/manage?action=upload",
       method: "post",
       data: formData,
       headers: { "Content-Type": "multipart/form-data" },
@@ -23,7 +23,7 @@ const FileAPI = {
     const formData = new FormData();
     formData.append("file", file);
     return request<any, FileInfo>({
-      url: "/data/file?action=upload",
+      url: "/dst/file/manage?action=upload",
       method: "post",
       data: formData,
       headers: { "Content-Type": "multipart/form-data" },
@@ -38,7 +38,7 @@ const FileAPI = {
     const formData = new FormData();
     formData.append("file", file);
     return request<any, FileInfo>({
-      url: "/data/file?action=upload",
+      url: "/dst/file/manage?action=upload",
       method: "post",
       data: formData,
       headers: { "Content-Type": "multipart/form-data" },
@@ -48,7 +48,7 @@ const FileAPI = {
   /** 删除文件 */
   delete(tid?: string) {
     return request({
-      url: "/data/file?action=delete&tid=" + tid,
+      url: "/dst/file/manage?action=delete&tid=" + tid,
       method: "post",
       headers: { "Content-Type": "multipart/form-data" },
     });
@@ -56,8 +56,11 @@ const FileAPI = {
 
   /** 下载文件 */
   download(url: string, fileName?: string) {
+    // 旧附件保存的是平台生成的相对地址。外部文件链接按原地址请求。
+    const legacyPath = "/data/download?";
+    const downloadUrl = url.startsWith(legacyPath) ? "/dst/file/download?" + url.slice(legacyPath.length) : url;
     return request({
-      url,
+      url: downloadUrl,
       method: "get",
       responseType: "blob",
     }).then((res) => {

@@ -77,7 +77,7 @@ async function renderLayer(layer, { roots = dictionary, layerCode = "dwd-domain"
     async post(url, params) {
       calls.push({ url, params });
       if (url === "/dst/statistics/common") return {};
-      if (url === "/sym/dictSaveOrUpdate") return { tid: "new-directory" };
+      if (url === "/sym/dict/save") return { tid: "new-directory" };
       return { list: Array.from({ length: params.pageSize }, (_, tid) => ({ tid })), total: 100 };
     },
     deepTree(node, visit) {
@@ -169,7 +169,7 @@ test("both published identities retain their layer-specific columns and paged qu
     assert.equal(Boolean(columns.processLogic), base);
     assert.equal(Boolean(columns.status), base);
     assert.equal(columns.operation, undefined);
-    assert.deepEqual(calls.map(({ url }) => url), ["/sym/dict", "/dst/statistics/common"]);
+    assert.deepEqual(calls.map(({ url }) => url), ["/sym/dict/query", "/dst/statistics/common"]);
 
     for (const [pageSize, keyword] of [[20, "目录"], [100, "source_table"]]) {
       search(keyword);
@@ -203,7 +203,7 @@ test("both published identities retain their layer-specific columns and paged qu
 test("missing dictionary root does not query another layer or attempt an unscoped read", async () => {
   const { table, calls } = await renderLayer("dws", { roots: [dictionary[0]] });
   assert.deepEqual(await table.data({ pageNo: 1, pageSize: 20 }), { list: [], total: 0 });
-  assert.deepEqual(calls.map(({ url }) => url), ["/sym/dict"]);
+  assert.deepEqual(calls.map(({ url }) => url), ["/sym/dict/query"]);
 });
 
 test("the toolbar creates a directory under the selected node in each layer", async () => {
@@ -211,7 +211,7 @@ test("the toolbar creates a directory under the selected node in each layer", as
     const root = dictionary.find((node) => node.value === layer);
     const selected = root.children[0];
     const state = await renderLayer(layer, { interactive: true, layerCode: "" });
-    const writes = () => state.calls.filter(({ url }) => url === "/sym/dictSaveOrUpdate");
+    const writes = () => state.calls.filter(({ url }) => url === "/sym/dict/save");
     try {
       assert.equal(state.toolbarAdd.props.disabled, false);
       state.rootAdd.click();
@@ -241,7 +241,7 @@ test("the toolbar creates a directory under the selected node in each layer", as
       await vue.nextTick();
       assert.equal(state.modal.props.modelValue, false);
       assert.deepEqual(writes(), [{
-        url: "/sym/dictSaveOrUpdate",
+        url: "/sym/dict/save",
         params: {
           parentId: selected.tid,
           dictName: "验证目录",
@@ -265,7 +265,7 @@ test("a layer with no valid dictionary parent cannot open the add dialog", async
     state.rootAdd.click();
     await vue.nextTick();
     assert.equal(state.modal.props.modelValue, false);
-    assert.deepEqual(state.calls.map(({ url }) => url), ["/sym/dict"]);
+    assert.deepEqual(state.calls.map(({ url }) => url), ["/sym/dict/query"]);
   } finally {
     state.unmount();
   }
