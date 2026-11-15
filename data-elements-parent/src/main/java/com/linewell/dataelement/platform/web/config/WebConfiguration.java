@@ -5,6 +5,7 @@ import com.linewell.dataelement.platform.web.security.GlobalInterceptor;
 import jakarta.servlet.Filter;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletRequestWrapper;
+import java.util.Map;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
@@ -35,12 +36,25 @@ public class WebConfiguration implements WebMvcConfigurer {
     }
 
     @Bean
-    FilterRegistrationBean<Filter> legacyAttachmentDownload() {
-        String oldPath = "/data/download";
-        String downloadPath = "/dst/file/download";
+    FilterRegistrationBean<Filter> legacyResourceRoutes() {
+        Map<String, String> assetPaths = Map.of(
+            "/dst/asset/module/page", "/dst/asset/page",
+            "/dst/asset/module/save", "/dst/asset/save",
+            "/dst/asset/module/delete", "/dst/asset/delete",
+            "/dst/asset/module/statistics", "/dst/asset/stats",
+            "/dst/asset/inventory/run", "/dst/asset/scan",
+            "/dst/asset/evaluation/calculate", "/dst/asset/score"
+        );
+        String oldDownload = "/data/download";
         FilterRegistrationBean<Filter> registration = new FilterRegistrationBean<>((request, response, chain) -> {
             HttpServletRequest http = (HttpServletRequest) request;
-            if (!"GET".equals(http.getMethod()) || !http.getRequestURI().equals(http.getContextPath() + oldPath)) {
+            String oldPath = http.getRequestURI().substring(http.getContextPath().length());
+            String target = switch (http.getMethod()) {
+                case "GET" -> oldPath.equals(oldDownload) ? "/dst/file/download" : null;
+                case "POST" -> assetPaths.get(oldPath);
+                default -> null;
+            };
+            if (target == null) {
                 chain.doFilter(request, response);
                 return;
             }
@@ -48,22 +62,23 @@ public class WebConfiguration implements WebMvcConfigurer {
             chain.doFilter(new HttpServletRequestWrapper(http) {
                 @Override
                 public String getRequestURI() {
-                    return getContextPath() + downloadPath;
+                    return getContextPath() + target;
                 }
 
                 @Override
                 public String getServletPath() {
-                    return downloadPath;
+                    return target;
                 }
 
                 @Override
                 public StringBuffer getRequestURL() {
                     StringBuffer original = super.getRequestURL();
-                    return original.replace(original.length() - oldPath.length(), original.length(), downloadPath);
+                    return original.replace(original.length() - oldPath.length(), original.length(), target);
                 }
             }, response);
         });
-        registration.addUrlPatterns(oldPath);
+        registration.addUrlPatterns(oldDownload);
+        registration.addUrlPatterns(assetPaths.keySet().toArray(String[]::new));
         registration.setOrder(Ordered.HIGHEST_PRECEDENCE + 30);
         return registration;
     }

@@ -96,7 +96,7 @@ export const centerTableColumns = (tableId: string) => resourceGet<CenterColumn[
 export const directoryDetail = (tid: string) => resourcePost<DirectoryDetail>('/dwm/center/command', {
   kind: 'catalogs', method: 'GET', action: 'directory-detail', id: tid,
 });
-export const directoryItems = (tid: string) => resourcePost<DirectoryItem[]>('/dst/catalog/catalog-items/list', { tid });
+export const directoryItems = (tid: string) => resourcePost<DirectoryItem[]>('/dst/catalog/items', { tid });
 /** Load the tenant's dictionary tree once instead of issuing a request for each form field. */
 export async function directoryDictionaries(codes: readonly string[]): Promise<Record<string, DirectoryDictionary[]>> {
   const all = await resourceGet<Record<string, { options?: DirectoryDictionary[] | null }>>('/sym/dict/query');
@@ -129,4 +129,4 @@ export function itemsFromColumns(columns: CenterColumn[]): DirectoryItem[] {
 
 export const centerColumnsPage=(tableId:string,page:number,size:number,sort:ServerSort={})=>resourceGet<{list:CenterColumn[];total:number}>('/dwm/metadata-governance/tables/columns/page',{tableId,page,size,...sort});
 
-export const directoryItemsPage=(tid:string,pageNo:number,pageSize:number,sort:ServerSort={})=>resourcePost<{list:DirectoryItem[];total:number}>('/dst/catalog/catalog-items/list',{tid,paged:true,pageNo,pageSize,...sort});
+export const directoryItemsPage=(tid:string,pageNo:number,pageSize:number,sort:ServerSort={})=>resourcePost<{list:DirectoryItem[];total:number}>('/dst/catalog/items',{tid,paged:true,pageNo,pageSize,...sort});

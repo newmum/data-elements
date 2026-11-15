@@ -3,7 +3,7 @@
   "id": "datapd_catalog_detail_compat_01",
   "script": null,
   "groupId": "datapd_catalog_group_01",
-  "name": "08.数据目录详情",
+  "name": "03.数据目录详情",
   "createTime": null,
   "updateTime": 1787153759311,
   "lock": null,

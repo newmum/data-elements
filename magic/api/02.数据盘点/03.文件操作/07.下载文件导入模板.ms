@@ -2,14 +2,14 @@
   "properties": {},
   "id": "3002ad9de30b4d22ac0644a965f629b7",
   "script": null,
-  "groupId": "datapd_catalog_group_01",
-  "name": "03.下载文件导入模板",
+  "groupId": "e79210b931bf5e1e9070de78883499c9",
+  "name": "07.下载文件导入模板",
   "createTime": 1782955343957,
   "updateTime": 1784437771723,
   "lock": null,
   "createBy": null,
   "updateBy": null,
-  "path": "/files/download",
+  "path": "/template",
   "method": "GET",
   "parameters": [
     {
@@ -63,10 +63,6 @@
   "responseBodyDefinition": null
 }
 ================================
-// 接口：03.下载文件导入模板
-// 路由：GET /dst/catalog/files/download
-// 业务说明：根据数据项下载excel模版, 分空模板、带全量数据模板。
-// 根据数据项下载excel模版, 分空模板、带全量数据模板
 import cn.hutool.core.io.IoUtil;
 import cn.hutool.poi.excel.ExcelUtil;
 import cn.hutool.poi.excel.ExcelWriter;
@@ -74,11 +70,13 @@ import jakarta.servlet.ServletOutputStream;
 import cn.hutool.core.codec.Base64;
 import response;
 import log;
-
 import "@post:/dst/catalog/detail" as queryById;
-import "@post:/dst/catalog/catalog-items/list" as getCatalogItem;
-import "@get:/dst/catalog/files/curd-data" as curdData;
+import "@post:/dst/catalog/items" as getCatalogItem;
+import "@get:/dst/file/rows" as curdData;
 
+// GET /dst/file/template 下载文件导入模板
+// 业务说明：根据数据项下载excel模版, 分空模板、带全量数据模板。
+// 根据数据项下载excel模版, 分空模板、带全量数据模板
 
 var excel_result = [];
 // 目录

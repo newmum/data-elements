@@ -23,6 +23,7 @@ public final class PushAccess {
     private static final String LEGACY_PUSH = "/api/v1/data-push";
     private static final String LEGACY_PUSH_UPLOADS = LEGACY_PUSH + "/uploads";
     private static final String FILE_PUSH = "/api/push";
+    private static final String RECEPTION = "/api/v1";
     private static final Map<String, String> EXACT_ALIASES = Map.ofEntries(
             entry("GET /gateway/config-check", "/gateway/config/check"),
             entry("POST /gateway/token-status", "/gateway/token/status"),
@@ -40,7 +41,10 @@ public final class PushAccess {
             entry("POST " + LEGACY_FILES + "/status-batch", FILES + "/batch"),
             entry("PUT " + LEGACY_PUSH, FILE_PUSH + "/single"),
             entry("PUT " + LEGACY_PUSH + "/single", FILE_PUSH + "/single"),
-            entry("POST " + LEGACY_PUSH_UPLOADS, FILE_PUSH + "/init"));
+            entry("POST " + LEGACY_PUSH_UPLOADS, FILE_PUSH + "/init"),
+            entry("POST " + RECEPTION + "/simple/ftp", RECEPTION + "/ftp"),
+            entry("POST " + RECEPTION + "/simple/kafka", RECEPTION + "/kafka"),
+            entry("POST " + RECEPTION + "/simple/log", RECEPTION + "/log"));
     private record PathAlias(String method, Pattern path, String target, List<String> parameters) {
         PathAlias(String method, String pattern, String target, String... parameters) {
             this(method, Pattern.compile(pattern), target, List.of(parameters));
@@ -67,6 +71,12 @@ public final class PushAccess {
             new PathAlias("GET", LEGACY_PUSH_UPLOADS+"/([^/]+)/parts", FILE_PUSH+"/parts", "id"),
             new PathAlias("POST", LEGACY_PUSH_UPLOADS+"/([^/]+)/complete", FILE_PUSH+"/complete", "id"),
             new PathAlias("GET", LEGACY_PUSH_UPLOADS+"/([^/]+)", FILE_PUSH+"/status", "id"));
+    private static final List<PathAlias> RECEPTION_ALIASES = List.of(
+            new PathAlias("POST", RECEPTION + "/ingest/([^/]+)", RECEPTION + "/ingest", "channel"),
+            new PathAlias("POST", RECEPTION + "/actions/([^/]+)", RECEPTION + "/action", "code"),
+            new PathAlias("GET", RECEPTION + "/messages/([^/]+)", RECEPTION + "/message", "id"),
+            new PathAlias("POST", RECEPTION + "/files/([^/]+)", RECEPTION + "/import", "channel"),
+            new PathAlias("GET", RECEPTION + "/files/([^/]+)", RECEPTION + "/file", "id"));
 
     record Route(String path, Map<String, String> parameters) {}
 
@@ -78,6 +88,8 @@ public final class PushAccess {
             candidates = OPERATION_ALIASES;
         } else if (path.startsWith(LEGACY_FILES + "/") || path.startsWith(LEGACY_PUSH_UPLOADS + "/")) {
             candidates = TRANSFER_ALIASES;
+        } else if (path.startsWith(RECEPTION + "/") && path.indexOf('/', RECEPTION.length() + 1) >= 0) {
+            candidates = RECEPTION_ALIASES;
         } else {
             return new Route(path, Map.of());
         }
@@ -111,10 +123,13 @@ public final class PushAccess {
     }
     public static boolean endpoint(HttpServletRequest request, String path) {
         String method = request.getMethod();
-        if (method.equals("POST") && Set.of("/api/v1/data-push", "/api/v1/simple/ftp",
-                "/api/v1/simple/kafka", "/api/v1/simple/log", DEBUG_PUSH,
+        if (method.equals("POST") && Set.of(LEGACY_PUSH, RECEPTION + "/ftp",
+                RECEPTION + "/kafka", RECEPTION + "/log", DEBUG_PUSH,
                 DEBUG_TEMPLATE, DEBUG_STATUS).contains(path)) return true;
-        if (method.equals("GET") && path.matches("/api/v1/messages/[A-Za-z0-9_-]+")) return true;
+        if (method.equals("GET") && path.equals(RECEPTION + "/message")) {
+            String id = request.getParameter("id");
+            return id != null && id.matches("[A-Za-z0-9_-]+");
+        }
         boolean unified = path.startsWith(FILE_PUSH + "/");
         if (!unified && !path.startsWith(FILES+"/")) return false;
         String suffix = path.substring((unified ? FILE_PUSH : FILES).length() + 1);

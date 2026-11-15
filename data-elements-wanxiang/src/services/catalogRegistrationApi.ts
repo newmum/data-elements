@@ -96,7 +96,7 @@ export const catalogRegistrationApi = {
   async detail(tid: string) {
     const [detail, items] = await Promise.all([
       platformApi<Record<string, unknown>>('/dst/catalog/detail', { tid }),
-      platformApi<CatalogItem[]>('/dst/catalog/catalog-items/list', { catalogId: tid }),
+      platformApi<CatalogItem[]>('/dst/catalog/items', { catalogId: tid }),
     ]);
     return { detail, items: items.map(item => ({ ...item, colName: text(item.colName), colEn: text(item.colEn), colType: text(item.colType), isPk: text(item.isPk || '0'), isNullable: text(item.isNullable ?? '1') })) };
   },

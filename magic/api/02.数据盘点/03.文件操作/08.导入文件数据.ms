@@ -2,14 +2,14 @@
   "properties": {},
   "id": "0de479d6e10340358b40c11991375065",
   "script": null,
-  "groupId": "datapd_catalog_group_01",
-  "name": "04.导入文件数据",
+  "groupId": "e79210b931bf5e1e9070de78883499c9",
+  "name": "08.导入文件数据",
   "createTime": 1782955343993,
   "updateTime": 1784437771748,
   "lock": null,
   "createBy": null,
   "updateBy": null,
-  "path": "/files/import",
+  "path": "/import",
   "method": "POST",
   "parameters": [
     {
@@ -62,9 +62,6 @@
   "responseBodyDefinition": null
 }
 ================================
-// 接口：06.导入文件数据
-// 路由：POST /dst/catalog/files/import
-// 业务说明：校验请求资料后执行导入文件数据，返回保存或配置结果。
 import tenantAccounts
 import log;
 import "@post:/dst/db/rowdata" as remoteTableData;
@@ -77,13 +74,14 @@ import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.date.DateUtil;
 import cn.dev33.satoken.stp.StpUtil;
 import "@post:/sym/user/me" as me;
-import "@post:/dst/catalog/catalog-items/list" as getCatalogItem;
+import "@post:/dst/catalog/items" as getCatalogItem;
 import request;
 import "@post:/dst/catalog/detail" as queryById;
 
-
-
+// POST /dst/file/import 导入文件数据
+// 业务说明：校验请求资料后执行导入文件数据，返回保存或配置结果。
 //获取用户名称
+
 var session =  StpUtil.getTokenSession();
 var userName = tenantAccounts.session().dataMap.user.userName;
 

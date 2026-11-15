@@ -13,7 +13,7 @@ servers:
 security:
 - ClientKey: []
 paths:
-  /api/v1/ingest/{channel}:
+  /api/v1/ingest:
     post:
       summary: 受理 JSON
       operationId: post_api_v1_ingest__channel
@@ -43,7 +43,7 @@ paths:
               schema: *id001
       parameters:
       - name: channel
-        in: path
+        in: query
         required: true
         schema:
           type: string
@@ -117,7 +117,7 @@ paths:
         '200':
           description: 同幂等键且请求体一致的重复提交
         default: *id002
-  /api/v1/simple/ftp:
+  /api/v1/ftp:
     post: &id005
       summary: 表批次写入 FTP/FTPS
       deprecated: true
@@ -159,14 +159,14 @@ paths:
         '200':
           description: 同幂等键重复提交且已完成
         default: *id002
-  /api/v1/simple/kafka:
+  /api/v1/kafka:
     post:
       <<: *id005
       summary: 表批次写入 Kafka
       deprecated: true
       description: 兼容旧调用方；新接入使用 POST /api/v1/data-push 和 deliveryType=KAFKA。推送校验开关控制业务密钥及本地登记校验，Kafka Topic 仅由本机 YAML 确定，调用方不能传入或覆盖。
       operationId: post_api_v1_simple_kafka
-  /api/v1/simple/log:
+  /api/v1/log:
     post:
       <<: *id005
       summary: 表批次打印运行日志
@@ -178,7 +178,7 @@ paths:
         content:
           application/json:
             schema: *id001
-  /api/v1/messages/{messageId}:
+  /api/v1/message:
     get:
       summary: 查询当前身份消息与目标状态
       operationId: get_api_v1_messages__messageId
@@ -190,12 +190,12 @@ paths:
               schema: *id001
         default: *id002
       parameters:
-      - name: messageId
-        in: path
+      - name: id
+        in: query
         required: true
         schema:
           type: string
-  /api/v1/files/{channel}:
+  /api/v1/import:
     post:
       summary: 上传文件
       operationId: post_api_v1_files__channel
@@ -213,7 +213,7 @@ paths:
               schema: *id001
       parameters:
       - name: channel
-        in: path
+        in: query
         required: true
         schema:
           type: string
@@ -236,7 +236,7 @@ paths:
                 file:
                   type: string
                   format: binary
-  /api/v1/files/{fileId}:
+  /api/v1/file:
     get:
       summary: 查询文件接管和完成进度
       operationId: get_api_v1_files__fileId
@@ -248,12 +248,12 @@ paths:
               schema: *id001
         default: *id002
       parameters:
-      - name: fileId
-        in: path
+      - name: id
+        in: query
         required: true
         schema:
           type: string
-  /api/v1/actions/{actionCode}:
+  /api/v1/action:
     post:
       summary: 执行白名单操作
       operationId: post_api_v1_actions__actionCode
@@ -270,8 +270,8 @@ paths:
             application/json:
               schema: *id001
       parameters:
-      - name: actionCode
-        in: path
+      - name: code
+        in: query
         required: true
         schema:
           type: string

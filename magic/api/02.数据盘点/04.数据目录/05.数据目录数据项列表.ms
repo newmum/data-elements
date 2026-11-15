@@ -3,8 +3,8 @@
   "id": "datapd_catalog_items_list_01",
   "script": null,
   "groupId": "datapd_catalog_group_01",
-  "name": "10.数据目录数据项列表",
-  "path": "/catalog-items/list",
+  "name": "05.数据目录数据项列表",
+  "path": "/items",
   "method": "POST",
   "parameters": [],
   "options": [],
@@ -12,7 +12,7 @@
   "headers": [],
   "paths": [],
   "responseBody": "[]",
-  "description": "数据目录数据项列表（POST /dst/catalog/catalog-items/list）。读取 da_catalog_item_t，供目录详情、登记和文件目录兼容调用；使用请求参数 catalogId、tid、id。",
+  "description": "数据目录数据项列表（POST /dst/catalog/items）。读取 da_catalog_item_t，供目录详情、登记和文件目录兼容调用；使用请求参数 catalogId、tid、id。",
   "requestBodyDefinition": null,
   "responseBodyDefinition": null
 }
@@ -26,8 +26,11 @@ import cn.hutool.core.util.NumberUtil
 import java.util.List
 import java.util.Map
 
+// POST /dst/catalog/items 数据目录数据项列表
+// 数据目录数据项列表（POST /dst/catalog/catalog-items/list）。读取 da_catalog_item_t，供目录详情、登记和文件目录兼容调用；使用请求参数 catalogId、tid、id。
+
 /**
- * 数据目录数据项列表。POST /dst/catalog/catalog-items/list
+ * 数据目录数据项列表。POST /dst/catalog/items
  * 接收 catalogId，兼容 tid 和 id。传入 pageNo 或 page 时返回 list 和 total，否则返回有界数组。
  * 按当前租户和来源数据范围核验目录后读取数据项。旧目录没有实际数据项时可读取历史治理快照。
  * 接口只读，适用于目录详情、登记、挂接及文件目录调用。

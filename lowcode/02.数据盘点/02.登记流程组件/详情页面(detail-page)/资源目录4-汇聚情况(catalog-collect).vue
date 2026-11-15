@@ -61,7 +61,7 @@ const init = async () => {
       $common.post("/dst/catalog/detail", {
         tid: props.catalogId,
       }),
-      $common.post("/dst/catalog/catalog-items/list", {
+      $common.post("/dst/catalog/items", {
         tid: props.catalogId,
       }),
     ]);

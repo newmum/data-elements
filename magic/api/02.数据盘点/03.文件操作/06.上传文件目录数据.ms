@@ -2,14 +2,14 @@
   "properties": {},
   "id": "08b503e694044829958402e3c2e4ab72",
   "script": null,
-  "groupId": "datapd_catalog_group_01",
-  "name": "02.上传文件数据(互联网)",
+  "groupId": "e79210b931bf5e1e9070de78883499c9",
+  "name": "06.上传文件目录数据",
   "createTime": 1782955343921,
   "updateTime": 1784437771719,
   "lock": null,
   "createBy": null,
   "updateBy": null,
-  "path": "/files/upload",
+  "path": "/upload",
   "method": "POST",
   "parameters": [],
   "options": [],
@@ -36,24 +36,22 @@
   "responseBodyDefinition": null
 }
 ================================
-// 接口：01.上传文件数据(互联网)
-// 路由：POST /dst/catalog/files/upload
+import log;
+import http;
+import cn.hutool.core.codec.Base64;
+import request;
+import "@post:/dst/catalog/detail" as queryById;
+import "@get:/dst/file/rows" as curdData;
+
+// POST /dst/file/upload 上传文件目录数据
 // 业务说明：1. 获取上传数据：分全量上传、部分上传；使用请求参数 data。
 // ============== 互联网数据 --> 公安网数据 ==============
 // 1. 获取上传数据：分全量上传、部分上传
 // 2. 调用公安网插入数据接口
 // 3. 收尾：依据情况执行是否删除已上传数据
 // ========================================================
-import log;
-import http;
-import cn.hutool.core.codec.Base64;
-
-import request;
-import "@post:/dst/catalog/detail" as queryById;
-import "@get:/dst/catalog/files/curd-data" as curdData;
-
-
 // token
+
 var token =  token || request.getHeaders("token")[0]
 
 

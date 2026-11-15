@@ -299,7 +299,7 @@ server {
 
 ## 数据资产工作台
 
-共享 `my-workbench` 的概览、事项分页和导出入口分别为 `POST /dst/statistics/workbench/overview`、`/items`、`/export`，集中在 Magic 编辑器“数据盘点 / 盘点统计 / 工作台统计”分组。概览支持 `section=registration|governance|health|tasks|changes`，省略时保留完整响应以兼容已有调用。首屏固定并行读取这五个区域，各区域返回后立即更新自己的指标、骨架和错误状态，不等待全部完成；失败仅在所属区域提供重试。授权与采集差异查询复用通用函数 `workbenchData`、`workbenchChanges`，不新增 Java 统计业务服务。导出保持现有Excel列结构，复用概览的授权快照去重和接入任务范围，每批最多100个来源；原公共导出接口继续兼容其他调用方。
+共享 `my-workbench` 的概览、事项分页和导出入口分别为 `POST /dst/workbench/overview`、`POST /dst/workbench/items`、`POST /dst/workbench/export`，集中在 Magic 编辑器“数据盘点 / 工作台”分组。概览支持 `section=registration|governance|health|tasks|changes`，省略时保留完整响应以兼容已有调用。首屏固定并行读取这五个区域，各区域返回后立即更新自己的指标、骨架和错误状态。失败仅在所属区域提供重试。授权与采集差异查询复用通用函数 `workbenchData`、`workbenchChanges`。导出保持现有 Excel 列结构，复用概览的授权快照去重和接入任务范围，每批最多 100 个来源。
 
 表事项 `kind=tables` 使用结构化查询。先按租户和角色筛选有效数据源，再按来源及表名小写选取代表行，依次优先已标注、字段较多、较新和较大表 ID。搜索、登记状态、业务类型和稳定排序均作用于代表行。处理清单先一次核验全部原始表 ID，失败时整批拒绝，成功后再应用列表筛选。20/100 条非空表事项分别为 3 次应用查询，含处理清单时为 4 次，另计身份范围解析。总数为零时 `list` 为 `null`，超出非空结果的末页时为 `[]`。保留达梦分页既有的绝对行号 `rowId`。
 

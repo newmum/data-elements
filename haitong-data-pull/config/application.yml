@@ -186,7 +186,7 @@ relay:
     #   file-format: CSV
 
   actions:
-    inspect:                          # 内置校验示例，POST /api/v1/actions/inspect
+    inspect:                          # 内置校验示例，POST /api/v1/action?code=inspect
       enabled: true
       handler: inspect
       mode: SYNC

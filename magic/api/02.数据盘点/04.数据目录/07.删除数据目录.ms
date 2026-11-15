@@ -3,7 +3,7 @@
   "id": "datapd_catalog_delete_01",
   "script": null,
   "groupId": "datapd_catalog_group_01",
-  "name": "12.删除数据目录",
+  "name": "07.删除数据目录",
   "createTime": null,
   "updateTime": 1790644837589,
   "lock": null,
@@ -22,7 +22,7 @@
   "responseBodyDefinition": null
 }
 ================================
-// 接口：09.删除数据目录
+// 接口：07.删除数据目录
 // 路由：POST /dst/catalog/delete
 // 业务说明：按当前租户软删除目录和关联；兼容未安装历史关联表的租户库，保留已采集表及字段；使用请求参数 tid、id、dryRun；涉及 da_catalog_t、da_catalog_item_t、db_table_t、da_prop_t、da_app_catalog_rela 等业务表。
 import tenantRuntime

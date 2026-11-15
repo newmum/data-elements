@@ -2,9 +2,9 @@
   "properties": {},
   "id": "93fcc3a46552459d836f50a112addafd",
   "script": null,
-  "groupId": "9ef163a809ec40b59d35eb27d2f584a5",
+  "groupId": "b1f74178793f4c2d9e0c4f4b04d43b21",
   "name": "02.工作台事项分页",
-  "path": "/workbench/items",
+  "path": "/items",
   "createTime": 1792844788331,
   "updateTime": null,
   "parameters": [],
@@ -24,10 +24,11 @@ import tableSort
 import java.util.List
 import java.util.Objects
 
-// POST /dst/statistics/workbench/items 为工作台下钻及勾选清单提供分页。
+// POST /dst/workbench/items 工作台事项分页
 // 按当前租户和角色解析视图，支持 kind、搜索、状态、业务类型及排序，返回列表、总数和实际数据范围。
 // 表事项先按所属数据源选定代表行，再整批验证选中 ID，最后筛选和分页。本接口只读。
 // 来源事项支持探查、字典、业务及审查阶段，显示同名代表表统计和最近有效采集状态。
+
 var context = workbenchData(body)
 var pageNo = Math.max(1, body?.pageNo == null ? 1 : body.pageNo::int)
 var pageSize = Math.min(100, Math.max(1, body?.pageSize == null ? 20 : body.pageSize::int))

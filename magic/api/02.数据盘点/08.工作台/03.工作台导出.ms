@@ -2,9 +2,9 @@
   "properties": {},
   "id": "1d54e87126614dd88063f247ab8f1176",
   "script": null,
-  "groupId": "9ef163a809ec40b59d35eb27d2f584a5",
+  "groupId": "b1f74178793f4c2d9e0c4f4b04d43b21",
   "name": "03.工作台导出",
-  "path": "/workbench/export",
+  "path": "/export",
   "createTime": 1792844788332,
   "updateTime": null,
   "parameters": [],
@@ -20,6 +20,10 @@
 import '@/common/workbenchData' as workbenchData
 import tableSort
 import cn.hutool.json.JSONUtil
+
+// POST /dst/workbench/export 工作台导出
+// 复用统一工作台授权、有效快照去重及接入范围，分页导出真实登记接入报表；只读取当前页接入配置，剔除连接凭据，保留原公共报表接口兼容性。
+
 var context=workbenchData(body)
 var tenantId=context.tenantId
 var userId=context.userId

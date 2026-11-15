@@ -9,7 +9,7 @@
   "lock": null,
   "createBy": null,
   "updateBy": null,
-  "path": "/module/statistics",
+  "path": "/stats",
   "method": "POST",
   "parameters": [],
   "options": [],
@@ -22,10 +22,10 @@
   "responseBodyDefinition": null
 }
 ================================
-// 接口：04.资产总览统计
-// 路由：POST /dst/asset/module/statistics
-// 业务说明：当前租户资产模块与目录/挂接/标准覆盖聚合统计；固定查询次数，不按记录逐条补查。
 import tenantRuntime
+
+// POST /dst/asset/stats 资产总览统计
+// 业务说明：当前租户资产模块与目录/挂接/标准覆盖聚合统计；固定查询次数，不按记录逐条补查。
 
 var tenantId = tenantRuntime.id()
 var modules = {

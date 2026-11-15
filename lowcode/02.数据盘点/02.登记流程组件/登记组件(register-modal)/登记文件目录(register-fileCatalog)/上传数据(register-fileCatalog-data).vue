@@ -168,7 +168,7 @@ const handleAction = (type: string, item?: any) => {
       }
       break;
     case "download": {
-      $common.download("/dst/catalog/files/download", { tid: currentData.value.tid });
+      $common.download("/dst/file/template", { tid: currentData.value.tid });
       break;
     }
     case "upload": {
@@ -289,21 +289,21 @@ const upload = (file: File) => {
   formData.append("tid", currentData.value.tid);
   formData.append("file", file);
   formData.append("isFull", state.type === "全量导入");
-  return $common.post("/dst/catalog/files/import", formData, {
+  return $common.post("/dst/file/import", formData, {
     "Content-Type": "multipart/form-data",
   });
 };
 
 const createTable = (tid: string) => {
-  return $common.get("/dst/catalog/files/create-table", { tid });
+  return $common.get("/dst/file/materialize", { tid });
 };
 
 const detailApi = (tid: string) => {
-  return $common.get("/dst/catalog/files/curd-data?action=get", { tid });
+  return $common.get("/dst/file/rows?action=get", { tid });
 };
 
 const deleteRowApi = (tid: string, rowId: string) => {
-  return $common.get("/dst/catalog/files/curd-data?action=delete", { tid, rowId });
+  return $common.get("/dst/file/rows?action=delete", { tid, rowId });
 };
 
 const finish = () => {

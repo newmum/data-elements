@@ -9,7 +9,7 @@
   "lock": null,
   "createBy": null,
   "updateBy": null,
-  "path": "/evaluation/calculate",
+  "path": "/score",
   "method": "POST",
   "parameters": [],
   "options": [],
@@ -22,13 +22,13 @@
   "responseBodyDefinition": null
 }
 ================================
-// 接口：06.资产评估执行
-// 路由：POST /dst/asset/evaluation/calculate
-// 业务说明：按周期汇总目录质量、使用、共享与安全指标，生成部门资产评估得分与等级；固定聚合查询，支持 dryRun。
 import cn.hutool.core.util.IdUtil
 import jsons
 import tenantRuntime
 import "@post:/sym/user/me" as me
+
+// POST /dst/asset/score 资产评估执行
+// 业务说明：按周期汇总目录质量、使用、共享与安全指标，生成部门资产评估得分与等级；固定聚合查询，支持 dryRun。
 
 var tenantId = tenantRuntime.id()
 var user = me()

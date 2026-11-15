@@ -225,7 +225,7 @@ const toCatalogItems = (columns: any[] = []) =>
 const detailApi = (tid: string) =>
   Promise.all([
     $common.post("/dst/catalog/detail", { tid }),
-    $common.post("/dst/catalog/catalog-items/list", { tid }),
+    $common.post("/dst/catalog/items", { tid }),
   ]);
 
 const applyCatalogItems = async (rows: any[] = []) => {

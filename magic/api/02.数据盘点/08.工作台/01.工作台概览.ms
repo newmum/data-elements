@@ -2,9 +2,9 @@
   "properties": {},
   "id": "30f59993bf5b43c994b4db87eee9d94d",
   "script": null,
-  "groupId": "9ef163a809ec40b59d35eb27d2f584a5",
+  "groupId": "b1f74178793f4c2d9e0c4f4b04d43b21",
   "name": "01.工作台概览",
-  "path": "/workbench/overview",
+  "path": "/overview",
   "createTime": 1792844788330,
   "updateTime": null,
   "parameters": [],
@@ -23,9 +23,10 @@ import cn.hutool.json.JSONUtil
 import tableRead
 import tableSort
 
-// POST /dst/statistics/workbench/overview 在当前租户和工作台角色授权范围内汇总首屏指标和待办。
+// POST /dst/workbench/overview 工作台概览
 // scope 选择可用视图，section 可单独查询登记、治理、健康、任务或变更，省略时返回完整概览。
 // 字段治理按代表行的已保存配置统计，越限和异常会注明不可用原因。接口只读，不连接来源库。
+
 var section = body?.section == null ? 'all' : body.section + ''
 if (!['all', 'registration', 'governance', 'health', 'tasks', 'changes'].contains(section)) {
     exit 400, '工作台区域参数无效'

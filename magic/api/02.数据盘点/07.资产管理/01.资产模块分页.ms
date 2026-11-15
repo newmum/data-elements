@@ -9,7 +9,7 @@
   "lock": null,
   "createBy": null,
   "updateBy": null,
-  "path": "/module/page",
+  "path": "/page",
   "method": "POST",
   "parameters": [],
   "options": [],
@@ -22,10 +22,10 @@
   "responseBodyDefinition": null
 }
 ================================
-// 接口：01.资产模块分页
-// 路由：POST /dst/asset/module/page
-// 业务说明：按当前租户分页查询资产规划/发现/处置/安全/运维/评估/盘点记录；一次计数、一次分页，不按行补查。
 import tenantRuntime
+
+// POST /dst/asset/page 资产模块分页
+// 业务说明：按当前租户分页查询资产规划/发现/处置/安全/运维/评估/盘点记录；一次计数、一次分页，不按行补查。
 
 var tenantId = tenantRuntime.id()
 var text = (value) => value == null ? '' : value + ''

@@ -164,7 +164,7 @@ const handleAction = (type: string, item?: any) => {
         .join(",");
       colRef.value?.setLoading(true);
       $common.handle({
-        url: "/dst/catalog/files/curd-data?action=delete",
+        url: "/dst/file/rows?action=delete",
         method: "get",
         params: {
           tid: props.fileCatalogId,
@@ -193,7 +193,7 @@ const handleAction = (type: string, item?: any) => {
       // 互联网操作
       state.loading = true;
       $common
-        .post("/dst/catalog/files/upload", {
+        .post("/dst/file/upload", {
           tid: props.fileCatalogId,
           data: colRef.value?.getCheckData().map((el) => {
             const { _X_ROW_KEY, ...rest } = el;
@@ -213,7 +213,7 @@ const handleAction = (type: string, item?: any) => {
       // 互联网操作
       state.loading = true;
       $common.handle({
-        url: "/dst/catalog/files/upload",
+        url: "/dst/file/upload",
         method: "POST",
         data: {
           op: "all",
@@ -282,7 +282,7 @@ const upload = (file: File) => {
   formData.append("file", file);
   formData.append("isFull", state.type === "全量导入");
   return $common
-    .post("/dst/catalog/files/import", formData, {
+    .post("/dst/file/import", formData, {
       "Content-Type": "multipart/form-data",
     })
     .then((data) => {
@@ -291,7 +291,7 @@ const upload = (file: File) => {
 };
 
 const detailApi = (tid: string) => {
-  return $common.get("/dst/catalog/files/curd-data?action=get", {
+  return $common.get("/dst/file/rows?action=get", {
     tid,
     pageNo: state.pageNo,
     pageSize: state.pageSize, sortField:state.sortField, sortDir:state.sortDir,
@@ -299,11 +299,11 @@ const detailApi = (tid: string) => {
 };
 
 const deleteRowApi = (tid: string, rowId: string) => {
-  return $common.get("/dst/catalog/files/curd-data?action=delete", { tid, rowId });
+  return $common.get("/dst/file/rows?action=delete", { tid, rowId });
 };
 
 const downloadApi = (tid: string) => {
-  $common.download("/dst/catalog/files/download", {
+  $common.download("/dst/file/template", {
     tid,
     isFull: state.type === "全量导入" ? "1" : "0",
   });

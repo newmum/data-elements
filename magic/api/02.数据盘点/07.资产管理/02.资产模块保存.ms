@@ -9,7 +9,7 @@
   "lock": null,
   "createBy": null,
   "updateBy": null,
-  "path": "/module/save",
+  "path": "/save",
   "method": "POST",
   "parameters": [],
   "options": [],
@@ -22,14 +22,14 @@
   "responseBodyDefinition": null
 }
 ================================
-// 接口：02.资产模块保存
-// 路由：POST /dst/asset/module/save
-// 业务说明：保存或修改资产模块记录；仅接受白名单字段，租户由登录上下文确定，支持 dryRun。
 import cn.hutool.core.date.DateUtil
 import cn.hutool.core.util.IdUtil
 import java.sql.Timestamp
 import tenantRuntime
 import "@post:/sym/user/me" as me
+
+// POST /dst/asset/save 资产模块保存
+// 业务说明：保存或修改资产模块记录；仅接受白名单字段，租户由登录上下文确定，支持 dryRun。
 
 var tenantId = tenantRuntime.id()
 var user = me()

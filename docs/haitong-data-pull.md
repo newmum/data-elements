@@ -123,7 +123,7 @@ python tools/resource-sync.py publish --project haitong-data-pull --file "magic/
 
 首次接管使用 `pull --project haitong-data-pull` 只读核对并登记当前基准，不覆盖本地源。发布前比较资源 ID、路径及基准摘要，备份到仓库外私有目录；编辑器保存后核对运行脚本和数据库正文。分组元数据通过有条件更新保存后要求冷加载，不能将持久化成功当作运行已刷新。日常脚本发布不需要重启；新增 Java、依赖或目录变更须重新打包部署并回读。此迁移没有增加或修改数据库结构。
 
-`MagicBusinessHttpTest` 通过实际 Magic HTTP 处理器覆盖登记 20/100 项固定 4 次读取 SQL（含两次 HTTP 审计时钟读取）、批次授权收紧、故障事务回滚、原始字节幂等、运维查询与原文下载；`PushOperationsMagicTest` 编译全部脚本并核对 37 路由无重复及没有业务 `@RestController`。`FileUploadHttpTest` 的阻塞 HTTP 用例覆盖附件完整生命周期、回执、Range/HEAD 与单次流式上传，需显式启用 `-Dhaitong.loopback.tests=true`。3GiB 压力用例与真实 MySQL专用用例另有独立开关，未启用时不计为通过。
+`MagicBusinessHttpTest` 通过实际 Magic HTTP 处理器覆盖登记 20/100 项固定 4 次读取 SQL（含两次 HTTP 审计时钟读取）、批次授权收紧、故障事务回滚、原始字节幂等、运维查询与原文下载。`PushOperationsMagicTest` 编译全部脚本，核对 62 个路由无重复、API 自身 path 均为单段，并确认没有业务 `@RestController`。`FileUploadHttpTest` 的阻塞 HTTP 用例覆盖附件完整生命周期、回执、Range/HEAD 与单次流式上传，需显式启用 `-Dhaitong.loopback.tests=true`。3GiB 压力测试和 Python 流式客户端测试分别由 `haitong.large-file.tests` 和 `haitong.example-client.tests` 开启。默认使用隔离数据库，通过 `haitong.mysql.config` 可指定 MySQL 测试配置。
 
 <a id="unstructured-design"></a>
 
@@ -151,7 +151,7 @@ python tools/resource-sync.py publish --project haitong-data-pull --file "magic/
 
 | 现有基础 | 源码中已具备的行为 | 本设计要补充的部分 |
 | --- | --- | --- |
-| [Magic 数据接收入口](../magic/haitong/api/04.数据接收与附件/01.接收和附件接口) | `POST /api/v1/files/{channel}` 接收 multipart，`GET /api/v1/files/{id}` 查询状态；依通道授权 | 数据源、文件集合、规范版本、业务元数据、分片及续传；旧通道入口不能绕过新登记权限 |
+| [Magic 数据接收入口](../magic/haitong/api/04.数据接收与附件/01.数据接收) | `POST /api/v1/import?channel={channel}` 接收 multipart，`GET /api/v1/file?id={id}` 查询状态；依通道授权 | 数据源、文件集合、规范版本、业务元数据、分片及续传；旧通道入口不能绕过新登记权限 |
 | [PayloadFiles](../haitong-data-pull/src/main/java/com/haitong/core/PayloadFiles.java) | 64KiB 缓冲流式写本地持久卷、计算 SHA-256、同步文件并原子改名 | 存储适配器、分片会话、多实例可访问的持久化位置、存储对象与数据库之间的恢复 |
 | [FileService](../haitong-data-pull/src/main/java/com/haitong/core/FileService.java) | JSONL、CSV 与 BINARY；BINARY 只保存文件引用；文件处理 `runOne()` 串行，接收容量检查会 `Files.walk` 全工作目录 | 受控并发文件处理、配额账本、异步整文件校验和隔离检查，去掉每次上传的目录遍历 |
 | [DeliveryWorker](../haitong-data-pull/src/main/java/com/haitong/core/DeliveryWorker.java) | 已按协议建立可配置线程池，带租约、续租、重试及不确定结果处理 | 同一协议内进一步区分大文件和表批次的资源预算；文件目标的就绪条件及远端异步复制状态 |
@@ -220,7 +220,7 @@ flowchart LR
 
 源数据管理平台第一步模板可声明字段关联附件、大小上限和格式；第五步在表数据推送接口旁统一展示非结构化上传地址、规范及字段附件限制，已移除独立照片文档页签。先上传附件并校验就绪，业务表的关联字段保存返回的fileId。平台字段限制已纳入登记规范版本，但文件集合仍须在推送服务配置相应大小、格式、目标及调用方权限；现有表配置同步不会自动维护FILE集合，页面接入说明不代表节点已启用文件功能。
 
-以下接口定义在仓库根目录的 [接收和附件接口](../magic/haitong/api/04.数据接收与附件/01.接收和附件接口)，统一使用 `X-Api-Key`。初始化、业务提交和回执各自需要 `Idempotency-Key`，仅提供 `uploadId` 不代表有权访问。创建会话时按服务端集合确定租户、目标、内容格式和规范快照，快照不含连接凭据。
+以下接口定义在仓库根目录的 [附件传输接口](../magic/haitong/api/04.数据接收与附件/02.附件传输)，统一使用 `X-Api-Key`。初始化、业务提交和回执各自需要 `Idempotency-Key`，仅提供 `uploadId` 不代表有权访问。创建会话时按服务端集合确定租户、目标、内容格式和规范快照，快照不含连接凭据。
 
 平台结构化与非结构化页面的标题统一为“数据推送接口规范”，已发布时显示“已发布接口规范”；这项展示统一不改变下表的路径、方法或正文。非结构化顶部同样展示 Idempotency-Key：初始化与业务提交分别使用稳定的键，同一操作重试保持不变；分片 PUT 以 uploadId、片号和实际摘要核对重复请求，complete 根据会话状态幂等，GET 查询无需额外幂等键。
 
@@ -751,12 +751,12 @@ FTP读取需要数据文件及 `<文件名>.done` 清单，可用 `scripts/make_
 厂家身份：`X-Api-Key`。管理身份：`X-Admin-Key`。每厂家可配置不同密钥和通道范围。数据请求必须带 `Idempotency-Key`，重试使用相同键和相同原始字节。
 
 ```
-POST /api/v1/ingest/{channel}
+POST /api/v1/ingest?channel={channel}
 POST /api/v1/data-push
-GET  /api/v1/messages/{messageId}
-POST /api/v1/files/{channel}
-GET  /api/v1/files/{fileId}
-POST /api/v1/actions/{code}
+GET  /api/v1/message?id={messageId}
+POST /api/v1/import?channel={channel}
+GET  /api/v1/file?id={fileId}
+POST /api/v1/action?code={code}
 GET  /internal/v1/logs?from=<UTC毫秒>&to=<UTC毫秒>&protocol=HTTP
 GET  /internal/v1/reconcile?from=<UTC毫秒>&to=<UTC毫秒>
 GET  /internal/v1/openapi
@@ -765,8 +765,10 @@ GET  /internal/v1/openapi
 `POST /api/v1/data-push` 是表批次数据推送的统一入口。请求体以
 `deliveryType: "FTP"` 或 `deliveryType: "KAFKA"` 选择登记好的投递通道；
 调用方不能传入 FTP 目录、FTP 主机或 Kafka Topic。`LOG` 仅用于不输出原文的
-运行验证。原 `/api/v1/simple/ftp`、`/api/v1/simple/kafka` 和
-`/api/v1/simple/log` 暂作为兼容别名保留，新接入不得再使用它们。
+运行验证。新接入的表批次统一使用 `POST /api/v1/data-push`。
+
+「01.数据接收」中的 `POST /api/v1/ftp`、`POST /api/v1/kafka` 和 `POST /api/v1/log` 对应原 `/api/v1/simple` 系列。
+既有客户端仍可使用原方法和路径，路径中的通道、操作编码或对象 ID 优先于同名查询参数。原地址沿用原 `Location` 和 `statusUrl`，新短地址返回对应的查询链接。
 
 日志查询最多200条/页；单次时间窗最长31天、左闭右开。数据库中的业务时间字段保留来源原始时间文本，不擅自推定时区。
 
@@ -948,7 +950,7 @@ haitong-data-pull
   ├─ FTP：按当前环境资源中心 ODS/FJGHCC 配置写入文件存储
   └─ KAFKA：按登记数据源已授权 Topic 写入消息
   ▼
-调用方轮询 GET /api/v1/messages/{messageId}
+调用方轮询 GET /api/v1/message?id={messageId}
 ```
 
 ---
@@ -1259,7 +1261,7 @@ Idempotency-Key: police_person_info-20260915-000002
 #### 7.2 查询消息投递状态
 
 ```http
-GET /api/v1/messages/{messageId} HTTP/1.1
+GET /api/v1/message?id={messageId} HTTP/1.1
 Host: 127.0.0.1:18083
 X-Api-Key: <同一个数据源的推送密钥>
 ```
@@ -1267,7 +1269,7 @@ X-Api-Key: <同一个数据源的推送密钥>
 示例：
 
 ```bash
-curl "http://127.0.0.1:18083/api/v1/messages/d0225d20-8c7b-43ac-a6d1-05e32d66dd87" \
+curl "http://127.0.0.1:18083/api/v1/message?id=d0225d20-8c7b-43ac-a6d1-05e32d66dd87" \
   --header "X-Api-Key: <平台签发的数据源推送密钥>"
 ```
 
@@ -1440,7 +1442,7 @@ POST /api/v1/data-push
 
 #### 10.3 推送到 FTP 后看到 `.done` 文件，它是什么？
 
-`.done` 是文件落地完成清单，通常记录大小、SHA-256、数据源与表等信息，供依赖标记的消费者确认文件已写完。结构化表推送默认不生成：先上传唯一 `.tmp` 文件，核验大小和摘要，再重命名为正式 `.json`，与平台直接读取正式文件的 NiFi 流程配套。旧消费者依赖标记时设置 `relay.ftp.table-completion-marker-enabled: true`，重启后恢复生成。文件集合推送仍需业务清单，FTP 入站扫描也仍按 `.done` 校验读取，不受该开关影响。不要手工创建标记或以它代替最终投递状态；以 `/api/v1/messages/{messageId}` 的 `SUCCEEDED` 及目标结果为准。升级不删除历史 `.done` 文件。
+`.done` 是文件落地完成清单，通常记录大小、SHA-256、数据源与表等信息，供依赖标记的消费者确认文件已写完。结构化表推送默认不生成：先上传唯一 `.tmp` 文件，核验大小和摘要，再重命名为正式 `.json`，与平台直接读取正式文件的 NiFi 流程配套。旧消费者依赖标记时设置 `relay.ftp.table-completion-marker-enabled: true`，重启后恢复生成。文件集合推送仍需业务清单，FTP 入站扫描也仍按 `.done` 校验读取，不受该开关影响。不要手工创建标记或以它代替最终投递状态；以 `/api/v1/message?id={messageId}` 的 `SUCCEEDED` 及目标结果为准。升级不删除历史 `.done` 文件。
 
 
 <a id="guide-38565d24--104-发生请求超时是否重新生成-idempotency-key-再发送"></a>
@@ -1487,7 +1489,7 @@ POST /api/v1/data-push
 | 推送规范查询 | 源数据管理平台 | `GET /dws/push/schema/contracts`，供管理端展示接口、表及目的端状态；不返回密钥和目的端凭据。 |
 | FTP/FJGHCC 关联配置 | 资源中心/数仓分层分域 | 决定当前环境 FTP 文件投递的实际关联数据源。 |
 | Kafka Topic 授权 | 数据源登记配置 | 决定当前数据源可投递的 Kafka Topic。 |
-| 消息投递查询 | `haitong-data-pull` | `GET /api/v1/messages/{messageId}`，供调用方确认最终投递结果。 |
+| 消息投递查询 | `haitong-data-pull` | `GET /api/v1/message?id={messageId}`，供调用方确认最终投递结果。 |
 
 ---
 

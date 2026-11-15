@@ -2,14 +2,14 @@
   "properties": {},
   "id": "28ab37e70de24570a2015c72d289ec89",
   "script": null,
-  "groupId": "datapd_catalog_group_01",
-  "name": "06.文件数据物化建表",
+  "groupId": "e79210b931bf5e1e9070de78883499c9",
+  "name": "10.文件数据物化建表",
   "createTime": 1782955344009,
   "updateTime": 1784437771755,
   "lock": null,
   "createBy": null,
   "updateBy": null,
-  "path": "/files/create-table",
+  "path": "/materialize",
   "method": "GET",
   "parameters": [
     {
@@ -115,17 +115,17 @@
   }
 }
 ================================
-// 接口：08.文件数据物化建表
-// 路由：GET /dst/catalog/files/create-table
-// 业务说明：根据文件目录数据项+resName，指定dbId建表。
-// 根据文件目录数据项+resName，指定dbId建表
 import "@post:/dst/db/ddl" as getCreateTableDDL;
 import "@post:/dst/db/create" as createTable;
-import "@post:/dst/catalog/catalog-items/list" as getCatalogItem;
+import "@post:/dst/catalog/items" as getCatalogItem;
 import "@post:/dst/catalog/detail" as queryById;
 import "@post:/dst/catalog/saveOrUpdate" as saveAsset;
 
+// GET /dst/file/materialize 文件数据物化建表
+// 业务说明：根据文件目录数据项+resName，指定dbId建表。
+// 根据文件目录数据项+resName，指定dbId建表
 // 1.查询 文件目录项 resName tableId
+
 body = {tid}
 var { resName, tableId, dbId, fileCatalogName } = queryById();
 var cols = getCatalogItem();

@@ -50,7 +50,7 @@ state.cols = [
 
 const fetchData=async ({pageNo,pageSize,sortField,sortDir})=> {
    if(!props.catalogId) return {list:[],total:0};
-   return $common.post('/dst/catalog/catalog-items/list',{tid:props.catalogId,paged:true,pageNo,pageSize,sortField,sortDir});
+   return $common.post('/dst/catalog/items',{tid:props.catalogId,paged:true,pageNo,pageSize,sortField,sortDir});
  };
  </script>
 

@@ -64,7 +64,7 @@ const init = async () => {
 
   colRef.value?.setLoading(true);
   try {
-    const data = await $common.post("/dst/catalog/catalog-items/list", {
+    const data = await $common.post("/dst/catalog/items", {
       sortField: sorting.sortField || 'sortNo',
       sortDir: sorting.sortDir || 'asc',
       ...(true ? {pageNo:pageState.pageNo,pageSize:pageState.pageSize} : {}),

@@ -9,7 +9,7 @@
   "lock": null,
   "createBy": null,
   "updateBy": null,
-  "path": "/module/delete",
+  "path": "/delete",
   "method": "POST",
   "parameters": [],
   "options": [],
@@ -22,11 +22,11 @@
   "responseBodyDefinition": null
 }
 ================================
-// 接口：03.资产模块删除
-// 路由：POST /dst/asset/module/delete
-// 业务说明：按当前租户软删除资产模块记录；记录不存在或跨租户时拒绝。
 import tenantRuntime
 import "@post:/sym/user/me" as me
+
+// POST /dst/asset/delete 资产模块删除
+// 业务说明：按当前租户软删除资产模块记录；记录不存在或跨租户时拒绝。
 
 var tenantId = tenantRuntime.id()
 var user = me()

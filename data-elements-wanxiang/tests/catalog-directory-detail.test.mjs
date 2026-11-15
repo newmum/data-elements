@@ -30,7 +30,7 @@ test('directory editor loads governed detail and existing item contract in its s
       body: { kind: 'catalogs', method: 'GET', action: 'directory-detail', id: 'validation-catalog' },
     },
     {
-      path: '/dev-api/dst/catalog/catalog-items/list', method: 'POST',
+      path: '/dev-api/dst/catalog/items', method: 'POST',
       body: { tid: 'validation-catalog' },
     },
   ]);

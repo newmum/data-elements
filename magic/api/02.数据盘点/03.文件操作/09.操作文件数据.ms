@@ -2,14 +2,14 @@
   "properties": {},
   "id": "f7f2ee0a5eb5410fbf30a027d48ca8da",
   "script": null,
-  "groupId": "datapd_catalog_group_01",
-  "name": "05.操作文件数据",
+  "groupId": "e79210b931bf5e1e9070de78883499c9",
+  "name": "09.操作文件数据",
   "createTime": 1782955344001,
   "updateTime": 1784437771752,
   "lock": null,
   "createBy": null,
   "updateBy": null,
-  "path": "/files/curd-data",
+  "path": "/rows",
   "method": "GET",
   "parameters": [
     {
@@ -102,19 +102,19 @@
   "responseBodyDefinition": null
 }
 ================================
-// 接口：07.操作文件数据
-// 路由：GET /dst/catalog/files/curd-data
-// 业务说明：按文件目录标识读取数据项和目标表，区分数据预览与增删改操作，并将请求转发至对应的数据表接口。
-// 数据预览
 import com.linewell.dataelement.metautil.service.MetadataExplorerService as metadataExplorerService;
 import "@post:/dst/catalog/detail" as queryById;
-import "@post:/dst/catalog/catalog-items/list" as getCatalogItem;
+import "@post:/dst/catalog/items" as getCatalogItem;
 import com.linewell.dataelement.elasticsearch.EsCommonService as esCommonService;
 import "@post:/dst/db/rowdata" as remoteTableData;
-import "@get:/dst/catalog/files/create-table" as createTable;
+import "@get:/dst/file/materialize" as createTable;
 import "@post:/dst/db/preview" as registeredPreview;
 
+// GET /dst/file/rows 操作文件数据
+// 业务说明：按文件目录标识读取数据项和目标表，区分数据预览与增删改操作，并将请求转发至对应的数据表接口。
+// 数据预览
 // 获取字段数
+
 body = {tid}
 cols = getCatalogItem();
 var { resName, tableId, dbId } = queryById();

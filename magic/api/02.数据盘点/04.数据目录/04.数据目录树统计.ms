@@ -3,7 +3,7 @@
   "id": "datapd_catalog_tree_stats_01",
   "script": null,
   "groupId": "datapd_catalog_group_01",
-  "name": "09.数据目录树统计",
+  "name": "04.数据目录树统计",
   "createTime": null,
   "updateTime": 1790484211140,
   "lock": null,
@@ -22,7 +22,7 @@
   "responseBodyDefinition": null
 }
 ================================
-// 接口：06.数据目录树统计
+// 接口：04.数据目录树统计
 // 路由：POST /dst/catalog/treeStatistics
 // 业务说明：数据目录树统计。以 da_catalog_t 已完成目录为唯一真值，返回组织、业务系统和数据源下的目录数量；使用请求参数 conditions、orgIds、keyword。
 import '@post:/dst/catalog/page' as catalogPage

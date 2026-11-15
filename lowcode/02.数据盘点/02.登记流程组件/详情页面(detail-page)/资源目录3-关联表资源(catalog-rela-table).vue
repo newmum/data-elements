@@ -352,7 +352,7 @@ const openMappingDialog = async (row: any) => {
   state.loading.mapping = true;
   try {
     // 获取目录数据项列表
-    const catalogItems = await $common.post("/dst/catalog/catalog-items/list", {
+    const catalogItems = await $common.post("/dst/catalog/items", {
       tid: props.catalogId,
     });
 

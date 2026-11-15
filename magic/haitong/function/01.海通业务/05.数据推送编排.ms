@@ -30,20 +30,25 @@
 ================================
 import java.nio.charset.StandardCharsets
 import java.util.UUID
-// 业务主流程：认证身份 -> 通道权限 -> 表契约 -> 幂等/容量 -> 持久队列 -> 可查询回执。
 import '@/haitong/common' as common
 import '@/haitong/table-contract' as tableContract
 import '@/haitong/registry' as registry
 import '@/haitong/message' as message
+import com.haitong.api.AuthenticationFilter
 import com.haitong.core.Models
 import com.haitong.core.Rules
+
+// /haitong/push 供数据接收、兼容推送和调试入口复用。校验通道和登记权限后执行幂等、续投及状态返回。
 var c=common();var _bean=c.bean;var _fail=c.fail;var _text=c.text;var _now=c.now;var _list=c.list;var _object=c.object;var _key=c.key;var _hash=c.hash;var _absolute=c.absolute;;var caller=input.caller;var req=input.request
 var catalog=_bean('routeCatalog');var ingress=_bean('ingressService');var files=_bean('fileService')
 var json=c.json;var key=input.key;var raw=input.raw;var action=input.action
+// 原公共表批次入口和旧地址继续返回原链接，新地址返回其对应的状态查询链接。
+var shortStatusLink = action != 'data-push' && req.getAttribute(AuthenticationFilter.ORIGINAL_PATH) == null
 var receipt=accepted=>{
     req.setAttribute('haitong.messageId',accepted.id())
     var result=message({id:accepted.id(),caller:caller})
-    var location=_absolute('/api/v1/messages/'+accepted.id())
+    var path = shortStatusLink ? '/api/v1/message?id=' : '/api/v1/messages/'
+    var location = _absolute(path + accepted.id())
     result.code=accepted.duplicate()?'ALREADY_ACCEPTED':'ACCEPTED';result.duplicate=accepted.duplicate();result.statusUrl=location
     return {status:accepted.duplicate() && result.completed?200:202,body:result,location:location}
 }
@@ -55,7 +60,9 @@ if(action=='upload'){
     if(file.getSize()>c.p.getLimits().getMaxFileBytes()){_fail(413,'FILE_TOO_LARGE','文件超过限制')}
     var stream=file.getInputStream();var accepted=null
     try{accepted=files.upload(caller.id(),channel,key,_text(file.getSubmittedFileName())==''?'upload.bin':file.getSubmittedFileName(),stream)}finally{stream.close()}
-    req.setAttribute('haitong.fileId',accepted.id());var url=_absolute('/api/v1/files/'+accepted.id())
+    req.setAttribute('haitong.fileId',accepted.id())
+    var path = shortStatusLink ? '/api/v1/file?id=' : '/api/v1/files/'
+    var url = _absolute(path + accepted.id())
     var result=message({action:'file',id:accepted.id(),caller:caller});result.duplicate=accepted.duplicate();result.statusUrl=url
     return {status:accepted.duplicate()?200:202,body:result,location:url}
 }

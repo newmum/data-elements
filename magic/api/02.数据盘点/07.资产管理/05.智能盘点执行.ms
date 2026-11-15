@@ -9,7 +9,7 @@
   "lock": null,
   "createBy": null,
   "updateBy": null,
-  "path": "/inventory/run",
+  "path": "/scan",
   "method": "POST",
   "parameters": [],
   "options": [],
@@ -22,13 +22,13 @@
   "responseBodyDefinition": null
 }
 ================================
-// 接口：05.智能盘点执行
-// 路由：POST /dst/asset/inventory/run
-// 业务说明：按租户/部门/目录范围执行智能盘点：批量读取目录、资源挂接与标准覆盖，识别缺失挂接、悬空资源与标准缺口；支持 dryRun。
 import cn.hutool.core.util.IdUtil
 import jsons
 import tenantRuntime
 import "@post:/sym/user/me" as me
+
+// POST /dst/asset/scan 智能盘点执行
+// 业务说明：按租户/部门/目录范围执行智能盘点：批量读取目录、资源挂接与标准覆盖，识别缺失挂接、悬空资源与标准缺口；支持 dryRun。
 
 var tenantId = tenantRuntime.id()
 var user = me()

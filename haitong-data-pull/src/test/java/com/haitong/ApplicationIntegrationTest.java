@@ -103,17 +103,25 @@ class ApplicationIntegrationTest {
         assertEquals(200,request("GET","/actuator/health",null,null,null).statusCode());
     }
     @Test void receiptDeduplicationAndBodyConflict() throws Exception {
-        var first=request("POST","/api/v1/ingest/demo",KEY,"idem","{\"v\":1}");
+        var first=request("POST","/api/v1/ingest?channel=demo",KEY,"idem","{\"v\":1}");
         assertEquals(202,first.statusCode(),first.body());String id=(String)object(first.body()).get("messageId");
-        var second=request("POST","/api/v1/ingest/demo",KEY,"idem","{\"v\":1}");
+        String statusUrl="/api/v1/message?id="+id;
+        assertEquals(statusUrl,object(first.body()).get("statusUrl"));
+        assertEquals(statusUrl,first.headers().firstValue("Location").orElseThrow());
+        var second=request("POST","/api/v1/ingest/demo?channel=ignored",KEY,"idem","{\"v\":1}");
+        assertEquals(202,second.statusCode(),second.body());
         assertEquals(id,object(second.body()).get("messageId"));assertEquals(true,object(second.body()).get("duplicate"));
+        assertEquals("/api/v1/messages/"+id,object(second.body()).get("statusUrl"));
+        assertEquals("/api/v1/messages/"+id,second.headers().firstValue("Location").orElseThrow());
         assertEquals(1,repo.deliveries(id).size());
         assertEquals(409,request("POST","/api/v1/ingest/demo",KEY,"idem","{ \"v\":1}").statusCode());
-        assertEquals(404,request("GET","/api/v1/messages/"+id,OTHER,null,null).statusCode());
+        assertEquals(200,request("GET",statusUrl,KEY,null,null).statusCode());
+        assertEquals(200,request("GET","/api/v1/messages/"+id+"?id=ignored",KEY,null,null).statusCode());
+        assertEquals(404,request("GET",statusUrl,OTHER,null,null).statusCode());
     }
     @Test void simpleLogSceneAcceptsOneTableBatchAndPrintsItsSafeSummary() throws Exception {
         String body="{\"tableName\":\"customer\",\"batchId\":\"customer-001\",\"records\":[{\"id\":\"C001\"},{\"id\":\"C002\"}]}";
-        var response=request("POST","/api/v1/simple/log",KEY,"customer-001",body);
+        var response=request("POST","/api/v1/log",KEY,"customer-001",body);
         assertEquals(202,response.statusCode(),response.body());String id=(String)object(response.body()).get("messageId");
         assertTrue(worker.runOne(Kind.LOG));assertEquals("SUCCEEDED",repo.deliveries(id).getFirst().status());
         assertEquals(422,request("POST","/api/v1/simple/log",KEY,"invalid-table","{\"tableName\":\"customer\",\"records\":[]}").statusCode());
@@ -205,11 +213,18 @@ class ApplicationIntegrationTest {
     }
     @Test void multipartUploadCreatesFileCheckpoint() throws Exception {
         String boundary="relay-test-boundary",body="--"+boundary+"\r\nContent-Disposition: form-data; name=\"file\"; filename=\"events.jsonl\"\r\nContent-Type: application/octet-stream\r\n\r\n{\"x\":1}\n\r\n--"+boundary+"--\r\n";
-        var request=HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+port+"/api/v1/files/demo"))
+        var request=HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+port+"/api/v1/import?channel=demo"))
             .header("X-Api-Key",KEY).header("Idempotency-Key","multipart")
             .header("Content-Type","multipart/form-data; boundary="+boundary).POST(HttpRequest.BodyPublishers.ofString(body)).build();
         var response=http.send(request,HttpResponse.BodyHandlers.ofString());assertEquals(202,response.statusCode(),response.body());
-        assertNotNull(object(response.body()).get("fileId"));
+        var fileId=object(response.body()).get("fileId");
+        assertNotNull(fileId);
+        String statusUrl="/api/v1/file?id="+fileId;
+        assertEquals(statusUrl,object(response.body()).get("statusUrl"));
+        assertEquals(statusUrl,response.headers().firstValue("Location").orElseThrow());
+        assertEquals(200,request("GET",statusUrl,KEY,null,null).statusCode());
+        assertEquals(200,request("GET","/api/v1/files/"+fileId+"?id=ignored",KEY,null,null).statusCode());
+        assertEquals(404,request("GET",statusUrl,OTHER,null,null).statusCode());
     }
     @Test void partialBadFileDoesNotBecomeCompleted() throws Exception {
         Accepted a=files.upload("default","demo","bad-file","events.jsonl",new ByteArrayInputStream(bytes("{\"x\":1}\nnot-json\n")));
@@ -225,8 +240,9 @@ class ApplicationIntegrationTest {
         assertNull(repo.message(a.id()).orElseThrow().payload());
     }
     @Test void builtInInspectIsRealValidation() throws Exception {
-        var response=request("POST","/api/v1/actions/inspect",KEY,null,"{\"deviceCode\":\"D001\"}");
+        var response=request("POST","/api/v1/action?code=inspect",KEY,null,"{\"deviceCode\":\"D001\"}");
         assertEquals(200,response.statusCode(),response.body());assertTrue(response.body().contains("sha256"));
+        assertEquals(200,request("POST","/api/v1/actions/inspect?code=ignored",KEY,null,"{\"deviceCode\":\"D001\"}").statusCode());
     }
 
     @Test void ledgerSeparatesUniqueInputAndDuplicates() {

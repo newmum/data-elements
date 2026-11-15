@@ -137,7 +137,7 @@ class WorkbenchMagicTest {
    }}));
   }
   Object script(String key,Map<String,Object> input,Map<String,Object> extra) throws Exception {
-   var paths=Map.of("context","function/01.通用函数/05.工作台数据范围.ms","changes","function/01.通用函数/06.工作台变更查询.ms","overview","api/02.数据盘点/05.盘点统计/01.工作台概览.ms","items","api/02.数据盘点/05.盘点统计/02.工作台事项分页.ms","export","api/02.数据盘点/05.盘点统计/03.工作台导出.ms");
+   var paths=Map.of("context","function/01.通用函数/05.工作台数据范围.ms","changes","function/01.通用函数/06.工作台变更查询.ms","overview","api/02.数据盘点/08.工作台/01.工作台概览.ms","items","api/02.数据盘点/08.工作台/02.工作台事项分页.ms","export","api/02.数据盘点/08.工作台/03.工作台导出.ms");
    String source=java.nio.file.Files.readString(java.nio.file.Path.of("../magic/"+paths.get(key))).split("================================",2)[1].replaceAll("(?m)^import[^\\n]*\\n","");
    var vars=new HashMap<String,Object>();vars.put("payload",input);vars.put("body",input);vars.put("tenantRuntime",scope);vars.put("tenantAccounts",scope);vars.put("dataScope",scope);vars.put("db",db);vars.put("tableSort",new TableSortMagicModule());
    vars.put("workbenchData", (java.util.function.Function<Object[], Object>) args -> {

@@ -149,7 +149,7 @@ const validate = async (): Promise<boolean> => {
 const detailApi = (tid: string) => {
   return Promise.all([
     $common.post("/dst/catalog/detail", { tid }),
-    $common.post("/dst/catalog/catalog-items/list", { tid }),
+    $common.post("/dst/catalog/items", { tid }),
   ]);
 };
 

@@ -1773,7 +1773,7 @@ async function loadSection(
   if (section === "changes") changesVersion++;
   try {
     const data = payloadOf(
-      await $common.post("/dst/statistics/workbench/overview", {
+      await $common.post("/dst/workbench/overview", {
         scope,
         section,
         ...(section === "registration"
@@ -2019,7 +2019,7 @@ async function fetchDrawer(query: PageQuery = {}) {
   list.error = "";
   try {
     const data = payloadOf(
-      await $common.post("/dst/statistics/workbench/items", {
+      await $common.post("/dst/workbench/items", {
         scope,
         kind: list.kind,
         status: list.status,
@@ -2086,7 +2086,7 @@ async function updateChangeType(type: string) {
     scope = activeScope.value;
   try {
     const data = payloadOf(
-      await $common.post("/dst/statistics/workbench/items", {
+      await $common.post("/dst/workbench/items", {
         scope,
         kind: "changes",
         changeType: type,
@@ -2442,7 +2442,7 @@ async function exportData() {
     const rows = await collectReportRows(
       async (payload) =>
         payloadOf(
-          await $common.post("/dst/statistics/workbench/export", {
+          await $common.post("/dst/workbench/export", {
             ...payload,
             scope: exportScope,
           }),

@@ -596,7 +596,7 @@ const initTable = async () => {
 
     // 同时获取目录数据项信息
     await $common
-      .post("/dst/catalog/catalog-items/list", {
+      .post("/dst/catalog/items", {
         tid: props.catalogId,
       })
       .then((itemRes) => {

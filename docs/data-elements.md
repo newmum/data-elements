@@ -762,7 +762,8 @@ Use the released `my-db` page at `/register/register-sjkb/list` as the default v
 - 独立海通的联调和内部运维接口将新地址注册在 Magic，仍需兼容的旧 HTTP 地址在认证层匹配原方法后转入同一脚本。旧协议将对象标识放在路径时，该标识优先于同名查询参数。发布后核对编辑器回读、真实 HTTP 和冷启动。
 - 系统管理的 `/sym/dict` 叶组提供 `GET /query`、`POST /tree`、`POST /save` 和 `POST /sort`。字典保存和排序以认证租户中的有效字典项为边界，保存时校验普通父节点的租户归属。
 - 系统管理的组件和动态表单使用 `POST /sym/component/manage` 与 `POST /sym/form/config`。两项入口通过 `action` 选择各自的业务操作，组件缓存刷新使用 `/sym/component/cache/refresh`。
-- 业务附件与上报位于 `02.数据盘点/03.文件操作`。在 `/dst/file` 下，`POST /manage` 操作附件，`GET /download` 读取二进制，`POST /snapshot` 维护非结构化文件登记快照，`POST /register` 处理数据上报登记、历史和回执，`POST /submit` 提交规范化文件。Web 层在会话校验前将已保存的 `GET /data/download?fileId=…` 映射到同一 Magic 下载入口，保留查询参数及文件归属校验。
+- `02.数据盘点/03.文件操作` 的前缀为 `/dst/file`。`POST /manage` 操作附件，`GET /download` 读取二进制，`POST /snapshot` 维护非结构化文件登记快照，`POST /register` 处理数据上报登记、历史和回执，`POST /submit` 提交规范化文件。文件目录使用 `POST /upload`、`GET /template`、`POST /import`、`GET /rows` 和 `GET /materialize`。Web 层在会话校验前将已保存的 `GET /data/download?fileId=…` 映射到同一 Magic 下载入口，保留查询参数及文件归属校验。
+- 目录数据项由 `POST /dst/catalog/items` 读取。`02.数据盘点/08.工作台` 的前缀为 `/dst/workbench`，提供概览 `/overview`、事项分页 `/items` 和导出 `/export`。`/dst/asset` 的资产模块分页、保存、删除、统计、盘点和评估依次使用 `POST /page`、`/save`、`/delete`、`/stats`、`/scan` 和 `/score`，已有资产调用可沿用原 POST 地址。
 - Direct database moves must preserve the complete resource tree:
   - Every group has one `group.json`.
   - Every physical folder has one active directory row ending in `/` with `file_content='this is directory'`.

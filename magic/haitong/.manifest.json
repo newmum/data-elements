@@ -104,64 +104,64 @@
       "baseSha256": "6c0bb9a4623b66014e415981585f687545799d6be78811b210b18aaab8e86248"
     },
     {
-      "path": "magic/haitong/api/04.数据接收与附件/01.接收和附件接口/01.统一数据推送.ms",
+      "path": "magic/haitong/api/04.数据接收与附件/01.数据接收/01.统一数据推送.ms",
       "id": "haitong-public-1",
-      "databasePath": "/magic-api/api/04.数据接收与附件/01.接收和附件接口/01.统一数据推送.ms",
-      "baseSha256": "7d5b48d463a8ea5dd796599548902bf53278b84e1a3ba3a60d461d4962a0b68a"
+      "databasePath": "/magic-api/api/04.数据接收与附件/01.数据接收/01.统一数据推送.ms",
+      "baseSha256": "e8e55acd6bd5e6354245aa173f81ad64daa8772225a6048c1441298c3947b4eb"
     },
     {
-      "path": "magic/haitong/api/04.数据接收与附件/01.接收和附件接口/02.兼容文件传输推送.ms",
+      "path": "magic/haitong/api/04.数据接收与附件/01.数据接收/02.兼容文件传输推送.ms",
       "id": "haitong-public-2",
-      "databasePath": "/magic-api/api/04.数据接收与附件/01.接收和附件接口/02.兼容文件传输推送.ms",
-      "baseSha256": "968684c7f83e95f861d1259471891d3eccdf403ebd79ceaeb23647de296b06e9"
+      "databasePath": "/magic-api/api/04.数据接收与附件/01.数据接收/02.兼容文件传输推送.ms",
+      "baseSha256": "00d5f9ef5e9833175a299e47cbe5fde6bb13a584abc311b3542c7dabc3b85bdb"
     },
     {
-      "path": "magic/haitong/api/04.数据接收与附件/01.接收和附件接口/03.兼容消息队列推送.ms",
+      "path": "magic/haitong/api/04.数据接收与附件/01.数据接收/03.兼容消息队列推送.ms",
       "id": "haitong-public-3",
-      "databasePath": "/magic-api/api/04.数据接收与附件/01.接收和附件接口/03.兼容消息队列推送.ms",
-      "baseSha256": "a046345b757511562c6b342daaa997a787640612344a406007090ac69e125e7b"
+      "databasePath": "/magic-api/api/04.数据接收与附件/01.数据接收/03.兼容消息队列推送.ms",
+      "baseSha256": "4235ad3bac0e06db0e21213c98b4a92e60c98b3cd37aba54a8aa4eba0cb9e82f"
     },
     {
-      "path": "magic/haitong/api/04.数据接收与附件/01.接收和附件接口/04.历史日志推送.ms",
+      "path": "magic/haitong/api/04.数据接收与附件/01.数据接收/04.历史日志推送.ms",
       "id": "haitong-public-4",
-      "databasePath": "/magic-api/api/04.数据接收与附件/01.接收和附件接口/04.历史日志推送.ms",
-      "baseSha256": "761916f6215158a3a097b4394f29017eea52dc4f706b6390e12b2fae560a8db5"
+      "databasePath": "/magic-api/api/04.数据接收与附件/01.数据接收/04.历史日志推送.ms",
+      "baseSha256": "315f9e4aee20751bfdcc432cbbc5112e334834b6940dfcc51b0efb15d72740e2"
     },
     {
-      "path": "magic/haitong/api/04.数据接收与附件/01.接收和附件接口/05.通道数据接收.ms",
+      "path": "magic/haitong/api/04.数据接收与附件/01.数据接收/05.通道数据接收.ms",
       "id": "haitong-public-5",
-      "databasePath": "/magic-api/api/04.数据接收与附件/01.接收和附件接口/05.通道数据接收.ms",
-      "baseSha256": "52865f41ba4a3682c71935610c74d325762a4f00e81ff0c3e17b960ca2d22659"
+      "databasePath": "/magic-api/api/04.数据接收与附件/01.数据接收/05.通道数据接收.ms",
+      "baseSha256": "ffd65ca620ff9f0bc6243dcbd8faff5725717d7f292361c0b24a2f8c596358c7"
     },
     {
-      "path": "magic/haitong/api/04.数据接收与附件/01.接收和附件接口/06.业务操作执行.ms",
+      "path": "magic/haitong/api/04.数据接收与附件/01.数据接收/06.业务操作执行.ms",
       "id": "haitong-public-6",
-      "databasePath": "/magic-api/api/04.数据接收与附件/01.接收和附件接口/06.业务操作执行.ms",
-      "baseSha256": "fde9ec088b71a92276e5753e8f70e971720c1bda9bc79e2988ece6ab5a0be2fb"
+      "databasePath": "/magic-api/api/04.数据接收与附件/01.数据接收/06.业务操作执行.ms",
+      "baseSha256": "dab92b571253ba14be12c40b43718147c914f344cf417fa331a0f0bac68ac6b7"
     },
     {
-      "path": "magic/haitong/api/04.数据接收与附件/01.接收和附件接口/07.消息状态.ms",
+      "path": "magic/haitong/api/04.数据接收与附件/01.数据接收/07.消息状态.ms",
       "id": "haitong-public-7",
-      "databasePath": "/magic-api/api/04.数据接收与附件/01.接收和附件接口/07.消息状态.ms",
-      "baseSha256": "e211f46de04611062ca54fac03605e8c59d568be6191c9a6859df1d79c16eb5f"
+      "databasePath": "/magic-api/api/04.数据接收与附件/01.数据接收/07.消息状态.ms",
+      "baseSha256": "34a80cca0b1675c72e2771e58516c001c4fde0271fb9b3c8711023b2725bde1d"
     },
     {
-      "path": "magic/haitong/api/04.数据接收与附件/01.接收和附件接口/08.批量文件导入.ms",
+      "path": "magic/haitong/api/04.数据接收与附件/01.数据接收/08.批量文件导入.ms",
       "id": "haitong-public-8",
-      "databasePath": "/magic-api/api/04.数据接收与附件/01.接收和附件接口/08.批量文件导入.ms",
-      "baseSha256": "e9730232c109582fe171a7da6b451e9e906fad6489eea2b63e4138344df4a8a3"
+      "databasePath": "/magic-api/api/04.数据接收与附件/01.数据接收/08.批量文件导入.ms",
+      "baseSha256": "90ce6c718079c090f7fa7f42a2369e1c26647e946749d899aa869013a3f30c21"
     },
     {
-      "path": "magic/haitong/api/04.数据接收与附件/01.接收和附件接口/09.导入文件状态.ms",
+      "path": "magic/haitong/api/04.数据接收与附件/01.数据接收/09.导入文件状态.ms",
       "id": "haitong-public-9",
-      "databasePath": "/magic-api/api/04.数据接收与附件/01.接收和附件接口/09.导入文件状态.ms",
-      "baseSha256": "fedcc2401a5de27d336818d43b0755e6c61887779fe1bfe9a95c499dac734c18"
+      "databasePath": "/magic-api/api/04.数据接收与附件/01.数据接收/09.导入文件状态.ms",
+      "baseSha256": "b6c6b78a78c01c9a2454bed71e8caf5b663c0aa636ff2a60f6a396259a152a66"
     },
     {
-      "path": "magic/haitong/api/04.数据接收与附件/01.接收和附件接口/group.json",
+      "path": "magic/haitong/api/04.数据接收与附件/01.数据接收/group.json",
       "id": "haitong-files-api",
-      "databasePath": "/magic-api/api/04.数据接收与附件/01.接收和附件接口/group.json",
-      "baseSha256": "8b0742e87843e9dbe1b65ffc6b7fed749cf6602cf72ee11646eb4bd11be065f6"
+      "databasePath": "/magic-api/api/04.数据接收与附件/01.数据接收/group.json",
+      "baseSha256": "f620c9e82c655387a535e141bdd3184d3516d1f7b56a40ffca1cd3925f6dc3ed"
     },
     {
       "path": "magic/haitong/api/04.数据接收与附件/02.附件传输/01.初始化分片上传.ms",
@@ -485,7 +485,7 @@
       "path": "magic/haitong/api/06.数据推送验证/03.消息验证/01.业务消息状态查询.ms",
       "id": "haitong-validation-12",
       "databasePath": "/magic-api/api/06.数据推送验证/03.消息验证/01.业务消息状态查询.ms",
-      "baseSha256": "f97dd7c52740a7075b3576d0b8a97dc65e6401c6186f4f0848692ced922a863a"
+      "baseSha256": "ba8eb0f34021dcf76e234572df50f4e1eb4cba661f1246be9eb06e49bc661c05"
     },
     {
       "path": "magic/haitong/api/06.数据推送验证/03.消息验证/group.json",
@@ -527,7 +527,7 @@
       "path": "magic/haitong/function/01.海通业务/05.数据推送编排.ms",
       "id": "haitong-function-push",
       "databasePath": "/magic-api/function/01.海通业务/05.数据推送编排.ms",
-      "baseSha256": "a6e2b8c7e9d4ee0ece8be93fde3c3e806ad93f43e68d8cc5906e13dc9e313039"
+      "baseSha256": "91318f3da1a7c8520beda5bd82b93906b8e566a68544b2b4d5336f45dba9633d"
     },
     {
       "path": "magic/haitong/function/01.海通业务/06.运维查询与状态处理.ms",
