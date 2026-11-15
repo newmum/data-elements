@@ -70,3 +70,7 @@ describe('metadata return toolbar entry',()=>{
 });
 
 describe('operator library refinement',()=>{it('uses collapsible categories and Ant Design form controls',()=>{expect(editor).toContain('<Collapse className="modeling-operator-collapse"');expect(editor).toContain('<Form layout="vertical"');expect(editor).toContain('useState(250)');expect(editor).toContain("operatorSearch.trim()?operatorGroups");});});
+
+describe('compact modeling workspace',()=>{it('keeps equal default panels and inline preview status',()=>{expect(editor).toContain('[paletteWidth,setPaletteWidth]=useState(250),[propertiesWidth,setPropertiesWidth]=useState(250)');expect(editor).toContain('<strong>属性配置</strong>');expect(editor).toContain('modeling-collapsed-rail');expect(editor).toContain('modeling-preview-tab-status');expect(editor).toContain("scroll={{x:'max-content'}}");expect(editor).not.toContain("y:Math.max(70,previewHeight-130)");});});
+
+describe('modeling task entry',()=>{it('opens the isolated mock task panel without replacing the canvas',()=>{expect(editor).toContain('aria-label="任务配置"');expect(editor).toContain('open={executionOpen}');expect(editor).toContain('<ModelingExecutionPanel nodes={nodes} tables={effectiveTables}/>');expect(editor).toContain('forceRender');});});
