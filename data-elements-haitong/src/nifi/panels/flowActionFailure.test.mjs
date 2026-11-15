@@ -11,12 +11,12 @@ import { visibleFlowErrors, visibleFlowBulletins } from '../runtime/dismissedFlo
 
 const failure = (count = 20) => ({ response: { status: 422, data: { code: 'MAPPING_PREFLIGHT_FAILED',
   error: 'MAPPING_PREFLIGHT_FAILED', message: '字段映射发布前检查失败', detail: `${count} 个字段：NiFi 缺少 1.1.12 扩展`, traceId: 'trace-fixture' } },
-  config: { method: 'post', url: '/pipelines/p/deploy' }, message: 'Request failed with status code 422' });
+  config: { method: 'post', url: '/life/deploy?id=p' }, message: 'Request failed with status code 422' });
 
 test('failed responses keep the concrete reason, status, trace and endpoint; empty polling cannot erase them', () => {
   const row = flowActionFailure(failure(), 'deploy');
   assert.equal(row.message, '字段映射发布前检查失败');
-  for (const text of ['NiFi 缺少 1.1.12', 'HTTP 422', 'trace-fixture', '/pipelines/p/deploy']) assert.ok(row.detail.includes(text));
+  for (const text of ['NiFi 缺少 1.1.12', 'HTTP 422', 'trace-fixture', '/life/deploy']) assert.ok(row.detail.includes(text));
   assert.equal(mergeFlowErrors([], [row]).length, 1);
   assert.equal(mergeFlowErrors([row], [row]).length, 1);
 });
@@ -65,7 +65,7 @@ test('20/100 mapping fields both make one deploy request and no per-row diagnost
   for (const count of [20, 100]) {
     const h = harness(async () => { throw failure(count); });
     await assert.rejects(h.hooks.useDeployPipeline().mutationFn({ id: 'p' }));
-    assert.deepEqual(h.requests, ['/pipelines/p/deploy']);
+    assert.deepEqual(h.requests, ['/life/deploy?id=p']);
     assert.equal(h.failures.length, 1);
     assert.equal(h.failures[0][0], 'p');
     assert.equal(h.failures[0][3], true);

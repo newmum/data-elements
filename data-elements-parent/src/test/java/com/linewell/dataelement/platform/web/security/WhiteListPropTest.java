@@ -13,8 +13,8 @@ class WhiteListPropTest {
         WhiteListProp properties = new WhiteListProp();
         properties.setWhiteList(List.of("/public/**"));
 
-        assertTrue(properties.isWhiteListed("/portal/index"));
-        assertTrue(properties.isWhiteListed("/sym/tenant/login-options"));
+        assertTrue(properties.isWhiteListed("/portal/main/index"));
+        assertTrue(properties.isWhiteListed("/portal/sso/options"));
         assertTrue(properties.isWhiteListed("/public/demo"));
         assertFalse(properties.isWhiteListed("/private/demo"));
     }
@@ -23,7 +23,7 @@ class WhiteListPropTest {
     void handlesMissingExternalWhitelist() {
         WhiteListProp properties = new WhiteListProp();
 
-        assertTrue(properties.isWhiteListed("/portal/index"));
+        assertTrue(properties.isWhiteListed("/portal/main/index"));
         assertFalse(properties.isWhiteListed("/private/demo"));
     }
 
@@ -42,12 +42,15 @@ class WhiteListPropTest {
     void canvasBusinessApisFollowConfiguredWhitelist() {
         WhiteListProp properties = new WhiteListProp();
         properties.setWhiteList(List.of("/portal/**", "/public/**"));
-        assertFalse(properties.isWhiteListed("/nifi/api/pipelines"));
-        assertFalse(properties.isWhiteListed("/nifi/api/pipelines/123"));
-        assertFalse(properties.isWhiteListed("/nifi/api/pipelines/123/deploy"));
-        assertTrue(properties.isWhiteListed("/portal/login"));
+        assertFalse(properties.isWhiteListed("/nifi/flow/list"));
+        assertFalse(properties.isWhiteListed("/nifi/flow/detail"));
+        assertFalse(properties.isWhiteListed("/nifi/life/deploy"));
+        assertTrue(properties.isWhiteListed("/portal/sso/login"));
+        assertFalse(properties.isWhiteListed("/portal/sso/session"));
+        assertFalse(properties.isWhiteListed("/portal/sso/tenants"));
+        assertFalse(properties.isWhiteListed("/portal/sso/switch"));
 
         properties.setWhiteList(List.of("/nifi/**"));
-        assertTrue(properties.isWhiteListed("/nifi/api/pipelines"));
+        assertTrue(properties.isWhiteListed("/nifi/flow/list"));
     }
 }

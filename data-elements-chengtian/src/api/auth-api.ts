@@ -1,7 +1,7 @@
 import request from "@/utils/request";
 import sm from "sm-crypto";
 import { useSettingStore } from "@/store";
-const AUTH_BASE_URL = "/portal";
+const AUTH_BASE_URL = "/portal/sso";
 
 const AuthAPI = {
   /** 登录接口*/
@@ -33,7 +33,7 @@ const AuthAPI = {
   /** SSO 统一认证登录 GET 请求，通过 ticket 或 code 参数认证 */
   ssoLogin(params: { ticket?: string; code?: string }) {
     return request<any, { token: string }>({
-      url: `${AUTH_BASE_URL}/ssoLogin`,
+      url: `${AUTH_BASE_URL}/redeem`,
       method: "get",
       params,
     });

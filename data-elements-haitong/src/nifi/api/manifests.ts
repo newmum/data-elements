@@ -27,7 +27,7 @@ function normalizeManifests(payload: unknown): ComponentManifest[] {
 }
 
 export async function fetchComponentManifests(): Promise<ComponentManifest[]> {
-  const { data } = await apiClient.get<unknown>('/manifests');
+  const { data } = await apiClient.get<unknown>(import.meta.env.MODE === 'flow-lite' ? '/manifests' : '/catalog/list');
   return governanceManifests(normalizeManifests(data));
 }
 

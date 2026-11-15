@@ -1,7 +1,5 @@
 {
-  "properties": {
-    "leafRoute": true
-  },
+  "properties": {},
   "id": "f5c231f2eb04431e8ff2a7ecbb7d07c2",
   "script": null,
   "groupId": "4e0e58d9dda153609f1d61b05d162791",
@@ -11,7 +9,7 @@
   "lock": null,
   "createBy": null,
   "updateBy": null,
-  "path": "/",
+  "path": "/index",
   "method": "GET",
   "parameters": [],
   "options": [],
@@ -129,10 +127,10 @@
   }
 }
 ================================
-// 接口：01.门户首页
-// 路由：GET /portal/index
+import systemConfig
+
+// GET /portal/main/index 门户首页。
 // 业务说明：读取当前租户可公开展示的系统配置，组装门户首页所需的名称、标识等资料并返回。
 // 门户首页：处理 GET /index 的核心查询和组装返回数据逻辑。
-import systemConfig
 
 return systemConfig.publicSettings()

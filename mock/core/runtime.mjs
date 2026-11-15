@@ -626,14 +626,14 @@ export class ChengtianMockRuntime {
   }
 
   dispatch(key, query, body, token) {
-    if (key === "GET /portal/index") return clone(configuration.globalSettings);
-    if (key === "GET /sym/tenant/login-options") return this.tenantOptions();
-    if (key === "GET /sym/tenant/login-settings") {
+    if (key === "GET /portal/main/index") return clone(configuration.globalSettings);
+    if (key === "GET /portal/sso/options") return this.tenantOptions();
+    if (key === "GET /portal/sso/settings") {
       const code = scenarioForTenantId(query.tenantId);
       assert(code, 400, "行业租户不存在");
       return this.settings(code);
     }
-    if (key === "POST /portal/login") {
+    if (key === "POST /portal/sso/login") {
       assert(
         typeof body.account === "string" &&
           body.account.trim() &&
@@ -653,14 +653,14 @@ export class ChengtianMockRuntime {
     );
     if (/^[A-Z]+ \/sym\/logs(?:\/|$)/.test(key))
       return this.logs.handle(key, query, body, this.database, clone(this.session), this.components);
-    if (key === "POST /portal/logout") {
+    if (key === "POST /portal/sso/logout") {
       this.session = null;
       this.sessionStorage?.removeItem("data-elements:mock:session:v3");
       return "/login";
     }
-    if (["GET /sym/tenant/current", "GET /sym/tenant/available"].includes(key))
+    if (["GET /portal/sso/session", "GET /portal/sso/tenants"].includes(key))
       return key.endsWith("/available") ? this.tenantOptions() : this.tenant();
-    if (key === "POST /sym/tenant/switch") {
+    if (key === "POST /portal/sso/switch") {
       const code = scenarioForTenantId(body.tenantId);
       assert(Object.hasOwn(scenarios, code), 403, "不能进入未定义的行业场景");
       Object.assign(this.session, {
@@ -678,7 +678,7 @@ export class ChengtianMockRuntime {
     if (key === "POST /sym/user/me") return this.user();
     if (key === "GET /sym/menu/routes") return this.routes();
     if (key === "GET /sym/dict") return query.code ? [] : {};
-    if (key === "POST /dws/market/shoppingCardList") {
+    if (key === "POST /dws/cart/page") {
       assert(body.mode === "count", 501, "首阶段仅提供导航购物车计数");
       return { total: 0 };
     }
@@ -706,10 +706,10 @@ export class ChengtianMockRuntime {
           (!body.env || row.env === body.env),
       );
     }
-    if (key === "POST /dst/database/treeStatistics")
+    if (key === "POST /db/source/stats")
       return this.statistics(body);
-    if (key === "POST /dst/database/page") return this.sourcePage(body);
-    if (key === "POST /dst/database/departmentDataSources") {
+    if (key === "POST /db/source/page") return this.sourcePage(body);
+    if (key === "POST /db/source/dept") {
       assert(
         ["cards", "choices", "tables", "summary"].includes(body.mode),
         501,
@@ -718,9 +718,9 @@ export class ChengtianMockRuntime {
       if (body.mode === "tables") return this.tables(body);
       return this.sourcePage(body);
     }
-    if (key === "POST /dst/database/detail") return this.sourceDetail(body.tid);
-    if (key === "POST /dst/database/saveOrUpdate") return this.saveSource(body);
-    if (key === "POST /dst/database/delete") {
+    if (key === "POST /db/source/detail") return this.sourceDetail(body.tid);
+    if (key === "POST /db/source/save") return this.saveSource(body);
+    if (key === "POST /db/source/delete") {
       const database = clone(this.database),
         rows = requireSources(database, this.session, body.tid);
       rows.forEach((row) => {
@@ -733,13 +733,13 @@ export class ChengtianMockRuntime {
       requireSources(this.database, this.session, body.tid);
       return { tid: body.tid, refreshed: true };
     }
-    if (key === "GET /dst/database/metadata/dbInfo") return this.metadataSummary(query, false);
-    if (key === "GET /dst/database/metadata/refreshDbInfo") return this.metadataSummary(query, true);
-    if (key === "GET /dst/database/metadata/tables") {
+    if (key === "GET /db/schema/info") return this.metadataSummary(query, false);
+    if (key === "GET /db/schema/refresh") return this.metadataSummary(query, true);
+    if (key === "GET /db/schema/tables") {
       const result = this.tables(query);
       return query.paged || query.catalogPaged ? result : result.list;
     }
-    if (key === "GET /dst/database/metadata/columns") {
+    if (key === "GET /db/field/list") {
       const table = requireTable(
         this.database,
         this.session,
@@ -749,8 +749,8 @@ export class ChengtianMockRuntime {
     }
     if (
       [
-        "POST /dst/database/metadata/table/preview-data",
-        "POST /dst/database/metadata/table/sample-data",
+        "POST /db/row/preview",
+        "POST /db/row/sample",
       ].includes(key)
     ) {
       const tableId =
@@ -763,7 +763,7 @@ export class ChengtianMockRuntime {
       const table = requireTable(this.database, this.session, tableId);
       return previewTable(
         table,
-        key.endsWith("sample-data")
+        key === "POST /db/row/sample"
           ? { ...body, pageNo: 1, pageSize: body.sampleSize || 20 }
           : body,
       );

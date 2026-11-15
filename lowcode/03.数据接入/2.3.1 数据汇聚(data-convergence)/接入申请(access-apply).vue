@@ -486,7 +486,7 @@ const partitionPayload = (key: string) => {
 const probePartitions = async (targets: any[]) => {
   const identity = JSON.stringify([String(props.id), targets.map((target: any) => target.dbId)]);
   if (partitionProbeIdentity === identity) return;
-  const response = await $common.post("/dst/database/metadata/getCreateTableDDL", {
+  const response = await $common.post("/db/schema/ddl", {
     canvas: true, partitionProbe: true, sourceTableId: formData.value.sourceTableId || props.id,
     targetDbIds: targets.map((target: any) => target.dbId),
   }, { _hiddenErrorMsg: true });
@@ -1467,14 +1467,14 @@ const init = async () => {
   templateLoading.value = true;
   loadPending.value = { datasource: true, node: true, source: true };
   try {
-    const addUrl = "/ods/getTableTempalte";
-    const viewUrl = "/ods/queryTargetTableInfo";
+    const addUrl = "/ods/target/template";
+    const viewUrl = "/ods/target/detail";
     // 三个请求互不依赖；收到全部结果后再设置表单默认目标库和接入节点。
     const [datasourceResult, nodeResult, sourceResult] = await Promise.allSettled([
-      trackLoad("datasource", $common.post("/ods/targetDatasource/options", {
+      trackLoad("datasource", $common.post("/ods/target/options", {
         taskCategory: props.taskCategory || "ingestion",
       }), runId),
-      trackLoad("node", $common.post("/ods/nifi-node/access-options", {}), runId),
+      trackLoad("node", $common.post("/ods/node/options", {}), runId),
       trackLoad("source", $common.post(props.type === "add" ? addUrl : viewUrl, {
         tid: sourceTableId,
       }, { _hiddenErrorMsg: true }, 120 * 1000), runId),
@@ -1654,7 +1654,7 @@ const regenerateDdl = async (input: any, targetKeys?: string[]) => {
     const targets = changed.map((target: any) => {
       return { propList: target.propList, tableItems: targetTableItems(input.tableItems, target.propList.dbType), partitionPlan: partitionPayload(target.key), sourceConstraints: sourceConstraints.value };
     });
-    const response = targets.length ? await $common.post("/dst/database/metadata/getCreateTableDDL", {
+    const response = targets.length ? await $common.post("/db/schema/ddl", {
       batchGenerate: true,
       canvas: true,
       targets,
@@ -1836,7 +1836,7 @@ const handleSave = async () => {
     const ddlInput = await currentDdlInput();
     materializationProgress.value.detail = '正在预检来源类型及文件定位信息';
     try {
-      const sourcePreflightResponse = await $common.post('/ods/dataAggTaskEnsure', {
+      const sourcePreflightResponse = await $common.post('/ods/job/fill', {
         tableId: props.id, dryRun: true, validateSourceOnly: true,
       }, { _hiddenErrorMsg: true }, 60 * 1000);
       const sourcePreflight = sourcePreflightResponse?.data || sourcePreflightResponse || {};
@@ -1899,7 +1899,7 @@ const handleSave = async () => {
     const validateMaterializationBatch = async (
       targets: (ReturnType<typeof batchTargets>[number] & { pendingTargetCleanup?: boolean })[],
     ) => {
-      const response = await $common.post('/ods/createTapleApply', {
+      const response = await $common.post('/ods/target/create', {
         tid: props.id, targets, dryRun: true,
       }, { _hiddenErrorMsg: true }, 120 * 1000);
       const validation = response?.data || response;
@@ -1924,7 +1924,7 @@ const handleSave = async () => {
         partitionPlan: payload.partitionPlan,
         tableItems: payload.tableItems,
       }));
-      const response = await $common.post("/dst/database/metadata/createTable", {
+      const response = await $common.post("/db/schema/create", {
         canvas: true,
         validateOnly: true,
         batchValidateOnly: true,
@@ -1963,7 +1963,7 @@ const handleSave = async () => {
     });
     materializationProgress.value.phase = 1;
     materializationProgress.value.detail = "正在检查目标表是否存在，并核对建表语句";
-    const preflightResponse = await $common.post('/ods/dataAggReset', {
+    const preflightResponse = await $common.post('/ods/job/reset', {
         batchDryRun: true,
         checkPhysicalExistence: true,
         sourceTableId: props.id,
@@ -2017,7 +2017,7 @@ const handleSave = async () => {
             ddl:payload.ddl, partitionPlan:payload.partitionPlan, tableItems:payload.tableItems };
         });
         const checkReuseTargets = async (preview: boolean) => {
-          const response = await $common.post('/dst/database/metadata/createTable', {
+          const response = await $common.post('/db/schema/create', {
             canvas:true, validateOnly:true, batchReuseValidation:true, partitionPreviewOnly:preview, targets,
           }, { _hiddenErrorMsg:true }, 120 * 1000);
           return response?.data || response || {};
@@ -2065,7 +2065,7 @@ const handleSave = async () => {
             materializationProgress.value.detail = `正在补齐并核验 ${check.database}.${check.tableName} 的 Hive 分区`;
             try {
               targetChangesPossible = true;
-              const response = await $common.post('/dst/database/metadata/createTable', {
+              const response = await $common.post('/db/schema/create', {
                 ...target, canvas:true, reuseExistingOnly:true, repairHivePartitions:true,
                 expectedHiveDatabase:check.database, expectedHiveTable:check.tableName,
                 expectedHiveLocation:check.tableLocation, expectedMissingPartitions:check.missing,
@@ -2121,7 +2121,7 @@ const handleSave = async () => {
         materializationProgress.value.detail = "正在清理已确认重新物化的目标表";
         for (const item of conflicts) {
           targetChangesPossible = true;
-          const result = await $common.post('/ods/dataAggReset', {
+          const result = await $common.post('/ods/job/reset', {
             sourceTableId: props.id,
             targetTableId: item.probe?.targetTableId || item.known?.targetTableId || '',
             targetDbId: item.targetDbId,
@@ -2152,7 +2152,7 @@ const handleSave = async () => {
         : materializationResultRow(target, 'unknown', '未收到该目标的执行结果，重新提交时将先检查目标表。')));
     materializationResults.value = resultRows();
     targetChangesPossible = true;
-    const response = await $common.post('/ods/createTapleApply', {
+    const response = await $common.post('/ods/target/create', {
       tid: props.id,
       targets: batchTargets(),
     }, { _hiddenErrorMsg: true }, Math.min(pending.length, 5) * 120 * 1000);
@@ -2232,7 +2232,7 @@ const handleDeleteExistingTarget = async (selectedTarget: any = null) => {
       deleteTargetTable: true,
       confirmUnmanagedTarget: true,
     };
-    const previewResult = await $common.post('/ods/dataAggReset',
+    const previewResult = await $common.post('/ods/job/reset',
       { ...request, dryRun: true }, { _hiddenErrorMsg: true });
     const preview = previewResult?.data || previewResult || {};
     if (target.targetTableId && String(preview.targetTableId || '') !== String(target.targetTableId)) {
@@ -2247,7 +2247,7 @@ const handleDeleteExistingTarget = async (selectedTarget: any = null) => {
       { type: 'warning', confirmButtonText: '确认删除', cancelButtonText: '取消' },
     );
     recoveryDeleting.value = true;
-    const result = await $common.post('/ods/dataAggReset', {
+    const result = await $common.post('/ods/job/reset', {
       ...request,
       targetTableId: preview.targetTableId || request.targetTableId,
       confirmUnlinkedTarget: preview.targetUnlinked === true,

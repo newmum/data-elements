@@ -19,7 +19,7 @@ import org.ssssssss.script.MagicScriptContext;
 class DistributionTaskPageMagicTest {
     private static final String ID = "b1813cae042f4fa0a5e08ae30fd00a12";
     private static final String TENANT = "tenant-a";
-    private static final String PAGE_PATH = "api/03.数据接入/05.数据分发/01.分发任务分页.ms";
+    private static final String PAGE_PATH = "api/03.数据接入/10.数据分发/01.分发任务分页.ms";
 
     @ParameterizedTest
     @ValueSource(ints = {20, 100})

@@ -98,28 +98,28 @@ function fixture(size = 2) {
     },
     $common: { post: async (route, body) => {
       calls.push({ route, body: plain(body) });
-      if (route === '/ods/targetDatasource/options') {
+      if (route === '/ods/target/options') {
         const list = context.optionRows || Object.values(context.datasourceMap.value);
         return { data: { list, options: list.length ? [{ value: body.taskCategory === 'distribution' ? 'dept-1' : 'ODS', children: list }] : [] } };
       }
-      if (route === '/ods/nifi-node/access-options') return {};
-      if (route === '/dst/database/metadata/collectColumns') return { data: columns };
-      if (route === '/ods/dataAggTaskEnsure') return {data:{sourcePreflight:true,valid:true,sideEffectsApplied:false,sourceTableId:body.tableId}};
-      if (route.endsWith('/getCreateTableDDL') && body.partitionProbe) return {data:{source:{status:'unsupported'},targetSupport:{}}};
-      if (route === '/ods/getTableTempalte' || route === '/ods/queryTargetTableInfo') return { data: {
+      if (route === '/ods/node/options') return {};
+      if (route === '/db/field/collect') return { data: columns };
+      if (route === '/ods/job/fill') return {data:{sourcePreflight:true,valid:true,sideEffectsApplied:false,sourceTableId:body.tableId}};
+      if (route === '/db/schema/ddl' && body.partitionProbe) return {data:{source:{status:'unsupported'},targetSupport:{}}};
+      if (route === '/ods/target/template' || route === '/ods/target/detail') return { data: {
         propList: { sourceTableName: context.sourceTableName.value, tableName: 'ODS_SAVED_CUSTOM', dbId: [['ODS', 'db-0']],
           sourceFileConfig: context.ftpTemplate || null,
           sourceAccessMode: context.sourceMode, sourceAccessModeCode: context.sourceModeCode },
         tableItems: columns,
       } };
-      if (route.endsWith('/getCreateTableDDL')) return { data: { batchGenerate: true,
+      if (route === '/db/schema/ddl') return { data: { batchGenerate: true,
         results: body.targets.map(target => ({
           dbId: target.propList.dbId, requestedTableName: target.propList.tableName,
           tableName: context.renameResponse ? 'WRONG_NAME' : target.propList.tableName,
           ddl: `CREATE TABLE ${target.propList.tableName} (person_id varchar(32))`,
         })),
       } };
-      if (route === '/ods/dataAggReset') {
+      if (route === '/ods/job/reset') {
         if (!body.dryRun) {
           assert.ok(context.allowCleanup, 'Only the explicit rebuild fixture may simulate a deletion');
           return { data: { targetPhysicalDeleted: true, targetCleanupPending: false } };
@@ -130,7 +130,7 @@ function fixture(size = 2) {
             targetDatabaseType: datasource[target.targetDbId].dbType })),
         } };
       }
-      if (route.endsWith('/createTable')) {
+      if (route === '/db/schema/create') {
         if (body.repairHivePartitions) {
           if (context.repairFails) throw new Error('无法补齐分区');
           context.repairedPartition = true;
@@ -155,7 +155,7 @@ function fixture(size = 2) {
             valid: true, sideEffectsApplied: false })),
         } };
       }
-      if (route === '/ods/createTapleApply') {
+      if (route === '/ods/target/create') {
         assert.ok(Array.isArray(body.targets));
         if (context.materializationReply) return context.materializationReply(body);
         if (body.dryRun) return { data: { batch: true, complete: true, dryRun: true, sideEffectsApplied: false,
@@ -276,9 +276,9 @@ multi.form.tableName = 'ODS_User_CONFIRMED';
 multi.actual.syncTargetTableNameInput(multi.form.tableName);
 await multi.actual.handleSave();
 assert.equal(multi.notices.filter(n => n.key === 'error').length, 0, JSON.stringify(multi.notices));
-const generated = multi.calls.find(c => c.route.endsWith('/getCreateTableDDL') && c.body.batchGenerate).body.targets;
-const validated = multi.calls.find(c => c.route.endsWith('/createTable')).body.targets;
-const saveRequests = multi.calls.filter(c => c.route === '/ods/createTapleApply' && !c.body.dryRun);
+const generated = multi.calls.find(c => c.route === '/db/schema/ddl' && c.body.batchGenerate).body.targets;
+const validated = multi.calls.find(c => c.route === '/db/schema/create').body.targets;
+const saveRequests = multi.calls.filter(c => c.route === '/ods/target/create' && !c.body.dryRun);
 assert.equal(saveRequests.length, 1);
 const saved = saveRequests[0].body.targets;
 assert.deepEqual(saved.map(target => target.propList.dbId), ['db-0', 'db-1'],
@@ -318,11 +318,11 @@ existingHive.actual.syncTargetDatasourceSelection(existingHive.form.dbId);
 existingHive.context.existingPhysical = true;
 existingHive.context.compatibilityWarnings = ['amount：已有Hive STRING将按文本保存（模板类型decimal）'];
 await existingHive.actual.handleSave();
-const reuseSubmissions = existingHive.calls.filter(c => c.route === '/ods/createTapleApply' && !c.body.dryRun);
+const reuseSubmissions = existingHive.calls.filter(c => c.route === '/ods/target/create' && !c.body.dryRun);
 assert.equal(reuseSubmissions.length, 1);
 assert.ok(reuseSubmissions[0].body.targets.every(target => target.reuseExistingTable === true));
-assert.equal(existingHive.calls.filter(c => c.route === '/ods/dataAggReset' && !c.body.dryRun).length, 0);
-assert.equal(existingHive.calls.filter(c=>c.route.endsWith('/createTable') && c.body.batchReuseValidation).length,1);
+assert.equal(existingHive.calls.filter(c => c.route === '/ods/job/reset' && !c.body.dryRun).length, 0);
+assert.equal(existingHive.calls.filter(c=>c.route==='/db/schema/create' && c.body.batchReuseValidation).length,1);
 assert.equal(existingHive.calls.find(c=>c.route==='user-confirm').canReuse,true,'Physical table without registration can be adopted');
 assert.equal(existingHive.emitted.length, 1);
 assert.ok(existingHive.notices.some(notice => notice.key === 'info' && notice.message.includes('沿用现有文本类型')));
@@ -333,22 +333,22 @@ for (const type of ['hive','mrshive','mysql','postgresql','kingbase8','oracle','
   await mixed.actual.init(); mixed.form.dbId=[['ODS','db-1'],['ODS','db-0']];
   mixed.actual.syncTargetDatasourceSelection(mixed.form.dbId); mixed.context.existingDbIds=['db-1'];
   await mixed.actual.handleSave();
-  const registrations=mixed.calls.filter(c=>c.route==='/ods/createTapleApply' && !c.body.dryRun);
+  const registrations=mixed.calls.filter(c=>c.route==='/ods/target/create' && !c.body.dryRun);
   assert.equal(registrations.length,1);
   assert.deepEqual(registrations[0].body.targets.map(target=>target.propList.dbId),['db-0','db-1']);
   assert.deepEqual(registrations[0].body.targets.map(target=>target.reuseExistingTable),[false,true]);
   assert.equal(mixed.emitted.length,1);
-  assert.equal(mixed.calls.findIndex(c=>c.body?.batchReuseValidation)<mixed.calls.findIndex(c=>c.route==='/ods/createTapleApply'),true,
+  assert.equal(mixed.calls.findIndex(c=>c.body?.batchReuseValidation)<mixed.calls.findIndex(c=>c.route==='/ods/target/create'),true,
     'All reused targets are checked before creating the missing target');
 }
 const incompatible=fixture(); await incompatible.actual.init();
 incompatible.form.dbId=[['ODS','db-0'],['ODS','db-1']]; incompatible.context.existingPhysical=true;
 incompatible.context.incompatibleExisting=true; await incompatible.actual.handleSave();
-assert.equal(incompatible.calls.filter(c=>c.route==='/ods/createTapleApply').length,0);
+assert.equal(incompatible.calls.filter(c=>c.route==='/ods/target/create').length,0);
 assert.equal(incompatible.emitted.length,0);
 const cancelled=fixture(); await cancelled.actual.init(); cancelled.context.existingPhysical=true;
 cancelled.context.existingChoice='cancel'; await cancelled.actual.handleSave();
-assert.equal(cancelled.calls.filter(c=>c.route==='/ods/createTapleApply').length,0);
+assert.equal(cancelled.calls.filter(c=>c.route==='/ods/target/create').length,0);
 
 for (const size of [1, 20]) {
   const f = fixture(size);
@@ -357,7 +357,7 @@ for (const size of [1, 20]) {
   f.actual.syncTargetDatasourceSelection(f.form.dbId);
   await f.actual.handleSave();
   assert.equal(f.notices.filter(n => n.key === 'error').length, 0, JSON.stringify(f.notices));
-  const writes = f.calls.filter(call => call.route === '/ods/createTapleApply' && !call.body.dryRun);
+  const writes = f.calls.filter(call => call.route === '/ods/target/create' && !call.body.dryRun);
   assert.equal(writes.length, 1);
   assert.equal(writes[0].body.targets.length, size);
   assert.equal(f.emitted.at(-1)[1].targetTables.length, size);
@@ -379,7 +379,7 @@ assert.deepEqual(plain(partial.actual.materializationResults.value.map(row => ro
 assert.match(partial.actual.materializationResults.value[1].message, /目标连接超时.*核对目标物理表/);
 delete partial.context.materializationReply;
 await partial.actual.handleSave();
-const partialWrites = partial.calls.filter(call => call.route === '/ods/createTapleApply' && !call.body.dryRun);
+const partialWrites = partial.calls.filter(call => call.route === '/ods/target/create' && !call.body.dryRun);
 assert.deepEqual(partialWrites.map(call => call.body.targets.map(({ propList }) => propList.dbId)), [
   ['db-0', 'db-1', 'db-2'], ['db-1', 'db-2'],
 ]);
@@ -400,9 +400,9 @@ for (const scenario of ['confirm', 'cancel', 'repair-fails']) {
   assert.ok(confirmation >= 0, JSON.stringify(f.notices));
   assert.match(f.calls[confirmation].message.text, /\/warehouse\/validation[\s\S]*2026/);
   const repair = f.calls.findIndex(call => call.body?.repairHivePartitions);
-  const precheck = f.calls.findIndex(call => call.route === '/ods/createTapleApply' && call.body.dryRun);
+  const precheck = f.calls.findIndex(call => call.route === '/ods/target/create' && call.body.dryRun);
   const review = f.calls.findIndex(call => call.body?.batchReuseValidation && call.body?.partitionPreviewOnly === false);
-  const save = f.calls.findIndex(call => call.route === '/ods/createTapleApply' && !call.body.dryRun);
+  const save = f.calls.findIndex(call => call.route === '/ods/target/create' && !call.body.dryRun);
   if (scenario === 'confirm') {
     assert.ok(precheck >= 0 && confirmation > precheck && repair > confirmation && review > repair && save > review);
     assert.deepEqual(f.calls[repair].body.expectedMissingPartitions, ['2026']);
@@ -425,10 +425,10 @@ for (const valid of [true, false]) {
   f.context.allowCleanup = true;
   if (!valid) f.context.materializationReply = () => ({ data: { batch: true, complete: false, results: [] } });
   await f.actual.handleSave();
-  const precheck = f.calls.findIndex(call => call.route === '/ods/createTapleApply' && call.body.dryRun);
+  const precheck = f.calls.findIndex(call => call.route === '/ods/target/create' && call.body.dryRun);
   const confirmation = f.calls.findIndex(call => call.title === '删除目标表并重新物化');
-  const cleanup = f.calls.findIndex(call => call.route === '/ods/dataAggReset' && !call.body.dryRun);
-  const save = f.calls.findIndex(call => call.route === '/ods/createTapleApply' && !call.body.dryRun);
+  const cleanup = f.calls.findIndex(call => call.route === '/ods/job/reset' && !call.body.dryRun);
+  const save = f.calls.findIndex(call => call.route === '/ods/target/create' && !call.body.dryRun);
   assert.ok(precheck >= 0, JSON.stringify(f.notices));
   assert.equal(f.calls[precheck].body.targets[0].pendingTargetCleanup, true);
   if (valid) {
@@ -558,12 +558,12 @@ for (const fields of [20, 100]) {
     columnName: `field_${i}`, dataType: 'varchar', length: 100,
   })));
   assert.equal(f.calls.length, 3);
-  assert.deepEqual(plain(f.calls.find(c => c.route === '/ods/getTableTempalte').body), { tid: f.context.props.id });
+  assert.deepEqual(plain(f.calls.find(c => c.route === '/ods/target/template').body), { tid: f.context.props.id });
   const before = f.calls.length;
   await f.actual.handleSave();
   assert.deepEqual(f.emitted.at(-1)[1].sourceFileConfig, f.context.ftpTemplate);
-  assert.equal(f.calls.filter(c => c.route === '/ods/getTableTempalte').length, 1);
-  assert.equal(f.calls.filter(c => c.route === '/dst/database/metadata/collectColumns').length, 0);
+  assert.equal(f.calls.filter(c => c.route === '/ods/target/template').length, 1);
+  assert.equal(f.calls.filter(c => c.route === '/db/field/collect').length, 0);
   ftpRequestCounts.push({ fields, initialRequests: before, saveRequests: f.calls.length - before });
 }
 assert.equal(ftpRequestCounts[0].saveRequests, ftpRequestCounts[1].saveRequests);

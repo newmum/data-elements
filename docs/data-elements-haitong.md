@@ -36,7 +36,7 @@ NiFi 原工程的迁入基线固定为 2026-09-29 14:42:43 的 `c122f605`；之�
 
 GaussDB 两种华为原生产品在登记、后端与画布自动地址中统一使用 `autoBalance=true`，驱动文件与部署键见[后端驱动契约](data-elements-parent.md#datasource-adapters)。ES 来源版本选项包含 6.x、7.x、8.x，使用 NiFi 的低级 REST 客户端和 JsonQueryElasticsearch，不按版本切换成 SQL JDBC。登记与预览已回归 ES 6/8 的两种 mapping 和命中数格式；真实 NiFi 节点上的认证、TLS 与执行仍按现场版本验收，不把协议测试作为实际投递成功。
 
-画布打开字段治理时，`/nifi/api/field-mapping/schema-contract` 默认在一次批量租户、角色及登记表校验后使用登记字段快照，不为打开编辑器强制连接物理库。旧驱动无法返回 JDBC 元数据、源库暂时不可达或目标尚未物化时，已登记的治理配置仍可打开编辑。显式“锁定字段结构”传入 `verifyPhysical=true`，继续读取真实物理字段；正式部署仍按当前授权引用核验结构漂移。无权、缺失、被删除或跨租户登记仍直接拒绝，不使用浏览器字段绕过鉴权。打开和重试不自动保存规则或改写已部署任务。
+画布打开字段治理时，`/nifi/map/schema` 默认在一次批量租户、角色及登记表校验后使用登记字段快照，不为打开编辑器强制连接物理库。旧驱动无法返回 JDBC 元数据、源库暂时不可达或目标尚未物化时，已登记的治理配置仍可打开编辑。显式“锁定字段结构”传入 `verifyPhysical=true`，继续读取真实物理字段；正式部署仍按当前授权引用核验结构漂移。无权、缺失、被删除或跨租户登记仍直接拒绝，不使用浏览器字段绕过鉴权。打开和重试不自动保存规则或改写已部署任务。
 
 
 <a id="overview--安装和启动"></a>
@@ -86,7 +86,7 @@ pnpm run dev
 
 TXT 按带表头的分隔文本读取，自动识别制表符、逗号、分号、竖线，也可在“设置解析”中选择分隔符及 UTF-8 / GB18030 编码。JSON 必须使用 UTF-8，支持普通对象、对象数组及 `data`、`rows`、`list` 中单一记录数组；各记录字段取并集，缺失值留空，长整数与高精度数值按原始文本保留，嵌套对象或数组须先展开为普通字段。所有来源格式进入同一规范编辑、预览与上报流程，投递时统一生成单表 UTF-8 CSV，继续使用现有接收规则。
 
-上传原件使用既有文件API。`POST /dst/database/metadata/report-registration` 用 `parse` 一次批量校验文件归属并识别区域，`list` 读取当前源配置，`save` 以版本和事务校验保存。新工作流提交 `workflowVersion:2` 和明确的 `normalizedTableKeys`，只有选定且检查通过的表才更新登记快照；浏览器提交的 `normalized` 不能授予通过状态，规范修改会使原批准失效，正在上报的表在处理结束前拒绝并发保存；成功后允许继续修改规范。成功回执保存registrationSnapshot元数据快照，旧成功回执在首次后续保存时从服务端原登记补齐，客户端不能伪造或覆盖回执及历史快照。通过状态及解析配置保存在现有 `pool_cfg.reportRegistration`，无表结构变更。20/100项的清单保存均为4次读取；快照导入另有4次SQL、一次索引准备和一次批量更新，不逐表exists或mapping补查。逐ID校验当前租户、数据源、文件及表关联，批量参数不能扩大访问范围。解析响应及登记JSON只保存来源和元数据，不包含业务数据单元格。CSV/TXT 使用服务器现有 CSV 库原生扫描，保留引号、多行值、空行及 UTF-8/GB18030 兼容，避免在脚本解释器中逐字符处理大文件。对象存储读取使用请求独立客户端，连接、无数据读取和单次调用分别限制为5、15和20秒；按实际字节数限制20 MiB并关闭流，超时返回待解析记录，提示通过“设置解析”重试。批量识别仍只发起一次接口调用，页面等待时间按文件数分配每份30秒预算、最多20份，避免20份文件共用单份文件的30秒截止时间。前端单文件上传上限仍为10 MiB；存储读取失败不能标记为识别或规范成功。
+上传原件使用既有文件API。`POST /db/report/register` 用 `parse` 一次批量校验文件归属并识别区域，`list` 读取当前源配置，`save` 以版本和事务校验保存。新工作流提交 `workflowVersion:2` 和明确的 `normalizedTableKeys`，只有选定且检查通过的表才更新登记快照；浏览器提交的 `normalized` 不能授予通过状态，规范修改会使原批准失效，正在上报的表在处理结束前拒绝并发保存；成功后允许继续修改规范。成功回执保存registrationSnapshot元数据快照，旧成功回执在首次后续保存时从服务端原登记补齐，客户端不能伪造或覆盖回执及历史快照。通过状态及解析配置保存在现有 `pool_cfg.reportRegistration`，无表结构变更。20/100项的清单保存均为4次读取；快照导入另有4次SQL、一次索引准备和一次批量更新，不逐表exists或mapping补查。逐ID校验当前租户、数据源、文件及表关联，批量参数不能扩大访问范围。解析响应及登记JSON只保存来源和元数据，不包含业务数据单元格。CSV/TXT 使用服务器现有 CSV 库原生扫描，保留引号、多行值、空行及 UTF-8/GB18030 兼容，避免在脚本解释器中逐字符处理大文件。对象存储读取使用请求独立客户端，连接、无数据读取和单次调用分别限制为5、15和20秒；按实际字节数限制20 MiB并关闭流，超时返回待解析记录，提示通过“设置解析”重试。批量识别仍只发起一次接口调用，页面等待时间按文件数分配每份30秒预算、最多20份，避免20份文件共用单份文件的30秒截止时间。前端单文件上传上限仍为10 MiB；存储读取失败不能标记为识别或规范成功。
 
 上传失败反馈沿用源数据管理平台的结构化错误契约。HTTP 200 内的 `success:false`/失败 `code` 与 HTTP 4xx/5xx 都读取 `error.message/detail/code/traceId/type/method/path`；页面按文件列出失败原因，提供“查看详情”和“复制错误信息”。从异常链最后一个 `Caused by` 提取已返回的具体原因，完整异常仍可展开；不猜测服务端未返回的根因。网关返回 HTML 的 413 显示上传限制提示，不将其误报为 JSON 解析错误。展示和复制前隐藏可识别的口令、token、签名与认证头，不附带请求正文或文件内容。初始化、列表查询及提交错误使用同一详情入口。
 
@@ -97,7 +97,7 @@ TXT 按带表头的分隔文本读取，自动识别制表符、逗号、分号�
 生产排查以 `POST /data/file?action=upload` 的完整 `error.detail` 或同一 `traceId` 的服务端异常为依据。`MAGIC-SCRIPT-001` 只是脚本异常包装，不能据此判断文件格式不支持。现行脚本先通过 `configData()` 读取 `minio_url/minio_user`，再调用后端 `systemConfig.legacyMinioPassword()` 读取 `data-element.legacy-integration.minio-password`（Nacos 使用环境变量 `NACOS_DATA_ELEMENT_LEGACY_INTEGRATION_MINIO_PASSWORD`），随后写 MinIO 并保存当前租户 `file_upload_t`。应按实际异常核对运行配置是否有效、对象存储网络/认证/存储桶写入权限、文件记录写入，以及 Magic 与后端模块版本是否匹配；不能把空凭据、脱敏占位符或其他环境配置覆盖到生产。生产不可访问且缺少具体异常时，只能确认失败阶段，不能宣称生产上传故障已经解决。
 
 
-`POST /dst/database/metadata/report-submit` 接收规范化文件及 `datasourceId`、`tableId`、`fileId`、`requestId`，校验可信租户、文件/表/源关联及服务端规范通过标记；未通过时在任何投递或回执写入之前拒绝。通过后在事务内保留请求记录，调用既有 `FtpReportUploadService`，持久化真实结果。重复请求标识不重复投递；同一表和文件正在投递或已成功时，新请求标识也不会启动第二次投递；明确失败后可重试。服务解析当前行业 ODS 数据域 `FJGHCC` 的绑定，在目标配置的根目录下按“数据源ID/英文表名/”子目录投递到既有FTP/FTPS/SFTP目标，文件名为report_时间戳_随机码.csv。成功只代表该规范化文件已传入目标存储，后续目标系统是否解析入库需要其另行回执。凭据不返回浏览器，不把行数据写入 `test1` 作为成功依据。每源最多1000次回执，达到上限时明确拒绝并要求归档，不静默丢弃历史。
+`POST /db/report/submit` 接收规范化文件及 `datasourceId`、`tableId`、`fileId`、`requestId`，校验可信租户、文件/表/源关联及服务端规范通过标记；未通过时在任何投递或回执写入之前拒绝。通过后在事务内保留请求记录，调用既有 `FtpReportUploadService`，持久化真实结果。重复请求标识不重复投递；同一表和文件正在投递或已成功时，新请求标识也不会启动第二次投递；明确失败后可重试。服务解析当前行业 ODS 数据域 `FJGHCC` 的绑定，在目标配置的根目录下按“数据源ID/英文表名/”子目录投递到既有FTP/FTPS/SFTP目标，文件名为report_时间戳_随机码.csv。成功只代表该规范化文件已传入目标存储，后续目标系统是否解析入库需要其另行回执。凭据不返回浏览器，不把行数据写入 `test1` 作为成功依据。每源最多1000次回执，达到上限时明确拒绝并要求归档，不静默丢弃历史。
 
 提交先锁定来源行并保存待投递回执，释放锁后调用传输服务，再重新加锁保存实际结果。最后一次写入只更新本次请求预留且仍处于待投递状态的回执，同时保留其他请求和无关表的最新配置。MagicScript 路由本身的首次投递和幂等重试分别执行 4 次和 3 次读取，传输组件的目标解析另计。
 
@@ -194,17 +194,17 @@ NiFi 与业务接口使用数据平台的登录会话。独立打开海通时，
 
 NiFi 流程本身不保存在 IndexedDB；本地工作区只保存可选的 `nifiPipelineId` 关联。若从另一浏览器、另一租户或已删除的本地任务进入，仍应以 NiFi 后端流程列表为准。登录到不同租户时不能因为流程名称相同而复用其他租户的流程。
 
-集成平台总览由 Magic API 直接提供 `GET /nifi/api/pipelines/runtime-overview` 及对应 `HEAD`。两者共用 `@/common/nifiRuntimeOverview`，依次读取请求参数、校验可信行业库和排序字段、统计有效流程总数、运行数和失败数，再读取按任务名称、最近运行时间或更新时间排序的前五条。统计与明细各执行一次查询。明细空值末置，同值按流程 ID 排序。运行和失败取已保存的流程状态，页面刷新无需连接 NiFi 或来源库。GET 保留原始 JSON 响应，HEAD 返回对应状态和响应头。
+集成平台总览由 Magic API 直接提供 `GET /nifi/run/overview` 及对应 `HEAD`。两者共用 `@/common/nifiRuntimeOverview`，依次读取请求参数、校验可信行业库和排序字段、统计有效流程总数、运行数和失败数，再读取按任务名称、最近运行时间或更新时间排序的前五条。统计与明细各执行一次查询。明细空值末置，同值按流程 ID 排序。运行和失败取已保存的流程状态，页面刷新无需连接 NiFi 或来源库。GET 保留原始 JSON 响应，HEAD 返回对应状态和响应头。
 
-共享平台的海通流程页和万象血缘页使用 Magic API 直接提供的 `GET /nifi/api/pipelines/page`。内部函数 `@/common/nifiPipelinePage` 从可信租户读取有效画布，按 `q` 在名称和说明中做字面匹配，空关键词显示全部有效流程。支持名称、节点数、创建及更新时间排序，默认更新时间降序，空值末置，同值按流程 ID 升序。节点数由数据库按旧 DSL 的节点展开规则计算后参与排序。默认每页 20 条，最多 100 条，越界页返回空 `list` 并保留请求页码和 `total`。非空页用一条计数和一条分页查询，空页只查总数。Magic 延续原参数转换和原始 JSON，提供对应的 `HEAD`。轻量安装包使用其独立后端的同名路由。
+共享平台的海通流程页和万象血缘页使用 Magic API 直接提供的 `GET /nifi/flow/page`。内部函数 `@/common/nifiPipelinePage` 从可信租户读取有效画布，按 `q` 在名称和说明中做字面匹配，空关键词显示全部有效流程。支持名称、节点数、创建及更新时间排序，默认更新时间降序，空值末置，同值按流程 ID 升序。节点数由数据库按旧 DSL 的节点展开规则计算后参与排序。默认每页 20 条，最多 100 条，越界页返回空 `list` 并保留请求页码和 `total`。非空页用一条计数和一条分页查询，空页只查总数。Magic 延续原参数转换和原始 JSON，提供对应的 `HEAD`。轻量安装包使用独立后端的 `GET /nifi/api/pipelines/page`。
 
-画布 API 可达检查 `GET /nifi/api/ping` 与 `HEAD /nifi/api/ping` 由 Magic 直接提供，沿用现有会话校验。GET 返回原始 `{"status":"ok"}`，用于确认画布 API 可用。它不读取数据库或访问 NiFi 节点。
+画布 API 可达检查 `GET /nifi/catalog/ping` 与 `HEAD /nifi/catalog/ping` 由 Magic 直接提供，沿用现有会话校验。GET 返回原始 `{"status":"ok"}`，用于确认画布 API 可用。它不读取数据库或访问 NiFi 节点。
 
-`GET /nifi/api/pipelines` 和 `GET /nifi/api/pipelines/runtime-list` 及其 HEAD 由 Magic 直接提供。两个兼容查询均保留完整数组，只执行一次当前租户的结构化查询。游标逐行读取画布和节点映射，略过保存内容损坏的流程，并将未记录更新时间的流程放在末尾。普通列表返回摘要，海通工具栏的「打开流程」使用此入口。运行列表在关闭游标后，按需解析 NiFi 根组标识并读取一次递归快照，只有租户可见且已部署的流程才添加运行指标或对应错误。分页页面独立使用 `/nifi/api/pipelines/page`。
+`GET /nifi/flow/list` 和 `GET /nifi/run/list` 及其 HEAD 由 Magic 直接提供。两个兼容查询均保留完整数组，只执行一次当前租户的结构化查询。游标逐行读取画布和节点映射，略过保存内容损坏的流程，并将未记录更新时间的流程放在末尾。普通列表返回摘要，海通工具栏的「打开流程」使用此入口。运行列表在关闭游标后，按需解析 NiFi 根组标识并读取一次递归快照，只有租户可见且已部署的流程才添加运行指标或对应错误。分页页面独立使用 `/nifi/flow/page`。
 
-打开已保存画布使用 Magic `GET /nifi/api/pipelines/{id}`，并提供对应 HEAD。Magic 按当前认证行业租户和路径 ID 执行一次结构化查询。返回原始画布 JSON，保持持久化 `designHash`、时间及实际来源节点，可见范围外或无法解析的流程返回空体 404。Hive 画布投影沿用现行规则。读取无写入、元数据探查或 NiFi 请求，同一路径的 POST 保存沿用原契约。
+打开已保存画布使用 Magic `GET /nifi/flow/detail?id={id}`，并提供对应 HEAD。Magic 按当前认证行业租户和查询参数 `id` 执行一次结构化查询。返回原始画布 JSON，保持持久化 `designHash`、时间及实际来源节点，可见范围外或无法解析的流程返回空体 404。Hive 画布投影沿用现行规则。读取无写入、元数据探查或 NiFi 请求，同一路径的 POST 保存沿用原契约。
 
-共享平台使用 Magic 提供同一流程下的 `GET /ui-link`、`GET /status` 和 `GET /status/page` 及对应 HEAD。原生页面地址由现有部署关联决定，未部署返回 400。运行状态从现有部署指纹、本地错误和租户运行快照组装，读取时不改写已保存状态。处理器分页在当前流程的一次 NiFi 递归快照内排序，默认 20 条，最多 100 条。三个入口分别只执行一次按当前租户和流程 ID 的结构化查询，跨租户、已删除或损坏的流程返回空体 404。
+共享平台使用 Magic 提供同一流程下的 `GET /nifi/flow/link`、`GET /nifi/run/status` 和 `GET /nifi/run/nodes` 及对应 HEAD。原生页面地址由现有部署关联决定，未部署返回 400。运行状态从现有部署指纹、本地错误和租户运行快照组装，读取时不改写已保存状态。处理器分页在当前流程的一次 NiFi 递归快照内排序，默认 20 条，最多 100 条。三个入口分别只执行一次按当前租户和流程 ID 的结构化查询，跨租户、已删除或损坏的流程返回空体 404。
 
 
 <a id="overview--验证与结构"></a>
@@ -505,11 +505,11 @@ LXDH、SFZH 继续作为字符语义，不丢前导零、不擅自截断或补�
 
 | 现有接口 | 用途与改造要求 |
 | --- | --- |
-| `POST /ods/getTableTempalte` | 保留现有拼写；返回来源字段、目标建议及治理规则草稿，补充规则来源/版本和目标输出绑定，不重建另一份来源主档 |
-| `POST /ods/createTapleApply` | 保留现有拼写；按目标方言物化/复用并核验实际Schema；dryRun维持现有只读范围，不伪造表已存在或已建成功 |
-| `POST /ods/dataAggTaskEnsure` | 沿用任务生成主链，按真实来源和目标创建/复用任务；输出规范规则及映射投影，已有画布默认保留，forceRebuild仍需明确选择 |
-| `POST /ods/task/columnAutoMapping` | 旧自动匹配入口；适配到统一推荐服务时保持当前调用兼容，新结果先生成草稿，不直接部署 |
-| `POST /ods/task/saveOrUpdate` | 旧任务/映射保存入口；需调用同一规范保存服务，不能继续只写旧列造成DSL与投影分离；新协议不被旧页面有损回写 |
+| `POST /ods/target/template` | 保留现有拼写；返回来源字段、目标建议及治理规则草稿，补充规则来源/版本和目标输出绑定，不重建另一份来源主档 |
+| `POST /ods/target/create` | 保留现有拼写；按目标方言物化/复用并核验实际Schema；dryRun维持现有只读范围，不伪造表已存在或已建成功 |
+| `POST /ods/job/fill` | 沿用任务生成主链，按真实来源和目标创建/复用任务；输出规范规则及映射投影，已有画布默认保留，forceRebuild仍需明确选择 |
+| `POST /ods/map/auto` | 旧自动匹配入口；适配到统一推荐服务时保持当前调用兼容，新结果先生成草稿，不直接部署 |
+| `POST /ods/job/save` | 旧任务/映射保存入口；需调用同一规范保存服务，不能继续只写旧列造成DSL与投影分离；新协议不被旧页面有损回写 |
 
 所有接口继续复用现有租户、角色和关联范围，并在生成规则前集中预取治理、字典和目标定义。路由沿用真实group.path组合，文件物理目录和中文显示名称不决定公开URL。
 
@@ -1159,7 +1159,7 @@ Bsg = min(配置键批次上限,
 
 #### 13.1 保留的现有接口
 
-现有前缀为 `POST /nifi/api/field-mapping`。保留路径与兼容响应，增加新协议字段需先升级DTO和前端类型，不能假设原接口已支持以下新执行语义。
+以下为字段映射的早期协议设计，使用当时的 `/nifi/api/field-mapping` 前缀。运行中的路径和请求契约见 22.9 节。协议演进时同批维护前端类型与后端校验。
 
 | 路径 | 当前请求/响应 | 升级内容 |
 | --- | --- | --- |
@@ -1512,7 +1512,7 @@ Magic/低代码实施任务需在同一任务完成已授权baseline持久化、
 
 证据一：分别准备20/100规则字段、20/100记录样本和20/100引用ID。记录浏览器请求数、授权/元数据SQL、字典业务SQL、连接次数、FlowFile数和实际执行计划。冷缓存、暖缓存、关闭缓存各执行一轮。同一字典一批内，字段数/记录数增加不增加查询；跨批按11.2公式增长。保留SQL计数器/驱动代理证据，不能仅搜索代码或依赖缓存命中率。
 
-证据二：相同数据集混入其他租户、同租户无角色权限、删除/不存在字典、无权目标和不属于来源的字段ID。证明每个ID被校验，整批拒绝且无写入；缓存命中和模板导入也不能绕过。真实会话确认`/sym/tenant/current`，至少两个行业租户验证读写隔离。
+证据二：相同数据集混入其他租户、同租户无角色权限、删除/不存在字典、无权目标和不属于来源的字段ID。证明每个ID被校验，整批拒绝且无写入；缓存命中和模板导入也不能绕过。真实会话确认`/portal/sso/session`，至少两个行业租户验证读写隔离。
 
 不把“100个不同字典”与“100行同一字典”混为一项性能证明。资源组增加的固有成本单独报告，并展示节点预算如何拒绝无界计划。
 
@@ -1581,16 +1581,16 @@ LIVE_BATCH在两次执行间被外部修改时不能强求旧结果，测试需�
 | [画布编辑器](../data-elements-haitong/src/nifi/panels/FieldMappingEditor.tsx:120) | 10个UI函数、条件配置、模板/预览/编译入口；1851附近为合成样例 |
 | [ODS模板工具](../data-elements-haitong/src/nifi/utils/fieldMapping.ts:24) | 系统主键生成模板，与编辑器另一模板存在差异 |
 | [映射服务](../data-elements-parent/src/main/java/com/linewell/dataelement/integration/nifi/canvas/mapping/FieldMappingService.java:763) | 编译分支、函数白名单、预览实现和全局策略差距；1536附近为51函数名单 |
-| [映射接口](../magic/api/10.NiFi流程接口/01.接口/77.查询字段映射能力.ms) | 原 `/nifi/api/field-mapping` 的能力、校验、预览、推荐、编译、旧规则转换和兼容字典模板 |
+| [映射接口](../magic/api/10.NiFi流程接口/13.字段映射/03.查询字段映射能力.ms) | `/nifi/map` 的能力、校验、预览、推荐、编译、旧规则转换和兼容字典模板 |
 | [NiFi发布编译](../data-elements-parent/src/main/java/com/linewell/dataelement/integration/nifi/canvas/compile/DslCompiler.java:1866) | 单值/多值展开链、组件数量；2797附近为来源下推边界 |
 | [多值运行脚本](../data-elements-parent/src/main/resources/nifi/multi-value-translation.groovy:43) | 100记录、500键、重复键与部分命中语义 |
 | [多值脚本测试](../data-elements-parent/src/test/java/com/linewell/dataelement/integration/nifi/canvas/compile/RecordLookupScriptTest.java:25) | 20/100/201记录与元数据/查询次数断言；本次未执行 |
 | [部署拓扑测试](../data-elements-parent/src/test/java/com/linewell/dataelement/integration/nifi/canvas/compile/DslCompilerLookupDeploymentTest.java:29) | 多值链无SplitRecord、混合链和同连接合并；本次未执行 |
 | [登记治理组件](<D:/Sourcecode/data-elements/lowcode/01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource)/03.登记数据表(register-dbTable-catalog).vue:1576>) | 统一格式、字典/枚举、强制对标、附加条件 |
 | [真实接入申请](<D:/Sourcecode/data-elements/lowcode/03.数据接入/2.3.1 数据汇聚(data-convergence)/接入申请(access-apply).vue:1205>) | 模板、目标/字段限制、DDL和物化提交 |
-| [任务生成Magic](../magic/api/03.数据接入/15.接入任务补齐/01.按来源表补齐接入任务.ms:715) | 日期规则、枚举fallback、字典条件、任务/DSL/映射初建及级联 |
-| [目标物化Magic](../magic/api/03.数据接入/03.物化建表申请/01.数据接入物化建表.ms:501) | fieldTransformBindings及目标列落位 |
-| [模板Magic](../magic/api/03.数据接入/13.建表申请模板/01.根据表或目录获取建表申请模板.ms:357) | 译名列、系统字段、来源类型和显式清空 |
+| [任务生成Magic](../magic/api/03.数据接入/03.接入任务/05.按来源表补齐接入任务.ms:715) | 日期规则、枚举fallback、字典条件、任务/DSL/映射初建及级联 |
+| [目标物化Magic](../magic/api/03.数据接入/12.目标数据/01.数据接入物化建表.ms:501) | fieldTransformBindings及目标列落位 |
+| [模板Magic](../magic/api/03.数据接入/12.目标数据/03.根据表或目录获取建表申请模板.ms:357) | 译名列、系统字段、来源类型和显式清空 |
 | [部署规则Binder](../data-elements-parent/src/main/java/com/linewell/dataelement/integration/nifi/canvas/mapping/AccessTaskFieldMappingBinder.java:62) | 补齐旧映射、默认策略和按目标列恢复的边界 |
 | [画布保存](../data-elements-parent/src/main/java/com/linewell/dataelement/integration/nifi/canvas/controller/PipelineController.java:478) | DSL保存与版本控制，不等同映射投影统一事务已完成 |
 | [现有部署生命周期](../data-elements-parent/src/main/java/com/linewell/dataelement/integration/nifi/canvas/controller/PipelineRunController.java:567) | 旧组清理后重编译，需升级状态保存/恢复 |
@@ -1640,7 +1640,7 @@ LIVE_BATCH在两次执行间被外部修改时不能强求旧结果，测试需�
 | 外部码表 | 登记数据源/表/列批量授权，保留 schema、复合键、静态过滤、空标签和重复键策略；按字典和依赖阶段合并编码；拆分顺序和重复值保留 | `RegisteredDictionaryCatalog.java`、`BatchDictionaryReader.java` |
 | 正式服务 | capabilities、validate、compile、preview 复用同一个内核；编译返回 ENGINE_PLAN，转换 query 为 null；正式服务不可用时拒绝假预览成功 | 共享 Magic 字段映射接口、`UnifiedMappingService.java` |
 | 画布编辑 | 旧配置明确升级为 2.0；规则表格、服务端草稿排序/分页、批量启停、来源字段选取、目标逻辑类型/长度/精度、步骤排序、常用策略控件及高级类型化 JSON；手工样本最多 100 行 | `FieldMappingEditor.tsx`、`UnifiedFieldMappingEditor.tsx` |
-| 数据接入 | 新生成映射采用 JAVA_RECORD，并将目标物理类型及非空要求纳入规则；登记枚举、字典条件、日期标准和 ODS 系统表达式仍通过原生成链承接 | `magic/api/03.数据接入/15.接入任务补齐/01.按来源表补齐接入任务.ms` |
+| 数据接入 | 新生成映射采用 JAVA_RECORD，并将目标物理类型及非空要求纳入规则；登记枚举、字典条件、日期标准和 ODS 系统表达式仍通过原生成链承接 | `magic/api/03.数据接入/03.接入任务/05.按来源表补齐接入任务.ms` |
 | 配置投影 | 画布 2.0 为权威配置；映射表以 pipelineId/nodeId/ruleId 标识完整投影或摘要，批量预取后写入；移除节点会清理其投影，旧 Binder 不回填覆盖 2.0 规则 | `MappingProjectionService.java`、`AccessTaskFieldMappingBinder.java` |
 | NiFi 运行 | 一个主要 Processor，独立批量字典 Controller Service，Reader/Writer 类型传递，512 行/8 MiB 窗口，同一 Session 提交，failure/invalid 保留、有界 retry | `data-elements-parent/mapping-extension/` |
 | 多节点及重放 | 计划摘要按处理器 ID 分隔，支持串联；输入身份和执行时钟保存在属性中，重试与复制属性的重放采用相同生成上下文 | `HaitongTransformRecord.java` |
@@ -1818,7 +1818,7 @@ LIVE_BATCH在两次执行间被外部修改时不能强求旧结果，测试需�
 
 当前实现限制在可核验的有限嵌套范围，设置了 512 个处理器、1,024 条连接、512 个可见 Controller Service、128 条字段边界边等上限。升级失败边界 10 条选定测试已通过；旧 1.0 单值字典 SQL 和拆分 SQL 查表规则的转换已修复并测试。上限是拒绝无界操作的保护，不是所有范围内拓扑和故障组合均已验证的承诺。非空业务队列不得为了升级被清空，增量水位不得为了通过检查被删除。
 
-**已发布运行版本的显式启动。** 普通流程 `/start` 继续检查 DSL 部署摘要；有尚未发布草稿时仍拒绝，不因字段节点局部升级而把整图标记为已部署。统一编辑器新增“启动已发布运行版本”，显式调用 `POST /nifi/api/field-mapping/start-published`，只启动当前已部署的原生图，返回 `draftPublished=false`，其余草稿继续保留。
+**已发布运行版本的显式启动。** 普通流程 `/start` 继续检查 DSL 部署摘要；有尚未发布草稿时仍拒绝，不因字段节点局部升级而把整图标记为已部署。统一编辑器新增“启动已发布运行版本”，显式调用 `POST /nifi/maprun/start`，只启动当前已部署的原生图，返回 `draftPublished=false`，其余草稿继续保留。
 
 该入口要求 `pipelineId/expectedUpdatedAt`，一次批量读取当前 publication 引用的不可变计划，并通过统一编译重新核验资源与角色范围；之后核对流程归属标记、全部来源/目标/辅助原生 ID、字段节点 plan-id 和所有已登记边界连接。发现未登记的额外 success 候选连接即阻止启动，不能让未完成恢复的支路同时消费记录。各原生范围一次读取 revision，普通组件按范围启动；禁用组件不启动，一次性来源只执行 `RUN_ONCE`，不改为持续 RUNNING。
 
@@ -1840,23 +1840,23 @@ LIVE_BATCH在两次执行间被外部修改时不能强求旧结果，测试需�
 
 #### 22.9 已落地接口与操作入口
 
-以下接口前缀为 `/nifi/api/field-mapping`，描述 1.1.1 当前代码契约；已确认测试范围见 22.10 节，不将早期第 13 章的拟定路由当作现行实现。
+以下为共享平台当前的字段映射资源接口。每个叶组按计划、模板、字典、规则或运行版本组织。
 
 | 方法与路径 | 请求要点 | 返回或行为 |
 | --- | --- | --- |
-| `GET /plans` | pipelineId、可选 nodeId、page/size、sortField/sortDir | 当前范围计划历史；rows/total/page/size，服务端分页 |
-| `GET /plans/{id}` | pipelineId | 指定不可变计划正文；单条主动读取 |
-| `POST /plans/{id}/restore-draft` | pipelineId、nodeId、expectedUpdatedAt | 恢复草稿和投影，不切换运行计划 |
-| `GET /templates` | page/size、白名单排序 | 租户模板版本分页 rows/total |
-| `POST /templates` | name、spec | 编译校验后追加模板版本 |
-| `GET /templates/{id}` | 模板版本 ID | 读取当前可见模板正文 |
-| `POST /templates/{id}/import` | fieldBindings、可选 dictionaryBindings/schemaContract | 新 ruleId 的已编译草稿及 templateOrigin |
-| `POST /dictionary-snapshots` | name、结构化 definition | 完整构建后追加快照，返回 id/hash/version |
-| `POST /schema-contract` | sourceRef/targetRef、allowAdditionalSourceFields | 实际物理结构、摘要及规范登记引用 |
-| `POST /sample` | spec、sourceRef、limit=1..100 | 脱敏 sampleRows/resultRows、行状态与统计 |
-| `GET /retention-policy` | 无业务 ID | KEEP_ALL，不自动删除历史 |
-| `POST /upgrade-runtime` | pipelineId/nodeId、expectedUpdatedAt/expectedPlanHash、start | 仅字段节点替换及按原状态恢复，不发布其他草稿 |
-| `POST /start-published` | pipelineId、expectedUpdatedAt | 重验已发布计划和原生图后显式启动，draftPublished=false，一次性来源RUN_ONCE |
+| `GET /nifi/plan/list` | pipelineId、可选 nodeId、page/size、sortField/sortDir | 当前范围计划历史；rows/total/page/size，服务端分页 |
+| `GET /nifi/plan/detail?id={id}` | pipelineId | 指定不可变计划正文；单条主动读取 |
+| `POST /nifi/plan/restore?id={id}` | pipelineId、nodeId、expectedUpdatedAt | 恢复草稿和投影，不切换运行计划 |
+| `GET /nifi/template/list` | page/size、白名单排序 | 租户模板版本分页 rows/total |
+| `POST /nifi/template/save` | name、spec | 编译校验后追加模板版本 |
+| `GET /nifi/template/detail?id={id}` | 模板版本 ID | 读取当前可见模板正文 |
+| `POST /nifi/template/import?id={id}` | fieldBindings、可选 dictionaryBindings/schemaContract | 新 ruleId 的已编译草稿及 templateOrigin |
+| `POST /nifi/dict/snapshot` | name、结构化 definition | 完整构建后追加快照，返回 id/hash/version |
+| `POST /nifi/map/schema` | sourceRef/targetRef、allowAdditionalSourceFields | 实际物理结构、摘要及规范登记引用 |
+| `POST /nifi/map/sample` | spec、sourceRef、limit=1..100 | 脱敏 sampleRows/resultRows、行状态与统计 |
+| `GET /nifi/plan/keep` | 无业务 ID | KEEP_ALL，不自动删除历史 |
+| `POST /nifi/maprun/upgrade` | pipelineId/nodeId、expectedUpdatedAt/expectedPlanHash、start | 仅字段节点替换及按原状态恢复，不发布其他草稿 |
+| `POST /nifi/maprun/start` | pipelineId、expectedUpdatedAt | 重验已发布计划和原生图后显式启动，draftPublished=false，一次性来源RUN_ONCE |
 
 计划和模板分页不是逐行正文补查；批量编译和资源解析应先收集 ID，再批量读取并逐 ID 校验。返回的版本/资源 ID 必须属于当前授权输入范围，任何跨租户或无权 ID 都不能靠丢弃条目掩盖。Schema 的物理驱动读取应和控制元数据查询分别计数，不能省略授权读取以证明查询次数固定。
 
@@ -1896,9 +1896,9 @@ LIVE_BATCH在两次执行间被外部修改时不能强求旧结果，测试需�
 | 模块 | 可维护源码 |
 | --- | --- |
 | 计划归档、发布写入和快照批量读取 | `integration/nifi/canvas/mapping/MappingVersionStore.java`；各行业 `db/<实际库>/init.sql` |
-| 计划历史和详情、模板读取和导入、版本保留策略、字典候选表和字段 | 共享 Magic 的 `/nifi/api/field-mapping`，计划和模板版本正文按当前租户复核现行引用 |
-| 模板保存、字典快照、Schema 契约、脱敏取样 | 共享 Magic 的 `/nifi/api/field-mapping`，模板和快照共用不可变版本写入 |
-| 计划恢复、运行升级与发布版本启动 | 共享 Magic 的 `/nifi/api/field-mapping`，入口在同一 NiFi 锁内校验当前租户、画布和版本 |
+| 计划历史和详情、模板读取和导入、版本保留策略、字典候选表和字段 | 共享 Magic 的 `/nifi/plan`、`/nifi/template` 和 `/nifi/dict`，计划和模板版本正文按当前租户复核现行引用 |
+| 模板保存、字典快照、Schema 契约、脱敏取样 | 共享 Magic 的 `/nifi/template`、`/nifi/dict` 和 `/nifi/map`，模板和快照共用不可变版本写入 |
+| 计划恢复、运行升级与发布版本启动 | 共享 Magic 的 `/nifi/plan` 和 `/nifi/maprun`，入口在同一 NiFi 锁内校验当前租户、画布和版本 |
 | 物理结构与受控取样 | `integration/nifi/canvas/mapping/RegisteredMappingSchemaService.java` |
 | 统一编译、快照绑定和正式预览 | `integration/nifi/canvas/mapping/UnifiedMappingService.java`、`mapping/core/PreviewMasking.java` |
 | 函数参数能力 | `mapping/core/FunctionRegistry.java`、`FunctionArgumentSchema.java` |
@@ -2390,7 +2390,7 @@ HiveRecordPut 模式同样按链路位置决定保留或旁路字段治理，并
 
 #### 28.2 已保存任务允许继续编辑
 
-`GET /nifi/api/pipelines/task-chain`、`GET /nifi/api/pipelines/{id}/chain` 与 `GET /nifi/api/pipelines/task-chain/native` 由 Magic API 直接注册。三个入口共用 `@/common/nifiAccessTaskChainHttp` 保持原始 JSON、HTTP 状态、缺参和租户错误契约，业务由 `@/common/nifiAccessTaskChain` 完成。MagicScript 追溯实际来源，逐项确认有效任务和登记资源的租户归属，组装展示连线并在关联异常时返回已授权的历史保存态。结构化读取函数 `@/common/nifiTaskChainRows` 使用固定深度关联和批量标识窗口。普通非空链路为 5 次 SQL。主动打开原生画布且有至少两个不同的可用流程组时，Java 技术组件读取一次 NiFi 根组状态。MagicScript 只在同一父组的全部直接子组都在已授权链路内时提供共同父组入口。读取链路不会保存画布或修改 NiFi。
+`GET /nifi/chain/task`、`GET /nifi/chain/flow?id={id}` 与 `GET /nifi/chain/native` 由 Magic API 直接注册。三个入口共用 `@/common/nifiAccessTaskChainHttp` 保持原始 JSON、HTTP 状态、缺参和租户错误契约，业务由 `@/common/nifiAccessTaskChain` 完成。MagicScript 追溯实际来源，逐项确认有效任务和登记资源的租户归属，组装展示连线并在关联异常时返回已授权的历史保存态。结构化读取函数 `@/common/nifiTaskChainRows` 使用固定深度关联和批量标识窗口。普通非空链路为 5 次 SQL。主动打开原生画布且有至少两个不同的可用流程组时，Java 技术组件读取一次 NiFi 根组状态。MagicScript 只在同一父组的全部直接子组都在已授权链路内时提供共同父组入口。读取链路不会保存画布或修改 NiFi。
 
 登记来源库变化、来源组件被手工替换为 FTP、原登记链不完整、关联循环或链路超过组合画布上限时，先验证当前任务、当前租户保存的 Pipeline，以及 DSL 中真实引用的数据源和表在该租户内的归属与有效性，再打开该任务独立保存的 DSL。关联异常返回 `relationshipUnavailable=true`、`readOnly=false`，允许继续编辑。
 
@@ -2404,11 +2404,11 @@ HiveRecordPut 模式同样按链路位置决定保留或旁路字段治理，并
 
 节点的运行错误红标只使用当前 NiFi 公告，不以持久运行历史覆盖实时状态。画布层集中读取组件清单、任务状态和整条流程的当前公告，再将组件及按节点分组的当前错误传入 `BaseNode`；节点本身不发起读取请求。20/100 个节点均只需要一次当前公告请求，后端沿用一次当前租户流程定位和一次 NiFi 公告读取，不随节点数量增加 SQL 或远端调用。新建未部署流程不查询公告，公告读取失败显示状态待确认的警示色并保留已有快照。公告按当前流程的处理器映射解析到画布节点，只在缺少处理器标识且历史标签归属唯一时兼容旧返回格式，未知处理器、其他节点 ID 和歧义标签不会使无关节点标红；配置和部署错误继续保留。`activeFlowErrors.test.mjs` 覆盖恢复后去掉旧红标、当前告警保留、20/100 节点请求数和节点零读取，以及未知/越界映射拒绝；历史面板仍提供原错误全文。
 
-共享平台在 `/nifi/api/pipelines` 与 `/nifi/api/flows` 下直接由 Magic 注册 `GET /{id}/errors`、`GET /{id}/bulletins/live`、对应 HEAD 和 `POST /delete/{id}/errors`。两个路径族复用 `@/common/nifiFlowErrorHttp`。历史从可信租户的错误存储读取，实时公告按已保存的流程组读取 ERROR 和 WARNING，流程不可见时返回空体 404，未部署流程的实时公告返回 400。清理在现有跨进程写锁内校验租户流程、执行原生清理及本地历史清理，然后失效租户运行状态缓存并释放锁。Magic 控制校验、过滤和清理规则，沿用现有错误存储及 NiFi 技术客户端。
+共享平台的 Magic 错误与公告接口为 `GET /nifi/event/errors`、`GET /nifi/event/live` 及对应 HEAD、`POST /nifi/event/clear`。使用查询参数 `id` 指定流程。三个入口共用 `@/common/nifiFlowErrorHttp`。历史从可信租户的错误存储读取，实时公告按已保存的流程组读取 ERROR 和 WARNING，流程不可见时返回空体 404，未部署流程的实时公告返回 400。清理在现有跨进程写锁内校验租户流程、执行原生清理及本地历史清理，然后失效租户运行状态缓存并释放锁。Magic 控制校验、过滤和清理规则，沿用现有错误存储及 NiFi 技术客户端。
 
-共享后端的 NiFi 组件清单使用 `GET /nifi/api/manifests` 和 `GET /nifi/api/manifests/{key}`。列表返回原始 JSON 数组，详情按完整组件键匹配（例如 `source.postgresql`），未命中时返回空体 HTTP 404。两个路径都支持 HEAD 和 OPTIONS。Magic 在现有登录及行业会话拦截后读取应用内置清单，供海通画布和任务登记共用。画布按会话集中读取，不按节点查询；共享后端的流程编译器复用同一组件注册表。接口说明在 Magic 编辑器的「NiFi流程接口 → 接口」维护。SpringDoc `/v3/api-docs` 只枚举 Java Controller 声明。
+共享后端的 NiFi 组件清单使用 `GET /nifi/catalog/list` 和 `GET /nifi/catalog/detail?key={key}`。列表返回原始 JSON 数组，详情按完整组件键匹配（例如 `source.postgresql`），未命中时返回空体 HTTP 404。两个路径都支持 HEAD 和 OPTIONS。Magic 在现有登录及行业会话拦截后读取应用内置清单，供海通画布和任务登记共用。画布按会话集中读取，不按节点查询；共享后端的流程编译器复用同一组件注册表。接口说明在 Magic 编辑器的「NiFi流程接口 → 接口」维护。SpringDoc `/v3/api-docs` 只枚举 Java Controller 声明。
 
-画布节点的运行血缘使用 `POST /nifi/api/pipelines/{id}/nodes/{nodeId}/lineage`，可选的 `maxEvents` 默认 10，允许 1 至 100。Magic 从可信租户的流程保存态解析节点和处理器映射，按同一节点的主处理器及后备处理器顺序查询。每次请求只读取一次流程并绑定一次 NiFi 节点，轮询和清理沿用该节点。正常响应返回图与事件摘要，事件摘要只包含公开字段。流程不可见时返回空体 404，流程未部署或节点无映射返回 400。业务库只读，查询结束时清理本次创建的 NiFi 临时查询。
+画布节点的运行血缘使用 `POST /nifi/node/lineage?id={id}&nodeId={nodeId}`，可选的 `maxEvents` 默认 10，允许 1 至 100。Magic 从可信租户的流程保存态解析节点和处理器映射，按同一节点的主处理器及后备处理器顺序查询。每次请求只读取一次流程并绑定一次 NiFi 节点，轮询和清理沿用该节点。正常响应返回图与事件摘要，事件摘要只包含公开字段。流程不可见时返回空体 404，流程未部署或节点无映射返回 400。业务库只读，查询结束时清理本次创建的 NiFi 临时查询。
 
 组合画布中的其他任务依然是独立保存对象，保留其既有编辑边界。运行中的任务以及需要补齐配置才能发布的组件，仍遵守正常运行和配置校验，不能把“可编辑”解释为任意缺失配置都可直接启动。关联失效时不提供虚构的跨任务原生链路；当前任务的单独流程入口按其实际部署状态处理。
 
@@ -2676,7 +2676,7 @@ NiFi 对自动精度小数在每个既有有界窗口内计算一个能承载所
 
 新建批处理任务的来源节点默认显示“每天一次（立即执行）”，对应 `TIMER_DRIVEN / 1 day`，启动后立即执行，之后每隔一天调度；用户仍可选择“每天一次（自动错峰）”，首次保存分配北京时间的固定时分秒，编辑、重启、重新部署沿用保存值。创建入口包括新建来源节点、来源切换、登记模板和登记批量补齐。Kafka 保留原实时策略，历史任务及已保存的错峰任务打开时不会自动切换；用户可改为“自定义调度”继续使用周期或 Cron。两种每日预设均隐藏周期/Cron 编辑项；切换到立即执行会清除旧错峰时刻。服务端规则与运行边界见后端主文档“新建批处理任务的默认调度”。
 
-适用于接入任务页面及 `POST /ods/dataAggPage` 的 `viewLevel=table` 分支。
+适用于接入任务页面及 `POST /ods/ingest/page` 的 `viewLevel=table` 分支。
 
 
 <a id="access-task-lifecycle--字段与枚举"></a>
@@ -2735,27 +2735,27 @@ NiFi 对自动精度小数在每个既有有界窗口内计算一个能承载所
 | `access_requested_by` | 申请人的当前认证标识，不接收客户端覆盖。 |
 | `access_requested_at` | 申请提交时间，重复提交保留首次时间。 |
 
-`POST /ods/registrationAccessSummary` 接受当前数据源和当前页1～100个去重表ID，逐ID验证同租户、同来源及来源角色范围。固定四次业务SQL和一次NiFi根快照；任务及目标只返回操作确认所需基本信息，来源授权不授予目标库通用数据访问权限。顶部统计覆盖整个已授权数据源，不从当前页推算。任务摘要不进入登记快照缓存。
+`POST /ods/registry/status` 接受当前数据源和当前页1～100个去重表ID，逐ID验证同租户、同来源及来源角色范围。固定四次业务SQL和一次NiFi根快照；任务及目标只返回操作确认所需基本信息，来源授权不授予目标库通用数据访问权限。顶部统计覆盖整个已授权数据源，不从当前页推算。任务摘要不进入登记快照缓存。
 
-`POST /ods/registrationAccessApply` 接受单表 ID，原子写入申请并汇总数据源登记状态。重复提交幂等，已有任务时沿用原申请状态。`POST /ods/dataAggTaskEnsure` 使用结构化接口锁定当前租户的有效来源表，在同一事务中保存或复用接入任务，并受理最初锁定来源的待处理申请。多跳链路中，各中间表的申请由各自的来源请求处理。`dryRun=true` 返回预检结果或执行计划。任务创建或受理失败时回滚本次事务。最后一个任务删除后回到待接入，旧已受理申请仍保留历史状态。
+`POST /ods/registry/apply` 接受单表 ID，原子写入申请并汇总数据源登记状态。重复提交幂等，已有任务时沿用原申请状态。`POST /ods/job/fill` 使用结构化接口锁定当前租户的有效来源表，在同一事务中保存或复用接入任务，并受理最初锁定来源的待处理申请。多跳链路中，各中间表的申请由各自的来源请求处理。`dryRun=true` 返回预检结果或执行计划。任务创建或受理失败时回滚本次事务。最后一个任务删除后回到待接入，旧已受理申请仍保留历史状态。
 
-海通任务列表和共享数据汇聚页在明确创建或复用接入任务后调用 `POST /ods/api-pull/bind-task`，提交数据源、来源表和已保存流程的标识。非 API 拉取来源返回 `applicable:false`。API 来源绑定按当前租户、数据源角色范围及实际任务关联校验。多跳链路的拉取规则绑定到起始来源的有效流程，后续接入流程沿用各自的上游表。有效但尚未同步规则的来源返回 `boundRules:0` 和保存表标注的提示。成功绑定只更新当前表规则和数据库时钟审计字段，部署、启动和调度仍由相应画布操作处理。
+海通任务列表和共享数据汇聚页在明确创建或复用接入任务后调用 `POST /ods/pull/bind`，提交数据源、来源表和已保存流程的标识。非 API 拉取来源返回 `applicable:false`。API 来源绑定按当前租户、数据源角色范围及实际任务关联校验。多跳链路的拉取规则绑定到起始来源的有效流程，后续接入流程沿用各自的上游表。有效但尚未同步规则的来源返回 `boundRules:0` 和保存表标注的提示。成功绑定只更新当前表规则和数据库时钟审计字段，部署、启动和调度仍由相应画布操作处理。
 
 绑定规则与取消接入结算先锁定同一来源根表，再核对任务和画布，避免取消中的活动状态被用来写入规则。20/100 跳链路的隔离 MySQL 验证均为 12 次查询（其中 7 次行锁查询）及 1 次规则更新，身份解析另计。回溯使用批量读取的登记关系和任务，不逐跳查库。
 
-登记第一步保存数据源或保存表标注后，`POST /ods/api-pull/sync` 从当前租户且角色可见的数据源读取已保存的 API 定义。同步在同一事务依次锁定数据源、已有服务和已有规则。逻辑表关联批量读取，已登记的逻辑表同步对应规则，未登记时先同步服务。重复同步沿用已有服务和规则 ID，保留已设置的规则启用状态、NiFi 绑定和更新人。更新以锁定后的实际行和关联键为准，内容相同时兼容 JDBC 返回零行。参数、凭据标识及回滚遵循当前登记契约，服务和规则任一批次写入失败时回滚本次同步。
+登记第一步保存数据源或保存表标注后，`POST /ods/pull/sync` 从当前租户且角色可见的数据源读取已保存的 API 定义。同步在同一事务依次锁定数据源、已有服务和已有规则。逻辑表关联批量读取，已登记的逻辑表同步对应规则，未登记时先同步服务。重复同步沿用已有服务和规则 ID，保留已设置的规则启用状态、NiFi 绑定和更新人。更新以锁定后的实际行和关联键为准，内容相同时兼容 JDBC 返回零行。参数、凭据标识及回滚遵循当前登记契约，服务和规则任一批次写入失败时回滚本次同步。
 
 单个来源最多登记 100 条 API。隔离 MySQL 验证中，20 条和 100 条完整定义的首次同步及重复同步均发起 4 次业务查询，其中 3 次为行锁查询，并各提交 2 次 JDBC 批量写入。该计数另计身份解析。同批混合新增和更新时，服务与规则各自最多进行一次批量插入和一次批量更新。已有服务、规则若在同步加锁前停用，使用新的有效记录；若在加锁后停用，等待同步事务提交。
 
 服务编码生成、服务和规则的批量写入统一由同步 Magic 脚本维护。数据源保存与同步复用 `@/common/apiPullDefinitionError` 检查地址、逻辑表名和凭据引用。保存返回统一参数提示，同步返回具体问题。接入任务预检和建画布复用已按租户和来源表关联读取的原始 `pool_cfg`，由 `@/common/nifiApiSource` 解析登记的请求、分页、增量、调度和凭据引用。来源解析只进行内存处理。
 
-共享平台的 `POST /nifi/api/pipelines/template` 和 `POST /nifi/api/pipelines/template/node` 在生成 API 来源配置时共用 `@/common/nifiApiTemplateConfig`。接口完成租户和资产读取后，函数使用已有的数据源配置及表名匹配 API 定义，输出地址、方法、请求体、响应提取、分页、增量、超时和调度字段。保留只有一条定义时的历史回退，并从画布输出中移除认证等敏感请求头。缺失或无效的可选 JSON 配置走原有默认规则，显式 JSON `null` 也按缺失处理。模板转换只处理内存数据，无额外 SQL 或 NiFi 请求。
+共享平台的 `POST /nifi/canvas/template` 和 `POST /nifi/canvas/node` 在生成 API 来源配置时共用 `@/common/nifiApiTemplateConfig`。接口完成租户和资产读取后，函数使用已有的数据源配置及表名匹配 API 定义，输出地址、方法、请求体、响应提取、分页、增量、超时和调度字段。保留只有一条定义时的历史回退，并从画布输出中移除认证等敏感请求头。缺失或无效的可选 JSON 配置走原有默认规则，显式 JSON `null` 也按缺失处理。模板转换只处理内存数据，无额外 SQL 或 NiFi 请求。
 
-画布创建入口 `POST /nifi/api/pipelines` 携带 `catalogTid` 时，由 Magic 校验当前租户的目录或来源表范围，按保存新流程、关联接入任务、尝试绑定规则的顺序执行。创建脚本在独立事务中确认有效来源为 API 拉取后，按租户、来源和表更新有效规则，沿用 `system` 和应用时钟审计。绑定失败时回滚该事务并保留画布和任务。已有画布直接保存设计，任务关联失败时画布回滚，这两种情况均不执行绑定。对外的规则绑定接口按其原有的权限、锁和数据库时钟契约执行。
+画布创建入口 `POST /nifi/flow/create` 携带 `catalogTid` 时，由 Magic 校验当前租户的目录或来源表范围，按保存新流程、关联接入任务、尝试绑定规则的顺序执行。创建脚本在独立事务中确认有效来源为 API 拉取后，按租户、来源和表更新有效规则，沿用 `system` 和应用时钟审计。绑定失败时回滚该事务并保留画布和任务。已有画布直接保存设计，任务关联失败时画布回滚，这两种情况均不执行绑定。对外的规则绑定接口按其原有的权限、锁和数据库时钟契约执行。
 
 创建画布、构建部署候选和完整部署共用内部 Magic 函数 `@/common/ensureNifiCatalogAccessTask`。按当前租户优先复用已经绑定该流程的活动任务，再按目录匹配未绑定任务。目录已经被其他流程占用时沿用原错误。DSL 中的来源、目标及主键字段沿用已有别名优先级。首建任务从有效目录及其扩展属性读取，澄天缺少旧 `da_asset_t` 视图仍可创建。传入现用来源表标识时核查其有效数据源与租户，并识别已验证的来源目录。独立画布保留原有关联。创建时任务写入与画布同事务，部署沿用原时序。目录属性及 Elasticsearch 投影继续通过已有回调更新。
 
-`POST /ods/registrationAccessControl` 接受当前数据源、表 ID、任务 ID 和 `start|stop`。先核对当前表与任务的关联，再用已授权的流程 ID 调用画布共用的 `@/common/nifiStartCanvas` 或 `@/common/nifiStopCanvas`。收到 `409/deployment-required` 时由 `@/common/nifiDeployCanvas` 部署已保存配置，部署成功后才启动。启停沿用共享写锁、已部署版本和清空确认。登记入口使用普通启动参数，部署和启动各自核验当前配置、队列和水位。
+`POST /ods/registry/switch` 接受当前数据源、表 ID、任务 ID 和 `start|stop`。先核对当前表与任务的关联，再用已授权的流程 ID 调用画布共用的 `@/common/nifiStartCanvas` 或 `@/common/nifiStopCanvas`。收到 `409/deployment-required` 时由 `@/common/nifiDeployCanvas` 部署已保存配置，部署成功后才启动。启停沿用共享写锁、已部署版本和清空确认。登记入口使用普通启动参数，部署和启动各自核验当前配置、队列和水位。
 
 普通启动使用当前绑定的原生组，按需部署由登记入口编排。弹框按明确选择的直接任务执行每次操作。`dryRun=true` 只返回授权与部署需求。摘要的 `requiresDeployment` 支持显示「部署并启动」，操作时防止重复确认和提交，执行超时为 180 秒。失败在对应卡片中显示，并重新读取状态。
 
@@ -2774,7 +2774,7 @@ NiFi 对自动精度小数在每个既有有界窗口内计算一个能承载所
 
 接入申请功能发布前，先确认每个实际行业业务库的`db_table_t`均包含上述三个申请字段，再发布引用这些字段的Magic和低代码。共享控制库不是这三个业务字段的升级目标。完整定义分别在`db/<业务库>/init.sql`；初始化文件用于空库，已有生产库只执行经结构检查生成的缺失列增量，不能重跑整份初始化文件。
 
-`/ods/dataAggPage`在待审批、待接入筛选中直接引用`access_request_status`。生产报错若根因是该列不存在，须补齐三列；不能通过去掉申请状态过滤、将所有表视为未申请或吞掉数据库异常来绕过结构升级。截图中的外层`bad SQL grammar`不能替代最底层数据库原因，需结合列检查或对应跟踪号日志确认。
+`/ods/ingest/page`在待审批、待接入筛选中直接引用`access_request_status`。生产报错若根因是该列不存在，须补齐三列；不能通过去掉申请状态过滤、将所有表视为未申请或吞掉数据库异常来绕过结构升级。截图中的外层`bad SQL grammar`不能替代最底层数据库原因，需结合列检查或对应跟踪号日志确认。
 
 部署核查须使用报错服务实际连接的行业业务库，先读取`DATABASE()`和数据库完整版本，再检查`db_table_t`、`data_access_agg_task_t`及`nifi_pipeline_t`的查询依赖。最新修改时间排序还依赖`db_table_t.source_table_id`、表和任务的`updated_time`、画布的`updated_at`；仅核对三个申请字段不能证明该分页的结构完整。字段定义、字符集和排序规则也须与该环境结构基线比较，不为消除错误盲目添加同名列。
 
@@ -2862,18 +2862,18 @@ MySQL分页会将完整查询包进`SELECT COUNT(*) FROM (...) count_`，因此�
 
 | 页面能力 | 已接入的接口或实体 |
 | --- | --- |
-| 登录、租户、NiFi 画布 | 平台 `capability-session.html` 会话桥、`/sym/user/me`、`/sym/tenant/current`、原 NiFi 流程接口；进入画布不再手填 Token |
-| 集成任务与创建 | `/ods/task/page`、`/ods/dataAggPage`、`/ods/dataAggTaskEnsure`，对应 `data_access_agg_task_t`、登记数据源和表 |
-| 接入监控 | Magic `POST /ods/task/page` 按来源数据源范围分页显示接入任务和实时状态。NiFi `/nifi/api/pipelines/runtime-list` 提供流程运行信息，Magic `POST /ods/task/monitorSnapPage` 分页显示历史快照并保留历史指标别名 |
-| NiFi 节点 | `/ods/nifi-node/page`、可用节点选项及原节点维护/健康接口，对应 `nifi_node_t` |
-| 盘点策略、执行和差异 | `/ods/reconciliation/policy/*`、`/ods/reconciliation/run/*`、`/ods/reconciliation/summary`，对应现有对账策略、执行、差异和字段规则表 |
-| 批量匹配与持久队列 | 租户内 `ods_batch_create_job_t`、`ods_batch_create_item_t` 和 Magic `POST /ods/batchCreateJob` 按当前登录租户分页预览，并逐 ID 核验有效来源、目标及其关联后保存作业。用户主动点击一次只调用一次既有 `/ods/dataAggTaskEnsure`，结果和失败可跨页面查看与续跑。自动执行的批量确保接口仍按[下文设计](#guide-a328d01d)跟踪。 |
+| 登录、租户、NiFi 画布 | 平台 `capability-session.html` 会话桥、`/sym/user/me`、`/portal/sso/session`、原 NiFi 流程接口；进入画布不再手填 Token |
+| 集成任务与创建 | `/ods/job/page`、`/ods/ingest/page`、`/ods/job/fill`，对应 `data_access_agg_task_t`、登记数据源和表 |
+| 接入监控 | Magic `POST /ods/job/page` 按来源数据源范围分页显示接入任务和实时状态。NiFi `/nifi/run/list` 提供流程运行信息，Magic `POST /ods/monitor/page` 分页显示历史快照并保留历史指标别名 |
+| NiFi 节点 | `/ods/node/page`、可用节点选项及原节点维护/健康接口，对应 `nifi_node_t` |
+| 盘点策略、执行和差异 | `/ods/reconciliation/policy/*`、`/ods/reconciliation/run/*`、`/ods/recon/summary`，对应现有对账策略、执行、差异和字段规则表 |
+| 批量匹配与持久队列 | 租户内 `ods_batch_create_job_t`、`ods_batch_create_item_t` 和 Magic `POST /ods/job/batch` 按当前登录租户分页预览，并逐 ID 核验有效来源、目标及其关联后保存作业。用户主动点击一次只调用一次既有 `/ods/job/fill`，结果和失败可跨页面查看与续跑。自动执行的批量确保接口仍按[下文设计](#guide-a328d01d)跟踪。 |
 | 多表任务编组 | `/ods/task/multi/*` 将既有的独立单表任务编组，保存到当前租户的 `data_access_multi_group_t` 和 `data_access_multi_group_item_t`，保留逐表状态。候选分页与保存预检共享任务、来源表和数据源的角色范围条件。候选每页最多 100 条，保存时一次校验 2 至 100 个任务并在同一事务内批量写入成员，固定请求标识可安全重试。删除和补齐关联仅允许创建者操作，任一成员来源失效或超出当前范围时拒绝整组，缺少创建人或部门归属的来源分别在 `OWNER` 或 `ORG` 范围下拒绝。补齐关联只写入同一来源表的有效任务。 |
-| 分发任务只读总览 | Magic `POST /ods/distribution/task/page` 按当前登录租户分页读取 `data_distribution_task_t`。状态和关键词可分别省略，结果仅包含实际任务及持久化状态。升序和降序都将空值放在末尾，同值按任务 ID 升序。 |
-| 小时监控趋势 | Magic `POST /ods/task/monitor/trend` 以单表结构化查询读取当前租户最多七天的快照。每个任务先取小时峰值，再汇总为监控趋势点 |
-| 脱敏差异完整导出 | 新增 Magic `POST /ods/reconciliation/run/diff/export`，只允许当前租户已完成实例；最多 5000 条，超限显式拒绝，结果使用既有仓储脱敏值 |
-| 外部 NiFi 流程登记 | Magic `POST /ods/task/registry/validate|save|page` 使用租户内 `nifi_pipeline_external_ref_t`。登记绑定已保存的 Canvas DSL v1 流程，历史分页仅关联当前租户的有效流程，按流程名称排序时空值置后 |
-| 外部登记选择已有流程 | Magic `POST /ods/task/registry/pipeline-options` 按当前租户分页搜索有 DSL 哈希的 Canvas DSL v1 流程，按更新时间和流程 ID 倒序返回当前页 |
+| 分发任务只读总览 | Magic `POST /ods/dist/page` 按当前登录租户分页读取 `data_distribution_task_t`。状态和关键词可分别省略，结果仅包含实际任务及持久化状态。升序和降序都将空值放在末尾，同值按任务 ID 升序。 |
+| 小时监控趋势 | Magic `POST /ods/monitor/trend` 以单表结构化查询读取当前租户最多七天的快照。每个任务先取小时峰值，再汇总为监控趋势点 |
+| 脱敏差异完整导出 | 新增 Magic `POST /ods/recon/export`，只允许当前租户已完成实例；最多 5000 条，超限显式拒绝，结果使用既有仓储脱敏值 |
+| 外部 NiFi 流程登记 | Magic `POST /ods/registry/check|save|page` 使用租户内 `nifi_pipeline_external_ref_t`。登记绑定已保存的 Canvas DSL v1 流程，历史分页仅关联当前租户的有效流程，按流程名称排序时空值置后 |
+| 外部登记选择已有流程 | Magic `POST /ods/registry/flows` 按当前租户分页搜索有 DSL 哈希的 Canvas DSL v1 流程，按更新时间和流程 ID 倒序返回当前页 |
 | NiFi 节点资源 | Java `POST /sym/node-config/service/diagnostics` 读取 NiFi 系统诊断并按当前租户节点范围返回安全汇总；集群页展示堆内存、线程等真实指标，不能用它推断目标表写入成功。 |
 
 `data_distribution_task_t` 和 `data_access_task_monitor_snap_t` 在当前租户库中已经存在。不能把“缺少分发监控接口”或“缺少趋势汇总接口”理解为缺这两张表。
@@ -2890,13 +2890,13 @@ MySQL分页会将完整查询包进`SELECT COUNT(*) FROM (...) count_`，因此�
 | 能力 | 现有基础与确切缺口 | 建议的补充 |
 | --- | --- | --- |
 | 多表统一执行 | 已有两张租户内编组表、五个 Magic 接口，可对已有单表任务编组并查看各自状态。编组成员仍各有独立 NiFi 流程，没有组级统一启动、调度或一次事务的执行语义。 | 若业务确需统一执行，先定义组级调度、逐表运行记录、失败恢复和权限模型，再补真实编排服务；不能把管理编组当成单个多表 NiFi 流程。 |
-| 分发监控 | `data_distribution_task_t` 已有任务状态和进度；租户级只读分页 `/ods/distribution/task/page` 和任务详情 `/ods/distribution/task/detail` 已补，当前租户没有分发记录。现有 `/v1/dataassets/delivery/detail` 只按申请单返回本人明细，尚无完整 NiFi 执行关联或独立状态历史。 | 若分发由 NiFi 执行，为分发任务补充 `pipeline_id` 或独立的任务—流程关联结构，再增加真实运行记录/状态历史；不能从任务名称猜测 NiFi 关联。 |
+| 分发监控 | `data_distribution_task_t` 已有任务状态和进度；租户级只读分页 `/ods/dist/page` 和任务详情 `/ods/dist/detail` 已补，当前租户没有分发记录。现有 `/v1/dataassets/delivery/detail` 只按申请单返回本人明细，尚无完整 NiFi 执行关联或独立状态历史。 | 若分发由 NiFi 执行，为分发任务补充 `pipeline_id` 或独立的任务—流程关联结构，再增加真实运行记录/状态历史；不能从任务名称猜测 NiFi 关联。 |
 | 跨网传输 | 节点 `network_code` 与接入任务 `nifiNetworkCode` 只表达单侧网络，现有任务没有目标网络、发送批次、签收及目标写入确认。用户已确认目前**尚无**实际发送与回执服务；统一身份的 `idaas_receiver_receipt_t` 用途不同，不能复用为数据传输回执。 | 先建设或指定实际传输与回执服务，再定义租户内任务/批次/回执持久化契约，至少保存来源与目标网络、批次、发送状态、接收签收、目标写入确认及关联流程；之后用 Magic API 提供任务分页、批次详情和回执查询。 |
 | 即时账单核销 | 现有对账实例和脱敏差异可查询，但没有“预期交付—确认接收”的双边账单、人工核销及复核证据接口。 | 先确定账单与证据的持久化模型及不可覆盖的核销记录，再提供 Magic API 的账单分页/详情/核销/复核接口。当前页不允许伪核销。 |
-| 真正的自动批量建任务 | 持久作业、逐项结果、停止和重试已落地；页面不会自动循环调用单表接口。现有 `/ods/dataAggTaskEnsure` 及其数据源配置、API 拉取和目标表结构帮助入口仍按单项读库或访问外部库，包装调用会造成 20/100 项请求及读查询线性增长。现有单表任务表也没有按活跃来源防并发重复创建的唯一约束。 | 按[批量确保改造设计](#guide-a328d01d)实现有界预取、共用纯生成器、新旧入口共享的并发防重和服务端批次执行，并用 20/100 项真实 SQL 计数与新旧 DSL 等价验收后才能开启自动执行。 |
+| 真正的自动批量建任务 | 持久作业、逐项结果、停止和重试已落地；页面不会自动循环调用单表接口。现有 `/ods/job/fill` 及其数据源配置、API 拉取和目标表结构帮助入口仍按单项读库或访问外部库，包装调用会造成 20/100 项请求及读查询线性增长。现有单表任务表也没有按活跃来源防并发重复创建的唯一约束。 | 按[批量确保改造设计](#guide-a328d01d)实现有界预取、共用纯生成器、新旧入口共享的并发防重和服务端批次执行，并用 20/100 项真实 SQL 计数与新旧 DSL 等价验收后才能开启自动执行。 |
 | 原海通 Flow JSON 转换 | 原海通本地 Flow JSON 只有 `kind/read/transform/write/send/receive` 与字符串配置；NiFi 画布 DSL 需要 `manifestKey/category` 和组件专属配置。真实登记现已支持已有 NiFi 流程或原 NiFi Canvas DSL v1 JSON，绑定到租户内 `nifi_pipeline_t`；本地 Flow 仍只在浏览器演示，未冒充真实流程。 | 若必须直接导入旧 Flow JSON，先逐组件定义数据源凭据引用、字段映射、目标写入、跨网接收等转换规则，再提供服务端验证与迁移；不能做仅改字段名的假转换。 |
 | 总览确认写入 | 历史快照分页、小时峰值趋势和 NiFi 节点系统诊断已接入；快照流出不等于目标库事务提交成功，因此“今日确认写入”仍没有可靠统计。 | 先取得目标写入成功证据并确定去重与时间口径，再提供确认写入汇总。 |
-| 大规模差异附件 | 脱敏完整导出 `/ods/reconciliation/run/diff/export` 已提供 5000 条以内的有界全量 JSON 行，超限不截断；当前租户尚无对账执行数据，未完成有数据实例的正向验证。 | 对超过 5000 条的实例增加后台分片/流式文件导出；前端应明确提示上限与接口错误。 |
+| 大规模差异附件 | 脱敏完整导出 `/ods/recon/export` 已提供 5000 条以内的有界全量 JSON 行，超限不截断；当前租户尚无对账执行数据，未完成有数据实例的正向验证。 | 对超过 5000 条的实例增加后台分片/流式文件导出；前端应明确提示上限与接口错误。 |
 
 分发和跨网页面明确显示接口缺口；多表页面明确标为已有单表任务的管理编组。接入任务数据仅作为参考时也会标明，不能把参考统计认作真实分发或跨网结果。新增业务接口优先写入现有 Magic API；NiFi 资源指标采集由服务层实现。
 
@@ -2943,13 +2943,13 @@ Magic 接口和低代码只从根 `magic/`、`lowcode/` 的当前可维护源逐
 
 ## 接入任务批量确保：合规改造边界
 
-状态：**设计与审计记录，尚未实现或发布批量确保接口**。现有 `POST /ods/batchCreateJob` 可以创建持久作业并按页预览来源表；`POST /ods/dataAggTaskEnsure` 仍是单来源表写接口。页面不能以循环、并发池或服务端代理逐项调用它来宣称“批量创建”。单项由用户主动点击执行仍可保留。
+状态：**设计与审计记录，尚未实现或发布批量确保接口**。现有 `POST /ods/job/batch` 可以创建持久作业并按页预览来源表；`POST /ods/job/fill` 仍是单来源表写接口。页面不能以循环、并发池或服务端代理逐项调用它来宣称“批量创建”。单项由用户主动点击执行仍可保留。
 
 现有作业的预览、保存、状态流转和租约均由 MagicScript 处理。预览按来源表显示名称分页，创建时分组预取来源表与物化目标，逐项校验后在同一事务内保存作业和批量写入创建项。重复提交同一请求键时按原提交顺序核对来源与目标。
 
 领取先暂选队首，再在事务内锁定作业和相关来源表的主键，随后重查队列和租约。候选变化时结束本次事务并重新选取，最多三次。同一租户、同一来源表在十分钟内有有效租约时返回忙碌，不同来源的作业可独立领取。回收失联项时清除旧令牌。完成回报校验当前租约和真实任务关联，成功回报只有在令牌和任务都相同时才可幂等重放。
 
-本设计遵循[前后端批量查询与分页规范](data-elements.md#batch-pagination)。单项入口以[当前可维护脚本](../magic/api/03.数据接入/15.接入任务补齐/01.按来源表补齐接入任务.ms)及实际运行版本为准。实施前按[本地资源版本管理](data-elements.md#resource-versioning)只读比较资源身份、内容及远端并发变化。
+本设计遵循[前后端批量查询与分页规范](data-elements.md#batch-pagination)。单项入口以[当前可维护脚本](../magic/api/03.数据接入/03.接入任务/05.按来源表补齐接入任务.ms)及实际运行版本为准。实施前按[本地资源版本管理](data-elements.md#resource-versioning)只读比较资源身份、内容及远端并发变化。
 
 
 <a id="guide-a328d01d--为什么不能包装现有单表接口"></a>

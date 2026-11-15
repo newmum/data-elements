@@ -41,13 +41,13 @@ export function sourceChoices():Promise<SourceChoices> {
  return choicesCache.promise;
 }
 export async function sourcesPage(query:Row,signal?:AbortSignal):Promise<{list:Row[];total:number;summary:Row;distributions:Row[]}> {
- const raw=await platformApi<Row>('/dst/database/page',query,{signal});
+ const raw=await platformApi<Row>('/db/source/page',query,{signal});
  return {list:rowsOf(raw).map(sourceRow),total:Number(raw.total||0),summary:raw.summary||{},distributions:raw.distributions||[]};
 }
 export async function listSources(signal?:AbortSignal):Promise<Row[]> {
  const result:Row[]=[];const seen=new Set<string>();
  for(let pageNum=1;pageNum<=1000;pageNum++){
-  const data=await platformApi<Row>('/dst/database/page',{pageNum,pageSize:100,conditions:[],sortField:'updatedTime',sortDir:'desc',includeMetadataCounts:true},{signal});
+  const data=await platformApi<Row>('/db/source/page',{pageNum,pageSize:100,conditions:[],sortField:'updatedTime',sortDir:'desc',includeMetadataCounts:true},{signal});
   const page=rowsOf(data);for(const raw of page){const row=sourceRow(raw);if(row.id&&!seen.has(row.id)){seen.add(row.id);result.push(row);}}
   if(page.length<100 || (Number(data.total)>0&&result.length>=Number(data.total)))return result;
  }
@@ -114,6 +114,6 @@ export async function collectionStatuses(ids:string[],signal?:AbortSignal):Promi
  return jobs;
 }
 export const startCollection=(id:string,refresh:boolean)=>platformApi<CollectionJob>('/dst/database/metadata/tables/collection/start',{dbId:id,mode:refresh?'REFRESH':'INITIAL'});
-export const collectTableFields=(id:string,force=false)=>platformApi<unknown>('/dst/database/metadata/collectColumns',{tableId:id,...(force?{force:true}:{})},{timeoutMs:120000});
+export const collectTableFields=(id:string,force=false)=>platformApi<unknown>('/db/field/collect',{tableId:id,...(force?{force:true}:{})},{timeoutMs:120000});
 export const sharedSourceApi=datasourceRegistrationApi;
 export function openPlatformCatalog() {const url=new URL(dataPlatformHomeUrl(),location.href);url.hash='/register/register-sjml/list';location.assign(url.href);}

@@ -109,8 +109,8 @@ test("detail breadcrumb can mount before an authorized detail initializes its ta
   assert.deepEqual(store.history.map(({ query }) => query.id), ["validation"]);
 });
 
-const savePath = "/dws/market/applyForm/saveOrUpdate";
-const submitPath = "/dws/market/submit";
+const savePath = "/dws/apply/save";
+const submitPath = "/dws/apply/submit";
 const resources = (size) =>
   Array.from({ length: size }, (_, index) => ({
     tid: `validation-catalog-${index + 1}`,

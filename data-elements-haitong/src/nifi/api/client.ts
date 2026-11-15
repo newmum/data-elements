@@ -20,7 +20,9 @@ function rejectStaleSession(config?: SessionRequestConfig) {
 }
 
 export const apiClient = axios.create({
-  baseURL: import.meta.env.MODE === 'flow-lite' ? '/nifi/api' : import.meta.env.VITE_APP_BASE_API || '/nifi/api',
+  baseURL: import.meta.env.MODE === 'flow-lite'
+    ? '/nifi/api'
+    : (import.meta.env.VITE_APP_BASE_API || '/nifi').replace(/\/nifi\/api\/?$/, '/nifi'),
   timeout: Number(import.meta.env.VITE_APP_API_TIMEOUT_MS || 45000),
   headers: { 'Content-Type': 'application/json' },
 });

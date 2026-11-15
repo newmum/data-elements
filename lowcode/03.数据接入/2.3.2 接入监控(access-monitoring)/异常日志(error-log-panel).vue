@@ -66,7 +66,7 @@ const fetchErrors = async () => {
   loading.value = true; loadError.value = ''; errorList.value = []; refreshedAt.value = '';
   try {
     if (!props.pipelineId?.trim()) throw new Error('当前任务尚未关联流程，暂时无法读取异常日志');
-    const response = await (window as any).$request.get(`/nifi/api/pipelines/${encodeURIComponent(props.pipelineId)}/errors`, {
+    const response = await (window as any).$request.get(`/nifi/event/errors?id=${encodeURIComponent(props.pipelineId)}`, {
       responsePolicy: 'raw', errorPolicy: 'silent', timeout: 30000, signal: controller.signal,
     });
     const data = unwrap(response);
@@ -83,7 +83,7 @@ const handleClear = async () => {
   if (!props.modelValue || id !== props.pipelineId) return;
   clearing.value = true; loadError.value = '';
   try {
-    unwrap(await (window as any).$request.post(`/nifi/api/pipelines/delete/${encodeURIComponent(id)}/errors`, {}, { responsePolicy: 'raw', errorPolicy: 'silent', timeout: 30000 }));
+    unwrap(await (window as any).$request.post(`/nifi/event/clear?id=${encodeURIComponent(id)}`, {}, { responsePolicy: 'raw', errorPolicy: 'silent', timeout: 30000 }));
     if (props.modelValue && id === props.pipelineId) { ElMessage.success('已清空异常日志'); await fetchErrors(); }
   } catch (error: any) { if (props.modelValue && id === props.pipelineId) loadError.value = `清空失败：${errorText(error)}`; }
   finally { clearing.value = false; }

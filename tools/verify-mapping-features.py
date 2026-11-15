@@ -41,7 +41,7 @@ def main():
         if isinstance(result, dict) and "data" in result and result.get("code") in [0, 1, 200]:
             return result["data"]
         return result
-    capabilities = api("/nifi/api/field-mapping/capabilities")
+    capabilities = api("/nifi/map/caps")
     direct = {item["name"] for item in capabilities["functions"] if item.get("requiredOperator", "FUNCTION") == "FUNCTION"}
     covered = {case[0] for case in functions()}
     # Some capability versions omit requiredOperator for direct functions.
@@ -52,9 +52,9 @@ def main():
     options.output.mkdir(parents=True, exist_ok=True)
     (options.output / "golden-spec.json").write_text(json.dumps(spec, ensure_ascii=False, indent=2), encoding="utf-8")
     (options.output / "golden-expected.json").write_text(json.dumps(expected, ensure_ascii=False, indent=2), encoding="utf-8")
-    compiled = api("/nifi/api/field-mapping/compile", {"spec": spec})
+    compiled = api("/nifi/map/compile", {"spec": spec})
     (options.output / "golden-compiled.json").write_text(json.dumps(compiled, ensure_ascii=False, indent=2), encoding="utf-8")
-    preview = api("/nifi/api/field-mapping/preview", {"spec": spec, "sampleRows": [{"x": "甲"}]})
+    preview = api("/nifi/map/preview", {"spec": spec, "sampleRows": [{"x": "甲"}]})
     results = preview.get("resultRows", [])
     failures = []
     if not results:

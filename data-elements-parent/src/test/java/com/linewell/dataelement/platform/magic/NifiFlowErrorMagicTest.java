@@ -48,9 +48,8 @@ import org.ssssssss.script.MagicScriptContext;
 import org.ssssssss.script.runtime.function.MagicScriptLambdaFunction;
 
 class NifiFlowErrorMagicTest {
-    private static final String ROOT = "api/10.NiFi流程接口/01.接口/";
+    private static final String ROOT = "api/10.NiFi流程接口/";
     private static final String PIPELINES = ROOT;
-    private static final String FLOWS = ROOT;
     private static final String HELPER = "function/01.通用函数/31.NiFi流程错误接口响应.ms";
     private static final String DSL = "{\"version\":1,\"nodes\":[],\"edges\":[]}";
     private static final String TENANT = "tenant-a";
@@ -140,7 +139,7 @@ class NifiFlowErrorMagicTest {
                 Map.of("historyCleared", true, "bulletinsCleared", 0, "nativeCleared", false));
         assertThat(upstream.getSuppressed()).containsExactly(close);
         assertThat(f.source.reads).isOne();
-        assertThat(f.invoke(f.clearAlias, "flow-a").getBody()).isEqualTo(
+        assertThat(f.invoke(f.clear, "flow-a").getBody()).isEqualTo(
                 Map.of("historyCleared", true, "bulletinsCleared", 2, "nativeCleared", true));
         assertThat(f.source.reads).isOne();
 
@@ -224,11 +223,10 @@ class NifiFlowErrorMagicTest {
                 "com.linewell.dataelement.integration.nifi.canvas.errors.ErrorService as errorStore",
                 "com.linewell.dataelement.integration.nifi.canvas.lifecycle.NifiMutationAspect as mutation",
                 "com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient as nifi");
-        final MagicScript history = endpoint(PIPELINES + "21.查询流程错误历史.ms", "nifi_pipe_error_history_get_v1");
-        final MagicScript historyHead = endpoint(PIPELINES + "22.核验流程错误历史.ms", "nifi_pipe_error_history_head_v1");
-        final MagicScript live = endpoint(PIPELINES + "23.查询流程实时公告.ms", "nifi_pipe_error_bulletin_get_v1");
-        final MagicScript clear = endpoint(PIPELINES + "25.清理流程错误.ms", "nifi_pipe_error_clear_post_v1");
-        final MagicScript clearAlias = endpoint(FLOWS + "40.清理流程错误.ms", "nifi_flow_error_clear_post_v1");
+        final MagicScript history = endpoint(PIPELINES + "09.错误与公告/01.查询流程错误历史.ms", "nifi_pipe_error_history_get_v1");
+        final MagicScript historyHead = endpoint(PIPELINES + "09.错误与公告/02.核验流程错误历史.ms", "nifi_pipe_error_history_head_v1");
+        final MagicScript live = endpoint(PIPELINES + "09.错误与公告/03.查询流程实时公告.ms", "nifi_pipe_error_bulletin_get_v1");
+        final MagicScript clear = endpoint(PIPELINES + "09.错误与公告/05.清理流程错误.ms", "nifi_pipe_error_clear_post_v1");
 
         Fixture() throws Exception {
             var statement = mock(PreparedStatement.class);
@@ -256,7 +254,7 @@ class NifiFlowErrorMagicTest {
                     "tenantRuntime", new TenantMagicModule(null), "objectMapper", JSON,
                     "errorStore", errors, "nifi", nifi, "mutation", mutation)));
             return TenantContext.call(TENANT, () -> (ResponseEntity<?>) endpoint.execute(new MagicScriptContext(
-                    Map.of("path", Map.of("id", id), "flowErrors", flowErrors))));
+                    Map.of("param", Map.of("id", id), "flowErrors", flowErrors))));
         }
     }
 

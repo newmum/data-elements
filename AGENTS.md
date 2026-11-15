@@ -6,7 +6,7 @@
 
 前端业务 HTTP 接口优先在 Magic API 直接注册。迁移以整类移除可替代的 Java Controller、Service 和专用文件为交付目标，并按 [Java 文件、旧对象与测试清理](docs/data-elements.md#backend-simplification) 核对入口、依赖、退役顺序和回归证据。每批独立统计生产 Java 文件与类、Controller 和测试文件。测试按有效覆盖和构建耗时整理，等价验证就绪后再删除重复或退役用例。
 
-新增、修改或归类 Magic 资源必须遵守 [Magic API 目录组织](docs/data-elements.md#lowcode-magic--magic-api-organization) 和 [Magic 脚本可读性与注释规范](docs/data-elements.md#lowcode-magic--magic-api-readability-and-documentation)。同级资源连续编号，API 使用同一深度的叶分组，业务目录最多三层，每个分组有有效路径。涉及实际路由或导入变化时，同批迁移并验证调用方。所有 `import` 放在脚本最前面，紧接中文说明。接口应直接展示本入口的业务编排，确有共享实现的短入口必须说明复用关系和业务实现位置。
+新增、修改或归类 Magic 资源必须遵守 [Magic API 目录组织](docs/data-elements.md#lowcode-magic--magic-api-organization) 和 [Magic 脚本可读性与注释规范](docs/data-elements.md#lowcode-magic--magic-api-readability-and-documentation)。同级资源连续编号，API 使用同一深度的叶分组，业务目录最多三层。分组和 API 的 `path` 各使用一个有名字的 URL 段，采用简短的小写英文单词或通用缩写，避免连字符，由层级拼成完整地址。涉及实际路由或导入变化时，同批迁移并验证调用方。所有 `import` 放在脚本最前面，紧接中文说明。接口应直接展示本入口的业务编排，确有共享实现的短入口必须说明复用关系和业务实现位置。
 
 独立 Magic Function 只承载多个现役入口实际共用的逻辑。沿引用核对 API、任务、兼容别名及 Java 回调；同一入口的多层转发只算一个调用入口。单入口的校验、权限、CRUD、事务和流程编排直接写在对应 API 脚本，需要分段时使用脚本内的局部函数。GET 和 HEAD 可以共用实现。退役独立函数前核对运行引用并备份选定资源。
 
@@ -57,7 +57,7 @@ Mock 的集中设计、用户要求、当前覆盖与接手顺序见用户要求
 - 租户是行业应用的数据边界。控制库 `baseline` 保存租户定义、数据库映射以及共享 `ui_component_t`、`api_file_t`；业务读写使用运行配置中映射到的真实租户数据库，不能因库名相似选择旧副本。物理分库隔离和 `tenant_id` 条件同时生效。
 - Java 使用 `TenantContext`、`TenantDataSourceRegistry` 和 `TenantRoutingDataSource` 路由行业库；控制面服务明确使用 `@UseControlDataSource`。共享页面/API 不表示业务数据跨租户共享，不创建重复主表或第二套等价业务后端。
 - 已认证行业业务 Magic 只从 `tenantRuntime.id()` 取得租户，一次解析后用于写入和数据访问的租户过滤；不能以 `body`、`param`、`principal`、浏览器选项或旧记录的租户字段决定数据归属。上下文缺失即拒绝，不能回退到旧记录租户。敏感对象及跨资源关联仍需显式校验归属。
-- 登录选择、租户切换使用其专有认证接口和账号成员关系校验。修改业务接口后，以真实会话核对 `/sym/tenant/current`，并验证不同租户的读写隔离。
+- 登录选择、租户切换使用其专有认证接口和账号成员关系校验。修改业务接口后，以真实会话核对 `GET /portal/sso/session`，并验证不同租户的读写隔离。
 - IDAAS 中央平台操作员会话、人员主档、统一认证账号、应用本地账号属于不同身份域；平台会话不附带行业 `tenantId`，其控制面 Magic 按当前平台权限与应用范围校验，不强行套用行业业务会话规则。具体约束继续以 `data-elements-idaas/AGENTS.md` 为准。不得恢复已退役的共享账号、旧初始化器、自动同步/下发或擅自启用原应用 SSO。
 - 租户配置按本系统已确认的普通授权用户模型处理。用户未要求时，不新增 `is_platform_admin`、`is_tenant_admin`、`platformAdmin`、`tenantAdmin` 等字段/角色门槛；保留租户归属、成员资格及正常业务权限校验。租户成员关系只维护成员与默认租户选择，不引入管理员标志。
 - `sym_form` 动态表单定义保存在当前租户业务库，与控制库共享低代码组件不同；保存表单配置不能误写到 `ui_component_t`。具体格式与兼容边界见上述业务约束。

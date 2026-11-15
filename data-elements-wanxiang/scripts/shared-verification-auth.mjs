@@ -5,7 +5,7 @@ export async function verificationLogin(base,account,password){
  for(let attempt=0;attempt<4;attempt++){
   let result,message='';
   try{
-   const response=await fetch(base+'/portal/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({account,password:sm3(password),appId:'1995678661281710081'}),signal:AbortSignal.timeout(12000)});
+   const response=await fetch(base+'/portal/sso/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({account,password:sm3(password),appId:'1995678661281710081'}),signal:AbortSignal.timeout(12000)});
    const text=await response.text();result=text?JSON.parse(text):{};
    if(result.code===0&&result.data?.token){if(attempt)console.log('NOTE login needed '+attempt+' runtime-publication retries; not evidence of stable authentication');return result;}
    message=String(result.msg||result.message||'Empty runtime response');

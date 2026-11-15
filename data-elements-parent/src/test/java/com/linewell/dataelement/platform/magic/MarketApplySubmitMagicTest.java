@@ -237,7 +237,7 @@ class MarketApplySubmitMagicTest {
     private static String readScript() throws Exception {
         Path root = Path.of(System.getProperty("user.dir")).toAbsolutePath();
         while (!Files.isDirectory(root.resolve("magic"))) root = root.getParent();
-        String content = Files.readString(root.resolve("magic/api/05.数据服务/02.数据超市/11.资源申请提交.ms"));
+        String content = Files.readString(root.resolve("magic/api/05.数据服务/04.资源申请/05.资源申请提交.ms"));
         return content.split("================================", 2)[1];
     }
 

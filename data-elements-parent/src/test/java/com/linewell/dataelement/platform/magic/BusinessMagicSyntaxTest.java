@@ -19,10 +19,12 @@ class BusinessMagicSyntaxTest {
     private static final List<String> IDENTITY_GROUPS = List.of("api/07.系统管理", TENANT_ACCOUNTS,
             "api/09.统一身份管理", "function/13.统一身份管理");
     private static final List<String> BUSINESS_GROUPS = List.of(
-            "api/02.数据盘点/02.数据库表", "api/07.系统管理/07.审批中心",
+            "api/01.系统门户", "api/11.数据库资源", "api/07.系统管理/07.审批中心",
             "api/07.系统管理/05.权限管理", "api/03.数据接入");
     private static final List<String> MULTI_VALUE_IDS = List.of(
             "e3320ec899a24426adf5f77e2dab36f9", "ods_data_agg_task_ensure_01");
+    private static final List<String> PORTAL_SESSION_IDS = List.of(
+            "c98ee7cf1481482586080eb71cf423d5", "10def1f21f6e42769e696534efbb91a9");
 
     @TestFactory
     List<DynamicTest> compileCurrentResources() throws IOException {
@@ -45,8 +47,10 @@ class BusinessMagicSyntaxTest {
         assertLoggingResourcesSelected(scripts.keySet());
 
         addRequiredScript(scripts, "function/01.通用函数/07.记录业务操作.ms", "log_operation_function_v1");
-        addRequiredScript(scripts, "api/01.系统门户/02.单点登录/01.单点登录.ms", "c98ee7cf1481482586080eb71cf423d5");
-        addRequiredScript(scripts, "api/01.系统门户/03.系统登出/01.系统登出.ms", "10def1f21f6e42769e696534efbb91a9");
+        for (String id : PORTAL_SESSION_IDS) {
+            var script = CanonicalMagicSources.scriptById(id);
+            assertSelected(scripts.keySet(), script.relativePath());
+        }
         for (String id : MULTI_VALUE_IDS) {
             var script = CanonicalMagicSources.scriptById(id);
             scripts.put(script.relativePath(), script);

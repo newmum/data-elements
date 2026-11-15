@@ -26,7 +26,7 @@ test('actual status/error query functions mark background reads quiet and retain
   await assert.rejects(queries.at(-1).queryFn({ signal: abort.signal }), error => error === backendError);
   exported.useFlowErrors('allowed-pipeline');
   await assert.rejects(queries.at(-1).queryFn({ signal: abort.signal }), error => error === backendError);
-  assert.deepEqual(calls.map(call => call.path), ['/pipelines/allowed-pipeline/status', '/pipelines/allowed-pipeline/errors']);
+  assert.deepEqual(calls.map(call => call.path), ['/run/status?id=allowed-pipeline', '/event/errors?id=allowed-pipeline']);
   for (const call of calls) {
     assert.equal(call.config.nifiSilentGlobalErrors, true);
     assert.equal(call.config.signal, abort.signal);

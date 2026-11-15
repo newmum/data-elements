@@ -49,13 +49,13 @@ const renderer = vue.createRenderer({
 });
 
 const settle = () => new Promise((resolve) => setImmediate(resolve));
-const listPath = "/dws/market/list";
-const countPath = "/dws/market/count";
+const listPath = "/dws/mall/page";
+const countPath = "/dws/mall/count";
 const appPath = "/sym/dict";
-const collectPath = "/dws/market/collect";
-const addPath = "/dws/market/shoppingCard";
-const detailPath = "/dws/market/detail";
-const viewPath = "/dws/market/view";
+const collectPath = "/dws/mall/collect";
+const addPath = "/dws/cart/save";
+const detailPath = "/dws/mall/detail";
+const viewPath = "/dws/mall/view";
 const org = { id: "org-1", value: "org-1", label: "部门一", serialNumber: "00010001" };
 const row = (tid, fields = {}) => ({ tid, catalogName: tid, assetType: "catalog", ...fields });
 

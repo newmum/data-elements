@@ -27,7 +27,7 @@ export type BatchCreateRequest = {
   items: Array<{ sourceTableId: string; targetTableId: string }>;
 };
 
-const path = '/ods/batchCreateJob';
+const path = '/ods/job/batch';
 const call = <T>(action: string, body: Record<string, unknown> = {}) =>
   platformApi<T>(path, { action, ...body });
 

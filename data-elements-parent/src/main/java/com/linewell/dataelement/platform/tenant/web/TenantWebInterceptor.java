@@ -48,9 +48,9 @@ public class TenantWebInterceptor implements HandlerInterceptor {
         // Login establishes a new, separately scoped token. An old token on
         // the request must not trigger compatibility tenant assignment.
         if (request.getRequestURI().startsWith("/idaas/")
-                || "/portal/login".equals(request.getRequestURI())
-                || "/sym/tenant/login-options".equals(request.getRequestURI())
-                || "/sym/tenant/login-settings".equals(request.getRequestURI())) {
+                || "/portal/sso/login".equals(request.getRequestURI())
+                || "/portal/sso/options".equals(request.getRequestURI())
+                || "/portal/sso/settings".equals(request.getRequestURI())) {
             TenantContext.control();
             return true;
         }

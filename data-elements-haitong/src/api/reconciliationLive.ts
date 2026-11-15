@@ -36,20 +36,20 @@ export const enabled = (row: Record<string, unknown>): boolean => {
 
 export const reconciliationLive = {
   async policies(page = 1, size = 20, keyword = '', sort:ServerSort={}): Promise<PageResult<ReconcilePolicy>> {
-    return asPage(await platformApi('/ods/reconciliation/policy/page', { page, size, keyword, ...sort }));
+    return asPage(await platformApi('/ods/policy/page', { page, size, keyword, ...sort }));
   },
   async runs(page = 1, size = 20, status = '', keyword = '', sort:ServerSort={}): Promise<PageResult<ReconcileRun>> {
-    return asPage(await platformApi('/ods/reconciliation/run/page', { page, size, status, keyword, ...sort }));
+    return asPage(await platformApi('/ods/recon/page', { page, size, status, keyword, ...sort }));
   },
   async diffs(runId: string, page = 1, size = 200): Promise<PageResult<ReconcileDiff>> {
-    return asPage(await platformApi('/ods/reconciliation/run/diff/page', { runId, page, size }));
+    return asPage(await platformApi('/ods/recon/diff', { runId, page, size }));
   },
-  exportDiffs: (runId: string) => platformApi<ReconcileDiffExport>('/ods/reconciliation/run/diff/export', { runId }),
-  accessTasks: () => platformApi<ReconcileAccessTask[]>('/ods/reconciliation/access-tasks', {}),
-  policyDetail: (policyId: string) => platformApi<ReconcilePolicy>('/ods/reconciliation/policy/detail', { policyId }),
-  runDetail: (runId: string) => platformApi<ReconcileRun>('/ods/reconciliation/run/detail', { runId }),
-  savePolicy: (body: Record<string, unknown>) => platformApi<ReconcilePolicy>('/ods/reconciliation/policy/save', body),
-  precheck: (policyId: string) => platformApi<Record<string, unknown>>('/ods/reconciliation/policy/precheck', { policyId }),
-  enable: (policyId: string, isEnabled: boolean) => platformApi<boolean>('/ods/reconciliation/policy/enable', { policyId, enabled: isEnabled }),
-  manualRun: (policyId: string) => platformApi<ReconcileRun>('/ods/reconciliation/run/manual', { policyId, requestId: `${policyId}-${Date.now()}` }),
+  exportDiffs: (runId: string) => platformApi<ReconcileDiffExport>('/ods/recon/export', { runId }),
+  accessTasks: () => platformApi<ReconcileAccessTask[]>('/ods/recon/tasks', {}),
+  policyDetail: (policyId: string) => platformApi<ReconcilePolicy>('/ods/policy/detail', { policyId }),
+  runDetail: (runId: string) => platformApi<ReconcileRun>('/ods/recon/detail', { runId }),
+  savePolicy: (body: Record<string, unknown>) => platformApi<ReconcilePolicy>('/ods/policy/save', body),
+  precheck: (policyId: string) => platformApi<Record<string, unknown>>('/ods/policy/check', { policyId }),
+  enable: (policyId: string, isEnabled: boolean) => platformApi<boolean>('/ods/policy/switch', { policyId, enabled: isEnabled }),
+  manualRun: (policyId: string) => platformApi<ReconcileRun>('/ods/recon/start', { policyId, requestId: `${policyId}-${Date.now()}` }),
 };

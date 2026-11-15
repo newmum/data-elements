@@ -77,13 +77,13 @@ for (const kind of ['delay', 'log']) {
 for (const wrapped of [false, true]) {
   const data = [{ id: 'err-1', phase: 'RUNTIME', message: '连接失败', nodeLabel: '数据库写入' }];
   const f = fixture('log', async () => ({ data: wrapped ? { code: 200, data } : data }));
-  await f.actual.fetchErrors(); assert.equal(f.calls[0].args[0], '/nifi/api/pipelines/flow-a/errors');
+  await f.actual.fetchErrors(); assert.equal(f.calls[0].args[0], '/nifi/event/errors?id=flow-a');
   assert.equal(f.actual.errorList.value.length, 1);
   f.actual.filter.value = 'DEPLOYMENT'; assert.equal(f.actual.filteredList.value.length, 0);
   f.actual.filter.value = 'ALL'; f.actual.keyword.value = '数据库'; assert.equal(f.actual.filteredList.value.length, 1);
   assert.equal(f.calls.length, 1, 'Filter and search add no row requests');
 }
 const clear = fixture('log', async route => ({ data: route.includes('/delete/') ? '' : [] }));
-await clear.actual.handleClear(); assert.equal(clear.calls[0].args[0], '/nifi/api/pipelines/delete/flow-a/errors');
+await clear.actual.handleClear(); assert.equal(clear.calls[0].args[0], '/nifi/event/clear?id=flow-a');
 assert.equal(clear.calls.length, 2, 'Clear 204 then one refresh'); assert.equal(clear.actual.loadError.value, '');
 console.log('PASS: 20/100 paging, remote sort, raw/wrapped arrays, clear 204, business/HTTP/malformed failures, stale and closed requests, local filtering without N+1');

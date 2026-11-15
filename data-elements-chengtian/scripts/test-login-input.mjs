@@ -128,7 +128,7 @@ const transportContext = {
 vm.runInNewContext(compile(read("src/utils/request.ts").replace("import.meta.env.VITE_APP_BASE_API", '"/fixture-api"')), transportContext);
 const transportError = {
   code: "ERR_NETWORK", message: "fixture transport failure", stack: "fixture stack",
-  config: { method: "post", url: "/portal/login", data: { password: sm.sm3(expectedPassword) }, headers: { token: "fixture-private-token" } },
+  config: { method: "post", url: "/portal/sso/login", data: { password: sm.sm3(expectedPassword) }, headers: { token: "fixture-private-token" } },
 };
 await assert.rejects(() => handlers.requestError(transportError));
 await assert.rejects(() => handlers.responseError(transportError), /无法连接服务器/);

@@ -144,7 +144,7 @@ const isUploading = ref(false);
 const fetchUserIcons = async () => {
   try {
     const response = (await $common.get(
-      "/das/repository/icon/list"
+      "/das/icon/list"
     )) as unknown as IconInfo[];
 
     const userIcons: any[] = response.map((icon) => ({
@@ -259,7 +259,7 @@ const handleUpload = (options: UploadRequestOptions) => {
 
 const handleSuccess = async (res: any) => {
   // 添加到图标库
-  await $common.post("/das/repository/icon/add", {
+  await $common.post("/das/icon/create", {
     appIcon: res.preView,
   });
   fetchUserIcons();
@@ -274,7 +274,7 @@ const removeUploadedIcon = async (url: string) => {
   if (!tid) return;
   try {
     // 调用图标库删除接口
-    await $common.post("/das/repository/icon/delete", {
+    await $common.post("/das/icon/delete", {
       tid,
     });
     // 直接从 imgList 移除，v-for 自动更新视图

@@ -41,7 +41,7 @@ import org.ssssssss.script.MagicScript;
 import org.ssssssss.script.MagicScriptContext;
 
 class NifiLineageMagicTest {
-    private static final String ROUTE = "api/10.NiFi流程接口/01.接口/16.查询节点血缘.ms";
+    private static final String ROUTE = "api/10.NiFi流程接口/08.节点运行/01.查询节点血缘.ms";
     private static final String RESOURCE_ID = "0a119f2475974554a8b3547dd70febf0";
     private static final String DSL = "{\"version\":1,\"nodes\":[],\"edges\":[]}";
     private static final String MAPPING = """
@@ -282,7 +282,7 @@ class NifiLineageMagicTest {
             when(request.getValues("maxEvents[]")).thenReturn(bracketLimit);
             var modules = Map.of("request", request, "tenantRuntime", new TenantMagicModule(null),
                     "tableRead", new StructuredTableReadMagicModule(jdbc));
-            var variables = Map.<String, Object>of("path", Map.of("id", id, "nodeId", nodeId));
+            var variables = Map.<String, Object>of("param", Map.of("id", id, "nodeId", nodeId));
             synchronized (MagicResourceLoader.class) {
                 var oldModules = new LinkedHashMap<String, Object>();
                 var loader = MagicResourceLoader.class.getDeclaredField("classLoader");

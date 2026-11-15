@@ -25,7 +25,7 @@
 // 接口：05.分层数据表公共分页
 // 路由：POST /dwm/center/layer-page
 // 业务说明：根据 layerRoot 选择 ODS、DWD 或 DWS 分层，复用登记表分页接口筛选当前租户数据，并补齐页面所需目录字段。
-import '@post:/dst/database/table/page' as tablePage
+import '@post:/db/table/page' as tablePage
 
 /*
  * 资源中心分层列表公共实现。

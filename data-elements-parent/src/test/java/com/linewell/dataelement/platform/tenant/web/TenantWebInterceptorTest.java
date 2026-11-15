@@ -87,7 +87,7 @@ class TenantWebInterceptorTest {
         TenantWebInterceptor interceptor = new TenantWebInterceptor(access, new TenantProperties(), mock(com.linewell.dataelement.feature.identity.application.TenantIdentityQueryService.class));
         try (var session = mockStatic(StpUtil.class)) {
             session.when(StpUtil::isLogin).thenThrow(new IllegalStateException("stale session"));
-            for (String path : new String[] {"/portal/login", "/sym/tenant/login-options", "/sym/tenant/login-settings"}) {
+            for (String path : new String[] {"/portal/sso/login", "/portal/sso/options", "/portal/sso/settings"}) {
                 MockHttpServletRequest request = new MockHttpServletRequest("GET", path);
                 request.addHeader("token", "obsolete-test-token");
                 TenantContext.bind("previous-request");

@@ -665,7 +665,7 @@ const loadTableFields = async () => {
 
   try {
     // 调用获取表字段的接口
-    const fieldRes = await $common.get("/dst/database/metadata/columns", {
+    const fieldRes = await $common.get("/db/field/list", {
       tid: state.tableInfo.tid,
     });
     // 将字段信息存储到状态中
@@ -998,7 +998,7 @@ const handleRemove = async (type: string, id: string) => {
 // 删除建表
 const handleDeleteTable = () => {
   $common.handle({
-    url: "/ods/cleanup-rebuild",
+    url: "/ods/ingest/clean",
     info: "删除挂接资源，任务同步删除，是否继续？",
     action: "移除",
     data: {

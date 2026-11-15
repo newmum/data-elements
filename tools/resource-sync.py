@@ -543,7 +543,7 @@ def register_magic(connection, config, files, apply=False):
               'result': 'registration-plan'}
     if not apply:
         return result
-    if not runtime_call(config, '/sym/tenant/current'):
+    if not runtime_call(config, '/portal/sso/session'):
         raise ValueError('Registration requires an authenticated runtime')
     # Preserve a bounded recovery record and recheck the full identity registry under lock.
     write_json(ROOT / 'logs/resources/backups' / ('registration-' + digest('|'.join(files)) + '.json'),

@@ -444,7 +444,7 @@ const deleteDrawerTargets = computed(() => {
     targetTableId: item.targetTableId,
     targetDbId: item.targetDbId || row.targetDbId || '',
     targetDbName: item.targetDbName || row.targetDbName || '',
-    // /ods/task/page 的 targetTableName 是中文展示名；删除必须使用元数据中的物理表名。
+    // /ods/job/page 的 targetTableName 是中文展示名；删除必须使用元数据中的物理表名。
     targetTableName: item.targetPhysicalTableName || row.targetPhysicalTableName || '',
     targetTableDisplayName: item.targetTableName || row.targetTableName || '',
   }));
@@ -490,7 +490,7 @@ const normalizeListData = (response) => {
 
 const fetchTasks = async ({ pageNo = 1, pageSize = 20, sortField, sortDir } = {}) => {
   const sequence = ++taskFetchSequence;
-  const response = await $common.post("/ods/task/page", {
+  const response = await $common.post("/ods/job/page", {
     taskStatus: activeTab.value === "all" ? "all" : activeTab.value,
     taskName: searchVal.value,
     nifiNetworkCode: selectedNetworkCode.value,
@@ -523,7 +523,7 @@ const fetchTasks = async ({ pageNo = 1, pageSize = 20, sortField, sortDir } = {}
 const loadNodeTree = async () => {
   nodeTreeLoading.value = true;
   try {
-    const response = await $common.post("/ods/nifi-node/access-options", {});
+    const response = await $common.post("/ods/node/options", {});
     const payload = response?.data || response || {};
     const networks = Array.isArray(payload.networks) ? payload.networks : [];
     const nodes = Array.isArray(payload.list) ? payload.list : [];
@@ -598,7 +598,7 @@ const cleanupMonitorHistory = async () => {
     );
     const retentionDays = Number(value);
     cleaningHistory.value = true;
-    const previewResponse = await $common.post("/ods/task/monitorSnapCleanup", {
+    const previewResponse = await $common.post("/ods/monitor/clean", {
       retentionDays,
       dryRun: true,
     });
@@ -614,7 +614,7 @@ const cleanupMonitorHistory = async () => {
       "确认清理监控历史",
       { type: "warning", confirmButtonText: "确认清理", cancelButtonText: "取消" }
     );
-    const resultResponse = await $common.post("/ods/task/monitorSnapCleanup", {
+    const resultResponse = await $common.post("/ods/monitor/clean", {
       retentionDays,
       dryRun: false,
       confirm: true,
@@ -719,7 +719,7 @@ const handleOperation = async (type, row) => {
         );
         setOperationState(row, "stop");
         await $request.post(
-          `/nifi/api/pipelines/${currentPipelineId}/stop`,
+          `/nifi/life/stop?id=${encodeURIComponent(currentPipelineId)}`,
           {},
           { responsePolicy: "raw", errorPolicy: "silent", timeout: 120 * 1000 }
         );
@@ -734,7 +734,7 @@ const handleOperation = async (type, row) => {
         );
         setOperationState(row, "run");
         await $request.post(
-          `/nifi/api/pipelines/${currentPipelineId}/start`,
+          `/nifi/life/start?id=${encodeURIComponent(currentPipelineId)}`,
           {},
           { responsePolicy: "raw", errorPolicy: "silent", timeout: 120 * 1000 }
         );
@@ -804,13 +804,13 @@ const deleteCurrentFlow = async () => {
     let response;
     if (row.recordSource === 'pipeline') {
       const pipelineId = requireOperationId(row.pipelineId, '缺少流程编号，无法删除');
-      response = await $request.post(`/nifi/api/pipelines/delete/${pipelineId}`, {},
+      response = await $request.post(`/nifi/flow/delete?id=${encodeURIComponent(pipelineId)}`, {},
         { responsePolicy: 'raw', errorPolicy: 'silent', timeout: 120 * 1000 });
     } else if (sourceTableId) {
-      response = await $common.post('/ods/dataAggReset', { sourceTableId, taskId, deleteTargetTable: false },
+      response = await $common.post('/ods/job/reset', { sourceTableId, taskId, deleteTargetTable: false },
         { _hiddenErrorMsg: true }, 120 * 1000);
     } else {
-      response = await $common.post('/ods/task/deleteById', { tid: taskId },
+      response = await $common.post('/ods/job/delete', { tid: taskId },
         { _hiddenErrorMsg: true }, 120 * 1000);
     }
     deleteDrawerVisible.value = false;
@@ -863,7 +863,7 @@ const deleteSingleTarget = async (target) => {
   if (!canDeleteTarget(target) || deletingTargets.value) return;
   try {
     const payload = deleteTargetPayload(target);
-    const previewResponse = await $common.post('/ods/dataAggReset',
+    const previewResponse = await $common.post('/ods/job/reset',
       { ...payload, dryRun: true }, { _hiddenErrorMsg: true });
     const preview = previewResponse?.data || previewResponse || {};
     if (String(preview.targetTableId || '') !== String(target.targetTableId)) {
@@ -875,7 +875,7 @@ const deleteSingleTarget = async (target) => {
       { type: 'warning', confirmButtonText: '确认', cancelButtonText: '取消' },
     );
     deletingTargets.value = true;
-    const result = await $common.post('/ods/dataAggReset', payload,
+    const result = await $common.post('/ods/job/reset', payload,
       { _hiddenErrorMsg: true }, 120 * 1000);
     const outcome = result?.data || result || {};
 
@@ -901,7 +901,7 @@ const deleteAllTargets = async () => {
     if (!sourceTableId) throw new Error('缺少来源表编号，无法核对目标归属');
     for (let offset = 0; offset < targets.length; offset += 20) {
       const batch = targets.slice(offset, offset + 20);
-      const response = await $common.post('/ods/dataAggReset', {
+      const response = await $common.post('/ods/job/reset', {
         sourceTableId, deleteTargetTable: true, dryRun: true, batchDryRun: true,
         targets: batch.map((target) => ({ targetDbId: target.targetDbId,
           targetTableName: target.targetTableName, targetTableId: target.targetTableId })),
@@ -922,7 +922,7 @@ const deleteAllTargets = async () => {
     deletingTargets.value = true;
     const outcomes = [];
     for (const target of targets) {
-      const response = await $common.post('/ods/dataAggReset', deleteTargetPayload(target),
+      const response = await $common.post('/ods/job/reset', deleteTargetPayload(target),
         { _hiddenErrorMsg: true }, 120 * 1000);
       outcomes.push(response?.data || response || {});
     }

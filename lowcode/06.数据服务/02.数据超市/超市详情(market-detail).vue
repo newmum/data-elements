@@ -188,7 +188,7 @@ async function loadDetail() {
 
   loading.value = true;
   try {
-    const row = await $common.postSilently("/dws/market/detail", { tid: requested });
+    const row = await $common.postSilently("/dws/mall/detail", { tid: requested });
     if (sequence !== requestSequence || !isCurrentVisit(visit)) return;
     if (row instanceof Error) throw row;
     if (!row || row.tid !== requested || row.assetType !== "catalog") {
@@ -198,7 +198,7 @@ async function loadDetail() {
     // 一次详情访问只提交一次浏览计数，详情刷新沿用本次访问。
     if (!viewRecorded) {
       viewRecorded = true;
-      void $common.postSilently("/dws/market/view", { tid: requested }).catch(() => {});
+      void $common.postSilently("/dws/mall/view", { tid: requested }).catch(() => {});
     }
   } catch (error: unknown) {
     if (sequence !== requestSequence || !isCurrentVisit(visit)) return;
@@ -239,7 +239,7 @@ async function toggleCollection() {
   const desired = !row.collected;
   collecting.value = true;
   try {
-    const collected = await $common.postSilently("/dws/market/collect", {
+    const collected = await $common.postSilently("/dws/mall/collect", {
       catalogId: row.tid,
       collected: desired,
     });

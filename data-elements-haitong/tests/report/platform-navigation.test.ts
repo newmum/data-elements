@@ -32,7 +32,7 @@ test('root/index.html and prefixed/index.html are the same app, without trusting
   assert.equal(appDocumentPath('/index.html'),'/');assert.equal(appDocumentPath('/source/index.html'),'/source');
   const portal=sourcePlatformBaseUrl(current).href;
   assert.equal(safeReportReturn('http://validation-platform.test:82/index.html#/datasource-manage/index',current,portal),'http://validation-platform.test:82/index.html#/datasource-manage/index');
-  for(const target of ['http://validation-platform.test:82/prod-api/portal/logout','http://validation-platform.test:82/unknown-app/#/','https://untrusted.test/#/','//untrusted.test/#/'])assert.equal(safeReportReturn(target,current,portal),undefined);
+  for(const target of ['http://validation-platform.test:82/prod-api/portal/sso/logout','http://validation-platform.test:82/unknown-app/#/','https://untrusted.test/#/','//untrusted.test/#/'])assert.equal(safeReportReturn(target,current,portal),undefined);
 });
 
 test('Chrome 100 without URLSearchParams.size retains business query and removes credential parameters',t=>{

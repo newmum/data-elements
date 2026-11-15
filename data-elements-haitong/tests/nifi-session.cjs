@@ -235,7 +235,7 @@ test('platform API recognizes HTTP-200 user_no_login as authentication expiry', 
     json: async () => ({ code: 100120, msg: 'user_no_login', success: false, data: null }),
   });
   try {
-    await assert.rejects(api.platformApi('/ods/task/page', {}), error =>
+    await assert.rejects(api.platformApi('/ods/job/page', {}), error =>
       error instanceof api.PlatformApiError && error.status === 401);
     assert.equal(redirects, 1);
   } finally {

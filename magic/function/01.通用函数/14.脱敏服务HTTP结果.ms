@@ -74,7 +74,7 @@ if (response.truncated == true) {
     // 部分JSON不能可靠识别秘密字段，只返回HTTP状态和响应大小提示。
     response.body = '[响应超过64 KiB，已省略正文]'
 }
-if (response.body instanceof String && ((request.address || '') + '').matches('.*(/portal/login|/idaas/oauth2/token)([?].*)?')) {
+if (response.body instanceof String && ((request.address || '') + '').matches('.*(/portal/sso/login|/idaas/oauth2/token)([?].*)?')) {
     response.body = '[认证响应正文已隐藏]'
 }
 return clean(response,0)

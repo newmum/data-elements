@@ -70,7 +70,7 @@ def api(route,body=None,timeout=120):
  return v
 
 def check_session():
- v=api('/sym/tenant/current')
+ v=api('/portal/sso/session')
  if v.get('tid')!=TENANT:raise RuntimeError('会话不属于澄天，拒绝执行')
  return v
 

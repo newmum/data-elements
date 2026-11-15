@@ -116,11 +116,11 @@ const handleAction = (action: string) => {
 const titleActions = (rule: any) => {
   const actions = Array.isArray(rule?.props?.actions) ? [...rule.props.actions] : [];
   if (detailClass.value === "table" && String(rule?.props?.name || "").includes("元数据")) {
-    if (!actions.some((action) => action.request?.url === "/dst/database/metadata/refreshDbInfo")) {
+    if (!actions.some((action) => action.request?.url === "/db/schema/refresh")) {
       actions.push({
         key: "refreshMetadata", label: "刷新元数据", icon: "Refresh", visibleWhen: "view",
         reloadDetail: true, successMessage: "元数据已刷新",
-        request: { url: "/dst/database/metadata/refreshDbInfo", method: "get",
+        request: { url: "/db/schema/refresh", method: "get",
           payload: { tid: "$datasourceId", tableId: "$tid" } },
       });
     }
@@ -178,7 +178,7 @@ const handleTitleAction = async (action: any) => {
   try {
     const method = String(request.method || "post").toLowerCase();
     const payload = resolveActionValue(request.payload || {});
-    const refreshMetadata = request.url === "/dst/database/metadata/refreshDbInfo";
+    const refreshMetadata = request.url === "/db/schema/refresh";
     // 资产详情读取范围可能更宽，刷新权限由服务端校验并在这里提示一次。
     const data = refreshMetadata && method === "get"
       ? await $common.getSilently(request.url, payload)
@@ -204,10 +204,10 @@ const detailApi = (tid: string, type = detailClass.value) => {
     return $common.post("/dst/application/detail", { tid });
   }
   if (type === "db") {
-    return $common.post("/dst/database/detail", { tid });
+    return $common.post("/db/source/detail", { tid });
   }
   if (type === "table") {
-    return $common.post("/ods/dataAggPage", { viewLevel: "tableDetail", tableId: tid }).then((res: any) => {
+    return $common.post("/ods/ingest/page", { viewLevel: "tableDetail", tableId: tid }).then((res: any) => {
       const payload = res?.data || res || {};
       return payload.detail || payload;
     });
@@ -232,7 +232,7 @@ const saveApi = (data: Record<string, any>) => {
     detailClass.value === "app"
       ? "/dst/application/save"
       : detailClass.value === "db"
-        ? "/dst/database/saveOrUpdate"
+        ? "/db/source/save"
         : "/dst/catalog/saveOrUpdate";
   return $common.post(url, {
     tid: currentData.value.tid,
@@ -276,7 +276,7 @@ const save = async (): Promise<any> => {
       // Keep a committed save successful if the remote datasource is unavailable.
       if (String(formData.showConnect ?? state.formData.showConnect ?? "1") === "1") {
         try {
-          await $common.getSilently("/dst/database/metadata/refreshDbInfo", { tid: saveResult?.tid || currentData.value.tid });
+          await $common.getSilently("/db/schema/refresh", { tid: saveResult?.tid || currentData.value.tid });
         } catch {
           metadataWarning = true;
         }

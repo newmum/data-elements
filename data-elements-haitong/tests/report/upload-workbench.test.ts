@@ -24,7 +24,7 @@ function contextFixture(t:TestContext,count:number){
  Object.defineProperty(globalThis,'window',{configurable:true,value:{location:{href:'http://report.test/#/report',origin:'http://report.test',hash:'#/report',search:''}}});
  for(const key of ['localStorage','sessionStorage'])Object.defineProperty(globalThis,key,{configurable:true,value:storage});
  const requests:string[]=[];globalThis.fetch=async input=>{const path=new URL(String(input),'http://report.test').pathname.replace(/^\/(?:prod|dev)-api/,'');requests.push(path);
-  const data=path==='/sym/user/me'?{id:'user'}:path==='/sym/tenant/current'?{tid:'tenant'}:{list:Array.from({length:count},(_,i)=>({tid:'source-'+i,dbName:'数据源'+i,accessMode:'upload'}))};return new Response(JSON.stringify({code:0,data}));};
+  const data=path==='/sym/user/me'?{id:'user'}:path==='/portal/sso/session'?{tid:'tenant'}:{list:Array.from({length:count},(_,i)=>({tid:'source-'+i,dbName:'数据源'+i,accessMode:'upload'}))};return new Response(JSON.stringify({code:0,data}));};
  t.after(()=>{globalThis.fetch=previousFetch;for(const[key,descriptor]of descriptors){if(descriptor)Object.defineProperty(globalThis,key,descriptor);else Reflect.deleteProperty(globalThis,key);}});return requests;
 }
 test('20/100 datasource choices need three reads and allow a first upload without registered tables',async t=>{
@@ -61,12 +61,12 @@ test('changing source uses one request without reloading user, tenant or candida
  for(const count of [20,100])await t.test(String(count),async child=>{
   const calls=contextFixture(child,count),context=await loadUploadContext('source-0');calls.length=0;
   const previousFetch=globalThis.fetch;globalThis.fetch=async(input,init)=>{
-   const path=String(input);if(path.includes('/report-registration')){
-    calls.push('/dst/database/metadata/report-registration');assert.equal(JSON.parse(String(init?.body)).dbId,'source-'+(count-1));
+   const path=String(input);if(path.endsWith('/db/report/register')){
+    calls.push('/db/report/register');assert.equal(JSON.parse(String(init?.body)).dbId,'source-'+(count-1));
     return new Response(JSON.stringify({code:0,data:{revision:'selected',files:[],tables:[],receipts:[]}}));
    }return previousFetch(input,init);
   };
   const loaded=await createReportSourceLoader().load('source-'+(count-1),context.sources);assert.equal(loaded?.manifest.revision,'selected');
-  assert.deepEqual(calls,['/dst/database/metadata/report-registration']);
+  assert.deepEqual(calls,['/db/report/register']);
  });
 });

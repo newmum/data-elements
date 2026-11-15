@@ -50,7 +50,48 @@ test('field binding whitelists IDs and expected reference without registration s
 test('encoding create compiles segments into the same pending data-element record',async()=>withTransport(async(path,body)=>{assert.equal(path,'/dwm/standard/element/metaSaveOrUpdate');assert.equal(body.formatPattern,'^WX-[0-9]{6}$');assert.equal(body.fieldLength,9);assert.equal(body.publishStatus,0);assert.equal(body.bizDef,'编码说明');assert.equal('segments' in body,false);return {...body,tid:'encoding'};},async()=>standards.saveEncoding({name:'编码规范',code:'WX_RULE',standardEncode:'WX001',description:'编码说明',definition:{segments:[{type:'LITERAL',value:'WX-'},{type:'DIGITS',length:6}]}},[])));
 test('published code set preflight blocks editing and referenced code set blocks deletion',async()=>{const code={tid:'dictionary',dictName:'代码',dictCode:'C',dictItemValue:'[]',status:1};await withTransport(async path=>{assert.ok(path.endsWith('queryById'));return code;},async()=>assert.rejects(standards.saveCode({name:'代码'},[],{id:'dictionary'}),/先下线/));await withTransport(async path=>path.endsWith('queryById')?{...code,status:0}:{list:[raw],total:1},async()=>assert.rejects(standards.deleteCode({id:'dictionary'}),/仍被 1 个数据元引用/));});
 
-async function withWorker(work){const prior=globalThis.Worker;const code=fs.readFileSync('.test-build/src/services/encodingValidation.worker.js','utf8');globalThis.Worker=class{constructor(){this.worker=new NodeWorker(`const {parentPort}=require('node:worker_threads'); const self={postMessage:value=>parentPort.postMessage(value)}; ${code}; parentPort.on('message',data=>self.onmessage({data}));`,{eval:true});this.worker.on('message',data=>this.onmessage?.({data}));this.worker.on('error',error=>this.onerror?.(error));}postMessage(value){this.worker.postMessage(value);}terminate(){return this.worker.terminate();}};try{return await work();}finally{globalThis.Worker=prior;}}
+async function withWorker(work) {
+  const prior = globalThis.Worker;
+  const code = fs.readFileSync('.test-build/src/services/encodingValidation.worker.js', 'utf8');
+  const workers = new Set();
+  globalThis.Worker = class {
+    constructor() {
+      this.worker = new NodeWorker(`const {parentPort}=require('node:worker_threads'); const self={postMessage:value=>parentPort.postMessage(value)}; ${code}; parentPort.on('message',data=>self.onmessage({data}));`, {eval:true});
+      workers.add(this);
+      this.worker.on('message', data => this.onmessage?.({data}));
+      this.worker.on('error', error => this.onerror?.(error));
+    }
+
+    postMessage(value) {
+      this.worker.postMessage(value);
+    }
+
+    terminate() {
+      this.terminated ??= this.worker.terminate();
+      return this.terminated;
+    }
+  };
+  try {
+    return await work();
+  } finally {
+    globalThis.Worker = prior;
+    await Promise.all(Array.from(workers, worker => worker.terminate()));
+  }
+}
 test('actual format worker checks a full match, rejects invalid format and bad regex',async()=>withWorker(async()=>{assert.equal((await standards.testEncoding('^WX-[0-9]{6}$','WX-000001')).valid,true);assert.equal((await standards.testEncoding('[0-9]{2}','x12')).valid,false);await assert.rejects(standards.testEncoding('[','x'),/不是有效的正则表达式/);}));
 test('legacy pathological encoding cannot hang the UI thread',async()=>withWorker(async()=>{await assert.rejects(standards.testEncoding('^(a+)+$','a'.repeat(80)+'!'),/执行超时/);}));
-test('canonical field-binding scripts retain their group identity and public routes',()=>{const group=magicResource('dwm_standard_landing_group_01');assert.equal(group.metadata.type,'api');assert.equal(group.metadata.parentId,'019b772ee9b44705a27710f91bbd731a');assert.equal(group.metadata.path,'/landing');for(const [id,route] of [['dwm_standard_landing_list_01','/list'],['dwm_standard_landing_save_01','/save']]){const resource=magicResource(id);assert.equal(resource.metadata.groupId,group.metadata.id);assert.equal(resource.metadata.path,route);assert.equal(resource.metadata.method,'POST');assert.ok(resource.script.length>0);assert.match(resource.script,/tenantRuntime.id\(\)/);}});
+test('canonical field-binding scripts retain their resource IDs and public routes', () => {
+  for (const [id, route] of [
+    ['dwm_standard_landing_list_01', '/dwm/standard/landing/list'],
+    ['dwm_standard_landing_save_01', '/dwm/standard/landing/save'],
+  ]) {
+    const { metadata, script } = magicResource(id);
+    const { metadata: group } = magicResource(metadata.groupId);
+    const { metadata: domain } = magicResource(group.parentId);
+    assert.equal(group.type, 'api');
+    assert.equal(domain.parentId, '0');
+    assert.equal(domain.path + group.path + metadata.path, route);
+    assert.equal(metadata.method, 'POST');
+    assert.match(script, /tenantRuntime.id\(\)/);
+  }
+});

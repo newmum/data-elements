@@ -159,7 +159,7 @@ export const useSettingStore = defineStore("setting", () => {
     let requestedTenantId = tenantId?.trim() || "";
     if (!requestedTenantId && AuthStorage.getAccessToken()) {
       try {
-        const currentTenant = (await request({ url: "/sym/tenant/current" })) as Record<string, unknown>;
+        const currentTenant = (await request({ url: "/portal/sso/session" })) as Record<string, unknown>;
         requestedTenantId = String(currentTenant?.tid || "").trim();
       } catch (error) {
         console.warn("读取当前租户失败，系统设置将使用全局配置：", error);
@@ -182,7 +182,7 @@ export const useSettingStore = defineStore("setting", () => {
 
     try {
       const data = (await request({
-        url: requestedTenantId ? "/sym/tenant/login-settings" : "/portal/index",
+        url: requestedTenantId ? "/portal/sso/settings" : "/portal/main/index",
         params: requestedTenantId ? { tenantId: requestedTenantId } : undefined,
       })) as unknown;
 

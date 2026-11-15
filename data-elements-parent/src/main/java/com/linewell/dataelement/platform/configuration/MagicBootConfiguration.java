@@ -36,8 +36,8 @@ public class MagicBootConfiguration {
 
     public static final String MAGIC_MAPPING_JSON_ERROR = MagicBootConfiguration.class.getName() + ".mappingJsonError";
     private static final Pattern MAPPING_JSON = Pattern.compile(
-            "/nifi/api/field-mapping/(templates(?:/[^/]+/import)?|dictionary-snapshots|schema-contract|sample"
-                    + "|plans/[^/]+/restore-draft|upgrade-runtime|start-published|validate|preview|recommend|compile|migrate-legacy|lookup-template)");
+            "/nifi/(template/(save|import)|dict/(snapshot|lookup)|map/(schema|sample|check|preview|recommend|compile|convert)"
+                    + "|plan/restore|maprun/(upgrade|start))");
 
     @Bean
     ApiInfoMagicResourceStorage apiInfoMagicResourceStorage(MagicAPIProperties properties) {
@@ -89,7 +89,7 @@ public class MagicBootConfiguration {
     /** Keep a bounded view of JSON consumed by Magic so scripts can preserve typed request errors. */
     @Bean
     public OncePerRequestFilter magicNifiJsonRequestCache() {
-        Pattern requests = Pattern.compile("/nifi/api/pipelines/[^/]+/(deploy|activate-candidate|attribute-sync)");
+        Pattern requests = Pattern.compile("/nifi/(life/(deploy|activate)|node/attrs)");
         return new OncePerRequestFilter() {
             @Override
             protected boolean shouldNotFilter(HttpServletRequest request) {

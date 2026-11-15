@@ -3,13 +3,13 @@ import { AuthStorage } from "@/utils/auth";
 import "@/utils/platformSessionChannel";
 
 const allowed = new Set([
-  "GET /sym/tenant/current",
+  "GET /portal/sso/session",
   "POST /sym/org/getOrgTree",
-  "POST /dst/database/treeStatistics",
-  "POST /dst/database/detail",
-  "GET /dst/database/metadata/tables",
-  "GET /dst/database/metadata/columns",
-  "POST /dst/database/metadata/table/preview-data",
+  "POST /db/source/stats",
+  "POST /db/source/detail",
+  "GET /db/schema/tables",
+  "GET /db/field/list",
+  "POST /db/row/preview",
 ]);
 
 /** 仅向配置中的风驰父窗口提供只读接口；会话和模拟数据始终留在元数据平台同源存储。 */

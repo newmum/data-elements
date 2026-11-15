@@ -18,8 +18,8 @@ const ast = babel.Babel.transform(script, {ast:true,code:false,parserOpts:{sourc
 const code = ast.program.body.filter(node => node.type === 'VariableDeclaration' && node.declarations.some(d => names.includes(d.id.name)))
   .map(node => script.slice(node.start,node.end)).join('\n');
 const variants = [
-  {page: '/ods/dataAggPage', tree: '/ods/dataAggTreeStatistics', route: '/jr/data-convergence', tabs: ['全部','待接入','待审批','待启动','已接入'], states: ['all','0','2','3','1']},
-  {category: 'distribution', page: '/ods/hiveTargetPage', tree: '/ods/hiveTargetTree', route: '/jr/hive-metastore', tabs: ['全部','待分发','已分发'], states: ['all','0','1']},
+  {page: '/ods/ingest/page', tree: '/ods/ingest/stats', route: '/jr/data-convergence', tabs: ['全部','待接入','待审批','待启动','已接入'], states: ['all','0','2','3','1']},
+  {category: 'distribution', page: '/ods/dist/tables', tree: '/ods/dist/tree', route: '/jr/hive-metastore', tabs: ['全部','待分发','已分发'], states: ['all','0','1']},
 ];
 for (const variant of variants) {
   for (const count of [20,100]) {
@@ -98,8 +98,8 @@ for (const variant of variants) {
     ctx.$message.success=()=>{};
     await ctx.actual.handleRejectForModify({sourceTableId:'source',datasourceId:'db-1'});
     assert.equal(confirms,variant.category ? 1 : 0);
-    assert.deepEqual(rejectRequests.filter(([url])=>url==='/ods/dataAggReject'),variant.category ? [
-      ['/ods/dataAggReject',{tableId:'source',datasourceId:'db-1'}],
+    assert.deepEqual(rejectRequests.filter(([url])=>url==='/ods/ingest/reject'),variant.category ? [
+      ['/ods/ingest/reject',{tableId:'source',datasourceId:'db-1'}],
     ] : []);
     console.log(`${variant.category || 'ingestion'}: rows=${count}; initial page=1, SSE=1, 120 unchanged events=0 reads, revision change=1 page read; both hops updated, offline unconfirmed`);
   }

@@ -26,13 +26,13 @@ export interface UploadTable {
 export interface ReportReceipt { id: string; fileId: string; tableId: string; tableName: string; fileName: string; status: string; rowCount: number; reportedAt: string; message?: string; registrationSnapshot?:UploadTable }
 export interface UploadManifest { revision: string; files: Array<{fileId: string; fileName: string}>; tables: UploadTable[]; failedTables?: UploadTable[]; receipts?: ReportReceipt[] }
 export interface UploadContext { context: ReportContext; sources: Array<{id: string; name: string}> }
-const endpoint='/dst/database/metadata/report-registration';
+const endpoint='/db/report/register';
 export async function loadUploadContext(preferred=''): Promise<UploadContext> {
   await platformSessionToken();
   const [user,tenant,summary]=await Promise.all([
     platformApi<Record<string,string>>('/sym/user/me',{method:'POST',body:{}}),
-    platformApi<Record<string,string>>('/sym/tenant/current'),
-    platformApi<Array<Record<string,unknown>>|{list:Array<Record<string,unknown>>}>('/dst/database/departmentDataSources',{method:'POST',body:{mode:'summary'}}),
+    platformApi<Record<string,string>>('/portal/sso/session'),
+    platformApi<Array<Record<string,unknown>>|{list:Array<Record<string,unknown>>}>('/db/source/dept',{method:'POST',body:{mode:'summary'}}),
   ]);
   if(!(user.userId||user.tid||user.id)||!(tenant.tenantId||tenant.tid||tenant.id))throw new Error('当前登录身份或租户信息不完整');
   const sources=(Array.isArray(summary)?summary:summary.list).filter(row=>['upload','report'].includes(String(row.accessMode))).map(row=>({id:String(row.tid||row.id),name:String(row.dbName||'未命名数据源')}));
@@ -150,6 +150,6 @@ export async function submitUploadTable(datasourceId:string,table:UploadTable,re
   if(!table.tid)throw new Error('请先完成第二步并保存数据规范');
   const form=new FormData();form.append('datasourceId',datasourceId);form.append('tableId',table.tid);form.append('fileId',table.fileId);
   form.append('requestId',reportRandomId());form.append('file',options.file||await prepareReportFile(resource,undefined,options.signal));
-  const result=await platformApi<ReportReceipt>('/dst/database/metadata/report-submit',{method:'POST',body:form,timeoutMs:120_000,signal:options.signal,onUploadProgress:options.onUploadProgress});
+  const result=await platformApi<ReportReceipt>('/db/report/submit',{method:'POST',body:form,timeoutMs:120_000,signal:options.signal,onUploadProgress:options.onUploadProgress});
   if(result.status!=='success')throw new Error(result.message||'上报尚未成功，请查看记录');return result;
 }

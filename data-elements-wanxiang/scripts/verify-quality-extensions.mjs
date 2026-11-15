@@ -46,10 +46,10 @@ const javaFile=join(folder,'WxQualityExtensionsFixture.java');await writeFile(ja
 // Recovery only for this verifier's two named disposable physical tables, after
 // a setup connection failure. It cannot purge registered assets/tasks/results.
 if(cleanupKey){await physical('drop');await rm(javaFile,{force:true});console.log('PASS scoped setup-fixture recovery');process.exit(0);}
-const tenant=await call('/sym/tenant/current');assert.equal(String(tenant.tid),'2084109831682699264');const user=await call('/sym/user/me',{});const baseline=await q('summary');
+const tenant=await call('/portal/sso/session');assert.equal(String(tenant.tid),'2084109831682699264');const user=await call('/sym/user/me',{});const baseline=await q('summary');
 try{
  fixture.physical=true;await record();await physical('setup');
- const source=await call('/dst/database/saveOrUpdate',{tid:'',assetType:'db',propList:{dbName:prefix,dbType:'mysql',orgId:user.orgId,storageDomain:'政务外网',assetDesc:'Disposable quality verification fixture',accessMode:'explore',showConnect:1,preserveSourceOrg:true,assetStatus:0,jdbcURL:`jdbc:mysql://${process.env.WX_META_DB_HOST}:3306/${process.env.WX_META_DATABASE}?useSSL=false&allowPublicKeyRetrieval=true`,host:process.env.WX_META_DB_HOST,port:'3306',database:process.env.WX_META_DATABASE,username:process.env.WX_META_DB_USER,password:process.env.WX_META_DB_PASSWORD}});fixture.source=source.tid;assert(fixture.source);await record();
+ const source=await call('/db/source/save',{tid:'',assetType:'db',propList:{dbName:prefix,dbType:'mysql',orgId:user.orgId,storageDomain:'政务外网',assetDesc:'Disposable quality verification fixture',accessMode:'explore',showConnect:1,preserveSourceOrg:true,assetStatus:0,jdbcURL:`jdbc:mysql://${process.env.WX_META_DB_HOST}:3306/${process.env.WX_META_DATABASE}?useSSL=false&allowPublicKeyRetrieval=true`,host:process.env.WX_META_DB_HOST,port:'3306',database:process.env.WX_META_DATABASE,username:process.env.WX_META_DB_USER,password:process.env.WX_META_DB_PASSWORD}});fixture.source=source.tid;assert(fixture.source);await record();
  async function seed(kind,names){const name='wx_qx_'+key+'_'+kind;await call('/data/save',{db_table_t:[{datasourceId:fixture.source,tableName:name,tableNameEn:name,tableNameCn:name,tableType:'数据表',businessType:'业务表',dataSourceType:'mysql',fieldCount:names.length,annotated:0,assetStatus:2,flowStatus:2}],db_table_column_t:names.map((column,i)=>({tableId:'#db_table_t.tid',columnName:column,dataType:column==='label'?'varchar':column==='event_time'?'timestamp':'int',columnType:column==='label'?'varchar(30)':column==='event_time'?'timestamp':'int',nullable:1,primaryKey:column==='id'?1:0,ordinalPosition:i+1}))});const rows=await q('options/tables',{datasourceId:fixture.source}),table=rows.find(r=>r.table_name===name);assert(table);return table.tid;}
  fixture.table=await seed('source',['id','a','b','label','event_time']);fixture.target=await seed('target',['a','b']);await record();
  const rule=(type,column,parameters={})=>({ruleName:type,ruleType:type,columnName:column,dimension:'VALIDITY',severity:'HIGH',weight:10,parameters});
@@ -72,7 +72,7 @@ try{
 }finally{
  const errors=[];for(const runId of fixture.runs)try{const r=await q('run/detail',{runId});if(!terminal(r.status)){await q('run/cancel',{runId});await wait(runId);}}catch(e){errors.push('run cleanup: '+e.message);}
  if(!errors.length)for(const taskId of fixture.tasks)try{await q('task/delete',{taskId});}catch(e){errors.push('task cleanup: '+e.message);}
- if(fixture.source&&!errors.length)try{await physical('purge');await call('/dst/database/delete',{tid:fixture.source,dryRun:true});await call('/dst/database/delete',{tid:fixture.source});}catch(e){errors.push('source cleanup: '+e.message);}
+ if(fixture.source&&!errors.length)try{await physical('purge');await call('/db/source/delete',{tid:fixture.source,dryRun:true});await call('/db/source/delete',{tid:fixture.source});}catch(e){errors.push('source cleanup: '+e.message);}
  if(fixture.physical&&!errors.length)try{await physical('drop');}catch(e){errors.push('physical cleanup: '+e.message);}
  await writeFile(join(folder,'cleanup.json'),JSON.stringify({errors}));if(errors.length)throw Error('Fixture cleanup needs attention; recovery helper preserved in '+folder+': '+errors.join('; '));await rm(javaFile,{force:true});
 }

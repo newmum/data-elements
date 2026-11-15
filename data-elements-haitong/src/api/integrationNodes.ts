@@ -76,12 +76,12 @@ export type NodeDraft = {
 
 export const integrationNodesApi = {
   async page(sort: {sortField?:string;sortDir?:'asc'|'desc'} = {}): Promise<IntegrationNode[]> {
-    const value = await platformApi<NodePayload>('/ods/nifi-node/page', sort);
+    const value = await platformApi<NodePayload>('/ods/node/page', sort);
     const rows = Array.isArray(value?.list) ? value.list : [];
     return rows.map(item => normalizeNode(item as NodePayload, [])).filter(item => item.tid && item.nodeName);
   },
   async accessOptions(): Promise<{ networks: IntegrationNetwork[]; nodes: IntegrationNode[] }> {
-    const value = await platformApi<NodePayload>('/ods/nifi-node/access-options', {});
+    const value = await platformApi<NodePayload>('/ods/node/options', {});
     const payload = value && typeof value === 'object' ? value : {};
     const rawNetworks = Array.isArray(payload.networks) ? payload.networks : Array.isArray(payload.list) ? [] : [];
     const networks = rawNetworks.map((item) => ({
@@ -93,13 +93,13 @@ export const integrationNodesApi = {
     const rawNodes = Array.isArray(payload.list) ? payload.list : Array.isArray(payload.records) ? payload.records : [];
     return { networks, nodes: rawNodes.map(item => normalizeNode(item as NodePayload, networks)).filter(item => item.tid && item.nodeName) };
   },
-  save: (draft: NodeDraft) => platformApi<IntegrationNode>('/ods/nifi-node/saveOrUpdate', {
+  save: (draft: NodeDraft) => platformApi<IntegrationNode>('/ods/node/save', {
     tid: draft.tid || '', nodeName: draft.nodeName, nodeCode: draft.nodeCode, networkCode: draft.networkCode,
     baseUrl: draft.baseUrl.replace(/\/+$/, ''), rootProcessGroupId: draft.rootProcessGroupId || '',
     authUsername: draft.authUsername || '', authPassword: draft.authPassword || '', insecureTls: draft.insecureTls === false ? 0 : 1,
     remark: draft.remark || '', enabled: draft.enabled ? 1 : 0, isDefault: draft.isDefault ? 1 : 0,
   }),
-  remove: (tid: string) => platformApi<boolean>('/ods/nifi-node/delete', { tid }),
+  remove: (tid: string) => platformApi<boolean>('/ods/node/delete', { tid }),
   health: (node: Pick<IntegrationNode, 'tid' | 'baseUrl'>) => platformApi<{ success: boolean; latencyMs?: number; message?: string }>('/sym/node-config/service/health', { nodeId: node.tid, nodeType: 'sync', baseUrl: node.baseUrl }),
   diagnostics: (nodeId: string) => platformApi<NodeDiagnostics>('/sym/node-config/service/diagnostics', { nodeId }),
 };

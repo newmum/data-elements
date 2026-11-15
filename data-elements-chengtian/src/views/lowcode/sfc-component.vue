@@ -850,7 +850,7 @@ const generatePreviewScreenshot = async () => {
 const saveThumbnailToTab = async (tabId, thumbnail) => {
   if (!tabId || !thumbnail) return;
   request({
-    url: "/das/repository/tab/saveTabThumbnail",
+    url: "/das/tab/thumb",
     data: {
       tid: tabId,
       thumbnail,
@@ -1156,7 +1156,7 @@ const handlePreview = async () => {
 // 绑定页签
 const bindTab = async (tabId, tid) => {
   return await request({
-    url: "/das/repository/tab/bind",
+    url: "/das/tab/bind",
     method: "POST",
     data: {
       pid: tabId,

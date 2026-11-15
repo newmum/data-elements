@@ -56,8 +56,8 @@ var origin = scheme + '://' + text(uri.getRawAuthority()).toLowerCase()
 var platformOrigin = text(platformBase.getScheme()).toLowerCase() + '://' + text(platformBase.getRawAuthority()).toLowerCase()
 // 平台同源只允许选定的集成接口，其余地址须由部署配置按租户明确授权。
 var builtIn = {
-    '/portal/login':'POST',
-    '/sym/tenant/current':'GET',
+    '/portal/sso/login':'POST',
+    '/portal/sso/session':'GET',
     '/dws/flowserve/gateway/api/list':'POST',
     '/idaas/oauth2/token':'POST',
     '/idaas/api/whoami':'GET'

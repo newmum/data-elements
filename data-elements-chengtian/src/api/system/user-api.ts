@@ -19,7 +19,7 @@ const UserAPI = {
   /** 修改当前登录账号的密码；服务端会核验原密码并注销旧会话。 */
   changeOwnPassword(oldPassword: string, newPassword: string) {
     return request<any, { relogin: boolean }>({
-      url: "/portal/account/password",
+      url: "/portal/profile/password",
       method: "post",
       data: {
         oldPassword: sm.sm3(oldPassword),

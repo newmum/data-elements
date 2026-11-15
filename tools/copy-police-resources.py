@@ -551,7 +551,7 @@ def verify(db):
  if tasks['bound'] or tasks['foreignTarget']:raise RuntimeError('复制的接入任务仍引用外部写入目标')
  report['copiedTaskTargets']=tasks
  sample=m.query(db,'select datasource_id,count(*) n from db_table_t where tenant_id=%s and is_del=0 and datasource_id in ('+','.join(['%s']*len(applied['rows']['db_datasource_t']))+') group by datasource_id order by n desc limit 1',[DST]+applied['rows']['db_datasource_t'])[0]
- evidence=[];route='/dst/database/departmentDataSources';logfile=ROOT/'logs/backend/local-runtime/stdout.log'
+ evidence=[];route='/db/source/dept';logfile=ROOT/'logs/backend/local-runtime/stdout.log'
  m.api(route,{'mode':'tables','datasourceId':sample['datasource_id'],'pageNum':1,'pageSize':20})
  for size in (20,100):
   offset=logfile.stat().st_size if logfile.exists() else 0;result=m.api(route,{'mode':'tables','datasourceId':sample['datasource_id'],'pageNum':1,'pageSize':size})

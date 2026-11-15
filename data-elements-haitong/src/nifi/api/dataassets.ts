@@ -242,7 +242,7 @@ export async function fetchDatabaseDetail(id: string): Promise<DbDictItem | null
   const revision = getSessionRevision();
   const token = getBridgeToken();
   const { data } = await axios.post<unknown>(
-    `${dataassetsBase}/dst/database/detail`,
+    `${dataassetsBase}/db/source/detail`,
     { tid: id },
     {
       headers: authHeaders(token),
@@ -274,7 +274,7 @@ async function fetchDatabasePageList(token: string | null, revision: number): Pr
 
 async function fetchDatabasePage(pageNo: number, pageSize: number, token: string | null, revision: number): Promise<{ list: unknown[]; total?: number }> {
   const { data } = await axios.post<unknown>(
-    `${dataassetsBase}/dst/database/page`,
+    `${dataassetsBase}/db/source/page`,
     { pageNo, pageSize },
     {
       headers: authHeaders(token),
@@ -475,7 +475,7 @@ export interface MaterializeTableResult {
   message?: string;
 }
 
-/** A registered materialization template returned by `/ods/getTableTempalte`. */
+/** A registered materialization template returned by `/ods/target/template`. */
 export interface MaterializationTemplateColumn {
   columnName: string;
   columnComment?: string;
@@ -531,7 +531,7 @@ export interface MaterializationTemplate {
 export async function fetchMaterializationTemplate(sourceTableId: string): Promise<MaterializationTemplate> {
   const revision = getSessionRevision();
   const headers = authHeaders();
-  const { data } = await axios.post(`${dataassetsBase}/ods/getTableTempalte`, { tid: sourceTableId }, {
+  const { data } = await axios.post(`${dataassetsBase}/ods/target/template`, { tid: sourceTableId }, {
     headers, timeout: requestTimeout,
   });
   assertCurrentSession(revision);
@@ -554,7 +554,7 @@ export async function generateTargetTableDdl(
 ): Promise<string> {
   const revision = getSessionRevision();
   const headers = authHeaders();
-  const { data } = await axios.post(`${dataassetsBase}/dst/database/metadata/getCreateTableDDL`, {
+  const { data } = await axios.post(`${dataassetsBase}/db/schema/ddl`, {
     canvas: true,
     sourceDatabaseType,
     propList: { dbId, tableName },
@@ -579,7 +579,7 @@ export async function generateTargetTableDdl(
 export async function materializeTargetTable(dbId: string, ddl: string): Promise<MaterializeTableResult> {
   const revision = getSessionRevision();
   const headers = authHeaders();
-  const { data } = await axios.post(`${dataassetsBase}/dst/database/metadata/createTable`,
+  const { data } = await axios.post(`${dataassetsBase}/db/schema/create`,
     { dbId, ddl, canvas: true }, { headers, timeout: requestTimeout });
   assertCurrentSession(revision);
   const result = unwrapResponse<Partial<MaterializeTableResult> | null>(data);

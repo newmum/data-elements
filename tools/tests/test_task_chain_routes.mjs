@@ -101,7 +101,7 @@ for (const category of ['ingestion', 'distribution']) {
     assert.equal(ctx.plan(ctx.sections(manyTasks),manyTasks).length,count,'Preparing 20/100 target operations uses only preloaded batch data');
     console.log(`${category}: ${count} rows/tasks rendered chains and all target sections with zero additional requests/SQL`);
   }
-  ctx.$common={post:async(route,body)=>{assert.equal(route,'/ods/dataAggReset');resetCalls.push(plain(body));return {data:{}};}};
+  ctx.$common={post:async(route,body)=>{assert.equal(route,'/ods/job/reset');resetCalls.push(plain(body));return {data:{}};}};
   await ctx.actions.deleteAllTargets(downstream);
   assert.deepEqual(resetCalls.map(call=>[call.sourceTableId,call.targetTableId]),[['ods','raw']],'Group cleanup uses the downstream source and only its targets');
   await ctx.actions.deleteAllTargets({key:'task:foreign-id'});

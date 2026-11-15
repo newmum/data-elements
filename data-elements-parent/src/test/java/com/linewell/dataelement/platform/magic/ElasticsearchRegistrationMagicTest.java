@@ -19,7 +19,7 @@ class ElasticsearchRegistrationMagicTest {
             "06ee6f0e37e44762be967dbd2d764780");
 
     @TestFactory List<DynamicTest> compileRegistrationScripts() throws Exception {
-        return CanonicalMagicSources.under("api/02.数据盘点/02.数据库表").stream()
+        return CanonicalMagicSources.under("api/11.数据库资源").stream()
                 .filter(source -> IDS.contains(source.metadataId()))
                 .map(source -> DynamicTest.dynamicTest(source.relativePath(),
                         () -> MagicScript.create(source.source(), null).compile())).toList();

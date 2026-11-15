@@ -14,7 +14,7 @@ public class AuditWebInterceptor implements HandlerInterceptor {
     @Override public boolean preHandle(HttpServletRequest request,HttpServletResponse response,Object handler) {
         request.setAttribute("audit.started",System.nanoTime());
         if (!excluded(request)) AuditRequestParameters.captureMvc(request, handler);
-        if(!excluded(request) && !request.getRequestURI().equals("/portal/login") && !request.getRequestURI().equals("/idaas/auth/login")) {
+        if(!excluded(request) && !request.getRequestURI().equals("/portal/sso/login") && !request.getRequestURI().equals("/idaas/auth/login")) {
             var actor=identities.current();if(actor!=null){if(actor.tenantId()!=null)org.slf4j.MDC.put("tenant_id",actor.tenantId());if(actor.id()!=null)org.slf4j.MDC.put("actor_id",actor.id());}
         }
         return true;
@@ -29,7 +29,7 @@ public class AuditWebInterceptor implements HandlerInterceptor {
         Object code=request.getAttribute(BUSINESS_CODE);
         recorder.request(actor,response.getStatus(),code==null?null:String.valueOf(code),result,(System.nanoTime()-started)/1_000_000);
         String path=request.getRequestURI();
-        if(actor!=null && !actor.platform() && !path.startsWith("/sym/logs/") && !path.equals("/portal/login") && !path.equals("/portal/logout")) {
+        if(actor!=null && !actor.platform() && !path.startsWith("/sym/logs/") && !path.equals("/portal/sso/login") && !path.equals("/portal/sso/logout")) {
             boolean mutation=!java.util.Set.of("GET","HEAD","OPTIONS").contains(request.getMethod()) && !path.matches("(?i).*/(?:page|list|query|find|detail|preview|statistics|batch|tree|me|userMenu|routes|load).*" );
             if(result.equals("DENIED") || mutation && (!Boolean.TRUE.equals(request.getAttribute("audit.operationRecorded")) || !result.equals("SUCCESS"))) {
                 recorder.observedOperation(actor,result,path,request.getAttribute("audit.functionName"));

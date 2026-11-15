@@ -194,7 +194,7 @@ class NifiPipelineTemplateMagicTest {
 
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final String COMMON = "function/01.通用函数/";
-    private static final String API = "api/10.NiFi流程接口/01.接口/";
+    private static final String API = "api/10.NiFi流程接口/";
 
     private static class Fixture {
         final JdbcTemplate jdbc;
@@ -286,11 +286,11 @@ class NifiPipelineTemplateMagicTest {
         }
 
         ResponseEntity<?> canvas(Map<String, Object> body) throws Exception {
-            return request("30.生成画布模板.ms", "nifi_canvas_template_post_v1", body);
+            return request("03.画布模板/01.生成画布模板.ms", "nifi_canvas_template_post_v1", body);
         }
 
         ResponseEntity<?> node(Map<String, Object> body) throws Exception {
-            return request("31.生成单节点模板.ms", "2e2c144806278f8c48faf98938ca63f5", body);
+            return request("03.画布模板/02.生成单节点模板.ms", "2e2c144806278f8c48faf98938ca63f5", body);
         }
 
         ResponseEntity<?> request(String path, String id, Map<String, Object> body) throws Exception {

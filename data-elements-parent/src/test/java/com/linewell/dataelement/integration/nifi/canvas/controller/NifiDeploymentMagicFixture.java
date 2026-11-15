@@ -33,7 +33,7 @@ import static org.mockito.Mockito.when;
 
 final class NifiDeploymentMagicFixture {
     private static final String COMMON = "function/01.通用函数/";
-    private static final String API = "api/10.NiFi流程接口/01.接口/";
+    private static final String API = "api/10.NiFi流程接口/";
     private static final String TENANT = "deployment-validation";
     private final PipelineRepository repository;
     private final PipelineTaskLifecycleSynchronizer tasks;
@@ -41,10 +41,10 @@ final class NifiDeploymentMagicFixture {
     private final MagicScript deploy = script(COMMON + "56.NiFi部署画布.ms", "nifi_canvas_deploy_v1");
     private final MagicScript bind = script(COMMON + "54.NiFi部署候选绑定.ms", "nifi_candidate_bind_v1");
     private final MagicScript respond = script(COMMON + "53.NiFi生命周期错误响应.ms", "nifi_lifecycle_response_v1");
-    private final MagicScript activate = script(API + "48.切换候选流程.ms", "nifi_candidate_activate_post_v1");
+    private final MagicScript activate = script(API + "06.部署与启停/02.切换候选流程.ms", "nifi_candidate_activate_post_v1");
     private final MagicScript start = script(COMMON + "58.NiFi启动流程.ms", "nifi_start_canvas_v1");
     private final MagicScript stop = script(COMMON + "59.NiFi停止流程.ms", "nifi_stop_canvas_v1");
-    private final MagicScript undeploy = script(API + "51.卸载流程.ms", "nifi_pipeline_undeploy_post_v1");
+    private final MagicScript undeploy = script(API + "06.部署与启停/05.卸载流程.ms", "nifi_pipeline_undeploy_post_v1");
     private final MagicScript oneShot = script(COMMON + "57.NiFi一次性来源处理器.ms", "nifi_one_shot_sources_v1");
 
     NifiDeploymentMagicFixture(PipelineRepository repository, DslCompiler compiler, NifiClient nifi,
@@ -108,7 +108,7 @@ final class NifiDeploymentMagicFixture {
     }
 
     ResponseEntity<?> activate(String id, String group) {
-        return TenantContext.call(TENANT, () -> (ResponseEntity<?>) evaluate(activate, Map.of("path", Map.of("id", id),
+        return TenantContext.call(TENANT, () -> (ResponseEntity<?>) evaluate(activate, Map.of("param", Map.of("id", id),
                 "body", Map.of(), "readBody", (MagicScriptLambdaFunction) (ctx, args) ->
                         new com.linewell.dataelement.integration.nifi.canvas.lifecycle.NifiDeploymentParameters.CandidateRequest(group))));
     }
@@ -130,7 +130,7 @@ final class NifiDeploymentMagicFixture {
     }
 
     ResponseEntity<?> undeploy(String id) {
-        return lifecycle(undeploy, Map.of("path", Map.of("id", id)));
+        return lifecycle(undeploy, Map.of("param", Map.of("id", id)));
     }
 
     private ResponseEntity<?> lifecycle(MagicScript command, Map<String, ?> args) {

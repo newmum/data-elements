@@ -814,7 +814,7 @@ const syncApiPullRules = async () => {
   const sourceType = String(source.dbType ?? source.databaseType ?? pool.dbType ?? pool.dataSourceType ?? "").trim().toLowerCase();
   const datasourceId = String(source.tid ?? source.id ?? "").trim();
   if (sourceType !== "api" || !datasourceId) return;
-  await $common.post("/ods/api-pull/sync", { datasourceId });
+  await $common.post("/ods/pull/sync", { datasourceId });
 };
 
 // 数据表标注已先写入 db_table_t。API 拉取规则只是该保存动作后的幂等补齐，
@@ -922,7 +922,7 @@ const huaweiMrsMetadata = (action, payload = {}) => {
   if (!database) {
     return Promise.reject(new Error("华为 MRS Hive 数据源缺少已登记的数据库名，请返回第一步保存后重试"));
   }
-  return $common.post("/dst/database/metadata/huaweiMrsHiveJdbcDebug", {
+  return $common.post("/db/source/hive", {
     action,
     contract: "registration",
     database,
@@ -1551,7 +1551,7 @@ const loadRegisteredTables = async ({ pageNo = state.markedPageNo || 1, force = 
   state.registeredTableMap = {};
   state.pendingSavedTotal = 0;
   registeredLoadPromise = Promise.all([
-    $common.get("/dst/database/metadata/tables", {
+    $common.get("/db/schema/tables", {
       dbId,
       paged: true,
       pageNo,
@@ -1561,7 +1561,7 @@ const loadRegisteredTables = async ({ pageNo = state.markedPageNo || 1, force = 
     }),
     // 这里读取所有已保存快照，而不是只读右侧已标注分页。被重新标注为
     // 未标注的表同样保有资产 ID；当物理表被删后，左侧必须能显示并删除它。
-    $common.get("/dst/database/metadata/tables", { dbId, includeGovernance: false }),
+    $common.get("/db/schema/tables", { dbId, includeGovernance: false }),
   ])
     .then(([result, allSnapshotResult]) => {
       const rows = Array.isArray(result) ? result : result?.rows || result?.list || [];
@@ -1618,12 +1618,12 @@ const fetchColumns = async (row) => {
     return row.columns;
   }
   if (isStructuredSource.value) {
-    return $common.post("/dst/database/metadata/structuredColumns", { dbId, tableName });
+    return $common.post("/db/field/read", { dbId, tableName });
   }
   if (isServerManagedHuaweiMrs.value) {
     return huaweiMrsMetadata("columns", { table: tableName }).then((result) => result?.columns || []);
   }
-  return $common.get("/dst/database/metadata/columns", { tid, dbId, tableName });
+  return $common.get("/db/field/list", { tid, dbId, tableName });
 };
 const buildColumnType = (row) => {
   const type = row.typeName || row.dataType || "";
@@ -1694,7 +1694,7 @@ const fetchPreviewTables = async ({
     // 列表始终来自已落库的 db_table_t 快照；华为 MRS 也只在用户显式
     // “采集/重新探查”时通过服务端托管连接池读取物理 Hive 表。
     const previewRequest = isOfflineSnapshot.value
-      ? $common.get("/dst/database/metadata/tables", { dbId, pageNo, pageSize, offset })
+      ? $common.get("/db/schema/tables", { dbId, pageNo, pageSize, offset })
       : $common.get("/dst/database/metadata/tables/snapshot", {
           dbId,
           pageNo,
@@ -2275,7 +2275,7 @@ const syncPreviewFields = async () => {
   } catch { return; }
   state.syncingFields = true;
   try {
-    const result = await $common.post("/dst/database/metadata/collectColumns", { tableId, force: true });
+    const result = await $common.post("/db/field/collect", { tableId, force: true });
     const fields = normalizeFieldRows(result);
     if (state.currentPreviewTableId === tableId) {
       state.fieldRows = normalizePreviewFieldsForDisplay(fields);
@@ -2336,8 +2336,8 @@ const openTablePreview = async (row, mode = "rows") => {
       return;
     }
     const samplePath = isStructuredSource.value
-      ? "/dst/database/metadata/structuredSampleData"
-      : "/dst/database/metadata/table/sample-data";
+      ? "/db/row/read"
+      : "/db/row/sample";
     const samplePayload = {
       tableId: row.tid || undefined,
       dbId,
@@ -2422,7 +2422,7 @@ const persistTableAnnotation = async (row, annotated) => {
   if (!dbId) {
     throw new Error("缺少数据源 ID，无法保存标注");
   }
-  const result = await $common.post("/dst/database/table/saveOrUpdate", {
+  const result = await $common.post("/db/table/save", {
     tid: row.tid || row.tableId || undefined,
     assetType: "table",
     propList: {
@@ -2504,7 +2504,7 @@ const persistTableAnnotations = async (rows, annotated) => {
     const chunk = list.slice(index, index + ANNOTATION_BATCH_SIZE);
     try {
       const result = await $common.post(
-        "/dst/database/table/batchAnnotate",
+        "/db/table/mark",
         {
           dbId,
           datasourceId: dbId,
@@ -2568,7 +2568,7 @@ const persistTableMetadataChange = async (row, previous, label) => {
     // an edited browser object between workflow steps.
     await persistTableAnnotation(row, Boolean(row.annotated));
     const dbId = db.value?.tid || db.value?.id;
-    const result = await $common.get("/dst/database/metadata/tables", { dbId });
+    const result = await $common.get("/db/schema/tables", { dbId });
     const rows = Array.isArray(result) ? result : result?.rows || result?.list || [];
     const saved = rows.find(
       (item) => normalizeTableKey(item?.tableName || item?.tableNameEn) === normalizeTableKey(row.tableName)
@@ -2692,7 +2692,7 @@ const deleteMissingTableAsset = async (row) => {
   if (!dbId || !tableId) return false;
   row._deleteLoading = true;
   try {
-    await $common.post("/dst/database/metadata/tables/deleteAsset", {
+    await $common.post("/db/table/delete", {
       dbId,
       tableId,
       tableName: row.tableName,
@@ -2805,7 +2805,7 @@ const deleteSelectedMissingTables = async () => {
     const dbId = db.value?.tid || db.value?.id;
     if (!dbId) throw new Error("缺少数据源标识，无法批量删除");
     // 所有选中项在一个请求中交给服务端统一清理，避免逐条请求造成部分成功或重复报错。
-    const result = await $common.post("/dst/database/metadata/tables/deleteAsset", {
+    const result = await $common.post("/db/table/delete", {
       dbId,
       tableIds: rows.map((row) => row?.tid || row?.tableId || row?.id).filter(Boolean),
     });

@@ -333,7 +333,7 @@ async function loadList() {
   const publishedWithin = state.valueRight["发布时间"]?.[0];
 
   try {
-    const result: ListResult = await $common.postSilently("/dws/market/list", {
+    const result: ListResult = await $common.postSilently("/dws/mall/page", {
       pageNum: state.pageNo,
       pageSize: state.pageSize,
       keyword: state.appliedKeyword,
@@ -375,7 +375,7 @@ async function loadCounts() {
   countLoading = true;
   countError.value = false;
   try {
-    const result: CountResult = await $common.postSilently("/dws/market/count", {});
+    const result: CountResult = await $common.postSilently("/dws/mall/count", {});
     if (request !== countRequest || !isCurrentSession(revision)) return;
     if (!result?.orgPath || typeof result.orgPath !== "object" || Array.isArray(result.orgPath)) {
       throw new Error("分类统计响应无效");
@@ -465,7 +465,7 @@ async function addCatalogToCart(item: MarketCatalog) {
   addingCatalogs.add(catalogId);
   const revision = sessionRevision.value;
   try {
-    const receipt = await $common.post("/dws/market/shoppingCard", { catalogId });
+    const receipt = await $common.post("/dws/cart/save", { catalogId });
     if (!isCurrentSession(revision)) return;
     if (typeof receipt !== "string" || !receipt.trim()) {
       $message.warning("加购结果暂未确认，请刷新后重试");
@@ -491,7 +491,7 @@ async function collectCatalog(item: MarketCatalog) {
   const revision = sessionRevision.value;
   const collected = item.collected !== true && item.collected !== "1";
   try {
-    const result = await $common.post("/dws/market/collect", { catalogId, collected });
+    const result = await $common.post("/dws/mall/collect", { catalogId, collected });
     if (!isCurrentSession(revision)) return;
     if (result !== collected) {
       $message.warning("收藏状态暂未确认，请重试");

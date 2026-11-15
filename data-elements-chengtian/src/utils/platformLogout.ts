@@ -4,7 +4,7 @@ export async function logoutPlatformSession(): Promise<void> {
   const token = await activePlatformToken();
   if (token) {
     const base = (import.meta.env.VITE_APP_BASE_API || '/dev-api').replace(/\/$/, '');
-    const response = await fetch(`${base}/portal/logout`, {
+    const response = await fetch(`${base}/portal/sso/logout`, {
       method: 'POST', headers: { token, 'Content-Type': 'application/json' },
       body: '{}', cache: 'no-store', signal: AbortSignal.timeout(20000),
     });

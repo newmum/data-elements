@@ -35,7 +35,7 @@ export async function request<T = Row>(path: string, options: { method?: string;
 }
 
 export async function loadSession(): Promise<Session> {
- const [user, tenant] = await Promise.all([platformApi<Row>('/sym/user/me', {}), platformApi<Row>('/sym/tenant/current')]);
+ const [user, tenant] = await Promise.all([platformApi<Row>('/sym/user/me', {}), platformApi<Row>('/portal/sso/session')]);
  if (!(user.id || user.userId)) { redirectToPlatformLogin(); throw new Error('当前登录账号无效，正在前往数据中台登录'); }
  const s: Session = { authenticated:true, csrf:'', principalId:String(user.id || user.userId), name:String(user.realName || user.userName || ''), department:String(user.orgName || ''), user, tenant, workspaces:[] };
  currentSession=s;

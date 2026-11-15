@@ -31,8 +31,8 @@ for (const count of [20, 100]) {
   await context.loadFields(context.tableRows.value[0], false, false);
   await context.loadDictionaryTables();
   assert.equal(calls.length, 4, `${count} fields: fixed four requests, without per-field fetches`);
-  assert.equal(calls.filter(call => call.route.endsWith('/columns')).length, 1);
-  assert.ok(calls.every(call => !call.route.includes('preview') && !call.route.includes('collectColumns')));
+  assert.equal(calls.filter(call => call.route === '/db/field/list').length, 1);
+  assert.ok(calls.every(call => !call.route.includes('preview') && call.route !== '/db/field/collect'));
   assert.equal(context.fieldMap.police_case.length, count);
   assert.equal(context.fieldExportRows().length, count + 1, 'all fields exported');
   assert.equal(context.fieldExportRows()[1][2], rows[0].columnComment, 'current edited values are exported');

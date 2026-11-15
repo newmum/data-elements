@@ -26,7 +26,7 @@ import tableRead
 import tableSort
 import tenantRuntime
 
-// @/common/nifiPipelinePage 为 GET、HEAD /nifi/api/pipelines/page 执行完整分页。
+// @/common/nifiPipelinePage 为 GET、HEAD /nifi/flow/page 执行完整分页。
 // 读取 page、size、sortField、sortDir 和 q，返回原始 list、total、page、size。
 // 越界页保留页码并返回空列表。仅查询可信行业租户，不访问 NiFi。
 

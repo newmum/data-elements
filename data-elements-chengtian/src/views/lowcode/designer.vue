@@ -134,7 +134,7 @@ const uploadThumbnail = async (data: any) => {
     }
 
     // 保存缩略图URL到表单
-    await $common.post("/das/repository/tab/saveTabThumbnail", {
+    await $common.post("/das/tab/thumb", {
       tid: tabId.value || undefined,
       thumbnail,
     });
@@ -148,7 +148,7 @@ const uploadThumbnail = async (data: any) => {
 
 // 绑定页签
 const bindTab = async (tabId: string, tid: string) => {
-  return await $common.post("/das/repository/tab/bind", {
+  return await $common.post("/das/tab/bind", {
     pid: tabId,
     tid,
   });

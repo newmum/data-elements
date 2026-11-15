@@ -36,7 +36,7 @@ import cn.dev33.satoken.stp.StpUtil
 import '@/resource-center/model-read' as readModels
 import '@/resource-center/technical-read' as technicalRead
 import '@/resource-center/planning-read' as readPlanning
-import '@post:/dst/database/metadata/table/sample-data' as sampleData
+import '@post:/db/row/sample' as sampleData
 
 /**
  * 磐石资源归属命令。/resource-center/resource-command

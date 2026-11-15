@@ -220,13 +220,13 @@ test('cancellation, token handshake and session transitions never produce a back
 });
 
 test('Axios HTTP/network/timeout polling errors stay rejected but suppress automatic global warnings', () => {
-  const polling = { url: '/pipelines/p0/status', nifiSilentGlobalErrors: true };
+  const polling = { url: '/run/status?id=p0', nifiSilentGlobalErrors: true };
   for (const error of [new AxiosError('Network Error', 'ERR_NETWORK', polling, {}),
     new AxiosError('timeout', 'ECONNABORTED', polling, {}),
     new AxiosError('503', 'ERR_BAD_RESPONSE', polling, {}, { status: 503 })]) {
     assert.equal(globalRequestFailureMessage(error), undefined);
     assert.ok(error instanceof Error);
   }
-  assert.match(globalRequestFailureMessage(new AxiosError('network', 'ERR_NETWORK', { url: '/pipelines/task-chain' }, {})), /网络连接异常/);
-  assert.match(globalRequestFailureMessage(new AxiosError('503', 'ERR_BAD_RESPONSE', { url: '/pipelines/p0/start' }, {}, { status: 503 })), /服务器异常/);
+  assert.match(globalRequestFailureMessage(new AxiosError('network', 'ERR_NETWORK', { url: '/chain/task' }, {})), /网络连接异常/);
+  assert.match(globalRequestFailureMessage(new AxiosError('503', 'ERR_BAD_RESPONSE', { url: '/life/start?id=p0' }, {}, { status: 503 })), /服务器异常/);
 });

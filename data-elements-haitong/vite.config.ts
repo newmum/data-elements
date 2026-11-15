@@ -24,7 +24,7 @@ export default defineConfig(({ command, isPreview }) => ({
       './src/nifi/panels/Toolbar.tsx',
     ] },
     proxy: {
-      '/nifi/api': { target: 'http://localhost:8088', changeOrigin: true },
+      '^/nifi/': { target: 'http://localhost:8088', changeOrigin: true },
       '/nifi-api': { target: 'http://localhost:8088', changeOrigin: true },
       '/nifi-ui': { target: 'http://localhost:8088', changeOrigin: true },
       '/dev-api': { target: 'http://localhost:8088', changeOrigin: true, rewrite: (requestPath) => requestPath.replace(/^\/dev-api/, '') },

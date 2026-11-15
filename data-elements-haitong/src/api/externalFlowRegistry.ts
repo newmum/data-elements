@@ -41,19 +41,19 @@ export interface RegistryPipelineOptionsPage {
 
 export const externalFlowRegistry = {
   pipelineOptions: (pageNum = 1, pageSize = 20, keyword = '') =>
-    platformApi<RegistryPipelineOptionsPage>('/ods/task/registry/pipeline-options', { pageNum, pageSize, keyword }),
+    platformApi<RegistryPipelineOptionsPage>('/ods/registry/flows', { pageNum, pageSize, keyword }),
   validate: (externalFlowId: string, pipelineId?: string) =>
-    platformApi<ExternalFlowValidation>('/ods/task/registry/validate', { externalFlowId, pipelineId }),
+    platformApi<ExternalFlowValidation>('/ods/registry/check', { externalFlowId, pipelineId }),
   save: (externalFlowId: string, pipelineId: string) =>
     platformApi<{ tid: string; externalFlowId: string; pipelineId: string; created: boolean }>(
-      '/ods/task/registry/save', { externalFlowId, pipelineId, sourceFormat: 'CANVAS_DSL_V1' },
+      '/ods/registry/save', { externalFlowId, pipelineId, sourceFormat: 'CANVAS_DSL_V1' },
     ),
   page: (pageNum = 1, pageSize = 20, sort: {sortField?:string;sortDir?:string} = {}) =>
     platformApi<{ pageNum: number; pageSize: number; total: number; list: ExternalFlowRegistration[] }>(
-      '/ods/task/registry/page', { pageNum, pageSize, ...sort },
+      '/ods/registry/page', { pageNum, pageSize, ...sort },
     ),
   createDraft: async (name: string, description: string, dsl: CanvasDsl) =>
-    (await apiClient.post<Pipeline>('/pipelines', { name, description, dsl })).data,
+    (await apiClient.post<Pipeline>('/flow/create', { name, description, dsl })).data,
 };
 
 function record(value: unknown): value is Record<string, unknown> {

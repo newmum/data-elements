@@ -68,7 +68,7 @@ const fetchData = async () => {
   loading.value = true; loadError.value = ''; rows.value = []; refreshedAt.value = '';
   try {
     if (!props.taskId?.trim()) throw new Error('当前任务缺少任务标识，请重新打开任务后重试');
-    const response = await (window as any).$request.post('/ods/task/monitorSnapPage', {
+    const response = await (window as any).$request.post('/ods/monitor/page', {
       taskId: props.taskId, pageNum: page.value, pageSize: pageSize.value, ...applied, ...sort.value,
     }, { responsePolicy: 'raw', errorPolicy: 'silent', timeout: 30000, signal: controller.signal });
     const body = response.data;

@@ -82,7 +82,7 @@ const initFormData = async (version: number) => {
 
   if (props.initData.tid) {
     // 编辑已有申请单，查询详情
-    const detail = await ($common as any).post("/dws/market/applyForm/queryById", {
+    const detail = await ($common as any).post("/dws/apply/detail", {
       tid: props.initData.tid,
     });
     const { applyResource = [], ...rest } = detail || {};

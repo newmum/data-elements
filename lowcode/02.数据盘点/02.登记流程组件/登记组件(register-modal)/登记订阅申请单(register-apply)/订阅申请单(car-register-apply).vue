@@ -100,7 +100,7 @@ async function saveDraft(form: Awaited<ReturnType<typeof readForm>>) {
         });
 
   const response: unknown = await $common.post(
-    "/dws/market/applyForm/saveOrUpdate",
+    "/dws/apply/save",
     { orders },
   );
   const items = asRecord(response).items;
@@ -139,7 +139,7 @@ const commit = async () => {
   const ids = await saveDraft(await readForm());
   // 用户离开表单后，已完成的草稿保存仍然有效，但不能继续发出提交。
   if (!active) return;
-  const response: unknown = await $common.post("/dws/market/submit", {
+  const response: unknown = await $common.post("/dws/apply/submit", {
     flowOrderIds: ids,
   });
   const items = asRecord(response).items;

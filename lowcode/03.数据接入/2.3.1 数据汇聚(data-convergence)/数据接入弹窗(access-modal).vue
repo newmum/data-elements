@@ -196,7 +196,7 @@ const handleEltChange = (value: any) => {
 // 获取ETL任务分类数据
 const fetchEltCategoryOptions = async () => {
   try {
-    const res = await $common.get("/ods/getEtlGroup");
+    const res = await $common.get("/ods/job/groups");
     const data = Array.isArray(res) ? res : [];
     eltCategoryOptions.value = data;
     // 强制更新表单的 field 数据
@@ -224,7 +224,7 @@ const fetchAccessInfo = async (id?: string) => {
   try {
     loading.value = true;
     $common
-      .post("/ods/task/autoMappingTemplate", {
+      .post("/ods/map/template", {
         tid: id,
       })
       .then((res: any) => {
@@ -244,7 +244,7 @@ const handleAutoMapping = async () => {
     await databaseConfigRef.value?.getConfig();
     const sourceInfo = await databaseConfigRef.value?.getSourceFormData();
     const targetInfo = await databaseConfigRef.value?.getTargetFormData();
-    const info = (await $common.post("/ods/task/columnAutoMapping", {
+    const info = (await $common.post("/ods/map/auto", {
       sourceTableId: sourceInfo.sourceTableId,
       targetTableId: targetInfo.targetTableId,
     })) as any;
@@ -269,7 +269,7 @@ const handleSave = async () => {
     const fieldMapping = await fieldMappingRef.value?.fieldMappingData;
     const scheduleConfig = await scheduleConfigRef.value?.getConfig();
     const formData = await formRef.value.getFormData();
-    await $common.post("/ods/task/saveOrUpdate", {
+    await $common.post("/ods/job/save", {
       ...formData,
       ...databaseConfig,
       ...scheduleConfig,

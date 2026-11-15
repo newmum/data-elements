@@ -28,7 +28,8 @@ import '@/common/configData' as configData
 import elasticsearch
 import tenantRuntime
 
-// POST /dws/market/count：统计当前租户已上架目录的组织路径分布，返回 {orgPath: {路径: 数量}}。
+// POST /dws/mall/count 聚合统计。在当前租户索引统计已上架的数据目录，按组织路径返回数量，不返回目录明细。需要有效登录账号，兼容旧超市页面发送的固定聚合参数。
+// POST /dws/mall/count：统计当前租户已上架目录的组织路径分布，返回 {orgPath: {路径: 数量}}。
 // 请求传空对象，旧页面的固定过滤和聚合形状也可用。聚合仅执行只读搜索。
 var tenantId = tenantRuntime.id()
 if (tenantId == null || (tenantId + '').trim() == '') {

@@ -17,9 +17,12 @@ import org.springframework.context.annotation.Configuration;
 public class WhiteListProp {
     private static final AntPathMatcher PATH_MATCHER = new AntPathMatcher();
     private static final Set<String> FRAMEWORK_PUBLIC_PATHS = Set.of(
-            "/portal/index",
-            "/portal/login",
-            "/portal/logout",
+            "/portal/main/index",
+            "/portal/sso/login",
+            "/portal/sso/logout",
+            "/portal/sso/redeem",
+            "/portal/sso/ticket",
+            "/portal/profile/password",
             "/idaas/auth/login",
             "/idaas/auth/public-settings",
             "/idaas/password-recovery/request",
@@ -43,8 +46,8 @@ public class WhiteListProp {
             "/idaas/verifications/submit",
             "/idaas/receiver/v2",
             "/idaas/receiver/admin",
-            "/sym/tenant/login-options",
-            "/sym/tenant/login-settings"
+            "/portal/sso/options",
+            "/portal/sso/settings"
     );
 
     private List<String> whiteList;
@@ -60,6 +63,9 @@ public class WhiteListProp {
             return false;
         }
         if(requestUri.startsWith("/idaas/oauth2/") || requestUri.startsWith("/idaas/connect/") || requestUri.equals("/.well-known/openid-configuration") || requestUri.startsWith("/.well-known/oauth-authorization-server")) return true;
+        if (requestUri.startsWith("/portal/")) {
+            return FRAMEWORK_PUBLIC_PATHS.contains(requestUri);
+        }
         if (FRAMEWORK_PUBLIC_PATHS.contains(requestUri)) {
             return true;
         }

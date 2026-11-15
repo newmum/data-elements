@@ -121,7 +121,7 @@ export function logoutPlatformSession(): Promise<void> {
   loggingOut = (async () => {
     const portal = getPortalBaseUrl();
     if (standaloneDeployment && portal.origin === window.location.origin) {
-      const response = await fetch('/prod-api/portal/logout', { method: 'POST', headers: { token: sameOriginToken() } });
+      const response = await fetch('/prod-api/portal/sso/logout', { method: 'POST', headers: { token: sameOriginToken() } });
       const result = await response.json();
       if (!response.ok || ![0, 200].includes(Number(result.code))) throw new Error(result.message || '退出登录失败，请重试');
       for (const storage of [localStorage, sessionStorage]) {

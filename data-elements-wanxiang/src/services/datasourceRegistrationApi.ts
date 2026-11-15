@@ -106,16 +106,16 @@ export const datasourceRegistrationApi = {
     ]);
     return { types: leafOptions(sourceOptions(dict.dbType?.options)), networks: leafOptions(sourceOptions(dict.storageDomain?.options)), organizations: organizationOptions(organizations), applications: sourceOptions(applications), nodes: leafOptions(sourceOptions(dict.nodeType?.options)) };
   },
-  detail: (tid: string) => platformApi<Record<string, unknown>>('/dst/database/detail', { tid }),
+  detail: (tid: string) => platformApi<Record<string, unknown>>('/db/source/detail', { tid }),
   // Commit the authoritative record first. ES projection is refreshed separately
   // after the editor closes, using the platform's existing deferred-save contract.
-  save: (draft: SourceDraft, tid?: string) => platformApi<{ tid: string; indexRefreshPending?: boolean }>('/dst/database/saveOrUpdate', { tid: tid || '', assetType: 'db', deferIndexRefresh: true, propList: { ...sourceProperties(draft), ...(!tid ? { assetStatus: 0 } : {}) } }),
+  save: (draft: SourceDraft, tid?: string) => platformApi<{ tid: string; indexRefreshPending?: boolean }>('/db/source/save', { tid: tid || '', assetType: 'db', deferIndexRefresh: true, propList: { ...sourceProperties(draft), ...(!tid ? { assetStatus: 0 } : {}) } }),
   async refreshIndex(tid: string): Promise<void> {
     const result = await platformApi<{ refreshed?: boolean; removed?: boolean }>('/dst/maintenance/refresh', { tid, assetType: 'db' }, { timeoutMs: 120000 });
     if (result.refreshed !== true) throw new Error(result.removed ? '数据源主记录已不存在，请刷新列表核对' : '索引接口未确认同步成功，请重试同步');
   },
-  test: (draft: SourceDraft, tid?: string) => platformApi<ConnectionResult>('/dst/database/metadata/test-connection', { ...sourceProperties(draft), ...(tid ? { tid } : {}) }, { timeoutMs: 120000 }),
-  testSaved: (tid: string) => platformApi<ConnectionResult>('/dst/database/metadata/test-connection', { tid }, { timeoutMs: 120000 }),
-  deletePreview: (tid: string) => platformApi<DeleteResult>('/dst/database/delete', { tid, dryRun: true }),
-  remove: (tid: string) => platformApi<DeleteResult>('/dst/database/delete', { tid }),
+  test: (draft: SourceDraft, tid?: string) => platformApi<ConnectionResult>('/db/source/test', { ...sourceProperties(draft), ...(tid ? { tid } : {}) }, { timeoutMs: 120000 }),
+  testSaved: (tid: string) => platformApi<ConnectionResult>('/db/source/test', { tid }, { timeoutMs: 120000 }),
+  deletePreview: (tid: string) => platformApi<DeleteResult>('/db/source/delete', { tid, dryRun: true }),
+  remove: (tid: string) => platformApi<DeleteResult>('/db/source/delete', { tid }),
 };

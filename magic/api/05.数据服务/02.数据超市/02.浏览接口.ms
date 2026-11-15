@@ -31,7 +31,8 @@ import tableCounter
 import tenantRuntime
 import log
 
-// POST /dws/market/view：为当前租户已上架目录登记一次浏览，关系库保存权威计数。
+// POST /dws/mall/view 浏览接口。按 tid 为当前租户已上架目录登记一次浏览。会话、主记录及发布索引校验后，在关系库事务内原子递增 market_view_count；索引仅补投影，失败不重复计数。返回目录编号和已确认浏览量。
+// POST /dws/mall/view：为当前租户已上架目录登记一次浏览，关系库保存权威计数。
 // tid 为目录编号。一次调用计一次访问；未提供访问幂等键，不自动重试不确定的提交。
 // 返回 tid 与已确认的 viewCount。索引补投影失败仍返回该值，不创建缺失索引或文档。
 var tid = body?.tid == null ? '' : (body.tid + '').trim()

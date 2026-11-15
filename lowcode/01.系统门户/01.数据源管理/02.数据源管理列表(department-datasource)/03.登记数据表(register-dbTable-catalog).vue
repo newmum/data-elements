@@ -2137,7 +2137,7 @@ const dictionaryPreviewTableData = computed(() => {
         }
       }
       const result = await $common.postSilently(
-        structured ? "/dst/database/metadata/structuredSampleData" : "/dst/database/metadata/table/preview-data",
+        structured ? "/db/row/read" : "/db/row/preview",
         structured
           ? {
               tableId,
@@ -2492,11 +2492,11 @@ async function loadDetailTable() {
   tableLoadError.value = "";
   try {
     // 精确定位当前租户与角色可见的表；字段只读登记快照，不触发来源库探查。
-    const result = await $common.postSilently("/dst/database/table/page", { tid: props.detailTableId, pageNum: 1, pageSize: 1 });
+    const result = await $common.postSilently("/db/table/page", { tid: props.detailTableId, pageNum: 1, pageSize: 1 });
     const row = unwrapList(result)[0];
     if (!row || String(row.tid) !== String(props.detailTableId)) throw new Error("数据表不存在或不在当前数据范围内");
     const sourceId = row.dbId || row.datasourceId;
-    const source = await $common.postSilently("/dst/database/detail", { tid: sourceId });
+    const source = await $common.postSilently("/db/source/detail", { tid: sourceId });
     store.data = { db: source, dbId: sourceId };
     const catalog = normalizeCatalogConfig(row);
     if (hasGovernanceContent(catalog)) applyCatalogToMap(catalog);
@@ -2534,7 +2534,7 @@ async function loadCatalogTables() {
   tableLoading.value = true;
   try {
     // 清单读取失败已由本页的 register-error-state 展示，不再叠加顶部接口通知。
-    const result = await $common.getSilently("/dst/database/metadata/tables", { dbId: id });
+    const result = await $common.getSilently("/db/schema/tables", { dbId: id });
     // 该接口已返回表主数据及治理配置，先建立已登记映射，再一次性提交列表，避免状态闪烁。
     unwrapList(result).forEach((tableConfig) => {
       const normalized = normalizeCatalogConfig(tableConfig);
@@ -2827,7 +2827,7 @@ async function loadFields(table, force = false, collectIfMissing = true) {
     // 同名元数据可能存在历史空壳记录，逐个候选读取，直到获得真实字段。
     for (const candidateTid of candidateTids) {
       try {
-        const result = await $common.getSilently("/dst/database/metadata/columns", {
+        const result = await $common.getSilently("/db/field/list", {
           tid: candidateTid,
           snapshotOnly: true,
         });
@@ -2842,7 +2842,7 @@ async function loadFields(table, force = false, collectIfMissing = true) {
       }
     }
     if (!resolvedRows.length && collectIfMissing) {
-      const collected = await $common.postSilently("/dst/database/metadata/collectColumns", {
+      const collected = await $common.postSilently("/db/field/collect", {
         tableId: table.tid,
       });
       resolvedRows = unwrapList(collected);
@@ -2880,7 +2880,7 @@ async function loadTableGovernance(table, force = false) {
   if (governanceLoadingMap[key]) return;
   governanceLoadingMap[key] = true;
   try {
-    const result = await $common.postSilently("/dst/database/table/page", {
+    const result = await $common.postSilently("/db/table/page", {
       pageNum: 1,
       pageSize: 1,
       tid: table.tid,
@@ -2907,7 +2907,7 @@ async function loadTableGovernance(table, force = false) {
 async function loadDictionaryTables() {
   if (detailMode.value) {
     if (!dbId.value || !tableRows.value.length) return;
-    const result = await $common.postSilently("/dst/database/table/page", { dbId: dbId.value, businessType: "字典表", pageNum: 1, pageSize: 100 });
+    const result = await $common.postSilently("/db/table/page", { dbId: dbId.value, businessType: "字典表", pageNum: 1, pageSize: 100 });
     dictionaryTables.value = unwrapList(result).map((row) => normalizeCatalogTableRow(row));
     if (Number(result?.total || 0) > 100) $message.warning("当前加载前 100 张字典表，请在数据源登记中维护更多字典关联");
     await ensureDictionaryProfilesLoaded();
@@ -4410,7 +4410,7 @@ async function loadDictionaryPreviewTranslations() {
         const whereClause = buildPreviewDictionaryWhereClause(group.relation, batch);
         if (!whereClause) return { rows: [] };
         const result = await $common.postSilently(
-          "/dst/database/metadata/table/sample-data",
+          "/db/row/sample",
           {
             tableId: group.tableId,
             sampleSize: batch.length,
@@ -4488,7 +4488,7 @@ async function syncActiveTableFields() {
   syncingFields.value = true;
   try {
     const previous = new Map((fieldMap[table.tableName] || []).map((field) => [String(field.columnName).toLowerCase(), field]));
-    const result = await $common.postSilently("/dst/database/metadata/collectColumns", {
+    const result = await $common.postSilently("/db/field/collect", {
       tableId: table.tid,
       force: true,
     });
@@ -4574,8 +4574,8 @@ async function loadBusinessPreview(force = false) {
       return;
     }
     const previewPath = isStructuredSource()
-      ? "/dst/database/metadata/structuredSampleData"
-      : "/dst/database/metadata/table/sample-data";
+      ? "/db/row/read"
+      : "/db/row/sample";
     const result = await $common.postSilently(
       previewPath,
       {
@@ -5120,7 +5120,7 @@ async function loadDictionaryFieldSnapshots(tables) {
     // columns 已支持逗号分隔的表 ID；每批最多 50 个，避免 GET URL 过长。
     for (let index = 0; index < ids.length; index += 50) {
       const batchIds = ids.slice(index, index + 50);
-      const result = await $common.getSilently("/dst/database/metadata/columns", {
+      const result = await $common.getSilently("/db/field/list", {
         tid: batchIds.join(","),
         snapshotOnly: true,
       });
@@ -5859,7 +5859,7 @@ async function loadDictionaryFields(tableName) {
       dictionaryDialog.fields = [];
       return;
     }
-      const result = await $common.get("/dst/database/metadata/columns", {
+      const result = await $common.get("/db/field/list", {
       tid: table.tid,
     });
     dictionaryDialog.fields = normalizeFieldRows(unwrapList(result), tableName);
@@ -6482,7 +6482,7 @@ async function loadDictionaryGroupedValues(requestVersion = dictionaryPreviewReq
     dictionaryPreview.categoryGroupField = categoryField;
     return;
   }
-  const result = await $common.postSilently("/dst/database/metadata/table/preview-data", {
+  const result = await $common.postSilently("/db/row/preview", {
     tableId: table.tid,
     groupByColumn: categoryField,
     groupNameColumn: table.dictionaryCategoryNameField || "",
@@ -6523,7 +6523,7 @@ async function loadDictionaryPreview() {
   try {
     const structured = isStructuredSource();
     const result = await $common.postSilently(
-      structured ? "/dst/database/metadata/structuredSampleData" : "/dst/database/metadata/table/preview-data",
+      structured ? "/db/row/read" : "/db/row/preview",
       structured
         ? {
             tableId: table.tid,
@@ -7077,7 +7077,7 @@ async function persistGovernanceTable(table, strictValidation = true) {
       ? JSON.stringify(governanceConfig.dictionaryProfiles)
       : "",
   };
-  const data = await $common.post("/dst/database/table/governance/save", {
+  const data = await $common.post("/db/table/policy", {
     tableId: table.tid,
     editMode: detailMode.value ? "fields" : undefined,
     propList,
@@ -7168,7 +7168,7 @@ async function compareSchema() {
   schemaSync.error = "";
   schemaSync.page = 1;
   try {
-    const plan = await $common.postSilently("/dst/database/table/governance/save", { tableId: props.detailTableId, schemaAction: "compare" });
+    const plan = await $common.postSilently("/db/table/policy", { tableId: props.detailTableId, schemaAction: "compare" });
     if (requestId === schemaSync.requestId) schemaSync.plan = plan;
   } catch (error) {
     if (requestId === schemaSync.requestId) schemaSync.error = error?.message || "比较失败，请检查来源数据库连接后重试";
@@ -7182,7 +7182,7 @@ async function applySchemaSync() {
   schemaSync.applying = true;
   schemaSync.error = "";
   try {
-    const result = await $common.postSilently("/dst/database/table/governance/save", {
+    const result = await $common.postSilently("/db/table/policy", {
       tableId: props.detailTableId, schemaAction: "apply", fingerprint: schemaSync.plan.fingerprint,
       // 按钮点击即确认当前服务端比较计划，保留既有接口契约和过期校验。
       confirmation: schemaSync.plan.tableName, acknowledged: true,

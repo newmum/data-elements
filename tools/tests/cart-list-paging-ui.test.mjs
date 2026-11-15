@@ -21,9 +21,9 @@ const { outputText } = ts.transpileModule(content, {
 });
 const createComponent = new Function("require", "exports", "$common", "$message", "$dialog", outputText);
 
-const cartPath = "/dws/market/shoppingCardList";
-const draftPath = "/dws/market/applyForm/list";
-const removePath = "/dws/market/shoppingCardRemove";
+const cartPath = "/dws/cart/page";
+const draftPath = "/dws/apply/page";
+const removePath = "/dws/cart/remove";
 const cartRow = (tid, available = true) => ({ tid, shoppingCarId: `cart-${tid}`, catalogName: tid, available });
 
 function node() {

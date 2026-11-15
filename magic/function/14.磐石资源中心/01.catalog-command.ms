@@ -41,7 +41,7 @@ import java.util.List
 import '@/resource-center/catalog-read' as readCatalog
 import '@/resource-center/planning-read' as readPlanning
 import '@post:/dst/catalog/saveOrUpdate' as saveCatalog
-import '@post:/dst/database/metadata/table/sample-data' as sampleData
+import '@post:/db/row/sample' as sampleData
 import '@post:/sym/user/me' as currentUser
 
 /**

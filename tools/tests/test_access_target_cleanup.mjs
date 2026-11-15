@@ -50,7 +50,7 @@ for (const [index, file] of paths.entries()) {
       ElMessageBox: { confirm: async text => { confirmations.push(text); } },
       emit: (...args) => emitted.push(args),
       $common: { post: async (route, body) => {
-        assert.equal(route, '/ods/dataAggReset');
+        assert.equal(route, '/ods/job/reset');
         calls.push({ route, body });
         if (body.batchDryRun) return { data: { batchDryRun: true, sideEffectsApplied: false,
           results: body.targets.map(item => ({ ...item, sideEffectsApplied: false })) } };

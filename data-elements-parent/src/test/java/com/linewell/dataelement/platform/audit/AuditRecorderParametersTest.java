@@ -65,7 +65,7 @@ class AuditRecorderParametersTest {
     }
 
     @Test void policyExcludedCurrentRequestIsOmittedRatherThanHistoricalCollection() {
-        for (String path : new String[] {"/sym/logs/requests", "/portal/login", "/auth/validation"}) {
+        for (String path : new String[] {"/sym/logs/requests", "/portal/sso/login", "/auth/validation"}) {
             var request = new MockHttpServletRequest("POST", path);
             RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
             AuditRequestParameters.capture(request, Map.of("name", "不得采集"), Map.of(), null);
@@ -77,7 +77,7 @@ class AuditRecorderParametersTest {
     }
 
     @Test void platformAndAuthenticationRoutesNeverCollectGeneralRequestSnapshots() {
-        for (String path : new String[] {"/idaas/validation", "/portal/login", "/auth/validation", "/security/validation", "/api/web/test"}) {
+        for (String path : new String[] {"/idaas/validation", "/portal/sso/login", "/auth/validation", "/security/validation", "/api/web/test"}) {
             var request = new MockHttpServletRequest("POST", path);
             AuditRequestParameters.capture(request, Map.of("name", "不得采集"), Map.of(), null);
             AuditRequestParameters.enrich(request, Map.of("taskName", "不得核验"));

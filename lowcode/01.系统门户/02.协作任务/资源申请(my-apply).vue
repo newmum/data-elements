@@ -314,7 +314,7 @@ const handleDraft = async (item: any) => {
   }
 
   try {
-    const removed: unknown = await $common.post("/dws/market/applyForm/deleteById", {
+    const removed: unknown = await $common.post("/dws/apply/delete", {
       tid: item.tid,
       addToCart: addToCart.value,
     });

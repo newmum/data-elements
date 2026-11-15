@@ -113,7 +113,7 @@ VITE_API_BASE=/yunti/dws/flowserve
 ### 数据和配置归属
 
 业务数据与主平台共用当前业务库。数据源不再由 Yunti 单独维护，编排器直接读取
-主平台 `db_datasource_t` 的 `/dst/database/list` 接口，新增、修改、测试和删除统一
+主平台 `db_datasource_t` 的 `/db/source/list` 接口，新增、修改、测试和删除统一
 回到主平台“数据源管理”完成。
 
 FlowServe 自有业务表仅包括：

@@ -1,0 +1,14 @@
+{
+  "properties": {},
+  "id": "2fd47336a28d511ea91773bca3335bf1",
+  "name": "03.购物车",
+  "type": "api",
+  "parentId": "2c4350a98636412f9b4feb6e31969c00",
+  "path": "/cart",
+  "createTime": 1784420517826,
+  "updateTime": 1785021681888,
+  "createBy": null,
+  "updateBy": null,
+  "paths": [],
+  "options": []
+}

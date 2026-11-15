@@ -78,7 +78,7 @@ if ($WithoutNacos -or $usesPrivateRuntime) {
     $runtimeReady = $false
     while ((Get-Date) -lt $runtimeDeadline -and (Get-Process -Id $runtimeResult.pid -ErrorAction SilentlyContinue)) {
         try {
-            $readyResponse = Invoke-RestMethod -Uri "http://localhost:$($runtimeResult.port)/sym/tenant/login-options" -TimeoutSec 3
+            $readyResponse = Invoke-RestMethod -Uri "http://localhost:$($runtimeResult.port)/portal/sso/options" -TimeoutSec 3
             if ($readyResponse.code -eq 0) { $runtimeReady = $true; break }
         } catch { }
         Start-Sleep -Seconds 1
@@ -161,7 +161,7 @@ function Test-MagicLoginReadiness {
     # An empty login validates the route before credentials or business data.
     # A listening socket / Spring "Started" message does not mean Magic's
     # database resource tree has finished loading.
-    foreach ($magicLoginPath in @('/portal/login', '/idaas/auth/login')) {
+    foreach ($magicLoginPath in @('/portal/sso/login', '/idaas/auth/login')) {
         try {
             $magicLoginResult = Invoke-RestMethod -Uri "http://localhost:$PortNumber$magicLoginPath" -Method Post -ContentType 'application/json' -Body '{}' -TimeoutSec 3
             if ($magicLoginResult.code -ne 400) { return $false }

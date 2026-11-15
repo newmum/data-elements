@@ -300,7 +300,7 @@ async function fetchList() {
   loading.value = true;
   listError.value = "";
   try {
-    const result: unknown = await $common.post("/dws/market/shoppingCardList", {
+    const result: unknown = await $common.post("/dws/cart/page", {
       mode: "page",
       pageNum: pageNo.value,
       pageSize: pageSize.value,
@@ -363,7 +363,7 @@ async function removeCartRow(row: CartRow) {
   const revision = sessionRevision.value;
   removingId.value = row.shoppingCarId;
   try {
-    const removed: unknown = await $common.post("/dws/market/shoppingCardRemove", {
+    const removed: unknown = await $common.post("/dws/cart/remove", {
       tid: row.shoppingCarId,
     });
     if (!mounted || revision !== sessionRevision.value) return;
@@ -390,7 +390,7 @@ async function fetchDrafts() {
   draftsLoading.value = true;
   draftError.value = "";
   try {
-    const data: unknown = await $common.post("/dws/market/applyForm/list", {
+    const data: unknown = await $common.post("/dws/apply/page", {
       type: "catalogSubscribe",
       flowStatus: 0,
     });
@@ -461,7 +461,7 @@ async function handleDraftCommand(draft: Draft, command: string) {
     }
 
     if (!mounted || revision !== sessionRevision.value) return;
-    const removed: unknown = await $common.post("/dws/market/applyForm/deleteById", {
+    const removed: unknown = await $common.post("/dws/apply/delete", {
       tid: draft.tid,
       addToCart: addToCart.value,
     });

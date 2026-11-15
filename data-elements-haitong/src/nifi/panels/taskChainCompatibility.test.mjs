@@ -40,7 +40,7 @@ test('20/100 task snapshots each use one chain request and preserve a read-only 
     const { hooks, requests } = harness(chain);
     const response = await hooks.fetchTaskChain({ accessTaskId: 'task' });
     assert.equal(response, chain);
-    assert.deepEqual(requests, ['/pipelines/task-chain']);
+    assert.deepEqual(requests, ['/chain/task']);
   }
 });
 
@@ -59,7 +59,7 @@ test('read-only saved design blocks save/copy/deploy/start/stop/delete/native ca
 test('compatibility state never disables an unrelated current pipeline operation', async () => {
   const { hooks, requests } = harness({ selectedPipelineId: 'selected', readOnly: true });
   await hooks.useStopPipeline().mutationFn('other');
-  assert.deepEqual(requests, ['/pipelines/other/stop']);
+  assert.deepEqual(requests, ['/life/stop?id=other']);
 });
 
 test('missing registration links allow saving the manually replaced source and other component properties', async () => {
@@ -71,7 +71,7 @@ test('missing registration links allow saving the manually replaced source and o
   const saved = await hooks.useSavePipeline().mutationFn({ id: 'selected', name: 'manually edited', dsl });
   assert.equal(saved.dsl, dsl);
   await hooks.useStopPipeline().mutationFn('selected');
-  assert.deepEqual(requests, ['/pipelines/selected', '/pipelines/selected/stop']);
+  assert.deepEqual(requests, ['/flow/save?id=selected', '/life/stop?id=selected']);
 });
 
 test('the actual editor shows a relationship failure reason while ordinary editable canvases remain free of a banner', () => {

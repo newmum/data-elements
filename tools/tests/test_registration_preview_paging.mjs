@@ -35,7 +35,7 @@ function fixture({ structured = false, count = 240, fail = false } = {}) {
     $common: { postSilently: async (route, payload) => {
       reads.push({ route, payload: plain(payload) });
       if (fail) throw new Error('read failed');
-      if (route.endsWith('/preview-data')) {
+      if (route === '/db/row/preview') {
         assert.ok(payload.pageSize >= 1 && payload.pageSize <= 100);
         const filtered = payload.conditions?.length ? rows.filter(row => row.category === payload.conditions[0].value) : rows;
         const start = (payload.pageNo - 1) * payload.pageSize;
@@ -81,7 +81,7 @@ const ftp = fixture({ structured: true });await ftp.actual.loadDictionaryPreview
 assert.equal(ftp.reads[0].payload.sampleSize, 200);
 page = await ftp.actual.dictionaryPreviewTableData.value({ pageNo: 2, pageSize: 20 });assert.equal(page.list[0].id, 21);assert.equal(ftp.reads.length, 1);
 const business = fixture();await business.actual.loadBusinessPreview();
-assert.equal(business.reads.length, 1);assert.ok(business.reads[0].route.endsWith('/sample-data'));
+assert.equal(business.reads.length, 1);assert.equal(business.reads[0].route, '/db/row/sample');
 assert.equal(business.reads[0].payload.sampleSize, 10);assert.equal(business.context.tablePreview.rows.length, 10);
 assert.match(source, /:page-sizes="isStructuredSource\(\) \? \[20, 50, 100, 200\] : \[20, 50, 100\]"/);
 console.log('PASS: server first page, page 2, 20/100 rows each one request, category filtering, last/empty/error pages, bounded FTP sample, and step-four sample');

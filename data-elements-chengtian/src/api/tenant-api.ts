@@ -15,14 +15,14 @@ export interface TenantContextInfo extends TenantOption {
 const TenantAPI = {
   loginOptions() {
     return request<any, TenantOption[]>({
-      url: "/sym/tenant/login-options",
+      url: "/portal/sso/options",
       method: "get",
     });
   },
 
   loginSettings(tenantId: string) {
     return request<any, Record<string, unknown>>({
-      url: "/sym/tenant/login-settings",
+      url: "/portal/sso/settings",
       method: "get",
       params: { tenantId },
     });
@@ -30,14 +30,14 @@ const TenantAPI = {
 
   current() {
     return request<any, TenantContextInfo>({
-      url: "/sym/tenant/current",
+      url: "/portal/sso/session",
       method: "get",
     });
   },
 
   switchTenant(tenantId: string) {
     return request<any, TenantContextInfo>({
-      url: "/sym/tenant/switch",
+      url: "/portal/sso/switch",
       method: "post",
       data: { tenantId },
     });

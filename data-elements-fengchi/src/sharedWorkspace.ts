@@ -158,7 +158,7 @@ export type SharedWorkspace = {
 };
 
 export async function readSharedCatalog(client: MockMetadataClient) {
-  await client.request("GET", "/sym/tenant/current");
+  await client.request("GET", "/portal/sso/session");
   const [organizations, statistics] = await Promise.all([
     client.request<Organization[]>("POST", "/sym/org/getOrgTree"),
     client.request<{
@@ -168,7 +168,7 @@ export async function readSharedCatalog(client: MockMetadataClient) {
           datasources: Array<{ value: string; label: string; dbType: string }>;
         }>
       >;
-    }>("POST", "/dst/database/treeStatistics", { mode: "tree" }),
+    }>("POST", "/db/source/stats", { mode: "tree" }),
   ]);
   const sources = Object.entries(statistics.orgApps).flatMap(([orgId, apps]) =>
     apps.flatMap((app) =>
@@ -194,13 +194,13 @@ export async function readSharedWorkspace(
   const [catalog, detail] = await Promise.all([
     client.request<SharedTable[]>(
       "GET",
-      "/dst/database/metadata/tables",
+      "/db/schema/tables",
       {},
       { dbId: id, pageSize: 100 },
     ),
     client.request<{ database: string; dbName?: string }>(
       "POST",
-      "/dst/database/detail",
+      "/db/source/detail",
       {
         tid: id,
       },
@@ -244,7 +244,7 @@ export async function readSharedWorkspace(
       if (!fields.has(name)) {
         const rows = await client.request<Field[]>(
           "GET",
-          "/dst/database/metadata/columns",
+          "/db/field/list",
           {},
           { tid: target.tid, snapshotOnly: true },
         );
@@ -294,7 +294,7 @@ export async function readSharedWorkspace(
         conditions.push({ field: "name", type: "like", value: `%${keyword}%` });
       const preview = await client.request<Preview>(
         "POST",
-        "/dst/database/metadata/table/preview-data",
+        "/db/row/preview",
         {
           tableId: target.tid,
           pageNo: page,

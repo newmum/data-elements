@@ -88,7 +88,7 @@ watch(
 
       const tableItems = Array.isArray(props.tableFields) ? props.tableFields : [];
 
-      const res = await $common.post("/dst/database/metadata/getCreateTableDDL", {
+      const res = await $common.post("/db/schema/ddl", {
         propList,
         tableItems,
       });

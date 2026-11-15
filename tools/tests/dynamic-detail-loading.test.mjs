@@ -30,7 +30,7 @@ for(const count of [20,100]) {
   const t=setup(); const done=t.loadDetail();
   assert.equal(t.detailLoading.value,true);
   assert.equal(t.calls.length,1); assert.equal(t.forms.length,1);
-  assert.equal(t.calls[0].url,'/ods/dataAggPage');
+  assert.equal(t.calls[0].url,'/ods/ingest/page');
   assert.equal('tenantId' in t.calls[0].body,false);
   t.calls[0].resolve({detail:{tid:'record-a',name:'ready'}}); await Promise.resolve();
   assert.equal(t.detailLoading.value,true,'data alone cannot reveal an unconfigured form');

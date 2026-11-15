@@ -36,7 +36,7 @@ test('actual pipeline cache-only hook never calls legacy detail even after stale
   hooks.usePipeline('independent', true);
   assert.equal(queries.at(-1).enabled, true);
   await queries.at(-1).queryFn({ signal: new AbortController().signal });
-  assert.deepEqual(requests, ['/pipelines/independent']);
+  assert.deepEqual(requests, ['/flow/detail?id=independent']);
 });
 
 test('actual Toolbar explicitly selects cache-only saved-design reads for every authorized chain task', () => {

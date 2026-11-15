@@ -219,12 +219,12 @@ test("review reads persisted registration, collection totals and changes indepen
     $common: {
       post: async (url, params) => {
         calls.push({ url, params: { ...params } });
-        assert.equal(url, "/dst/database/detail");
+        assert.equal(url, "/db/source/detail");
         return { tid: "source-a" };
       },
       get: async (url, params) => {
         calls.push({ url, params: { ...params } });
-        if (url === "/dst/database/metadata/tables") return { list: savedRows };
+        if (url === "/db/schema/tables") return { list: savedRows };
         if (url === "/dst/database/metadata/tables/snapshot")
           return { physicalTotal: 7177, total: 17 };
         if (url === "/dst/database/metadata/tables/collection/status") return statusResponse;
@@ -241,8 +241,8 @@ test("review reads persisted registration, collection totals and changes indepen
   ]);
   await scope.refreshReviewSummary("source-a", 1, true);
   assert.deepEqual(calls, [
-    { url: "/dst/database/detail", params: { tid: "source-a" } },
-    { url: "/dst/database/metadata/tables", params: { dbId: "source-a", includeGovernance: true } },
+    { url: "/db/source/detail", params: { tid: "source-a" } },
+    { url: "/db/schema/tables", params: { dbId: "source-a", includeGovernance: true } },
     {
       url: "/dst/database/metadata/tables/snapshot",
       params: { dbId: "source-a", pageNo: 1, pageSize: 1 },

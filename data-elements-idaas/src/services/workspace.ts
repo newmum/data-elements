@@ -79,7 +79,7 @@ export function initializeWorkspace(): Promise<void> {
 export interface TenantOption { tenantId: string; tenantName: string; tenantCode?: string; }
 export interface UserOperation { requestId: string; userId: string; operationType: string; status: string; errorCode?: string | null; createdTime: string; }
 export async function loginTenants(): Promise<TenantOption[]> {
-    const rows = await request<Array<TenantOption & { tid?: string; name?: string; id?: string }>>('/sym/tenant/login-options');
+    const rows = await request<Array<TenantOption & { tid?: string; name?: string; id?: string }>>('/portal/sso/options');
     if (!Array.isArray(rows)) throw new DomainError('无法读取登录租户，请稍后重试。', 'INVALID_RESPONSE');
     return rows.map(row => ({ tenantId: String(row.tenantId || row.tid || row.id || ''), tenantName: row.tenantName || row.name || '', tenantCode: row.tenantCode })).filter(row => row.tenantId && row.tenantName);
 }

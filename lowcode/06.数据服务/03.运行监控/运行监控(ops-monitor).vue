@@ -209,7 +209,7 @@ const request = async (url, body) => {
 const loadOverview = async () => {
   overviewLoading.value = true;
   try {
-    const data = await request("/dws/ops/monitor/overview", {});
+    const data = await request("/dws/monitor/overview", {});
     if (!data) {
       return;
     }
@@ -231,7 +231,7 @@ const loadOverview = async () => {
 const loadRules = async (pageNum = 1) => {
   rulesLoading.value = true;
   try {
-    const data = await request("/dws/ops/monitor/alert/rules", {
+    const data = await request("/dws/monitor/rules", {
       pageNum,
       pageSize,
       keyword: ruleKeyword.value,
@@ -250,7 +250,7 @@ const loadRules = async (pageNum = 1) => {
 const loadEvents = async (pageNum = 1) => {
   eventsLoading.value = true;
   try {
-    const data = await request("/dws/ops/monitor/alert/events", {
+    const data = await request("/dws/monitor/events", {
       pageNum,
       pageSize,
       keyword: eventKeyword.value,
@@ -270,7 +270,7 @@ const loadEvents = async (pageNum = 1) => {
 const loadCalls = async (pageNum = 1) => {
   callsLoading.value = true;
   try {
-    const data = await request("/dws/ops/monitor/calls", {
+    const data = await request("/dws/monitor/calls", {
       pageNum,
       pageSize,
       keyword: callKeyword.value,

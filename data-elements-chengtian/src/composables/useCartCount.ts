@@ -33,7 +33,7 @@ async function refresh() {
   if (!AuthStorage.getAccessToken()) return;
   const commit = beginRead();
   const result = await requestPolicy.quiet<{ total: number }>({
-    url: "/dws/market/shoppingCardList",
+    url: "/dws/cart/page",
     method: "post",
     data: { mode: "count" },
   });

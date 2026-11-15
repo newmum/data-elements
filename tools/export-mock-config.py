@@ -77,7 +77,7 @@ def export_configuration(base_url, with_structure=False):
             raise ValueError('公开配置接口返回失败')
         return payload['data']
 
-    options = get('/sym/tenant/login-options')
+    options = get('/portal/sso/options')
     if not isinstance(options, list) or len(options) > 100:
         raise ValueError('行业选项格式或规模不合法')
     tenants = []
@@ -93,7 +93,7 @@ def export_configuration(base_url, with_structure=False):
         tenants.append({
             'scenario': SCENARIOS[code],
             'tenant': tenant,
-            'settings': public_settings(get('/sym/tenant/login-settings?' + query)),
+            'settings': public_settings(get('/portal/sso/settings?' + query)),
         })
     if {item['scenario'] for item in tenants} != set(SCENARIOS.values()):
         raise ValueError('四个行业配置不完整')
@@ -104,7 +104,7 @@ def export_configuration(base_url, with_structure=False):
     return {
         'version': 1,
         'source': '当前数据库生效的门户公开配置及租户菜单/组织白名单' if with_structure else '当前数据库生效的登录前公开配置；通过只读门户接口导出白名单字段',
-        'globalSettings': public_settings(get('/portal/index')),
+        'globalSettings': public_settings(get('/portal/main/index')),
         'tenants': tenants,
     }
 

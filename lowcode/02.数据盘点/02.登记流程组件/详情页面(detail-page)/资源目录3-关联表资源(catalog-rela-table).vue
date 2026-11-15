@@ -357,7 +357,7 @@ const openMappingDialog = async (row: any) => {
     });
 
     // 获取来源表字段列表
-    const tableFields = await $common.get("/dst/database/metadata/columns", {
+    const tableFields = await $common.get("/db/field/list", {
       tid: row.tableId,
     });
 

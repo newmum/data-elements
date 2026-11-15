@@ -9,7 +9,7 @@ const { parse, compileScript } = require('vue/compiler-sfc');
 const root = new URL('../../', import.meta.url);
 const componentPath = 'lowcode/01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource).vue';
 const source = fs.readFileSync(new URL(componentPath, root), 'utf8');
-const magic = fs.readFileSync(new URL('magic/api/02.数据盘点/02.数据库表/06.本部门数据源清单.ms', root), 'utf8');
+const magic = fs.readFileSync(new URL('magic/api/12.数据库资源/06.本部门数据源清单.ms', root), 'utf8');
 const { descriptor, errors } = parse(source, { filename: componentPath });
 assert.deepEqual(errors, []);
 const { scriptSetupAst } = compileScript(descriptor, { id: 'datasource-loading-test' });
@@ -78,9 +78,9 @@ test('cards settle without waiting for the organization tree and never request o
   assert.equal(h.state.treeLoading, true);
   assert.deepEqual(h.state.list, [row]);
   assert.deepEqual(h.calls.map(({ url, body }) => [url, body.mode]), [
-    ['/dst/database/departmentDataSources', 'cards'],
+    ['/db/source/dept', 'cards'],
     ['/sym/org/getOrgTree', undefined],
-    ['/dst/database/treeStatistics', 'facets'],
+    ['/db/source/stats', 'facets'],
   ]);
 
   tree.resolve([]);
@@ -131,7 +131,7 @@ test('expanding a card loads one scoped table page and reuses the pending reques
 
   assert.equal(h.calls.length, 1);
   assert.deepEqual(h.calls[0], {
-    url: '/dst/database/departmentDataSources',
+    url: '/db/source/dept',
     body: { mode: 'tables', datasourceId: 'db1', pageNum: 1, pageSize: 10 },
   });
 

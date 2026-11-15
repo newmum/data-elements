@@ -14,10 +14,9 @@ export function resolveNifiNativeUiUrl(
   }
 
   const apiBasePath = new URL(apiBaseUrl || '/', pageOrigin).pathname.replace(/\/+$/, '');
-  // `/prod-api/nifi/api` and `/nifi/api` are the two supported public API
-  // shapes. The native proxy is a sibling of `nifi`, not a route in the
-  // embedded `/haitong/` SPA.
-  const matched = apiBasePath.match(/^(.*)\/nifi\/api$/);
+  // The native proxy is a sibling of `nifi` within the public gateway.
+  // The standalone canvas also accepts the existing `/nifi/api` base.
+  const matched = apiBasePath.match(/^(.*)\/nifi(?:\/api)?$/);
   const gatewayPrefix = matched?.[1] ?? '';
   const proxyPath = `${gatewayPrefix}${nativeTarget.pathname}`.replace(/\/\/{2,}/g, '/');
 

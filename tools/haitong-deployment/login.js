@@ -22,7 +22,7 @@ form.addEventListener('submit', async event => {
   button.disabled = true;
   error.hidden = true;
   try {
-    const response = await fetch('/prod-api/portal/login', {
+    const response = await fetch('/prod-api/portal/sso/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

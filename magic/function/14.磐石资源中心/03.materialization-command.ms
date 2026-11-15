@@ -38,8 +38,8 @@ import cn.hutool.core.util.IdUtil
 import cn.dev33.satoken.stp.StpUtil
 import com.linewell.dataelement.dataassets.runtime.DataSourceConnectionPropertyResolver as connectionProperties
 import com.linewell.dataelement.metautil.service.MetadataRelationJdbcService as fusionJdbc
-import '@post:/dst/database/metadata/getCreateTableDDL' as generateDDL
-import '@post:/dst/database/metadata/createTable' as createPhysicalTable
+import '@post:/db/schema/ddl' as generateDDL
+import '@post:/db/schema/create' as createPhysicalTable
 import '@/resource-center/planning-read' as readPlanning
 import '@/resource-center/model-read' as readModels
 import '@/resource-center/model-validate' as validateModel

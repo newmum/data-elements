@@ -289,7 +289,7 @@ const fetchData = async ({ pageNo: pageNum, pageSize }: { pageNo: number; pageSi
 
     if (type === "org") {
       // org 节点：查找该部门下nodeId为业务库的db
-      const dbList = await $common.post("/dst/database/table/list", {
+      const dbList = await $common.post("/db/table/list", {
         nodeId: "业务库",
         assetType: "db",
         orgId: value || undefined, // 考虑查全部时，不传orgId
@@ -305,7 +305,7 @@ const fetchData = async ({ pageNo: pageNum, pageSize }: { pageNo: number; pageSi
 
     if (type === "app") {
       // app 节点：查找app下nodeId为业务库的db
-      const dbList = await $common.post("/dst/database/table/list", {
+      const dbList = await $common.post("/db/table/list", {
         nodeId: "业务库",
         assetType: "db",
         appId: value,
@@ -327,7 +327,7 @@ const fetchData = async ({ pageNo: pageNum, pageSize }: { pageNo: number; pageSi
     }
   }
 
-  const response = await $common.post("/dst/database/table/page", {
+  const response = await $common.post("/db/table/page", {
     sortField: "updatedTime",
     sortDir: "desc",
     pageNum,

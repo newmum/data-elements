@@ -18,7 +18,7 @@ import tableRead
 import tableSort
 import tenantRuntime
 
-// @/common/nifiRuntimeOverview 为 GET、HEAD /nifi/api/pipelines/runtime-overview 提供完整总览。
+// @/common/nifiRuntimeOverview 为 GET、HEAD /nifi/run/overview 提供完整总览。
 // 读取 sortField 和 sortDir，返回 total、running、failed 和 flows。
 // 仅查询认证行业租户的已保存状态，不访问 NiFi 或来源库。
 

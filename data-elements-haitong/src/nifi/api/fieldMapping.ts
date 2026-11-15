@@ -76,25 +76,25 @@ export interface UnifiedMappingRule {
   when?: unknown; then?: unknown; else?: unknown;
 }
 export async function fieldMappingCapabilities() {
-  return (await apiClient.get<{ engineVersion: string; functions: { name: string; previewSupported: boolean; runtimeSupported: boolean; parameterSchema: FunctionParameter[]; additionalParametersAllowed: boolean }[] }>('/field-mapping/capabilities')).data;
+  return (await apiClient.get<{ engineVersion: string; functions: { name: string; previewSupported: boolean; runtimeSupported: boolean; parameterSchema: FunctionParameter[]; additionalParametersAllowed: boolean }[] }>('/map/caps')).data;
 }
 export interface FunctionParameter { index: number; name: string; type: string; required: boolean; defaultValue: unknown; choices: string[] }
 export type FunctionParameterSchema = FunctionParameter[] & { additionalParametersAllowed?: boolean };
 export interface MappingTableRef { datasourceId: string; tableId?: string; table?: string }
 export interface MappingVersionRow { tid: string; node_id?: string; plan_revision?: number; draft_revision?: number; plan_hash?: string; resource_key?: string; version_no?: number; created_time: string }
 export const mappingVersions = {
-  dictionaryTables: async (params:{datasourceId:string;search?:string;page?:number;size?:number}) => (await apiClient.get<{rows:{tid:string;table_name:string;table_name_cn?:string}[];total:number;page:number;size:number}>('/field-mapping/dictionary-tables',{params})).data,
-  dictionaryColumns: async (datasourceId:string,tableId:string) => (await apiClient.get<FieldMeta[]>('/field-mapping/dictionary-columns',{params:{datasourceId,tableId}})).data,
-  plans: async (params: Record<string,unknown>) => (await apiClient.get<{rows:MappingVersionRow[];total:number}>('/field-mapping/plans',{params})).data,
-  plan: async (id: string,pipelineId: string) => (await apiClient.get<UnifiedMappingDraft>(`/field-mapping/plans/${encodeURIComponent(id)}`,{params:{pipelineId}})).data,
-  templates: async (params: Record<string,unknown>) => (await apiClient.get<{rows:MappingVersionRow[];total:number}>('/field-mapping/templates',{params})).data,
-  saveTemplate: async (name:string,spec:UnifiedMappingDraft) => (await apiClient.post('/field-mapping/templates',{name,spec})).data,
-  importTemplate: async (id:string,body:Record<string,unknown>) => (await apiClient.post<UnifiedMappingDraft>(`/field-mapping/templates/${encodeURIComponent(id)}/import`,body)).data,
-  snapshot: async (name:string,definition:Record<string,unknown>) => (await apiClient.post<{id:string;hash:string;version:number}>('/field-mapping/dictionary-snapshots',{name,definition})).data,
-  schema: async (sourceRef?:MappingTableRef,targetRef?:MappingTableRef,verifyPhysical=false) => (await apiClient.post<Record<string,unknown>>('/field-mapping/schema-contract',{sourceRef,targetRef,verifyPhysical})).data,
-  sample: async (spec:UnifiedMappingDraft,sourceRef:MappingTableRef,limit:number) => (await apiClient.post<PreviewResponse&{sampleRows:Record<string,unknown>[]}>('/field-mapping/sample',{spec,sourceRef,limit},{transformResponse:[preciseJsonResponse]})).data,
-  upgrade: async (pipelineId:string,nodeId:string,expectedPlanHash:string) => {const pipeline=(await apiClient.get<{updatedAt:number}>(`/pipelines/${encodeURIComponent(pipelineId)}`)).data;return (await apiClient.post('/field-mapping/upgrade-runtime',{pipelineId,nodeId,expectedUpdatedAt:pipeline.updatedAt,expectedPlanHash,start:true})).data;},
-  startPublished: async (pipelineId:string) => {const pipeline=(await apiClient.get<{updatedAt:number}>(`/pipelines/${encodeURIComponent(pipelineId)}`)).data;return (await apiClient.post('/field-mapping/start-published',{pipelineId,expectedUpdatedAt:pipeline.updatedAt})).data;},
+  dictionaryTables: async (params:{datasourceId:string;search?:string;page?:number;size?:number}) => (await apiClient.get<{rows:{tid:string;table_name:string;table_name_cn?:string}[];total:number;page:number;size:number}>('/dict/tables',{params})).data,
+  dictionaryColumns: async (datasourceId:string,tableId:string) => (await apiClient.get<FieldMeta[]>('/dict/fields',{params:{datasourceId,tableId}})).data,
+  plans: async (params: Record<string,unknown>) => (await apiClient.get<{rows:MappingVersionRow[];total:number}>('/plan/list',{params})).data,
+  plan: async (id: string,pipelineId: string) => (await apiClient.get<UnifiedMappingDraft>(`/plan/detail?id=${encodeURIComponent(id)}`,{params:{pipelineId}})).data,
+  templates: async (params: Record<string,unknown>) => (await apiClient.get<{rows:MappingVersionRow[];total:number}>('/template/list',{params})).data,
+  saveTemplate: async (name:string,spec:UnifiedMappingDraft) => (await apiClient.post('/template/save',{name,spec})).data,
+  importTemplate: async (id:string,body:Record<string,unknown>) => (await apiClient.post<UnifiedMappingDraft>(`/template/import?id=${encodeURIComponent(id)}`,body)).data,
+  snapshot: async (name:string,definition:Record<string,unknown>) => (await apiClient.post<{id:string;hash:string;version:number}>('/dict/snapshot',{name,definition})).data,
+  schema: async (sourceRef?:MappingTableRef,targetRef?:MappingTableRef,verifyPhysical=false) => (await apiClient.post<Record<string,unknown>>('/map/schema',{sourceRef,targetRef,verifyPhysical})).data,
+  sample: async (spec:UnifiedMappingDraft,sourceRef:MappingTableRef,limit:number) => (await apiClient.post<PreviewResponse&{sampleRows:Record<string,unknown>[]}>('/map/sample',{spec,sourceRef,limit},{transformResponse:[preciseJsonResponse]})).data,
+  upgrade: async (pipelineId:string,nodeId:string,expectedPlanHash:string) => {const pipeline=(await apiClient.get<{updatedAt:number}>(`/flow/detail?id=${encodeURIComponent(pipelineId)}`)).data;return (await apiClient.post('/maprun/upgrade',{pipelineId,nodeId,expectedUpdatedAt:pipeline.updatedAt,expectedPlanHash,start:true})).data;},
+  startPublished: async (pipelineId:string) => {const pipeline=(await apiClient.get<{updatedAt:number}>(`/flow/detail?id=${encodeURIComponent(pipelineId)}`)).data;return (await apiClient.post('/maprun/start',{pipelineId,expectedUpdatedAt:pipeline.updatedAt})).data;},
 };
 
 export interface TransformSpec {
@@ -149,7 +149,7 @@ export const emptyFieldMappingSpec = (): FieldMappingSpec => ({
 export async function migrateFieldMapping(spec: unknown) {
   if (fieldMappingApiUnavailable) return normalizeLocalSpec(spec);
   try {
-    const { data } = await apiClient.post<FieldMappingSpec>('/field-mapping/migrate-legacy', { spec });
+    const { data } = await apiClient.post<FieldMappingSpec>('/map/convert', { spec });
     return data;
   } catch (error) {
     if (isNotFound(error)) return normalizeLocalSpec(spec);
@@ -159,7 +159,7 @@ export async function migrateFieldMapping(spec: unknown) {
 
 export async function validateFieldMapping(spec: FieldMappingSpec | UnifiedMappingDraft, sourceSchema: FieldMeta[] = [], targetSchema: FieldMeta[] = []) {
   try {
-    const { data } = await apiClient.post<ValidationResponse>('/field-mapping/validate', { spec, sourceSchema, targetSchema });
+    const { data } = await apiClient.post<ValidationResponse>('/map/check', { spec, sourceSchema, targetSchema });
     return data;
   } catch (error) {
     if (isNotFound(error)) throw new Error('正式规则校验服务不可用；草稿仍可编辑，请恢复后端服务后重试');
@@ -169,7 +169,7 @@ export async function validateFieldMapping(spec: FieldMappingSpec | UnifiedMappi
 
 export async function previewFieldMapping(spec: FieldMappingSpec | UnifiedMappingDraft, sampleRows: Record<string, unknown>[]) {
   try {
-    const { data } = await apiClient.post<PreviewResponse>('/field-mapping/preview', { spec, sampleRows },{transformResponse:[preciseJsonResponse]});
+    const { data } = await apiClient.post<PreviewResponse>('/map/preview', { spec, sampleRows },{transformResponse:[preciseJsonResponse]});
     return data;
   } catch (error) {
     if (isNotFound(error)) throw new Error('正式预览服务不可用；本次没有生成转换结果');
@@ -180,7 +180,7 @@ export async function previewFieldMapping(spec: FieldMappingSpec | UnifiedMappin
 export async function recommendFieldMapping(sourceSchema: FieldMeta[], targetSchema: FieldMeta[]) {
   if (fieldMappingApiUnavailable) return recommendLocal(sourceSchema, targetSchema);
   try {
-    const { data } = await apiClient.post<RecommendResponse>('/field-mapping/recommend', { sourceSchema, targetSchema });
+    const { data } = await apiClient.post<RecommendResponse>('/map/recommend', { sourceSchema, targetSchema });
     return data;
   } catch (error) {
     if (isNotFound(error)) return recommendLocal(sourceSchema, targetSchema);
@@ -190,7 +190,7 @@ export async function recommendFieldMapping(sourceSchema: FieldMeta[], targetSch
 
 export async function compileFieldMapping(spec: FieldMappingSpec | UnifiedMappingDraft, sourceSchema: FieldMeta[] = [], targetSchema: FieldMeta[] = []) {
   try {
-    const { data } = await apiClient.post<CompileResponse>('/field-mapping/compile', { spec, sourceSchema, targetSchema });
+    const { data } = await apiClient.post<CompileResponse>('/map/compile', { spec, sourceSchema, targetSchema });
     return data;
   } catch (error) {
     if (isNotFound(error)) throw new Error('正式计划编译服务不可用；请恢复后端后再编译');

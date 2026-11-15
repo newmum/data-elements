@@ -133,7 +133,7 @@
       <el-pagination v-if="pushSyncRows.length > 20" v-model:current-page="pushSyncPage" :total="pushSyncRows.length" :page-size="20" layout="total, prev, pager, next" small class="push-sync-pagination" />
       <p v-if="pushSyncStage !== 'success' && pushSyncRows.length" class="push-sync-scope">本次同步清单中的全部有效配置，已同步的表也会更新。</p>
       <div v-if="pushSyncPreview?.skipped?.length" class="push-sync-skipped"><strong>未纳入同步：{{ pushSyncPreview.skipped.length }} 个数据源</strong><el-table :data="pushSyncSkippedPage" size="small" max-height="135"><el-table-column prop="datasourceName" label="数据源" min-width="190" /><el-table-column prop="reason" label="原因" min-width="280" /></el-table><el-pagination v-if="pushSyncPreview.skipped.length > 10" v-model:current-page="pushSkippedPage" :total="pushSyncPreview.skipped.length" :page-size="10" layout="prev, pager, next" small /></div>
-      <div class="push-sync-addresses"><div><span>平台发起</span><code>POST {{ pushSyncPreview?.requestPath || '/dst/database/push/sync' }}</code></div><div><span>节点接收</span><code>POST {{ pushSyncPreview?.targetUrl || `${pushSyncNode?.baseUrl || ''}/api/v1/data-push` }}</code></div></div>
+      <div class="push-sync-addresses"><div><span>平台发起</span><code>POST {{ pushSyncPreview?.requestPath || '/db/source/sync' }}</code></div><div><span>节点接收</span><code>POST {{ pushSyncPreview?.targetUrl || `${pushSyncNode?.baseUrl || ''}/api/v1/data-push` }}</code></div></div>
       <template #footer><el-button :disabled="Boolean(syncingNodeId)" @click="closePushSync">{{ pushSyncStage === 'success' ? '关闭' : '取消' }}</el-button><el-button v-if="pushSyncStage !== 'success'" :disabled="Boolean(syncingNodeId)" :loading="pushPreviewLoading" @click="previewPushSync">刷新清单</el-button><el-button v-if="pushSyncStage !== 'success'" type="primary" :disabled="!pushCanSync" :loading="Boolean(syncingNodeId)" @click="commitPushSync">确认同步</el-button></template>
     </el-dialog>
 
@@ -253,7 +253,7 @@ const normalizeNetworkOptions = (payload) => {
 };
 const loadNetworkOptions = async () => {
   try {
-    const response = await $common.post('/ods/nifi-node/access-options', {});
+    const response = await $common.post('/ods/node/options', {});
     const payload = response?.data || response || {};
     networkOptions.value = normalizeNetworkOptions(payload.networks || payload);
     expandedNetworkCodes.value = networkOptions.value.map((item) => item.value);
@@ -265,7 +265,7 @@ const loadNodes = async (mode) => {
   const loading = mode === 'service' ? serviceLoading : (mode === 'push' ? pushLoading : syncLoading);
   loading.value = true;
   try {
-    const response = await $common.post(mode === 'service' ? '/ods/service-node/page' : '/ods/nifi-node/page', { keyword: keyword.value, nodeType: mode, ...nodeSort[mode] });
+    const response = await $common.post(mode === 'service' ? '/ods/service/page' : '/ods/node/page', { keyword: keyword.value, nodeType: mode, ...nodeSort[mode] });
     const payload = response?.data || response || {};
     const rows = Array.isArray(payload) ? payload : payload.list || [];
     if (mode === 'sync') syncNodes.value = rows.map((item) => toNode(item, mode));
@@ -277,13 +277,13 @@ const loadNodes = async (mode) => {
 const loadActive = () => loadNodes(activeTab.value);
 const handleTabChange = (mode) => loadNodes(mode);
 const openNetworkIconEditor = (network) => { Object.assign(networkIconForm, { networkCode: network.value, networkName: network.label, icon: network.icon || fallbackNetworkIcon(network.value), tagType: network.tagType || 'primary' }); networkIconDialogVisible.value = true; };
-const saveNetworkIcon = async () => { savingNetworkIcon.value = true; try { await $common.post('/ods/nifi-node/access-options', { action: 'saveNetworkIcon', networkCode: networkIconForm.networkCode, icon: networkIconForm.icon }); networkIconDialogVisible.value = false; await loadNetworkOptions(); ElMessage.success(text.saved); } catch (error) { ElMessage.error(error?.message || text.saveFailed); } finally { savingNetworkIcon.value = false; } };
+const saveNetworkIcon = async () => { savingNetworkIcon.value = true; try { await $common.post('/ods/node/options', { action: 'saveNetworkIcon', networkCode: networkIconForm.networkCode, icon: networkIconForm.icon }); networkIconDialogVisible.value = false; await loadNetworkOptions(); ElMessage.success(text.saved); } catch (error) { ElMessage.error(error?.message || text.saveFailed); } finally { savingNetworkIcon.value = false; } };
 const resetForm = () => { hasStoredAuthPassword.value = false; passwordVisible.value = false; Object.assign(form, { id: '', name: '', code: '', networkCode: networkOptions.value[0]?.value || '', networkName: networkOptions.value[0]?.label || '', baseUrl: '', rootProcessGroupId: '', authUsername: '', authPassword: '', insecureTls: true, jdbcDriverDirectory: '', businessDomain: '', serviceType: '', managementUrl: '', credentialRef: '', remark: '', enabled: true, isDefault: false, localNode: false }); };
 const openCreate = async (mode, networkCode = '') => { dialogMode.value = mode; editingId.value = ''; editingLocalNode.value = false; resetForm(); if (mode !== 'service' && networkCode) form.networkCode = networkCode; if (mode !== 'service') form.isDefault = !(mode === 'push' ? pushNodes.value : syncNodes.value).some((node) => node.networkCode === form.networkCode && node.isDefault); dialogVisible.value = true; await nextTick(); formRef.value?.clearValidate?.(); };
 const openEdit = async (node, mode) => { dialogMode.value = mode; editingId.value = node.id; editingLocalNode.value = Boolean(node.localNode); hasStoredAuthPassword.value = Boolean(node.hasAuthPassword); passwordVisible.value = false; Object.assign(form, { ...node, authPassword: '' }); dialogVisible.value = true; await nextTick(); formRef.value?.clearValidate?.(); };
 const copyNode = async (node, mode) => { dialogMode.value = mode; editingId.value = ''; editingLocalNode.value = false; hasStoredAuthPassword.value = false; passwordVisible.value = false; Object.assign(form, { ...node, id: '', name: `${node.name}-${text.copy}`, code: '', authPassword: '', isDefault: false, localNode: false }); dialogVisible.value = true; await nextTick(); formRef.value?.clearValidate?.(); ElMessage.info(text.copied); };
-const toggleAuthPasswordVisibility = async () => { if (passwordVisible.value) { passwordVisible.value = false; return; } if (!form.authPassword && editingId.value && hasStoredAuthPassword.value) { revealingPassword.value = true; try { const response = await $common.post('/ods/nifi-node/page', { revealPasswordNodeId: editingId.value }); const payload = response?.data || response || {}; const rows = Array.isArray(payload) ? payload : payload.list || []; const revealed = rows.find((item) => String(item.tid || item.id) === String(editingId.value)); const password = String(revealed?.authPassword || revealed?.auth_password || ''); if (!password) throw new Error(text.passwordRevealFailed); form.authPassword = password; } catch (error) { ElMessage.error(error?.message || text.passwordRevealFailed); return; } finally { revealingPassword.value = false; } } passwordVisible.value = true; };
-const requestSave = (value, mode) => $common.post(mode === 'service' ? '/ods/service-node/saveOrUpdate' : '/ods/nifi-node/saveOrUpdate', {
+const toggleAuthPasswordVisibility = async () => { if (passwordVisible.value) { passwordVisible.value = false; return; } if (!form.authPassword && editingId.value && hasStoredAuthPassword.value) { revealingPassword.value = true; try { const response = await $common.post('/ods/node/page', { revealPasswordNodeId: editingId.value }); const payload = response?.data || response || {}; const rows = Array.isArray(payload) ? payload : payload.list || []; const revealed = rows.find((item) => String(item.tid || item.id) === String(editingId.value)); const password = String(revealed?.authPassword || revealed?.auth_password || ''); if (!password) throw new Error(text.passwordRevealFailed); form.authPassword = password; } catch (error) { ElMessage.error(error?.message || text.passwordRevealFailed); return; } finally { revealingPassword.value = false; } } passwordVisible.value = true; };
+const requestSave = (value, mode) => $common.post(mode === 'service' ? '/ods/service/save' : '/ods/node/save', {
   nodeType: mode,
   tid: value.id || '', nodeName: value.name, nodeCode: value.code, networkCode: value.networkCode || '', baseUrl: String(value.baseUrl || '').replace(/\/+$/, ''), rootProcessGroupId: value.rootProcessGroupId || '', authUsername: value.authUsername || '', authPassword: value.authPassword || '', insecureTls: value.insecureTls ? 1 : 0, jdbcDriverDirectory: value.jdbcDriverDirectory || '', businessDomain: value.businessDomain || '', serviceType: value.serviceType || '', managementUrl: String(value.managementUrl || '').replace(/\/+$/, ''), credentialRef: value.credentialRef || '', remark: value.remark || '', enabled: value.enabled ? 1 : 0, isDefault: value.isDefault ? 1 : 0, localNode: value.localNode ? 1 : 0
 });
@@ -305,7 +305,7 @@ const healthDescription = node => node.healthStatus === 'unknown' || !node.healt
 const testNode = async (node, nodeType) => {
   testingId.value = node.id;
   try {
-    const response = await $common.post(nodeType === 'push' ? '/ods/nifi-node/page' : '/sym/node-config/service/health', { action: 'health', tid: node.id, nodeId: node.id, nodeType, baseUrl: node.baseUrl, managementUrl: node.managementUrl || '', localNode: Boolean(node.localNode) });
+    const response = await $common.post(nodeType === 'push' ? '/ods/node/page' : '/sym/node-config/service/health', { action: 'health', tid: node.id, nodeId: node.id, nodeType, baseUrl: node.baseUrl, managementUrl: node.managementUrl || '', localNode: Boolean(node.localNode) });
     const payload = response?.data || response || {};
     Object.assign(node, { healthStatus: payload.success ? 'reachable' : 'unreachable', healthMessage: payload.message || (payload.success ? text.healthOk : text.healthFailed), healthTime: payload.healthTime || new Date().toLocaleString(), healthLatencyMs: payload.latencyMs });
     if (payload.success) ElMessage.success(`${text.healthOk} (${payload.latencyMs ?? 0}ms)`);
@@ -315,7 +315,7 @@ const testNode = async (node, nodeType) => {
     ElMessage.error(`${text.healthFailed}: ${error?.message || ''}`);
   } finally { testingId.value = ''; }
 };
-const removeNode = async (node, mode) => { if (node.isDefault) { ElMessage.warning(text.defaultDelete); return; } if (mode === 'service' && node.localNode) { ElMessage.warning(text.localDelete); return; } try { await ElMessageBox.confirm(`${text.deleteContent}${node.name}?`, text.deleteTitle, { type: 'warning' }); await $common.post(mode === 'service' ? '/ods/service-node/delete' : '/ods/nifi-node/delete', { tid: node.id, nodeType: mode }); ElMessage.success(text.deleted); await loadNodes(mode); } catch (error) { if (error !== 'cancel' && error !== 'close') ElMessage.error(error?.message || text.deleteFailed); } };
+const removeNode = async (node, mode) => { if (node.isDefault) { ElMessage.warning(text.defaultDelete); return; } if (mode === 'service' && node.localNode) { ElMessage.warning(text.localDelete); return; } try { await ElMessageBox.confirm(`${text.deleteContent}${node.name}?`, text.deleteTitle, { type: 'warning' }); await $common.post(mode === 'service' ? '/ods/service/delete' : '/ods/node/delete', { tid: node.id, nodeType: mode }); ElMessage.success(text.deleted); await loadNodes(mode); } catch (error) { if (error !== 'cancel' && error !== 'close') ElMessage.error(error?.message || text.deleteFailed); } };
 const handleNodeCommand = (action, node, mode) => { if (action === 'edit') openEdit(node, mode); else if (action === 'remove') removeNode(node, mode); };
 
 
@@ -347,7 +347,7 @@ const previewPushSync = async () => {
   const version=++pushPreviewVersion;
   pushPreviewLoading.value=true;pushSyncError.value='';pushSyncPreview.value=null;pushSyncStage.value='preview';pushSyncPage.value=1;pushSkippedPage.value=1;
   try {
-    const response=await $common.post('/dst/database/push/sync',{all:true,nodeId:node.id,preview:true});
+    const response=await $common.post('/db/source/sync',{all:true,nodeId:node.id,preview:true});
     if(version!==pushPreviewVersion || !pushSyncVisible.value) return;
     const payload=response?.data || response || {};
     if(!payload.valid || !payload.dryRun || payload.nodeId!==node.id || !/^[a-f0-9]{64}$/.test(payload.planHash || '') || !Array.isArray(payload.rows)) throw new Error('同步清单未能确认，请刷新后重试');
@@ -365,7 +365,7 @@ const commitPushSync = async () => {
   const node=pushSyncNode.value,plan=pushSyncPreview.value;
   syncingNodeId.value=node.id;pushSyncError.value='';
   try{
-    const response=await $common.post('/dst/database/push/sync',{all:true,nodeId:node.id,planHash:plan.planHash});
+    const response=await $common.post('/db/source/sync',{all:true,nodeId:node.id,planHash:plan.planHash});
     const payload=response?.data || response || {};
     const planned=new Set(plan.rows.map(row=>`${row.datasourceId}:${row.tableId}`));
     const received=(payload.rows || []).map(row=>`${row.datasourceId}:${row.tableId}`);

@@ -45,7 +45,7 @@ import org.ssssssss.script.MagicScriptContext;
 import org.ssssssss.script.runtime.function.MagicScriptLambdaFunction;
 
 class NifiPipelineReadMagicTest {
-    private static final String API = "api/10.NiFi流程接口/01.接口/";
+    private static final String API = "api/10.NiFi流程接口/";
     private static final String PIPELINE_API = API;
     private static final String COMMON = "function/01.通用函数/";
     private static final ObjectMapper JSON = new ObjectMapper();
@@ -282,8 +282,8 @@ class NifiPipelineReadMagicTest {
             assertThat(fixture.route(fixture.pageHead)).isEqualTo(fixture.route(fixture.pageGet));
             assertThat(fixture.route(fixture.overviewHead)).isEqualTo(fixture.route(fixture.overviewGet));
         }
-        var ping = script(API + "05.查询画布接口健康.ms", "nifi_canvas_ping_get_v1");
-        var pingHead = script(API + "06.核验画布接口健康.ms", "nifi_canvas_ping_head_v1");
+        var ping = script(API + "01.组件清单/05.查询画布接口健康.ms", "nifi_canvas_ping_get_v1");
+        var pingHead = script(API + "01.组件清单/06.核验画布接口健康.ms", "nifi_canvas_ping_head_v1");
         assertThat(fixture.route(ping)).isEqualTo(ResponseEntity.ok(Map.of("status", "ok")));
         assertThat(fixture.route(pingHead)).isEqualTo(fixture.route(ping));
     }
@@ -453,19 +453,19 @@ class NifiPipelineReadMagicTest {
         final MagicScript page = script(COMMON + "22.NiFi流程分页.ms", "947c14bf3a694e99ae078d79d4307cbd",
                 "tableRead", "tableSort", "tenantRuntime", "'@/common/nifiPipelineReadHttp' as withHttpResponse");
         final MagicScript response = script(COMMON + "29.NiFi流程只读接口响应.ms", "nifi_pipeline_read_http_v1", "request");
-        final MagicScript pageGet = script(PIPELINE_API + "17.查询流程分页.ms", "nifi_pipeline_page_get_v1",
+        final MagicScript pageGet = script(PIPELINE_API + "02.流程设计/04.查询流程分页.ms", "nifi_pipeline_page_get_v1",
                 "'@/common/nifiPipelinePage' as readPipelinePage");
-        final MagicScript pageHead = script(PIPELINE_API + "18.核验流程分页.ms", "nifi_pipeline_page_head_v1",
+        final MagicScript pageHead = script(PIPELINE_API + "02.流程设计/05.核验流程分页.ms", "nifi_pipeline_page_head_v1",
                 "'@/common/nifiPipelinePage' as readPipelinePage");
-        final MagicScript overviewGet = script(PIPELINE_API + "19.查询流程运行总览.ms", "nifi_runtime_overview_get_v1",
+        final MagicScript overviewGet = script(PIPELINE_API + "05.运行状态/01.查询流程运行总览.ms", "nifi_runtime_overview_get_v1",
                 "'@/common/nifiRuntimeOverview' as readOverview");
-        final MagicScript overviewHead = script(PIPELINE_API + "20.核验流程运行总览.ms", "nifi_runtime_overview_head_v1",
+        final MagicScript overviewHead = script(PIPELINE_API + "05.运行状态/02.核验流程运行总览.ms", "nifi_runtime_overview_head_v1",
                 "'@/common/nifiRuntimeOverview' as readOverview");
         final MagicScript detailResponse = script(COMMON + "32.NiFi流程详情接口响应.ms", "nifi_pipe_detail_http_v1",
                 "com.fasterxml.jackson.databind.ObjectMapper as objectMapper", "tableRead", "tenantRuntime");
-        final MagicScript detailGet = script(PIPELINE_API + "26.查询流程详情.ms", "nifi_pipe_detail_get_v1",
+        final MagicScript detailGet = script(PIPELINE_API + "02.流程设计/06.查询流程详情.ms", "nifi_pipe_detail_get_v1",
                 "'@/common/nifiPipelineDetailHttp' as pipelineDetail");
-        final MagicScript detailHead = script(PIPELINE_API + "27.核验流程详情.ms", "nifi_pipe_detail_head_v1",
+        final MagicScript detailHead = script(PIPELINE_API + "02.流程设计/07.核验流程详情.ms", "nifi_pipe_detail_head_v1",
                 "'@/common/nifiPipelineDetailHttp' as pipelineDetail");
         final List<String> detailSql = new ArrayList<>();
         final MagicScript decodeCanvas = script(COMMON + "43.NiFi解码保存画布.ms", "e06d4eb123494419e67f70f2fc03bceb",
@@ -547,40 +547,40 @@ class NifiPipelineReadMagicTest {
                     new MagicScriptContext(Map.of("flowId", args[0], "objectMapper", JSON,
                             "tenantRuntime", new TenantMagicModule(null), "tableRead", tableRead)));
             return (ResponseEntity<?>) route.execute(new MagicScriptContext(Map.of(
-                    "path", Map.of("id", id, "tenantId", "tenant-b"), "pipelineDetail", pipelineDetail)));
+                    "param", Map.of("id", id, "tenantId", "tenant-b"), "pipelineDetail", pipelineDetail)));
         }
 
         ResponseEntity<?> runRead(String operation, boolean head, String id, Map<String, Object> extras) throws Exception {
             String functionFile;
             String functionId;
             String importName;
-            String label;
             String routeId;
-            int number;
+            String getRoute;
+            String headRoute;
             switch (operation) {
                 case "ui" -> {
                     functionFile = "49.NiFi流程原生地址响应.ms";
                     functionId = "nifi_pipeline_ui_link_http_v1";
                     importName = "nifiPipelineUiLink";
-                    label = "流程原生地址";
                     routeId = "nifi_pipeline_ui_link";
-                    number = 41;
+                    getRoute = "02.流程设计/10.查询流程原生地址.ms";
+                    headRoute = "02.流程设计/11.核验流程原生地址.ms";
                 }
                 case "status" -> {
                     functionFile = "50.NiFi流程运行状态响应.ms";
                     functionId = "nifi_pipeline_status_http_v1";
                     importName = "nifiPipelineStatus";
-                    label = "流程运行状态";
                     routeId = "nifi_pipeline_status";
-                    number = 43;
+                    getRoute = "05.运行状态/05.查询流程运行状态.ms";
+                    headRoute = "05.运行状态/06.核验流程运行状态.ms";
                 }
                 case "page" -> {
                     functionFile = "51.NiFi处理器状态分页响应.ms";
                     functionId = "nifi_processor_page_http_v1";
                     importName = "nifiProcessorStatusPage";
-                    label = "处理器状态分页";
                     routeId = "nifi_processor_page";
-                    number = 45;
+                    getRoute = "05.运行状态/07.查询处理器状态分页.ms";
+                    headRoute = "05.运行状态/08.核验处理器状态分页.ms";
                 }
                 default -> throw new IllegalArgumentException(operation);
             }
@@ -589,7 +589,7 @@ class NifiPipelineReadMagicTest {
                     "com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient as nifi",
                     "com.linewell.dataelement.integration.nifi.canvas.errors.ErrorService as errorStore",
                     "com.linewell.dataelement.integration.nifi.canvas.runtime.TaskRuntimeStatusService as runtimeStatus");
-            var endpoint = script(API + (head ? number + 1 : number) + "." + (head ? "核验" : "查询") + label + ".ms",
+            var endpoint = script(API + (head ? headRoute : getRoute),
                     routeId + (head ? "_head" : "_get") + "_v1", "'@/common/" + importName + "' as read");
             MagicScriptLambdaFunction decode = (context, args) -> decodeCanvas.execute(
                     new MagicScriptContext(Map.of("row", args[0], "mapper", JSON)));
@@ -605,7 +605,7 @@ class NifiPipelineReadMagicTest {
             detailSql.clear();
             reads = 0;
             return TenantContext.call("tenant-a", () -> (ResponseEntity<?>) endpoint.execute(new MagicScriptContext(
-                    Map.of("path", Map.of("id", id, "tenantId", "tenant-b"), "read", action))));
+                    Map.of("param", Map.of("id", id, "tenantId", "tenant-b"), "read", action))));
         }
 
         Object executeRead(MagicScript businessScript) {

@@ -1,0 +1,16 @@
+{
+  "properties": {},
+  "id": "datapd_database_group_01",
+  "name": "01.数据源",
+  "type": "api",
+  "parentId": "7a6eeb1e0f1357e89ba8e7443f5c2659",
+  "path": "/source",
+  "createTime": 1784420517826,
+  "updateTime": 1784437771888,
+  "createBy": null,
+  "updateBy": null,
+  "paths": [],
+  "options": []
+}
+================================
+

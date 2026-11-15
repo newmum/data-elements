@@ -99,10 +99,10 @@ interface PageResult {
 
 // API 路径
 const API = {
-  PAGE: "/das/repository/page",
-  ADD: "/das/repository/add",
-  DELETE: "/das/repository/delete",
-  PUBLISH: "/das/repository/publish",
+  PAGE: "/das/app/page",
+  ADD: "/das/app/create",
+  DELETE: "/das/app/delete",
+  PUBLISH: "/das/app/publish",
 };
 
 // 状态定义

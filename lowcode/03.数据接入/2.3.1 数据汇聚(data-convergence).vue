@@ -370,15 +370,15 @@ const props = defineProps({
 const isDistribution = props.taskCategory === "distribution";
 const taskPage = isDistribution ? {
   verb: "分发",
-  pageEndpoint: "/ods/hiveTargetPage",
-  treeEndpoint: "/ods/hiveTargetTree",
+  pageEndpoint: "/ods/dist/tables",
+  treeEndpoint: "/ods/dist/tree",
   routeBase: "/jr/hive-metastore",
   sortField: "createdTime",
   canvasName: "任务画布",
 } : {
   verb: "接入",
-  pageEndpoint: "/ods/dataAggPage",
-  treeEndpoint: "/ods/dataAggTreeStatistics",
+  pageEndpoint: "/ods/ingest/page",
+  treeEndpoint: "/ods/ingest/stats",
   routeBase: "/jr/data-convergence",
   sortField: "updatedTime",
   canvasName: "接入画布",
@@ -1083,7 +1083,7 @@ const ensureAccessTask = async (row, forceRebuild = false) => {
     $message.warning(`无法读取来源表标识，暂不能创建${taskName}`);
     return null;
   }
-  const result = await $common.post("/ods/dataAggTaskEnsure", payload, { _hiddenErrorMsg: true });
+  const result = await $common.post("/ods/job/fill", payload, { _hiddenErrorMsg: true });
   const response = result?.data || result;
   const tasks = Array.isArray(response?.tasks) ? response.tasks : [];
   const task = tasks[0] || response?.task || response;
@@ -1106,7 +1106,7 @@ const ensureAccessTask = async (row, forceRebuild = false) => {
   let bindingWarning = "";
   if (datasourceId && pipelineId) {
     try {
-      await $common.post("/ods/api-pull/bind-task", {
+      await $common.post("/ods/pull/bind", {
         datasourceId,
         sourceTableId: payload.tableId,
         pipelineId,
@@ -1179,7 +1179,7 @@ const handleTaskRecovery = async (task, row, command, target = null) => {
       actionText,
       { type: "warning", confirmButtonText: "确认", cancelButtonText: "取消" },
     );
-    const response = await $common.post("/ods/dataAggReset", {
+    const response = await $common.post("/ods/job/reset", {
       sourceTableId,
       ...(deleteTargetTable ? {
         targetTableId: target?.targetTableId || task?.targetTableId || task?.target_table_id || row?.targetTableId || "",
@@ -1293,7 +1293,7 @@ const deleteAllTargets = async (section = null) => {
       }
       try {
         const target = entry.target;
-        const response = await $common.post("/ods/dataAggReset", {
+        const response = await $common.post("/ods/job/reset", {
           sourceTableId: entry.sourceTableId,
           ...(target ? { targetTableId: target.targetTableId, targetDbId: target.targetDbId || "",
             targetTableName: target.targetTableName || "", deleteTargetTable: true }
@@ -1362,7 +1362,7 @@ const handleRejectForModify = async (row) => {
       "驳回修改",
       { type: "warning" },
     );
-    await $common.post("/ods/dataAggReject", {
+    await $common.post("/ods/ingest/reject", {
       tableId,
       datasourceId: row.datasourceId || row.dbId || "",
     });

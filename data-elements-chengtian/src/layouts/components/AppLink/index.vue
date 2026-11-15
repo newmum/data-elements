@@ -46,7 +46,7 @@ const linkProps = (to: any) => {
 
 const openUrl = (to: any) => {
   if (to.meta.ticket) {
-    $common.get("/portal/sso/getTicket").then((ticket) => {
+    $common.get("/portal/sso/ticket").then((ticket) => {
       window.open(
         to.path.includes("?") ? `${to.path}&ticket=${ticket}` : `${to.path}?ticket=${ticket}`,
         to.meta.target ?? "_blank"

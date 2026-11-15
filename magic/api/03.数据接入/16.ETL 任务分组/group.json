@@ -1,7 +1,0 @@
-{
-  "id": "c14ff9c2f4f95e1684ce357c3aac5cc1",
-  "name": "16.ETL 任务分组",
-  "parentId": "1f4028f20aaa4f379b5e37a343b99fa9",
-  "path": "/getEtlGroup",
-  "type": "api"
-}

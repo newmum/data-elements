@@ -23,7 +23,7 @@ class AuditSanitizerTest {
     }
 
     @Test void requestParametersOnlyKeepApprovedScalarsAndNamesResolvedByBusiness() throws Exception {
-        var request = new org.springframework.mock.web.MockHttpServletRequest("POST", "/ods/dataAggReset");
+        var request = new org.springframework.mock.web.MockHttpServletRequest("POST", "/ods/job/reset");
         AuditRequestParameters.capture(request, Map.of("taskId", "validation-id", "dryRun", true,
                 "taskName", "伪造任务", "token", "validation-secret", "password", "validation-password",
                 "headers", Map.of("authorization", "validation-authorization")));

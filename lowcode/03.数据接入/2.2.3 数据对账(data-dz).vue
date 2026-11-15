@@ -421,18 +421,18 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 
 const API = {
-  summary: "/ods/reconciliation/summary",
-  accessTasks: "/ods/reconciliation/access-tasks",
-  policyPage: "/ods/reconciliation/policy/page",
-  policyDetail: "/ods/reconciliation/policy/detail",
-  policySave: "/ods/reconciliation/policy/save",
-  policyPrecheck: "/ods/reconciliation/policy/precheck",
-  policyEnable: "/ods/reconciliation/policy/enable",
-  runManual: "/ods/reconciliation/run/manual",
-  runPage: "/ods/reconciliation/run/page",
-  runDetail: "/ods/reconciliation/run/detail",
-  runCancel: "/ods/reconciliation/run/cancel",
-  diffPage: "/ods/reconciliation/run/diff/page",
+  summary: "/ods/recon/summary",
+  accessTasks: "/ods/recon/tasks",
+  policyPage: "/ods/policy/page",
+  policyDetail: "/ods/policy/detail",
+  policySave: "/ods/policy/save",
+  policyPrecheck: "/ods/policy/check",
+  policyEnable: "/ods/policy/switch",
+  runManual: "/ods/recon/start",
+  runPage: "/ods/recon/page",
+  runDetail: "/ods/recon/detail",
+  runCancel: "/ods/recon/cancel",
+  diffPage: "/ods/recon/diff",
 };
 
 const activeView = ref("policy");

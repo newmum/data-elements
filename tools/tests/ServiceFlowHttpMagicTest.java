@@ -36,8 +36,8 @@ public class ServiceFlowHttpMagicTest {
         }
         public List<Map<String,Object>> select() {
             reads++;
-            return List.of(Map.of("tid", "validation-login", "address", "/portal/login", "method", "POST"),
-                    Map.of("tid", "validation-business", "address", "/sym/tenant/current", "method", "GET"));
+            return List.of(Map.of("tid", "validation-login", "address", "/portal/sso/login", "method", "POST"),
+                    Map.of("tid", "validation-business", "address", "/portal/sso/session", "method", "GET"));
         }
     }
 
@@ -65,7 +65,7 @@ public class ServiceFlowHttpMagicTest {
             var options = (Map<?,?>) args[0];
             String address = String.valueOf(options.get("address"));
             calls.add(address);
-            if (address.equals("/portal/login")) {
+            if (address.equals("/portal/sso/login")) {
                 check(((Map<?,?>) options.get("payload")).get("password").equals("validation-input"), "bound login input");
                 return authenticated
                         ? Map.of("ok", true, "status", 200, "body", Map.of("code", 0, "data", Map.of("token", "validation-issued")))
@@ -89,11 +89,11 @@ public class ServiceFlowHttpMagicTest {
         var db = new Database();
         var success = (Map<?, ?>) run(script, db, true, true, calls);
         check(Boolean.TRUE.equals(success.get("success")) && "validation tenant".equals(success.get("response")), "flow returns selected response");
-        check(calls.equals(List.of("/portal/login", "/sym/tenant/current")) && db.reads == 1, "one batch read, two ordered calls");
+        check(calls.equals(List.of("/portal/sso/login", "/portal/sso/session")) && db.reads == 1, "one batch read, two ordered calls");
         check(!success.toString().contains("validation-issued"), "issued token absent from response and trace");
         calls.clear();
         var failed = (Map<?, ?>) run(script, new Database(), false, true, calls);
-        check(Boolean.FALSE.equals(failed.get("success")) && calls.equals(List.of("/portal/login")), "auth failure skips downstream");
+        check(Boolean.FALSE.equals(failed.get("success")) && calls.equals(List.of("/portal/sso/login")), "auth failure skips downstream");
         check(failed.get("trace").toString().contains("skipped"), "trace marks skipped nodes");
         calls.clear();
         var denied = run(script, new Database(), true, false, calls);

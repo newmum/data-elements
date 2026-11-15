@@ -435,7 +435,7 @@ const getSource = (): Promise<Row> => {
   const version = generation,
     dbId = props.dbId;
   sourceRequest = $common
-    .post("/dst/database/detail", { tid: dbId })
+    .post("/db/source/detail", { tid: dbId })
     .then((result: unknown) => {
       const source = payloadOf(result);
       if (disposed || version !== generation) return source;
@@ -460,7 +460,7 @@ async function fetchData({ pageNo = 1, pageSize = 20, sortField = "", sortDir = 
   try {
     // 与登记第二步共用快照接口；列表不读取来源表或逐行补查字段。
     const result = payloadOf(
-      await $common.get("/dst/database/metadata/tables", {
+      await $common.get("/db/schema/tables", {
         dbId,
         paged: true,
         allSnapshots: true,
@@ -611,7 +611,7 @@ async function deleteTableSnapshot(row: TableRow) {
   state.deletingId = row.tid;
   try {
     const result = payloadOf(
-      await $common.post("/dst/database/metadata/tables/deleteAsset", { dbId, tableId: row.tid })
+      await $common.post("/db/table/delete", { dbId, tableId: row.tid })
     );
     if (result.deleted !== true) throw new Error("快照未确认删除，请刷新后重试");
     if (!disposed && version === generation) {
@@ -659,7 +659,7 @@ async function mrsMetadata(action: string, extra: Row) {
   const source = await getSource();
   const database = text(source.database || source.dbName || source.dbMetaDbName || source.schema);
   if (!database) throw new Error("数据源缺少已登记的数据库名，请在登记流程中补充");
-  return $common.post("/dst/database/metadata/huaweiMrsHiveJdbcDebug", {
+  return $common.post("/db/source/hive", {
     action,
     contract: "registration",
     database,
@@ -669,11 +669,11 @@ async function mrsMetadata(action: string, extra: Row) {
 async function fetchFields(row: TableRow) {
   if (serverManagedMrs.value) return mrsMetadata("columns", { table: row.tableName });
   if (structured.value && !isPushSource.value)
-    return $common.post("/dst/database/metadata/structuredColumns", {
+    return $common.post("/db/field/read", {
       dbId: props.dbId,
       tableName: row.tableName,
     });
-  return $common.get("/dst/database/metadata/columns", {
+  return $common.get("/db/field/list", {
     tid: row.tid,
     dbId: props.dbId,
     tableName: row.tableName,
@@ -766,8 +766,8 @@ async function readSample(row: TableRow, version = previewVersion, current = gen
     ? await mrsMetadata("sample", { table: body.tableName, limit: 10 })
     : await $common.post(
         structured.value
-          ? "/dst/database/metadata/structuredSampleData"
-          : "/dst/database/metadata/table/sample-data",
+          ? "/db/row/read"
+          : "/db/row/sample",
         body
       );
   if (disposed || current !== generation || version !== previewVersion) return;
@@ -810,7 +810,7 @@ async function syncPreviewFields() {
   state.syncingFields = true;
   try {
     const fields = normalizeFields(
-      await $common.post("/dst/database/metadata/collectColumns", { tableId, force: true })
+      await $common.post("/db/field/collect", { tableId, force: true })
     );
     if (version === previewVersion) {
       state.fieldRows = fields;

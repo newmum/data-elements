@@ -567,7 +567,7 @@ const loadSourcePage = async (generation = loadGeneration) => {
   state.expanded = [];
   state.tableLoads = {};
   try {
-    const result = await $common.post("/dst/database/departmentDataSources", payload);
+    const result = await $common.post("/db/source/dept", payload);
     if (!isCurrent()) return;
     state.sourceChangesAvailable = result?.changesAvailable !== false;
     if (payload.filter === "changed" && !state.sourceChangesAvailable) {
@@ -623,7 +623,7 @@ const loadOrganizationTree = async (generation) => {
   try {
     const [orgTree, statistics] = await Promise.all([
       $common.post("/sym/org/getOrgTree", { parentId: $user.orgRootId }),
-      $common.post("/dst/database/treeStatistics", { mode: "facets", keyword: "", filter: "all", orgIds: [], appId: "" }),
+      $common.post("/db/source/stats", { mode: "facets", keyword: "", filter: "all", orgIds: [], appId: "" }),
     ]);
     if (generation !== loadGeneration) return;
     orgTreeSource.value = Array.isArray(orgTree) ? orgTree : [];
@@ -807,7 +807,7 @@ const loadTypeStatistics = async () => {
   state.typeStatisticsLoading = true;
   state.typeStatisticsError = "";
   try {
-    const result = await $common.post("/dst/database/treeStatistics", payload);
+    const result = await $common.post("/db/source/stats", payload);
     if (request !== typeStatisticsGeneration || generation !== loadGeneration) return;
     applyTypeStatistics(result, JSON.stringify(payload));
   } catch {
@@ -880,7 +880,7 @@ const loadTablePage = async (item, pageNum) => {
   const request = { ...cached, loading: true, error: "", requestedPage: pageNum, generation: loadGeneration, requestId: Symbol() };
   state.tableLoads[key] = request;
   try {
-    const result = await $common.post("/dst/database/departmentDataSources", {
+    const result = await $common.post("/db/source/dept", {
       mode: "tables", datasourceId: key, pageNum, pageSize: tablePageSize,...(cached.sort||{}),
     });
     if (state.tableLoads[key]?.requestId !== request.requestId || request.generation !== loadGeneration) return;
@@ -1322,7 +1322,7 @@ const openTableRegister = async (row, currentStep = 1) => {
     // 与 register-db 在“下一步”时的处理保持一致：先读主记录详情，再携带
     // poolCfg 内的 showConnect 等配置进入数据表页。这样 API、FTP 等抓取型
     // 数据源会读取已保存的表快照，而不会被错误地重新当作直连库探查。
-    const detail = await $common.post("/dst/database/detail", { tid, silent: true });
+    const detail = await $common.post("/db/source/detail", { tid, silent: true });
     if (detail?.found === false) {
       ElMessage.warning("该数据源已不存在或当前部门无权访问，请刷新后重试");
       return;
@@ -1353,7 +1353,7 @@ const handlePrimaryAction = (row) => {
 
 const deleteDatasource = (row) => {
   $common.handle({
-    url: "/dst/database/delete",
+    url: "/db/source/delete",
     info: `是否删除该数据源【${row.dbName || "未命名数据源"}】`,
     data: { tid: row.tid },
     done: () => {

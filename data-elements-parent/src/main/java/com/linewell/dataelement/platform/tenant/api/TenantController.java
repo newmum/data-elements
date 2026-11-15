@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/sym/tenant")
+@RequestMapping("/portal/sso")
 public class TenantController {
 
     private final TenantAccessService tenantAccessService;
@@ -37,19 +37,19 @@ public class TenantController {
         this.accountPolicy = accountPolicy;
     }
 
-    @GetMapping("/login-options")
+    @GetMapping("/options")
     public CommonResponse<?> loginOptions() {
         return CommonResponse.success(tenantAccessService.loginOptions());
     }
 
-    @GetMapping("/login-settings")
+    @GetMapping("/settings")
     public CommonResponse<?> loginSettings(@RequestParam String tenantId) {
         TenantAccessService.TenantIdentity identity =
                 tenantAccessService.requireActiveTenant(tenantId);
         return CommonResponse.success(systemConfigService.publicSettings(identity.tenantId()));
     }
 
-    @GetMapping("/current")
+    @GetMapping("/session")
     public CommonResponse<?> current() {
         Map<String, Object> data = new LinkedHashMap<>(tenantAccessService.currentTenant());
         data.put("available", availableAccounts());
@@ -57,7 +57,7 @@ public class TenantController {
         return CommonResponse.success(data);
     }
 
-    @GetMapping("/available")
+    @GetMapping("/tenants")
     public CommonResponse<?> available() {
         return CommonResponse.success(availableAccounts());
     }

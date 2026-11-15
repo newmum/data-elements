@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
 const require=createRequire(import.meta.url),{sm3}=require('sm-crypto');
 assert(process.env.METADATA_TEST_PASSWORD,'Use a development credential from the invoking environment');
-const auth=await fetch('http://localhost:3010/dev-api/portal/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({account:process.env.METADATA_TEST_ACCOUNT||'manager',password:sm3(process.env.METADATA_TEST_PASSWORD),appId:'1995678661281710081'})}).then(r=>r.json());
+const auth=await fetch('http://localhost:3010/dev-api/portal/sso/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({account:process.env.METADATA_TEST_ACCOUNT||'manager',password:sm3(process.env.METADATA_TEST_PASSWORD),appId:'1995678661281710081'})}).then(r=>r.json());
 assert.equal(auth.code,0);assert(auth.data?.token);
 const headers={'Content-Type':'application/json',token:auth.data.token};
 async function call(side,route,body){const response=await fetch(`http://localhost:${side}/dev-api${route}`,{method:body===undefined?'GET':'POST',headers,...(body===undefined?{}:{body:JSON.stringify(body)}),signal:AbortSignal.timeout(30000)});const r=await response.json();const successCodes=route.startsWith('/api/web/resource/')?[1]:[0,200];assert(response.ok&&successCodes.includes(r.code??0),route+': '+String(r.msg||r.message||response.status));return 'data'in r?r.data:r;}
@@ -11,7 +11,7 @@ function pageOf(v){if(Array.isArray(v))return {list:v,total:v.length};assert(v&&
 function classCount(v){if(Array.isArray(v))return v.reduce((n,r)=>n+classCount(r),0);if(!v||typeof v!=='object')return 0;return (v.tid!=null&&String(v.tid)!=='0'?1:0)+classCount(v.children);}
 const summary=[];
 for(const side of [3000,3010]){
- const tenant=await call(side,'/sym/tenant/current');
+ const tenant=await call(side,'/portal/sso/session');
  const elements=pageOf(await call(side,'/dwm/standard/element/page',{pageNum:1,pageSize:1000}));
  const codes=await call(side,'/dwm/standard/code/list',{}),classes=await call(side,'/dwm/standard/standard-class-list',{});
  const landing=await call(side,'/dwm/standard/landing/list',{}),bindings=await call(side,'/dwm/metadata-governance/bindings/list',{});

@@ -40,7 +40,7 @@ export async function installContract(page: Page) {
         const pathname = new URL(route.request().url()).pathname;
         let data: unknown;
         if (pathname.endsWith('/idaas/logs/query')) data = loggingQuery(new URL(route.request().url()).searchParams);
-        else if (pathname.endsWith('/sym/tenant/login-options')) data = [{ tenantId: session.tenantId, tenantName: session.tenantName }];
+        else if (pathname.endsWith('/portal/sso/options')) data = [{ tenantId: session.tenantId, tenantName: session.tenantName }];
         else if (pathname.endsWith('/idaas/auth/login')) {
             const body = route.request().postDataJSON();
             expect(body.tenantId).toBeUndefined();

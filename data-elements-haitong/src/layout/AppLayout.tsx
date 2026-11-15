@@ -29,7 +29,7 @@ export default function AppLayout({children,live=false}:{children:React.ReactNod
  const allowedRoute=(path:string)=>deploymentAllows(path)&&(path!=='/management/logs'||Boolean(logs.data?.length));
  const accountName=live?account.data?.name||'当前用户':'林澄';
  const [accountOpen,setAccountOpen]=useState(false),[signingOut,setSigningOut]=useState(false);
- const tenant=useQuery({queryKey:['platform','tenant',sessionRevision],enabled:live&&accountOpen,queryFn:()=>platformApi<Record<string,unknown>>('/sym/tenant/current',{})});
+ const tenant=useQuery({queryKey:['platform','tenant',sessionRevision],enabled:live&&accountOpen,queryFn:()=>platformApi<Record<string,unknown>>('/portal/sso/session',{})});
  const signout=async()=>{if(signingOut)return;setSigningOut(true);try{await logoutPlatformSession();}catch(error){message.error(error instanceof Error?error.message:String(error));setSigningOut(false);}};
  const [collapsed,setCollapsed]=useState(()=>localStorage.getItem('haitong:collapsed')==='true');const [mobileNav,setMobileNav]=useState(false);const [searchOpen,setSearchOpen]=useState(false),[query,setQuery]=useState('');const [noticeOpen,setNoticeOpen]=useState(false);
  const current=routes.find(r=>r.path===location.pathname)||routes[0];

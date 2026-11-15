@@ -44,11 +44,11 @@ public class WebConfiguration implements WebMvcConfigurer {
                 "/api/web/**",
                 "/nifi-ui/**",
                 "/nifi-api/**",
-                "/portal/index",
-                "/portal/login",
-                "/portal/logout",
-                "/sym/tenant/login-options",
-                "/sym/tenant/login-settings",
+                "/portal/main/index",
+                "/portal/sso/login",
+                "/portal/sso/logout",
+                "/portal/sso/options",
+                "/portal/sso/settings",
                 "/dws/push/internal/**"
             );
         registry.addInterceptor(tenantWebInterceptor)
@@ -56,9 +56,9 @@ public class WebConfiguration implements WebMvcConfigurer {
                 "/api/web/**",
                 "/nifi-ui/**",
                 "/nifi-api/**",
-                "/portal/index",
-                "/portal/login",
-                "/portal/logout",
+                "/portal/main/index",
+                "/portal/sso/login",
+                "/portal/sso/logout",
                 "/dws/push/internal/**"
             );
             //.addPathPatterns("/**"); // 根据需要调整路径匹配规则

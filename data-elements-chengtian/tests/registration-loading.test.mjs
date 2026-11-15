@@ -183,7 +183,7 @@ test("saved MySQL columns render without waiting for governance or preview", asy
   const loadFields = loadFunction("loadFields", scope);
   await loadFields({ tid: "table-a", tableName: "A" });
   assert.deepEqual(reads, [
-    { path: "/dst/database/metadata/columns", tid: "table-a", snapshotOnly: true },
+    { path: "/db/field/list", tid: "table-a", snapshotOnly: true },
   ]);
   assert.deepEqual(scope.fieldMap.A, [{ columnName: "ID" }]);
   assert.equal(scope.fieldLoadingMap.A, false);

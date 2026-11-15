@@ -41,12 +41,12 @@ function requireEditableTask(id?: string) {
 
 /** One bounded, authorized read contains every related design; no per-task loading loop. */
 export async function fetchTaskChain(selection: { accessTaskId?: string; pipelineId?: string }): Promise<TaskChain> {
-  const path = selection.accessTaskId ? '/pipelines/task-chain' : `/pipelines/${selection.pipelineId}/chain`;
+  const path = selection.accessTaskId ? '/chain/task' : `/chain/flow?id=${encodeURIComponent(selection.pipelineId ?? '')}`;
   return (await api.get<TaskChain>(path, { params: selection.accessTaskId ? { accessTaskId: selection.accessTaskId } : undefined })).data;
 }
 
 export async function fetchTaskChainNative(accessTaskId: string): Promise<TaskChain> {
-  return (await api.get<TaskChain>('/pipelines/task-chain/native', { params: { accessTaskId } })).data;
+  return (await api.get<TaskChain>('/chain/native', { params: { accessTaskId } })).data;
 }
 
 export type PipelineStatus =
@@ -173,7 +173,7 @@ const KEY = ['pipelines'] as const;
 export function usePipelinePage(page:number,size:number,sort:{sortField?:string;sortDir?:string}={}) {
   const tokenReady=useTokenReady(),sessionRevision=useSessionRevision();
   return useQuery({enabled:tokenReady,queryKey:[...KEY,'page',sessionRevision,page,size,sort],queryFn:async()=>{
-    const result=(await api.get<{list:PipelineSummary[];total:number}>('/pipelines/page',{params:{page,size,...sort}})).data;
+    const result=(await api.get<{list:PipelineSummary[];total:number}>('/flow/page',{params:{page,size,...sort}})).data;
     if(!Array.isArray(result.list)||!Number.isFinite(result.total))throw new Error('流程分页响应不完整');
     return result;
   }});
@@ -184,7 +184,7 @@ export function usePipelineList(enabled = true) {
   return useQuery({
     enabled: tokenReady && enabled,
     queryKey: [...KEY, sessionRevision],
-    queryFn: async () => requireListResponse<PipelineSummary>((await api.get<unknown>('/pipelines')).data, '流程列表'),
+    queryFn: async () => requireListResponse<PipelineSummary>((await api.get<unknown>('/flow/list')).data, '流程列表'),
   });
 }
 
@@ -194,7 +194,7 @@ export function usePipelineRuntimeList() {
   return useQuery({
     enabled: tokenReady,
     queryKey: ['pipeline-runtime-list', sessionRevision],
-    queryFn: async () => requireListResponse<PipelineRuntimeSummary>((await api.get<unknown>('/pipelines/runtime-list')).data, '流程运行列表'),
+    queryFn: async () => requireListResponse<PipelineRuntimeSummary>((await api.get<unknown>('/run/list')).data, '流程运行列表'),
   });
 }
 
@@ -208,7 +208,7 @@ export function usePipeline(id: string | null, allowNetwork = true) {
       // Task-chain reads seed this exact query with the authorized saved design.
       // Do not revisit the legacy detail route when selecting or focusing a related task.
       if (!allowNetwork) throw new Error('关联任务设计由只读链路快照提供，请重新打开画布刷新');
-      return (await api.get<Pipeline>(`/pipelines/${id}`, { signal })).data;
+      return (await api.get<Pipeline>(`/flow/detail?id=${encodeURIComponent(id ?? '')}`, { signal })).data;
     },
     staleTime: allowNetwork ? 5_000 : Infinity,
     refetchOnMount: allowNetwork,
@@ -228,7 +228,7 @@ export function useSavePipeline() {
         if (p.id) {
           const stored = qc.getQueryData<Pipeline>(['pipeline', p.id, revision]);
           if (stored && stored.name === p.name && sameDesignDsl(stored.dsl, dsl)) return stored;
-          const saved = (await api.post<Pipeline>(`/pipelines/${p.id}`, { ...p, dsl }, {
+          const saved = (await api.post<Pipeline>(`/flow/save?id=${encodeURIComponent(p.id)}`, { ...p, dsl }, {
             params: stored?.designHash ? { expectedDesignHash: stored.designHash }
               : stored?.updatedAt ? { expectedUpdatedAt: stored.updatedAt } : undefined,
           })).data;
@@ -236,7 +236,7 @@ export function useSavePipeline() {
           if (!preservesIncrementalFields(dsl, saved.dsl)) throw new Error('保存响应改变了主增量字段，画布配置已保留，请核对后端版本后重试');
           return saved;
         }
-        const saved = (await api.post<Pipeline>('/pipelines', { ...p, dsl }, {
+        const saved = (await api.post<Pipeline>('/flow/create', { ...p, dsl }, {
           params: p.copy ? undefined : { catalogTid: getTid() || undefined },
         })).data;
         if (revision !== getSessionRevision()) throw new Error('登录会话已切换，请重新打开画布');
@@ -261,7 +261,7 @@ export function useDeletePipeline() {
   return useMutation({
     mutationFn: async (id: string) => {
       requireEditableTask(id);
-      await api.post(`/pipelines/delete/${encodeURIComponent(id)}`, undefined, BACKGROUND_REQUEST_OPTIONS);
+      await api.post(`/flow/delete?id=${encodeURIComponent(id)}`, undefined, BACKGROUND_REQUEST_OPTIONS);
       return id;
     },
     onSuccess: (id) => {
@@ -280,7 +280,7 @@ export function useDeployPipeline() {
     }) => {
       requireEditableTask(id);
       return performFlowAction(id, 'deploy', async () => {
-        const result = (await api.post<DeploymentResult>(`/pipelines/${id}/deploy`, { catalogTid, preserveExisting, forceRebuild })).data;
+        const result = (await api.post<DeploymentResult>(`/life/deploy?id=${encodeURIComponent(id)}`, { catalogTid, preserveExisting, forceRebuild })).data;
         if (!result || result.pipeline?.id !== id) {
           throw Object.assign(new Error('部署接口未返回有效的流程结果，请刷新状态确认执行结果'), { payload: result });
         }
@@ -304,7 +304,7 @@ export function useActivateCandidate() {
     mutationFn: async ({ id, processGroupId }: { id: string; processGroupId: string }) => {
       requireEditableTask(id);
       return performFlowAction(id, 'deploy', async () =>
-        (await api.post<DeploymentResult>(`/pipelines/${id}/activate-candidate`, { processGroupId })).data);
+        (await api.post<DeploymentResult>(`/life/activate?id=${encodeURIComponent(id)}`, { processGroupId })).data);
     },
     onSuccess: async (data, { id }) => {
       const revision = getSessionRevision();
@@ -327,13 +327,13 @@ export interface AttributeChange {
 
 export async function previewRuntimeAttributes(id: string) {
   requireEditableTask(id);
-  return (await api.get<{ processGroupId: string; changes: AttributeChange[] }>(`/pipelines/${id}/attribute-sync`)).data;
+  return (await api.get<{ processGroupId: string; changes: AttributeChange[] }>(`/node/attrs?id=${encodeURIComponent(id)}`)).data;
 }
 
 export async function applyRuntimeAttributes(id: string, processGroupId: string,
   selections: Array<Pick<AttributeChange, 'nodeId' | 'field' | 'processorId' | 'currentValue' | 'designValue'> & { keepNative: boolean }>) {
   requireEditableTask(id);
-  return (await api.post<AttributeChange[]>(`/pipelines/${id}/attribute-sync`, { processGroupId, selections })).data;
+  return (await api.post<AttributeChange[]>(`/node/attrs?id=${encodeURIComponent(id)}`, { processGroupId, selections })).data;
 }
 
 export interface ConnectionTestResult {
@@ -347,7 +347,7 @@ export interface ConnectionTestResult {
 
 export async function getNifiUiLink(id: string) {
   requireEditableTask(id);
-  return (await api.get<{ url: string; processGroupId: string; reusesBrowserSession: boolean }>(`/pipelines/${id}/ui-link`)).data;
+  return (await api.get<{ url: string; processGroupId: string; reusesBrowserSession: boolean }>(`/flow/link?id=${encodeURIComponent(id)}`)).data;
 }
 
 export interface ProbedColumn {
@@ -392,7 +392,7 @@ export async function testConnection(
   manifestKey: string,
   config: Record<string, unknown>,
 ): Promise<ConnectionTestResult> {
-  const { data } = await api.post<ConnectionTestResult>('/connection-test', { manifestKey, config }, { timeout: 45000 });
+  const { data } = await api.post<ConnectionTestResult>('/api/connection-test', { manifestKey, config }, { timeout: 45000 });
   return normalizeProbeResponse<ConnectionTestResult>(data, '连接测试');
 }
 
@@ -404,7 +404,7 @@ export async function probeColumns(
   const configError = hiveMetadataConfigError(manifestKey, config);
   if (configError) return { success: false, error: configError, columns: [] };
   const { data } = await api.post<ColumnsProbeResult>(
-    '/columns-probe',
+    '/api/columns-probe',
     { manifestKey, config, table },
     { timeout: 45000 },
   );
@@ -420,7 +420,7 @@ export async function probeTables(
   const configError = hiveMetadataConfigError(manifestKey, config);
   if (configError) return { success: false, error: configError, tables: [] };
   const { data } = await api.post<TablesProbeResult>(
-    '/tables-probe',
+    '/api/tables-probe',
     { manifestKey, config, keyword, limit },
     { timeout: 45000 },
   );
@@ -431,15 +431,15 @@ export function useStopPipeline() {
   return useMutation({
     mutationFn: async (id: string) => {
       requireEditableTask(id);
-      return performFlowAction(id, 'stop', async () => (await api.post(`/pipelines/${id}/stop`)).data);
+      return performFlowAction(id, 'stop', async () => (await api.post(`/life/stop?id=${encodeURIComponent(id)}`)).data);
     },
   });
 }
 
-export function fetchProcessorStatusPage(id:string,query:Record<string,unknown>) {return api.get(`/pipelines/${id}/status/page`,{params:query}).then(r=>r.data);}
+export function fetchProcessorStatusPage(id:string,query:Record<string,unknown>) {return api.get(`/run/nodes?id=${encodeURIComponent(id)}`,{params:query}).then(r=>r.data);}
 
 export function fetchPipelineStatus(id: string) {
-  return api.get(`/pipelines/${id}/status`).then((r) => r.data);
+  return api.get(`/run/status?id=${encodeURIComponent(id)}`).then((r) => r.data);
 }
 
 export function useStartPipeline() {
@@ -447,7 +447,7 @@ export function useStartPipeline() {
   return useMutation({
     mutationFn: async ({ id, force = false, confirmCleanup = false }: { id: string; force?: boolean; confirmCleanup?: boolean }) => {
       requireEditableTask(id);
-      return performFlowAction(id, 'start', async () => (await api.post(`/pipelines/${id}/start`, undefined, { params: { force, confirmCleanup } })).data);
+      return performFlowAction(id, 'start', async () => (await api.post(`/life/start?id=${encodeURIComponent(id)}`, undefined, { params: { force, confirmCleanup } })).data);
     },
     onSuccess: (_, { id }) => {
       qc.invalidateQueries({ queryKey: ['pipeline-status', id] });
@@ -478,7 +478,8 @@ export function useFlowStatus(id: string | null, intervalMs = 3000) {
   return useQuery<FlowStatusPayload>({
     enabled: tokenReady && !!id,
     queryKey: ['pipeline-status', id, sessionRevision],
-    queryFn: async ({ signal }) => (await api.get<FlowStatusPayload>(`/pipelines/${id}/status`, { ...BACKGROUND_REQUEST_OPTIONS, signal })).data,
+    queryFn: async ({ signal }) => (await api.get<FlowStatusPayload>(import.meta.env.MODE === 'flow-lite'
+      ? `/pipelines/${encodeURIComponent(id ?? '')}/status` : `/run/status?id=${encodeURIComponent(id ?? '')}`, { ...BACKGROUND_REQUEST_OPTIONS, signal })).data,
     refetchInterval: import.meta.env.MODE === 'flow-lite' ? intervalMs : false,
   });
 }
@@ -490,7 +491,7 @@ export function useFlowErrors(id: string | null) {
   return useQuery<FlowError[]>({
     enabled: tokenReady && !!id,
     queryKey: ['pipeline-errors', id, sessionRevision],
-    queryFn: async ({ signal }) => requireListResponse<FlowError>((await api.get<unknown>(`/pipelines/${id}/errors`, { ...BACKGROUND_REQUEST_OPTIONS, signal })).data, '流程错误列表'),
+    queryFn: async ({ signal }) => requireListResponse<FlowError>((await api.get<unknown>(`/event/errors?id=${encodeURIComponent(id ?? '')}`, { ...BACKGROUND_REQUEST_OPTIONS, signal })).data, '流程错误列表'),
     refetchInterval: () => {
       const status = statusQuery.data?.status;
       return status === 'RUNNING' ? 3000 : 30000;
@@ -515,7 +516,8 @@ export function useLiveFlowBulletins(id: string | null, deployed: boolean, poll 
     enabled: poll && tokenReady && !!id && deployed,
     queryKey: ['pipeline-live-bulletins', id, sessionRevision],
     queryFn: async ({ signal }) => requireListResponse<LiveFlowBulletin>((await api.get<unknown>(
-      `/pipelines/${id}/bulletins/live`, { ...BACKGROUND_REQUEST_OPTIONS, signal })).data, 'NiFi 当前告警'),
+      import.meta.env.MODE === 'flow-lite'
+        ? `/pipelines/${encodeURIComponent(id ?? '')}/bulletins/live` : `/event/live?id=${encodeURIComponent(id ?? '')}`, { ...BACKGROUND_REQUEST_OPTIONS, signal })).data, 'NiFi 当前告警'),
     refetchInterval: 5000,
   });
 }
@@ -534,7 +536,7 @@ export function useClearFlowErrors() {
       const bulletins = qc.getQueryData<LiveFlowBulletin[]>(['pipeline-live-bulletins', id, revision]) ?? [];
       let result = { historyCleared: false, bulletinsCleared: 0, nativeCleared: false };
       try {
-        const { data } = await api.post<Partial<typeof result>>(`/pipelines/delete/${id}/errors`);
+        const { data } = await api.post<Partial<typeof result>>(`/event/clear?id=${encodeURIComponent(id)}`);
         result = { historyCleared: data?.historyCleared === true, bulletinsCleared: data?.bulletinsCleared ?? 0,
           nativeCleared: data?.nativeCleared === true || (data?.nativeCleared === undefined && data?.historyCleared === true) };
       } catch (error) {
@@ -564,7 +566,7 @@ export interface LineageResponse {
 
 export async function fetchLineage(id: string, nodeId: string, maxEvents = 10): Promise<LineageResponse> {
   const { data } = await api.post<LineageResponse>(
-    `/pipelines/${id}/nodes/${nodeId}/lineage?maxEvents=${maxEvents}`,
+    `/node/lineage?id=${encodeURIComponent(id)}&nodeId=${encodeURIComponent(nodeId)}&maxEvents=${maxEvents}`,
   );
   return data;
 }
@@ -581,13 +583,13 @@ export interface TemplateResponse {
 }
 
 export async function fetchPipelineTemplate(tid: string): Promise<TemplateResponse> {
-  const { data } = await api.post<TemplateResponse>('/pipelines/template', { tid });
+  const { data } = await api.post<TemplateResponse>('/canvas/template', { tid });
   return data;
 }
 
 /**
  * 请求生成单组件模板并获取配置回填数据
- * POST /pipelines/template/node
+ * POST /nifi/canvas/node
  *
  * 响应拦截器已自动解包 { code, data } 包装层，data 即为业务对象。
  *
@@ -600,7 +602,7 @@ export async function fetchNodeTemplate(
   tableId: string,
 ): Promise<{ config: Record<string, unknown>; manifestKey?: string }> {
   const { data } = await api.post<any>(
-    '/pipelines/template/node',
+    '/canvas/node',
     { key, tableId },
   );
 
@@ -630,7 +632,7 @@ export interface AccessTaskDetail {
 
 /**
  * 查询已配置的访问任务详情（用于画布回填）
- * POST /ods/task/queryById，入参 { tid }
+ * POST /ods/job/detail，入参 { tid }
  */
 export async function fetchAccessTaskDetail(tid: string): Promise<AccessTaskDetail> {
   const dataassetsApi = import.meta.env.VITE_APP_DATAASSETS_API || '/dev-api';
@@ -643,7 +645,7 @@ export async function fetchAccessTaskDetail(tid: string): Promise<AccessTaskDeta
   let data: AccessTaskDetail;
   try {
     const response = await axios.post<AccessTaskDetail>(
-      `${dataassetsApi}/ods/task/queryById`,
+      `${dataassetsApi}/ods/job/detail`,
       { tid },
       {
         headers: {
@@ -670,9 +672,9 @@ export async function fetchAccessTaskDetail(tid: string): Promise<AccessTaskDeta
 
 /**
  * 根据 pipelineId 获取画布 DSL 并回填
- * GET /nifi/api/pipelines/{pipelineId}
+ * GET /nifi/flow/detail?id=<pipelineId>
  */
 export async function fetchPipelineById(pipelineId: string): Promise<Pipeline> {
-  const { data } = await api.get<Pipeline>(`/pipelines/${pipelineId}`);
+  const { data } = await api.get<Pipeline>(`/flow/detail?id=${encodeURIComponent(pipelineId)}`);
   return data;
 }

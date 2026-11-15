@@ -42,7 +42,7 @@ test('canvas fallback clears history and badges across polling, but later identi
     });
     const result = await hooks.useClearFlowErrors().mutationFn('p');
     assert.equal(result.nativeCleared, response === 'native-cleared');
-    assert.deepEqual(requests, ['/pipelines/delete/p/errors']);
+    assert.deepEqual(requests, ['/event/clear?id=p']);
     const cleared = state.dismissed.p;
     assert.equal(visibleFlowErrors([history], cleared).length, 0);
     assert.equal(visibleFlowBulletins([bulletin], cleared).length, 0);
@@ -106,7 +106,7 @@ test('20/100 nodes share one live-bulletin query; rendering a node performs no r
     hooks.useLiveFlowBulletins('selected', true);
     assert.equal(queries.length, 1);
     await queries[0].queryFn({ signal: undefined });
-    assert.deepEqual(requests, ['/pipelines/selected/bulletins/live']);
+    assert.deepEqual(requests, ['/event/live?id=selected']);
     let nodeReads = 0;
     const { default: BaseNode } = load('../canvas/BaseNode.tsx', id => {
       if (id === 'react/jsx-runtime') return { jsx: React.createElement, jsxs: React.createElement };

@@ -15,10 +15,10 @@ describe("shared metadata contracts", () => {
         body: Record<string, unknown> = {},
         _query: Record<string, unknown> = {},
       ) => {
-        if (path === "/sym/tenant/current") return { tid: "tenant" };
+        if (path === "/portal/sso/session") return { tid: "tenant" };
         if (path === "/sym/org/getOrgTree")
           return [{ id: "org", name: "实际机构", children: [] }];
-        if (path === "/dst/database/treeStatistics")
+        if (path === "/db/source/stats")
           return {
             orgApps: {
               org: [
@@ -30,9 +30,9 @@ describe("shared metadata contracts", () => {
               ],
             },
           };
-        if (path === "/dst/database/detail")
+        if (path === "/db/source/detail")
           return { database: "shared_database" };
-        if (path === "/dst/database/metadata/tables")
+        if (path === "/db/schema/tables")
           return [
             {
               tid: "table",
@@ -42,7 +42,7 @@ describe("shared metadata contracts", () => {
               recordCount: 120,
             },
           ];
-        if (path === "/dst/database/metadata/columns")
+        if (path === "/db/field/list")
           return [
             {
               columnName: "id",
@@ -52,7 +52,7 @@ describe("shared metadata contracts", () => {
               nullable: 0,
             },
           ];
-        if (path === "/dst/database/metadata/table/preview-data")
+        if (path === "/db/row/preview")
           return {
             rows: Array.from({ length: Number(body.pageSize) }, (_, i) => ({
               id: i + 1,

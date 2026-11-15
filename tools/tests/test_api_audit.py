@@ -14,9 +14,9 @@ class ApiReferencesTest(unittest.TestCase):
         self.assertEqual([v for _, v in values], ['/active/list'])
 
     def test_base_and_environment_prefix_preserve_request_path(self):
-        _, values = audit.resolved_literals('const BASE = "/idaas/users"; get(BASE + "/list"); get(`${envBase}/ods/task/queryById`);')
+        _, values = audit.resolved_literals('const BASE = "/idaas/users"; get(BASE + "/list"); get(`${envBase}/ods/job/detail`);')
         self.assertIn('/idaas/users/list', [v for _, v in values])
-        self.assertIn('/ods/task/queryById', [v for _, v in values])
+        self.assertIn('/ods/job/detail', [v for _, v in values])
 
     def test_ternary_question_mark_is_not_query_separator(self):
         value = "/idaas/${isRole ? 'platform-roles' : 'operators'}/save?x=1"
@@ -38,10 +38,10 @@ class ApiReferencesTest(unittest.TestCase):
 
     def test_regex_quotes_do_not_hide_real_vue_request(self):
         resource = {'id': 'structured', 'file': 'magic/api/columns.ms', 'method': 'POST',
-                    'route': '/dst/database/metadata/structuredColumns', 'section': 'api', 'script': ''}
+                    'route': '/db/field/read', 'section': 'api', 'script': ''}
         document = {'label': 'lowcode/register.vue', 'text': '''<script setup>
 const pattern = /["']/;
-request("/dst/database/metadata/structuredColumns");
+request("/db/field/read");
 </script>'''}
         with patch.object(audit, 'inventory', return_value=[resource]), patch.object(audit, 'corpus', return_value=[document]):
             report = audit.audit()

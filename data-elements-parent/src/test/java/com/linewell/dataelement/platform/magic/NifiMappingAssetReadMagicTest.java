@@ -74,7 +74,7 @@ import org.ssssssss.script.runtime.function.MagicScriptLambdaFunction;
 
 class NifiMappingAssetReadMagicTest {
     private static final String COMMON = "function/01.通用函数/";
-    private static final String API = "api/10.NiFi流程接口/01.接口/";
+    private static final String API = "api/10.NiFi流程接口/";
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final Timestamp CREATED = Timestamp.from(Instant.parse("2025-01-02T00:00:00Z"));
 
@@ -151,17 +151,17 @@ class NifiMappingAssetReadMagicTest {
         fixture.jdbc.update("UPDATE data_access_mapping_resource_t SET resource_hash='wrong' WHERE tid='corrupt'");
         when(fixture.mapping.compile(any())).thenAnswer(call -> new UnifiedMappingService.Compiled(
                 MappingEngine.compile(call.getArgument(0)), Map.of()));
-        var templatePath = Map.<String, Object>of("path", Map.of("id", "template"));
-        var planPath = Map.<String, Object>of("path", Map.of("id", "plan"));
+        var templatePath = Map.<String, Object>of("param", Map.of("id", "template"));
+        var planPath = Map.<String, Object>of("param", Map.of("id", "plan"));
         var pipeline = Map.of("pipelineId", "canvas");
         try (var tenant = TenantContext.use("tenant-a")) {
             assertThat(fixture.run("template", Map.of(), templatePath).getBody()).isEqualTo(document);
             assertThat(fixture.run("plan", pipeline, planPath).getBody()).isEqualTo(document);
-            assertError(fixture.run("plan", pipeline, Map.of("path", Map.of("id", "another"))), "RESOURCE_FORBIDDEN");
-            assertError(fixture.run("template", Map.of(), Map.of("path", Map.of("id", "foreign"))), "RESOURCE_FORBIDDEN");
-            assertError(fixture.run("template", Map.of(), Map.of("path", Map.of("id", "corrupt"))), "RESOURCE_CORRUPTED");
+            assertError(fixture.run("plan", pipeline, Map.of("param", Map.of("id", "another"))), "RESOURCE_FORBIDDEN");
+            assertError(fixture.run("template", Map.of(), Map.of("param", Map.of("id", "foreign"))), "RESOURCE_FORBIDDEN");
+            assertError(fixture.run("template", Map.of(), Map.of("param", Map.of("id", "corrupt"))), "RESOURCE_CORRUPTED");
 
-            var input = Map.<String, Object>of("path", Map.of("id", "template"), "body",
+            var input = Map.<String, Object>of("param", Map.of("id", "template"), "body",
                     JSON.readTree("{\"fieldBindings\":{\"before\":\"after\"}}"));
             var imported = fixture.run("import", Map.of(), input);
             assertThat(imported.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -193,7 +193,7 @@ class NifiMappingAssetReadMagicTest {
                 new MagicBootConfiguration(), "magicMappingJsonConverter", magic, JSON);
         installer.afterSingletonsInstantiated();
         var converter = magic.getHttpMessageConverters().getFirst();
-        var request = new MockHttpServletRequest("POST", "/nifi/api/field-mapping/templates/id/import");
+        var request = new MockHttpServletRequest("POST", "/nifi/template/import");
         var attributes = new ServletRequestAttributes(request);
         RequestContextHolder.setRequestAttributes(attributes);
         try {
@@ -211,7 +211,7 @@ class NifiMappingAssetReadMagicTest {
                     .isInstanceOf(HttpMessageNotReadableException.class);
             assertThat(request.getAttribute(MagicBootConfiguration.MAGIC_MAPPING_JSON_ERROR))
                     .isInstanceOf(HttpMessageNotReadableException.class);
-            request.setRequestURI("/nifi/api/pipelines/id/deploy");
+            request.setRequestURI("/nifi/life/deploy");
             assertThat(converter.canRead(Object.class, MediaType.APPLICATION_JSON)).isFalse();
         } finally {
             RequestContextHolder.resetRequestAttributes();
@@ -311,14 +311,14 @@ class NifiMappingAssetReadMagicTest {
             spec.put("marker", "changed");
             assertThat(pageBody(fixture.run("saveTemplate", Map.of(), Map.of("body", input))).path("version").asLong())
                     .isEqualTo(2);
-            var stored = fixture.run("template", Map.of(), Map.of("path", Map.of("id", id)));
+            var stored = fixture.run("template", Map.of(), Map.of("param", Map.of("id", id)));
             assertThat(pageBody(stored).path("marker").asText()).isEqualTo("original");
             spec.put("token", "forbidden");
             assertError(fixture.run("saveTemplate", Map.of(), Map.of("body", input)), "TEMPLATE_SECRET_FORBIDDEN");
             assertThat(fixture.queries).isEmpty();
         }
         try (var tenant = TenantContext.use("tenant-b")) {
-            assertError(fixture.run("template", Map.of(), Map.of("path", Map.of("id", id))), "RESOURCE_FORBIDDEN");
+            assertError(fixture.run("template", Map.of(), Map.of("param", Map.of("id", id))), "RESOURCE_FORBIDDEN");
             assertThat(rows(fixture.run("templates", Map.of(), Map.of()))).isEmpty();
         }
     }
@@ -454,7 +454,7 @@ class NifiMappingAssetReadMagicTest {
         var restored = JSON.createObjectNode().put("schemaVersion", "2.0").put("marker", "original");
         fixture.plan("plan", "tenant-a", "canvas", "mapping", restored.toString());
         var input = JSON.createObjectNode().put("pipelineId", "canvas").put("nodeId", "mapping").put("expectedUpdatedAt", 5);
-        var request = Map.<String, Object>of("body", input, "path", Map.of("id", "plan"));
+        var request = Map.<String, Object>of("body", input, "param", Map.of("id", "plan"));
         try (var tenant = TenantContext.use("tenant-a")) {
             fixture.lockAvailable.set(false);
             var locked = fixture.run("restore", Map.of(), request);
@@ -747,29 +747,29 @@ class NifiMappingAssetReadMagicTest {
             function("nifiReadMappingPlans", "72.NiFi批量读取映射计划.ms", "nifi_mapping_plan_read_v1",
                     "pipelineId", "tenantId", "ids");
             function("nifiFieldMappingCapabilities", "73.NiFi字段映射能力.ms", "nifi_field_map_capabilities_v1");
-            route("capabilities", "77.查询字段映射能力.ms", "nifi_field_map_caps_get_v1");
-            route("capabilitiesHead", "78.核验字段映射能力.ms", "nifi_field_map_caps_head_v1");
-            route("validateRules", "79.校验字段映射.ms", "nifi_field_map_validate_v1");
-            route("previewRules", "80.预览字段映射.ms", "nifi_field_map_preview_v1");
-            route("recommendRules", "81.推荐字段映射.ms", "nifi_field_map_recommend_v1");
-            route("compileRules", "82.编译字段映射.ms", "nifi_field_map_compile_v1");
-            route("legacyRules", "83.转换旧字段映射.ms", "nifi_field_map_legacy_v1");
-            route("lookupRules", "84.生成字典查询模板.ms", "nifi_field_map_lookup_v1");
-            route("restore", "74.恢复映射计划草稿.ms", "nifi_map_restore_post_v1");
-            route("upgrade", "75.升级运行字段节点.ms", "nifi_map_upgrade_post_v1");
-            route("published", "76.启动已发布映射流程.ms", "nifi_map_start_pub_post_v1");
-            route("saveTemplate", "70.保存映射模板.ms", "nifi_map_templates_post_v1");
-            route("snapshot", "71.生成字典快照.ms", "nifi_map_dict_snapshot_post_v1");
-            route("schema", "72.构造映射字段结构.ms", "nifi_map_schema_post_v1");
-            route("sample", "73.取样预览映射.ms", "nifi_map_sample_post_v1");
-            route("plans", "55.查询映射计划历史.ms", "nifi_map_plans_get_v1");
-            route("plansHead", "56.核验映射计划历史.ms", "nifi_map_plans_head_v1");
-            route("plan", "57.查询映射计划版本.ms", "nifi_map_plan_get_v1");
-            route("templates", "59.查询映射模板版本.ms", "nifi_map_templates_get_v1");
-            route("template", "61.查询映射模板详情.ms", "nifi_map_template_get_v1");
-            route("tables", "65.查询字典候选表.ms", "nifi_map_dict_tables_get_v1");
-            route("columns", "67.查询字典候选字段.ms", "nifi_map_dict_cols_get_v1");
-            route("import", "69.导入映射模板.ms", "nifi_map_template_import_v1");
+            route("capabilities", "13.字段映射/03.查询字段映射能力.ms", "nifi_field_map_caps_get_v1");
+            route("capabilitiesHead", "13.字段映射/04.核验字段映射能力.ms", "nifi_field_map_caps_head_v1");
+            route("validateRules", "13.字段映射/05.校验字段映射.ms", "nifi_field_map_validate_v1");
+            route("previewRules", "13.字段映射/06.预览字段映射.ms", "nifi_field_map_preview_v1");
+            route("recommendRules", "13.字段映射/07.推荐字段映射.ms", "nifi_field_map_recommend_v1");
+            route("compileRules", "13.字段映射/08.编译字段映射.ms", "nifi_field_map_compile_v1");
+            route("legacyRules", "13.字段映射/09.转换旧字段映射.ms", "nifi_field_map_legacy_v1");
+            route("lookupRules", "12.映射字典/06.生成字典查询模板.ms", "nifi_field_map_lookup_v1");
+            route("restore", "10.映射计划/07.恢复映射计划草稿.ms", "nifi_map_restore_post_v1");
+            route("upgrade", "14.映射运行/01.升级运行字段节点.ms", "nifi_map_upgrade_post_v1");
+            route("published", "14.映射运行/02.启动已发布映射流程.ms", "nifi_map_start_pub_post_v1");
+            route("saveTemplate", "11.映射模板/06.保存映射模板.ms", "nifi_map_templates_post_v1");
+            route("snapshot", "12.映射字典/05.生成字典快照.ms", "nifi_map_dict_snapshot_post_v1");
+            route("schema", "13.字段映射/01.构造映射字段结构.ms", "nifi_map_schema_post_v1");
+            route("sample", "13.字段映射/02.取样预览映射.ms", "nifi_map_sample_post_v1");
+            route("plans", "10.映射计划/01.查询映射计划历史.ms", "nifi_map_plans_get_v1");
+            route("plansHead", "10.映射计划/02.核验映射计划历史.ms", "nifi_map_plans_head_v1");
+            route("plan", "10.映射计划/03.查询映射计划版本.ms", "nifi_map_plan_get_v1");
+            route("templates", "11.映射模板/01.查询映射模板版本.ms", "nifi_map_templates_get_v1");
+            route("template", "11.映射模板/03.查询映射模板详情.ms", "nifi_map_template_get_v1");
+            route("tables", "12.映射字典/01.查询字典候选表.ms", "nifi_map_dict_tables_get_v1");
+            route("columns", "12.映射字典/03.查询字典候选字段.ms", "nifi_map_dict_cols_get_v1");
+            route("import", "11.映射模板/05.导入映射模板.ms", "nifi_map_template_import_v1");
         }
 
         void nativeCanvas() throws Throwable {

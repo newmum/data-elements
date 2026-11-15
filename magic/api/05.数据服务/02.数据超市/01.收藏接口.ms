@@ -32,7 +32,8 @@ import tableRead
 import tenantRuntime
 import log
 
-// POST /dws/market/collect：设置当前部门对数据目录的收藏状态，返回实际状态。
+// POST /dws/mall/collect 收藏接口。按当前租户和部门设置已上架目录的收藏状态。collected 为布尔值，省略时兼容原切换调用。返回实际收藏状态。
+// POST /dws/mall/collect：设置当前部门对数据目录的收藏状态，返回实际状态。
 // 显式传 collected 时允许重试。旧调用省略时按当前状态切换。
 var submittedId = body?.catalogId
 if (!(submittedId instanceof String) && !(submittedId instanceof Number)) {

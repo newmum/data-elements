@@ -44,7 +44,7 @@ function global:Get-Process {
 }
 function global:Invoke-RestMethod {
     param([string]$Uri, [int]$TimeoutSec)
-    if ($Uri -ne 'http://localhost:18088/sym/tenant/login-options') {
+    if ($Uri -ne 'http://localhost:18088/portal/sso/options') {
         throw 'Unexpected readiness endpoint'
     }
     @{code=0}

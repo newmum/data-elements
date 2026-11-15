@@ -60,11 +60,11 @@ npm run preview
 
 | 能力 | 复用的元数据接口 |
 | --- | --- |
-| 当前租户与组织 | `GET /sym/tenant/current`、`POST /sym/org/getOrgTree` |
-| 组织下数据源 | `POST /dst/database/treeStatistics` 的 `orgApps/datasources` |
-| 数据源及表/视图目录 | `POST /dst/database/detail`、`GET /dst/database/metadata/tables` |
-| 字段结构 | `GET /dst/database/metadata/columns`，携带 `tid/snapshotOnly` |
-| 分页数据 | `POST /dst/database/metadata/table/preview-data`，携带同一 `tableId` |
+| 当前租户与组织 | `GET /portal/sso/session`、`POST /sym/org/getOrgTree` |
+| 组织下数据源 | `POST /db/source/stats` 的 `orgApps/datasources` |
+| 数据源及表/视图目录 | `POST /db/source/detail`、`GET /db/schema/tables` |
+| 字段结构 | `GET /db/field/list`，携带 `tid/snapshotOnly` |
+| 分页数据 | `POST /db/row/preview`，携带同一 `tableId` |
 
 以下本地编辑、SQL 和样例说明适用于普通独立模式；共享模式以以上只读范围为准。
 

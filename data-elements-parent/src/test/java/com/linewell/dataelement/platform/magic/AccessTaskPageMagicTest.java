@@ -3,10 +3,16 @@ package com.linewell.dataelement.platform.magic;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient;
 import com.linewell.dataelement.platform.magic.module.JsonModule;
 import com.linewell.dataelement.utils.StructuredValues;
 import java.io.IOException;
@@ -39,6 +45,38 @@ class AccessTaskPageMagicTest {
               {"category":"target","config":{"jdbcUrl":"jdbc:mysql://validation.example/legacy-target?x=1","targetTable":"target_table"}}
             ]}
             """;
+
+    @ParameterizedTest
+    @ValueSource(ints = {20, 100})
+    void readsEtlGroupTreeFromOneRecursiveSnapshot(int size) throws IOException {
+        var response = JsonNodeFactory.instance.objectNode();
+        var groups = response.putObject("processGroupStatus").putObject("aggregateSnapshot")
+                .putArray("processGroupStatusSnapshots");
+        for (int index = 0; index < size; index++) {
+            var group = groups.addObject().putObject("processGroupStatusSnapshot")
+                    .put("id", "group-" + index).put("name", "分组-" + index);
+            if (index == 0) {
+                group.putArray("processGroupStatusSnapshots").addObject().putObject("processGroupStatusSnapshot")
+                        .put("id", "nested").put("name", "子组");
+            }
+        }
+        var nifi = mock(NifiClient.class);
+        when(nifi.getProcessGroupStatus("root")).thenReturn(response);
+        var source = CanonicalMagicSources.byId("28ee5d9e32e04dfa8438756b9302b5de")
+                .replaceAll("(?m)^import [^\\r\\n]*\\R", "");
+        var script = MagicScript.create("var configData = () => { return {nifi_gourpId: 'configured'} }\n" + source, null);
+        var tree = StructuredValues.objectRows(script.execute(new MagicScriptContext(Map.of("nifiClient", nifi))));
+
+        assertThat(tree).hasSize(size);
+        var first = tree.getFirst();
+        assertThat(first).containsEntry("id", "group-0").containsEntry("name", "分组-0")
+                .containsEntry("label", "分组-0").containsEntry("value", "group-0").containsEntry("parentId", "configured");
+        assertThat(StructuredValues.objectRows(first.get("children"))).singleElement().satisfies(child ->
+                assertThat(child).containsEntry("id", "nested").containsEntry("parentId", "group-0"));
+        verify(nifi).getProcessGroupStatus("root");
+        verifyNoMoreInteractions(nifi);
+        System.out.printf("ETL group tree size=%d plus child, NiFi reads=1%n", size);
+    }
 
     @ParameterizedTest
     @ValueSource(ints = {20, 100})

@@ -1,0 +1,14 @@
+{
+  "properties": {},
+  "id": "7968dd743d4f5e30a8e28986a3070c90",
+  "name": "04.资源申请",
+  "type": "api",
+  "parentId": "2c4350a98636412f9b4feb6e31969c00",
+  "path": "/apply",
+  "createTime": 1784420517826,
+  "updateTime": 1785021681888,
+  "createBy": null,
+  "updateBy": null,
+  "paths": [],
+  "options": []
+}

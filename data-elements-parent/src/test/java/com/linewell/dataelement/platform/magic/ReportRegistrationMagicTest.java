@@ -27,7 +27,7 @@ class ReportRegistrationMagicTest {
     static String source() throws Exception {
         Path root = Path.of(System.getProperty("user.dir")).toAbsolutePath();
         while (!Files.isDirectory(root.resolve("magic"))) root = root.getParent();
-        String content = Files.readString(root.resolve("magic/api/02.数据盘点/02.数据库表/19.数据上报登记.ms"));
+        String content = Files.readString(root.resolve("magic/api/11.数据库资源/07.上报/01.数据上报登记.ms"));
         return content.substring(content.indexOf("================================") + 32);
     }
     public static class Metadata {

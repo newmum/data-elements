@@ -81,7 +81,7 @@ const init = async () => {
     if (!targetTableId) {
       return;
     }
-    await $common.get("/dst/database/metadata/columns", { tid: targetTableId }).then((data) => {
+    await $common.get("/db/field/list", { tid: targetTableId }).then((data) => {
       state.cols = data.map((el) => ({
         label: el.columnName,
         prop: el.columnName,
@@ -105,7 +105,7 @@ const getData = (tableId = state.targetTableId) => {
   if (!state.targetTableId) return;
   state.loading = true;
   $common
-    .post("/dst/database/metadata/table/preview-data", {
+    .post("/db/row/preview", {
       tableId,
       pageNo: 1,
       pageSize: 20,

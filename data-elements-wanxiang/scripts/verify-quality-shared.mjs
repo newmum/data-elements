@@ -5,7 +5,7 @@ const require=createRequire(import.meta.url),{sm3}=require('sm-crypto');
 const account=process.env.QUALITY_TEST_ACCOUNT,password=process.env.QUALITY_TEST_PASSWORD;
 assert(account&&password,'Set QUALITY_TEST_ACCOUNT and QUALITY_TEST_PASSWORD in the invoking environment');
 const bases=['http://localhost:3000/dev-api','http://localhost:3010/dev-api'];
-const login=await fetch(bases[0]+'/portal/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({account,password:sm3(password),appId:'1995678661281710081'}),signal:AbortSignal.timeout(20000)}).then(r=>r.json());
+const login=await fetch(bases[0]+'/portal/sso/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({account,password:sm3(password),appId:'1995678661281710081'}),signal:AbortSignal.timeout(20000)}).then(r=>r.json());
 assert.equal(login.code,0,'Development login must succeed');
 assert(login.data?.token,'Development login must return a session');
 const headers={'Content-Type':'application/json',token:login.data.token};
@@ -15,7 +15,7 @@ async function raw(side,path,body={},method='POST'){return fetch(bases[side]+pat
 async function call(side,path,body={},method='POST'){const r=await raw(side,path,body,method);assert.equal(r.code,0,path+' must succeed: '+String(r.message||r.msg||'').slice(0,300));return r.data;}
 const page=value=>{const row=Array.isArray(value?.list)?value:value?.list;const rawTotal=value?.total??row?.total;const list=row?.list===null&&(rawTotal===0||rawTotal==='0')?[]:row?.list;assert(Array.isArray(list),'Real page list must be present');const total=Number(rawTotal);assert(Number.isInteger(total)&&total>=0);return {list,total};};
 const id=row=>String(row.tid??row.id);
-const tenant0=await call(0,'/sym/tenant/current',{},'GET'),tenant1=await call(1,'/sym/tenant/current',{},'GET');
+const tenant0=await call(0,'/portal/sso/session',{},'GET'),tenant1=await call(1,'/portal/sso/session',{},'GET');
 assert.equal(id(tenant0),id(tenant1));pass('Both platform proxies retain the same server-owned tenant session');
 const results=[];
 for(let side=0;side<2;side++){

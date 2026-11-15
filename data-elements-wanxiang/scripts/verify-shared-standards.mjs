@@ -8,7 +8,7 @@ const require=createRequire(import.meta.url),{sm3}=require('sm-crypto');
 const base=process.env.DATA_ELEMENTS_TEST_API||'http://localhost:8088',tenant='2084109831682699265';
 if(!process.env.DATA_ELEMENTS_TEST_PASSWORD)throw new Error('Missing test-login environment credential');
 const started=Date.now(),checks=[],fixtures={};
-const login=await fetch(base+'/portal/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({account:'manager',password:sm3(process.env.DATA_ELEMENTS_TEST_PASSWORD),appId:'1995678661281710081',tenantId:tenant})}).then(r=>r.json());
+const login=await fetch(base+'/portal/sso/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({account:'manager',password:sm3(process.env.DATA_ELEMENTS_TEST_PASSWORD),appId:'1995678661281710081',tenantId:tenant})}).then(r=>r.json());
 const token=typeof login.data==='string'?login.data:login.data?.token;
 assert.ok(token,'Platform login did not return a session: '+String(login.msg||login.message||login.code));
 async function envelope(path,body){const response=await fetch(base+path,{method:body===undefined?'GET':'POST',headers:{token,...(body===undefined?{}:{'Content-Type':'application/json'})},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(30000)});assert.ok(response.ok,path+' HTTP failure');return response.json();}
@@ -16,7 +16,7 @@ async function call(path,body){const result=await envelope(path,body);assert.ok(
 async function rejected(path,body,code){const result=await envelope(path,body);assert.equal(result.code,code,path+' should reject invalid input');}
 const readElement=tid=>call('/dwm/standard/element/queryById',{tid});
 const publish=(tid,value)=>call('/dwm/standard/element/updatePublishStatus',{tid,publishStatus:value});
-const context=await call('/sym/tenant/current');assert.equal(context.tid,tenant);checks.push('real-login-and-intended-tenant');
+const context=await call('/portal/sso/session');assert.equal(context.tid,tenant);checks.push('real-login-and-intended-tenant');
 const user=await call('/sym/user/me',{}),userId=user.id||user.userId||user.tid;
 const originalPage=await call('/dwm/standard/element/page',{pageNum:1,pageSize:1000});
 const originalCodes=await call('/dwm/standard/code/list',{});
@@ -41,7 +41,7 @@ try{
  await publish(fixtures.element,0);meta=await call('/dwm/standard/element/metaSaveOrUpdate',{...metaBody,tid:fixtures.element,valueDomainId:fixtures.code,bizDef:'下线修改后再次审批',exampleValue:'WX-000002'});assert.equal(Number(meta.publishStatus),0);assert.equal(meta.exampleValue,'WX-000002');await publish(fixtures.element,1);checks.push('offline-edit-reapprove');
  assert.ok(new RegExp((await readElement(fixtures.element)).formatPattern).test('WX-000002'));assert.equal(new RegExp(metaBody.formatPattern).test('bad'),false);checks.push('encoding-shares-real-format-pattern');
  const props={dbName:name+'字段绑定测试',dbType:'mysql',orgId:user.orgId,storageDomain:'政务外网',assetDesc:'Disposable standard binding fixture; no physical source access',accessMode:'explore',dataAccessMode:'explore',showConnect:0,preserveSourceOrg:true,assetStatus:2};
- const source=await call('/dst/database/saveOrUpdate',{tid:'',assetType:'db',deferIndexRefresh:true,propList:props});fixtures.source=source.tid;assert.ok(fixtures.source);
+ const source=await call('/db/source/save',{tid:'',assetType:'db',deferIndexRefresh:true,propList:props});fixtures.source=source.tid;assert.ok(fixtures.source);
  const tableName='wx_standard_fixture_'+key;
  // Seed only our disposable tenant-scoped field fixture; offline import is outside this module.
  const seeded=await call('/data/save',{
@@ -52,7 +52,7 @@ try{
  fixtures.column=seeded.find(r=>r.table==='db_table_column_t')?.tid;
  assert.ok(fixtures.table&&fixtures.column);checks.push('disposable-tenant-field-fixture');
  let landing=await call('/dwm/standard/landing/list',{});const entity=landing.entities.find(e=>e.name===tableName),field=entity?.fields.find(f=>f.name==='standard_code');assert.ok(entity&&field);fixtures.table=entity.id;fixtures.column=field.id;
- const beforeTables=await call('/dst/database/metadata/tables?dbId='+fixtures.source+'&includeGovernance=false');
+ const beforeTables=await call('/db/schema/tables?dbId='+fixtures.source+'&includeGovernance=false');
  const binding={tableId:fixtures.table,columnId:fixtures.column,standardId:fixtures.element,expectedStandardId:null};
  assert.equal((await call('/dwm/standard/landing/save',{...binding,dryRun:true})).valid,true);checks.push('binding-safe-preview');
  await call('/dwm/standard/landing/save',binding);landing=await call('/dwm/standard/landing/list',{});assert.equal(landing.items.find(i=>i.field_id===fixtures.column).target_id,fixtures.element);checks.push('bind-authoritative-field-standard');
@@ -60,13 +60,13 @@ try{
  await publish(fixtures.element,0);landing=await call('/dwm/standard/landing/list',{});assert.equal(landing.items.find(i=>i.field_id===fixtures.column).status,'STALE');checks.push('offline-standard-reference-marked-unavailable');
  await call('/dwm/standard/landing/save',{...binding,standardId:null,expectedStandardId:fixtures.element});
  await rejected('/dwm/standard/landing/save',binding,409);checks.push('unpublished-standard-cannot-bind');
- const afterTables=await call('/dst/database/metadata/tables?dbId='+fixtures.source+'&includeGovernance=false');
+ const afterTables=await call('/db/schema/tables?dbId='+fixtures.source+'&includeGovernance=false');
  const pickTable=rows=>{const row=rows.find(r=>r.tid===fixtures.table);return [row?.annotated,row?.businessType,row?.catalogId,row?.tableComment,row?.flowStatus,row?.assetStatus];};assert.deepEqual(pickTable(afterTables),pickTable(beforeTables));
  landing=await call('/dwm/standard/landing/list',{});assert.equal(landing.items.find(i=>i.field_id===fixtures.column).target_id,null);assert.equal(landing.entities.find(e=>e.id===fixtures.table).fields[0].displayName,'原始标准编码注释');checks.push('unbind-preserves-comments-registration-and-catalog');
 }finally{
  // Exact IDs are only populated after creating our own fixtures; never infer cleanup targets.
  const cleanupErrors=[];
- if(fixtures.source)try{await call('/dst/database/delete',{tid:fixtures.source,dryRun:true});await call('/dst/database/delete',{tid:fixtures.source});checks.push('remove-own-source-and-field-fixture');}catch(e){cleanupErrors.push('source: '+e.message);}
+ if(fixtures.source)try{await call('/db/source/delete',{tid:fixtures.source,dryRun:true});await call('/db/source/delete',{tid:fixtures.source});checks.push('remove-own-source-and-field-fixture');}catch(e){cleanupErrors.push('source: '+e.message);}
  if(fixtures.element)try{await publish(fixtures.element,0);await call('/dwm/standard/element/meatDeleteById',{tid:fixtures.element});checks.push('remove-own-element-fixture');}catch(e){cleanupErrors.push('element: '+e.message);}
  if(fixtures.code)try{await call('/dwm/standard/code/saveOrUpdate',{...codeBody,tid:fixtures.code,status:0});await call('/dwm/standard/code/deleteById',{tid:fixtures.code});checks.push('remove-own-code-fixture');}catch(e){cleanupErrors.push('code: '+e.message);}
  if(cleanupErrors.length)throw new Error('Fixture cleanup needs attention: '+cleanupErrors.join('; '));

@@ -33,17 +33,17 @@ function fixture(size, category) {
     openNifiDesigner:(...args)=>opened.push(args),ElMessageBox:{confirm:async()=>{}},
     $message:Object.fromEntries(['success','error','warning'].map(kind=>[kind,text=>notices.push({kind,text})])),
     $common:{post:async(route,body)=>{calls.push({route,body:plain(body)});
-      if(route==='/ods/dataAggTaskEnsure')return {tasks,task:tasks[0],createdCount:size,repairRequired:false};return {};}}});
+      if(route==='/ods/job/fill')return {tasks,task:tasks[0],createdCount:size,repairRequired:false};return {};}}});
   vm.runInContext(executable,context);
   return {context,calls,opened,notices,tasks};
 }
 for(const size of [1,2,20,100]) {
   const f=fixture(size);
   await f.context.actual.handleApplySave({targetTables:Array.from({length:size},(_,i)=>({targetTableId:`target-${i}`}))});
-  const ensure=f.calls.filter(call=>call.route==='/ods/dataAggTaskEnsure');
+  const ensure=f.calls.filter(call=>call.route==='/ods/job/fill');
   assert.equal(ensure.length,1);
   assert.deepEqual(ensure[0].body.targetTableIds,Array.from({length:size},(_,i)=>`target-${i}`));
-  assert.equal(f.calls.filter(call=>call.route==='/ods/api-pull/bind-task').length,1);
+  assert.equal(f.calls.filter(call=>call.route==='/ods/pull/bind').length,1);
   assert.equal(f.calls.filter(call=>call.route==='refresh').length,1);
   assert.equal(f.opened.length,1,'Every successful create opens the first task, including a multi-hop result');
   assert.deepEqual(plain(f.opened[0]),['task-0','source']);
@@ -69,13 +69,13 @@ for(const size of [1,2,20,100]){
   const f=fixture(size,'distribution');
   await f.context.actual.handleApplySave({targetTables:Array.from({length:size},(_,i)=>({targetTableId:`target-${i}`}))});
   assert.deepEqual(plain(f.opened),[['task-0','source']],'Distribution also opens the first canvas immediately');
-  assert.equal(f.calls.filter(call=>call.route==='/ods/dataAggTaskEnsure').length,1);
+  assert.equal(f.calls.filter(call=>call.route==='/ods/job/fill').length,1);
 }
 for (const category of ['ingestion','distribution']) {
   const failed=fixture(2,category);
   failed.context.$common.post=async(route,body,options)=>{
     failed.calls.push({route,body:plain(body)});
-    if(route==='/ods/dataAggTaskEnsure') {
+    if(route==='/ods/job/fill') {
       assert.equal(options?._hiddenErrorMsg,true);
       throw new Error('字段映射存储容量不足');
     }
@@ -101,8 +101,8 @@ const pageExecutable = pageNames.map(name => {
   return script.slice(node.start, node.end);
 }).join('\n') + '\nglobalThis.pageHandlers={' + pageNames.join(',') + '};';
 for (const {category,endpoint,defaultSort,accessStatus} of [
-  {category:'ingestion',endpoint:'/ods/dataAggPage',defaultSort:'updatedTime',accessStatus:'3'},
-  {category:'distribution',endpoint:'/ods/hiveTargetPage',defaultSort:'createdTime',accessStatus:'1'},
+  {category:'ingestion',endpoint:'/ods/ingest/page',defaultSort:'updatedTime',accessStatus:'3'},
+  {category:'distribution',endpoint:'/ods/dist/tables',defaultSort:'createdTime',accessStatus:'1'},
 ]) for (const count of [20, 100]) {
   const calls = [], rows = Array.from({length:count}, (_,i) => ({tid:`source-${i}`, taskCount:1,
     tableName:`source_${i}`,tasks:[{tid:`task-${i}`,sourceTableId:`source-${i}`,sourceTableName:`source_${i}`,

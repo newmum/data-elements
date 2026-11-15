@@ -22,9 +22,9 @@ async function request(path, body = {}, method = "POST") {
   assert.equal(Number(result.code), 0, `${path}: ${result.message || result.msg}`);
   return result.data;
 }
-token = (await request("/portal/login", { account, password: sm.sm3(password), appId: "1995678661281710081" })).token;
+token = (await request("/portal/sso/login", { account, password: sm.sm3(password), appId: "1995678661281710081" })).token;
 assert.ok(token, "Platform login did not return a session");
-const tenant = await request("/sym/tenant/current", {}, "GET");
+const tenant = await request("/portal/sso/session", {}, "GET");
 assert.ok(tenant, "Cannot resolve the authenticated platform context");
 console.log("Authenticated platform context verified; publishing only the shared global-navigation component.");
 const before = readFileSync(new URL("backups/global-nav-menu-20261003/before.vue", directory), "utf8");

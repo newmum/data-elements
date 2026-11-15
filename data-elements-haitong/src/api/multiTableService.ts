@@ -44,21 +44,21 @@ export type MultiTableCandidate = {
 
 export const multiTableService = {
   async candidates(query: { page?: number; size?: number; keyword?: string } & ServerSort = {}): Promise<PageResult<MultiTableCandidate>> {
-    return asPage<MultiTableCandidate>(await platformApi('/ods/task/multi/candidates', {
+    return asPage<MultiTableCandidate>(await platformApi('/ods/multi/options', {
       pageNum: query.page || 1, pageSize: query.size || 10, keyword: query.keyword || '',sortField:query.sortField,sortDir:query.sortDir,
     }));
   },
   async page(query: { page?: number; size?: number; keyword?: string; itemSortField?:string; itemSortDir?:string } & ServerSort = {}): Promise<PageResult<MultiTableGroup>> {
-    const result = await platformApi<unknown>('/ods/task/multi/page', {
+    const result = await platformApi<unknown>('/ods/multi/page', {
       itemSortField:query.itemSortField,itemSortDir:query.itemSortDir,
       pageNum: query.page || 1, pageSize: query.size || 20, keyword: query.keyword || '',sortField:query.sortField,sortDir:query.sortDir,
     });
     return asPage<MultiTableGroup>(result);
   },
   save: (groupId: string, groupName: string, taskIds: string[]) =>
-    platformApi<{ groupId: string; created: boolean; tableCount: number }>('/ods/task/multi/save', { groupId, groupName, taskIds }),
+    platformApi<{ groupId: string; created: boolean; tableCount: number }>('/ods/multi/save', { groupId, groupName, taskIds }),
   remove: (groupId: string) =>
-    platformApi<{ groupId: string; deleted: boolean; memberTasksPreserved: boolean }>('/ods/task/multi/delete', { groupId }),
+    platformApi<{ groupId: string; deleted: boolean; memberTasksPreserved: boolean }>('/ods/multi/delete', { groupId }),
   relink: (groupId: string, sourceTableId: string, taskId: string) =>
-    platformApi<{ linked: boolean }>('/ods/task/multi/relink', { groupId, sourceTableId, taskId }),
+    platformApi<{ linked: boolean }>('/ods/multi/relink', { groupId, sourceTableId, taskId }),
 };

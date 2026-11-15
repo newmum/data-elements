@@ -128,7 +128,7 @@ test("无组织行业ORG不补权限；四行业切换、本人角色及模块�
   }
   const { runtime } = setup("registrar");
   const id = (await ok(runtime, "operations")).list[0].tid;
-  await call(runtime, "/sym/tenant/switch", {}, { tenantId: tenantConfiguration("broadcasting").tenant.tid }, "POST");
+  await call(runtime, "/portal/sso/switch", {}, { tenantId: tenantConfiguration("broadcasting").tenant.tid }, "POST");
   await refused(runtime, `operations/${id}`, 403);
   const rows = (await ok(runtime, "operations")).list;
   assert(rows.every((row) => row.actor_id === "broadcasting-user-0"));
@@ -296,7 +296,7 @@ test("导出本人/租户/范围/权限/过期/摘要约束及失败状态不伪
   advance(25 * 3600000);
   await refused(runtime, `exports/${id}/download`, 500);
   assert.equal((await ok(runtime, "exports")).list.find((row) => row.tid === id).status, "EXPIRED");
-  await call(runtime, "/sym/tenant/switch", {}, { tenantId: tenantConfiguration("chengtian").tenant.tid }, "POST");
+  await call(runtime, "/portal/sso/switch", {}, { tenantId: tenantConfiguration("chengtian").tenant.tid }, "POST");
   assert.equal((await ok(runtime, "exports")).total, 0);
   await refused(runtime, `exports/${id}/download`, 403);
 });

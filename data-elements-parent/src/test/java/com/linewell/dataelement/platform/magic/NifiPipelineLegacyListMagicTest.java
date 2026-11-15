@@ -157,7 +157,7 @@ class NifiPipelineLegacyListMagicTest {
 
     private static final class Fixture {
         private static final String COMMON = "function/01.通用函数/";
-        private static final String API = "api/10.NiFi流程接口/01.接口/";
+        private static final String API = "api/10.NiFi流程接口/";
         final JdbcTemplate jdbc = new JdbcTemplate(new DriverManagerDataSource(
                 "jdbc:h2:mem:nifi_list_" + UUID.randomUUID() + ";MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1"));
         final StructuredTableReadMagicModule tableRead = new StructuredTableReadMagicModule(jdbc);
@@ -170,13 +170,13 @@ class NifiPipelineLegacyListMagicTest {
         final MagicScript runtime = script(COMMON + "36.NiFi流程运行列表响应.ms", "nifi_pipe_runtime_list_http_v1",
                 "'@/common/nifiSavedCanvasRows' as loadSavedCanvases", "'@/common/nifiPipelineListResponse' as respond",
                 "com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient as nifi");
-        final MagicScript listGet = script(API + "07.查询流程列表.ms", "nifi_pipe_list_get_v1",
+        final MagicScript listGet = script(API + "02.流程设计/01.查询流程列表.ms", "nifi_pipe_list_get_v1",
                 "'@/common/nifiPipelineListHttp' as readPipelines");
-        final MagicScript listHead = script(API + "08.核验流程列表.ms", "nifi_pipe_list_head_v1",
+        final MagicScript listHead = script(API + "02.流程设计/02.核验流程列表.ms", "nifi_pipe_list_head_v1",
                 "'@/common/nifiPipelineListHttp' as readPipelines");
-        final MagicScript runtimeGet = script(API + "28.查询流程运行列表.ms", "nifi_pipe_runtime_list_get_v1",
+        final MagicScript runtimeGet = script(API + "05.运行状态/03.查询流程运行列表.ms", "nifi_pipe_runtime_list_get_v1",
                 "'@/common/nifiPipelineRuntimeListHttp' as readPipelines");
-        final MagicScript runtimeHead = script(API + "29.核验流程运行列表.ms", "nifi_pipe_runtime_list_head_v1",
+        final MagicScript runtimeHead = script(API + "05.运行状态/04.核验流程运行列表.ms", "nifi_pipe_runtime_list_head_v1",
                 "'@/common/nifiPipelineRuntimeListHttp' as readPipelines");
 
         Fixture() throws Exception {

@@ -260,12 +260,12 @@ const nodes = ref([
 ]);
 
 const API = {
-  UPDATE: "/das/repository/update",
-  TAB_PAGE: "/das/repository/tab/page",
-  QUERY_BY_ID: "/das/repository/queryById",
-  TAB_ADD: "/das/repository/tab/add",
-  TAB_DELETE: "/das/repository/tab/delete",
-  TAB_BIND: "/das/repository/tab/bind",
+  UPDATE: "/das/app/update",
+  TAB_PAGE: "/das/tab/page",
+  QUERY_BY_ID: "/das/app/detail",
+  TAB_ADD: "/das/tab/create",
+  TAB_DELETE: "/das/tab/delete",
+  TAB_BIND: "/das/tab/bind",
 };
 
 // 分页相关状态
