@@ -1,0 +1,11 @@
+import {describe,it,expect} from 'vitest';
+import {createModelingDemo} from '../src/modelingDemo';
+import {previewModel} from '../src/modeling';
+import {validateExecution} from '../src/modelingExecution';
+describe('independent multi database modeling demo',()=>{
+ it('provides exactly five isolated sources across the required three databases',()=>{const d=createModelingDemo();expect(Object.keys(d.tables)).toHaveLength(5);expect(d.sources.filter(s=>s.database==='DB1')).toHaveLength(1);expect(d.sources.filter(s=>s.database==='DB2')).toHaveLength(3);expect(d.sources.filter(s=>s.database==='DB3'&&s.kind==='view')).toHaveLength(1);expect(d.nodes.filter(n=>n.kind==='source').map(n=>n.name)).toEqual(['客户库 / 客户表','交易库 / 订单表','交易库 / 订单明细表','交易库 / 商品表','区域库 / 自定义 SQL']);expect(d.nodes.filter(n=>n.kind==='join')).toHaveLength(4);expect(d.viewSql).toContain('不执行 SQL');expect(d.viewSql).toContain('JOIN DB3.regions')});
+ it('executes all local joins and sums to independently expected region totals',()=>{const d=createModelingDemo();const result=previewModel(d.nodes,d.outputId,d.tables);expect(result.rows).toEqual([{'right.region_name':'华东',total_amount:550},{'right.region_name':'华南',total_amount:300}]);expect(result.rows).toEqual(d.expectedRows);expect(previewModel(d.nodes,'demo-join-regions',d.tables).rows).toHaveLength(5);expect(previewModel(d.nodes,'demo-join-orders',d.tables).rows).toHaveLength(5);expect(previewModel(d.nodes,'demo-completed',d.tables).rows).toHaveLength(4);expect(validateExecution(d.nodes,{engine:'flink',mode:'batch'}).filter(i=>i.level==='error')).toEqual([])});
+ it('each invocation returns fresh data with no mutation of another workspace',()=>{const a=createModelingDemo(),b=createModelingDemo();a.tables['demo.DB1.customers'].rows[0].customer_name='changed';a.nodes[0].config.table='changed';expect(b.tables['demo.DB1.customers'].rows[0].customer_name).toBe('客户甲');expect(b.nodes[0].config.table).toBe('demo.DB1.customers')});
+});
+
+it('custom SQL fixture refuses edited SQL or a different database',()=>{const d=createModelingDemo(),n=d.nodes.find(n=>n.id==='demo-regions')!;expect(n.config.table).toBe('');n.config.sqlText+=' WHERE 1=1';expect(()=>previewModel(d.nodes,n.id,d.tables)).toThrow('不执行 SQL');n.config.sqlText=d.viewSql;n.config.database='DB1';expect(()=>previewModel(d.nodes,n.id,d.tables)).toThrow('不执行 SQL')});
