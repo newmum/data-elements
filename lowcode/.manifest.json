@@ -122,7 +122,7 @@
       "type": "1",
       "sortOrder": 4,
       "path": "01.系统门户/02.协作任务/资源申请(my-apply).vue",
-      "baseSha256": "c551915ffd1e80ae8266551fba418fb14440ff98833497a1aede1a024d1241b7"
+      "baseSha256": "7f43d3bb6b3489b7a3dd58d66e01bd9280a6c0e7b8964b09c21a527785bacaa2"
     },
     {
       "id": "08204573bcdb4283b7a88e57aefdd0ea",
@@ -292,7 +292,7 @@
       "type": "1",
       "sortOrder": 2,
       "path": "02.数据盘点/02.登记流程组件/登记组件(register-modal)/登记订阅申请单(register-apply)/申请单表单(apply-json-form).vue",
-      "baseSha256": "b29d000595d21f4ff1045aaf152793cf83164c9733530b94e0e22c6a60cb26e3"
+      "baseSha256": "d5b0ceb67dd33319159e1766959be813bdcc271dc654d4156e5e2714ff15326d"
     },
     {
       "id": "2020438813065162752",
@@ -312,7 +312,7 @@
       "type": "1",
       "sortOrder": 4,
       "path": "02.数据盘点/02.登记流程组件/登记组件(register-modal)/登记订阅申请单(register-apply)/订阅申请单(car-register-apply).vue",
-      "baseSha256": "faaef75e102a45b7cfdd0926ddc77be7f0da6e0a135c0cf3681d253a1e9a65c7"
+      "baseSha256": "fa316c71a3969cffe835af1657b870144afb3c566f16304d4e419c545bdf1675"
     },
     {
       "id": "2019722536331849728",
@@ -322,7 +322,7 @@
       "type": "1",
       "sortOrder": 5,
       "path": "02.数据盘点/02.登记流程组件/登记组件(register-modal)/登记订阅申请单(register-apply)/购物车列表(car-list).vue",
-      "baseSha256": "f056537fe5c36c9e58e7b3b427676a7b2b0793dde02773d9d868de20c3b50ea2"
+      "baseSha256": "5c7499760d60acad29d6a42d726d71559923327a24a17a62e9af393056fb6425"
     },
     {
       "id": "2007661287158910976",
@@ -1042,7 +1042,7 @@
       "type": "1",
       "sortOrder": 2,
       "path": "06.数据服务/02.数据超市/超市列表页(market).vue",
-      "baseSha256": "9f2cc7aa4d362637b01122fddf937be47e8f6852cb2ce13093ce8fd532121ed4"
+      "baseSha256": "2da2017f7416f3d89c07e540655a45cae8a2260c98445da31ad59f9b8ea3d9f6"
     },
     {
       "id": "2015737672091897856",
@@ -1082,7 +1082,7 @@
       "type": "1",
       "sortOrder": 4,
       "path": "06.数据服务/02.数据超市/超市详情(market-detail).vue",
-      "baseSha256": "6d266a7cbf1f3880780ff1f0525ef4e1e65ca9ab9e42ef3ba1a40473058a5a43"
+      "baseSha256": "57f68f2872af7e9f7d8135ac3f2e7e9bda9667993bb7e90ad7afe3500af7b73e"
     },
     {
       "id": "2087000000000000001",
@@ -1102,7 +1102,7 @@
       "type": "1",
       "sortOrder": 1,
       "path": "06.数据服务/03.运行监控/运行监控(ops-monitor).vue",
-      "baseSha256": "ca87db12065463cf3c6bf7a4abddf809779f4b4ae6e7a8a94a9ac9a7466358c1"
+      "baseSha256": "e1e40a6ab98e4afa87fac1fb91dbad3699beb5255a9c0c0fdb466ce838427c84"
     },
     {
       "id": "2087000000000000005",
