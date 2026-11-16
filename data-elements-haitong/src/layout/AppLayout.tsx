@@ -25,8 +25,7 @@ export default function AppLayout({children,live=false}:{children:React.ReactNod
   const user=await platformApi<Record<string,unknown>>('/sym/user/me',{});
   return {name:accountText(user.realName||user.userName),avatar:accountText(user.avatar),department:accountText(user.orgName||user.departmentName||user.deptName),user};
  }});
- const logs=useQuery({queryKey:['platform','log-capabilities',sessionRevision],enabled:live&&deploymentAllows('/management/logs'),queryFn:()=>platformApi<string[]>('/sym/logs/capabilities'),retry:false});
- const allowedRoute=(path:string)=>deploymentAllows(path)&&(path!=='/management/logs'||Boolean(logs.data?.length));
+ const allowedRoute=deploymentAllows;
  const accountName=live?account.data?.name||'当前用户':'林澄';
  const [accountOpen,setAccountOpen]=useState(false),[signingOut,setSigningOut]=useState(false);
  const tenant=useQuery({queryKey:['platform','tenant',sessionRevision],enabled:live&&accountOpen,queryFn:()=>platformApi<Record<string,unknown>>('/portal/sso/session',{})});

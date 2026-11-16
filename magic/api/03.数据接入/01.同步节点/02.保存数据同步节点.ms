@@ -11,7 +11,7 @@
   "paths": [],
   "requestBody": "{\n  \"nodeName\": \"数据同步主节点\",\n  \"nodeCode\": \"primary-nifi\",\n  \"baseUrl\": \"https://nifi.example.com:8443\"\n}",
   "responseBody": "{\n  \"tid\": \"2087600000000000001\"\n}",
-  "description": "保存数据同步节点（POST /ods/node/save）。仅维护当前租户节点；每个所属网络保留一个默认节点，默认节点可以停用；使用请求参数 tid、nodeName、nodeCode、baseUrl、networkCode、authUsername、authPassword、insecureTls；涉及 sym_dict_t、nifi_node_t 等业务表。",
+  "description": "保存当前租户的数据抽取或推送节点（POST /ods/node/save），返回 tid。每个所属网络保留一个默认节点。HTTP NiFi 节点的用户名和密码可同时留空，HTTPS 须设置完整凭据。",
   "script": null
 }
 ================================
@@ -22,7 +22,7 @@ import java.net.URI
 // POST /ods/node/save 保存数据同步节点。
 // 接口：02.保存数据抽取节点
 // 路由：POST /ods/node/save
-// 业务说明：保存数据抽取节点（POST /ods/node/save）。仅维护当前租户节点；每个所属网络保留一个默认节点，默认节点可以停用；使用请求参数 tid、nodeName、nodeCode、baseUrl、networkCode、authUsername、authPassword、insecureTls；涉及 sym_dict_t、nifi_node_t 等业务表。
+// 业务说明：按 tid、节点信息、网络和凭据保存本租户节点并返回 tid。HTTP NiFi 可免认证，HTTPS 须设置完整凭据。
 
 var text = value => value == null ? '' : value + ''
 var blank = value => value == null || text(value).trim() == ''
@@ -126,26 +126,17 @@ var networkDefault = db.table('nifi_node_t').where().eq('tenant_id', tenantId).e
 if (blank(tid) && networkDefault == null) {
     isDefault = 1
 }
-if (isDefault == 1) {
-    db.table('nifi_node_t').where().eq('tenant_id', tenantId).eq('network_code', networkCode).eq('is_del', 0).update({ is_default: 0, updated_time: now })
-}
-if (blank(tid)) {
-    if (isDefault == 1 && (blank(authUsername) || blank(authPassword))) {
-        exit 400, '默认节点必须配置 NiFi 用户名和密码'
-    }
-    tid = IdUtil.getSnowflakeNextIdStr()
-    db.table('nifi_node_t').primary('tid').insert({
-        tid: tid, tenant_id: tenantId, node_name: nodeName, node_code: nodeCode, base_url: baseUrl,
-        network_code: networkCode, root_process_group_id: text(body?.rootProcessGroupId).trim(), auth_username: authUsername, auth_password: authPassword, insecure_tls: insecureTls, jdbc_driver_locations: jdbcDriverDirectory, remark: text(body?.remark).trim(),
-        enabled: enabled, is_default: isDefault, created_time: now, updated_time: now, is_del: 0
-    })
-} else {
+var creating = blank(tid)
+var httpNode = baseUrl.startsWith('http://')
+var clearStoredCredentials = false
+if (!creating) {
     var existing = db.table('nifi_node_t').where().eq('tenant_id', tenantId).eq('tid', tid).eq('is_del', 0).selectOne()
     if (existing == null) {
         exit 404, '数据抽取节点不存在或已删除'
     }
     var persistedDefault = existing.isDefault == null ? existing.is_default : existing.isDefault
     var persistedNetworkCode = text(existing.networkCode == null ? existing.network_code : existing.networkCode).trim()
+    var existingUsername = text(existing.authUsername == null ? existing.auth_username : existing.authUsername).trim()
     var existingPassword = text(existing.authPassword == null ? existing.auth_password : existing.authPassword)
     if ((persistedDefault == 1 || persistedDefault == true) && persistedNetworkCode != '' && persistedNetworkCode != networkCode) {
         exit 400, '默认节点不能直接变更所属网络，请先在原网络设置新的默认节点'
@@ -153,13 +144,46 @@ if (blank(tid)) {
     if ((persistedDefault == 1 || persistedDefault == true) && isDefault == 0) {
         exit 400, '每个所属网络必须保留一个默认节点，请先将其他节点设为默认'
     }
-    if (isDefault == 1 && (blank(authUsername) || (blank(authPassword) && blank(existingPassword)))) {
-        exit 400, '默认节点必须配置 NiFi 用户名和密码'
-    }
-    db.table('nifi_node_t').where().eq('tenant_id', tenantId).eq('tid', tid).eq('is_del', 0).update({
-        node_name: nodeName, node_code: nodeCode, base_url: baseUrl,
-        network_code: networkCode, root_process_group_id: text(body?.rootProcessGroupId).trim(), auth_username: authUsername, auth_password: blank(authPassword) ? existingPassword : authPassword, insecure_tls: insecureTls, jdbc_driver_locations: jdbcDriverDirectory, remark: text(body?.remark).trim(),
-        enabled: enabled, is_default: isDefault, updated_time: now
-    })
+    // 普通编辑时空密码表示保留。HTTP 显式清空用户名且密码留空才切换到免认证。
+    var sentUsername = body.containsKey('authUsername')
+    var clearCredentials = httpNode && sentUsername && blank(authUsername) && blank(authPassword)
+    if (!sentUsername) { authUsername = existingUsername }
+    if (blank(authPassword) && !clearCredentials) { authPassword = existingPassword }
+    clearStoredCredentials = clearCredentials && (!blank(existingUsername) || !blank(existingPassword))
 }
+var anonymousHttp = httpNode && blank(authUsername) && blank(authPassword)
+if (!anonymousHttp && (blank(authUsername) || blank(authPassword))) {
+    exit 400, '请填写完整的 NiFi 用户名和密码，仅 HTTP 节点可同时留空'
+}
+
+if (creating) { tid = IdUtil.getSnowflakeNextIdStr() }
+var nodeId = tid
+var clearAuthentication = clearStoredCredentials
+var values = {
+    node_name: nodeName, node_code: nodeCode, base_url: baseUrl, network_code: networkCode,
+    root_process_group_id: text(body?.rootProcessGroupId).trim(), auth_username: authUsername, auth_password: authPassword,
+    insecure_tls: insecureTls, jdbc_driver_locations: jdbcDriverDirectory, remark: text(body?.remark).trim(),
+    enabled: enabled, is_default: isDefault, updated_time: now
+}
+// 校验完成后，在同一事务切换默认节点并保存，失败时保留原有默认节点。
+db.transaction(() => {
+    if (values.is_default == 1) {
+        db.table('nifi_node_t').where().eq('tenant_id', tenantId).eq('network_code', networkCode).eq('is_del', 0)
+            .update({ is_default: 0, updated_time: now })
+    }
+    if (creating) {
+        values.tid = nodeId
+        values.tenant_id = tenantId
+        values.created_time = now
+        values.is_del = 0
+        db.table('nifi_node_t').primary('tid').insert(values)
+    } else {
+        db.table('nifi_node_t').where().eq('tenant_id', tenantId).eq('tid', nodeId).eq('is_del', 0).update(values)
+        if (clearAuthentication) {
+            // 常规更新忽略空值。显式切换认证方式时清除两列，兼容空字符串视为 NULL 的数据库。
+            db.table('nifi_node_t').withBlank().where().eq('tenant_id', tenantId).eq('tid', nodeId).eq('is_del', 0)
+                .update({ auth_username: null, auth_password: null })
+        }
+    }
+})
 return { tid: tid }

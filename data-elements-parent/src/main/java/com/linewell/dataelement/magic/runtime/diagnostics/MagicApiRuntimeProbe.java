@@ -1,4 +1,4 @@
-package com.linewell.dataelement.platform.magic.diagnostics;
+package com.linewell.dataelement.magic.runtime.diagnostics;
 
 import com.linewell.dataelement.platform.tenant.infrastructure.datasource.UseControlDataSource;
 import java.util.List;

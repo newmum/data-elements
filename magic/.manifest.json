@@ -412,7 +412,7 @@
         "8a56e7d664934c1499102cfa508cd58a"
       ],
       "kind": null,
-      "baseSha256": "6f00df4b4023433e45e60b102fddcabda2635b0302e5827080dbeb40ec84a02b",
+      "baseSha256": "c717f18b1aa390746f1eec587f5fbcb1fddb652a4d4b5ed4a40f5668fbdee53a",
       "metadataId": "8a56e7d664934c1499102cfa508cd58a"
     },
     {
@@ -422,7 +422,7 @@
         "a0b5bba38fbf428c8e3646864d83d56b"
       ],
       "kind": null,
-      "baseSha256": "b98067cc6db9a154d65ab4db272181b61ec040c50fb056fa79728c8228af8230",
+      "baseSha256": "363a91b5d299ddd50d97813cc247958c7d970b9ede04856133a131cc7b48478f",
       "metadataId": "a0b5bba38fbf428c8e3646864d83d56b"
     },
     {
@@ -1024,7 +1024,7 @@
         "ods_nifi_node_page_01"
       ],
       "kind": "api",
-      "baseSha256": "f51e0910801eb974866c11e167a891e6fc611c32ffb0dd86fcaa4fdf4ed34e40",
+      "baseSha256": "ace248edc4e635b870c8ef19f58d0a14fef905fec5d8673bcb155aacf82da06e",
       "metadataId": "ods_nifi_node_page_01"
     },
     {
@@ -1034,7 +1034,7 @@
         "ods_nifi_node_save_01"
       ],
       "kind": "api",
-      "baseSha256": "d8200bb88519461752042a817b21da8d83e9d5be3b4748181c79094873af679c",
+      "baseSha256": "f1e7cbf034ca4a4393f976c1c657d335b90731806218a38d46bb9a84674a0bb4",
       "metadataId": "ods_nifi_node_save_01"
     },
     {
@@ -1450,6 +1450,16 @@
       "kind": null,
       "baseSha256": "3997118436496b81585b1e84afa5a883c1e8c951104909628d625c7ebb810907",
       "metadataId": "33cd261177224b5f9ddb886d5df1b1e4"
+    },
+    {
+      "path": "api/03.数据接入/07.接入登记/08.关联原生流程.ms",
+      "databasePath": "/magic-api/api/03.数据接入/07.接入登记/08.关联原生流程.ms",
+      "rowIds": [
+        "f2b03e97c14a4ebdbc8571dee6a8f7b2"
+      ],
+      "kind": "api",
+      "metadataId": "ea87bf02b8a843b5a0491ebdc6aa8071",
+      "baseSha256": "f7a8d0d80695356b3a50c1a67f8c4b5e0d934d32833544c0fa9f5f1560778d21"
     },
     {
       "path": "api/03.数据接入/07.接入登记/group.json",
@@ -7246,7 +7256,7 @@
         "aef49fd436d54631b6a399428c6a1fca"
       ],
       "kind": "api",
-      "baseSha256": "339b80669ccbd3af8dd79f0672aabad250469c408f3ba51de9820716c7ab0072",
+      "baseSha256": "f2b3d3dd50f2af32d9bc662c4b24444d5e51bbf3f0ac030245a8373747a993c0",
       "metadataId": "nifi_pipeline_deploy_post_v1"
     },
     {
@@ -8519,7 +8529,7 @@
         "5c60ea7c3ee145478a2fe6ef278c59c8"
       ],
       "kind": "function",
-      "baseSha256": "a7a828afd4481ea145e874e6254a45da95fe49cdf5caaafcf435d9ba4db845d7",
+      "baseSha256": "eb286739c2a1d85a6a00c250c1f51cb57389b66d3cfd48d1c782447b5ff7aa5d",
       "metadataId": "nifi_canvas_deploy_v1"
     },
     {
@@ -8549,7 +8559,7 @@
         "ce6e24e7424d4426aebaf2c28c7b043b"
       ],
       "kind": "function",
-      "baseSha256": "9efeac234bb642e65cc161349a70ba1858a0b4e2ad4014ce6d60ac8cacc665e9",
+      "baseSha256": "947028586bc2c48649daa12975bf699ec2fc944fcda32064fadd58470b63940b",
       "metadataId": "nifi_stop_canvas_v1"
     },
     {
@@ -8700,7 +8710,7 @@
       ],
       "kind": "function",
       "metadataId": "nifi_connection_probe_setting_v1",
-      "baseSha256": "1a7cc00dba521bbda8dca1458be48450f3b5ba8df1e5be241342a6978bc080a4"
+      "baseSha256": "a96aed18d4a7b3eacdf93420cf1cbb3b704e3385de6d31557a8e1dff123aa1f8"
     },
     {
       "path": "function/01.通用函数/75.草稿排序与分页.ms",

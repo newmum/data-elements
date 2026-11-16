@@ -2787,9 +2787,19 @@ public class DslCompiler {
                                                       String localId,
                                                       Map<String, Object> cfg,
                                                       Map<String, String> properties) {
-        if ("sink.jdbc".equals(manifest.key()) && "put".equals(localId)
+        if (properties != null && "sink.jdbc".equals(manifest.key()) && "put".equals(localId)
                 && !usesLinewellJdbcWriter(manifest, localId, cfg)) {
             normalizeNativeJdbcTableProperties(properties);
+            // NiFi removes underscores by default. Distinct columns such as MongoDB's
+            // _id and a business id would then share one JDBC binding.
+            Set<String> translatedNames = new HashSet<>();
+            for (TargetColumnMetadata column : targetColumnMetadata(cfg)) {
+                String translated = column.name().replace("_", "").toUpperCase(Locale.ROOT);
+                if (!translatedNames.add(translated)) {
+                    properties.put("Translate Field Names", "false");
+                    break;
+                }
+            }
         }
         if (!usesLinewellJdbcWriter(manifest, localId, cfg) || properties == null) {
             return;

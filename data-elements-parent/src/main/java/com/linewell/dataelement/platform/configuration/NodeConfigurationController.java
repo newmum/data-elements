@@ -1,14 +1,19 @@
 package com.linewell.dataelement.platform.configuration;
 
 import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient;
+import com.linewell.dataelement.integration.nifi.canvas.config.NifiNodeRuntimeResolver;
 import com.linewell.dataelement.model.common.CommonResponse;
 import com.linewell.dataelement.platform.tenant.domain.TenantContext;
+import com.linewell.dataelement.utils.LocalCache;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -33,17 +38,22 @@ public class NodeConfigurationController {
 
     private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(5);
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(8);
+    private static final DateTimeFormatter HEALTH_TIME_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     private final MagicResourceService magicResourceService;
     private final Resource magicDatabaseResource;
     private final NifiClient nifiClient;
+    private final NifiNodeRuntimeResolver nifiNodeRuntimeResolver;
+    private final ObjectMapper objectMapper;
 
     public NodeConfigurationController(MagicResourceService magicResourceService,
             @Qualifier("magicDatabaseResource") Resource magicDatabaseResource,
-            NifiClient nifiClient) {
+            NifiClient nifiClient, NifiNodeRuntimeResolver nifiNodeRuntimeResolver, ObjectMapper objectMapper) {
         this.magicResourceService = magicResourceService;
         this.magicDatabaseResource = magicDatabaseResource;
         this.nifiClient = nifiClient;
+        this.nifiNodeRuntimeResolver = nifiNodeRuntimeResolver;
+        this.objectMapper = objectMapper;
     }
 
     /** Refresh the in-memory Magic resource tree after an api_file_t publish. */
@@ -72,12 +82,12 @@ public class NodeConfigurationController {
     public CommonResponse<Map<String, Object>> checkServiceNodeHealth(
             @RequestBody(required = false) Map<String, Object> body) {
         Map<String, Object> request = body == null ? Map.of() : body;
+        if ("sync".equalsIgnoreCase(text(request.get("nodeType")))) {
+            return checkSyncNode(text(request.get("nodeId")));
+        }
         if (booleanValue(request.get("localNode"))) {
             return CommonResponse.success(healthResult(true, 200, 0,
                     "本机 data-elements 数据服务节点可用", "local"));
-        }
-        if ("sync".equalsIgnoreCase(text(request.get("nodeType")))) {
-            return checkSyncNode(text(request.get("nodeId")), text(request.get("baseUrl")));
         }
         String managementUrl = text(request.get("managementUrl"));
         String baseUrl = text(request.get("baseUrl"));
@@ -157,16 +167,35 @@ public class NodeConfigurationController {
         return value.isNumber() ? value.numberValue() : null;
     }
 
-    private CommonResponse<Map<String, Object>> checkSyncNode(String nodeId, String baseUrl) {
+    private CommonResponse<Map<String, Object>> checkSyncNode(String nodeId) {
+        String tenantId = TenantContext.getTenantId();
+        if (tenantId == null || tenantId.isBlank()) {
+            throw new IllegalStateException("登录租户上下文已失效，请重新登录");
+        }
         long started = System.currentTimeMillis();
+        NifiNodeRuntimeResolver.ConfiguredNode configured;
         try {
-            nifiClient.testConnection(nodeId);
-            return CommonResponse.success(healthResult(true, 200, System.currentTimeMillis() - started,
-                    "NiFi 节点认证与根流程组访问正常", normalizeNifiApiUrl(baseUrl)));
+            configured = nifiNodeRuntimeResolver.configuredNodeById(nodeId);
         } catch (Exception exception) {
             return CommonResponse.success(healthResult(false, 0, System.currentTimeMillis() - started,
-                    rootMessage(exception), normalizeNifiApiUrl(baseUrl)));
+                    rootMessage(exception), ""));
         }
+        var node = configured.runtimeNode();
+        String url = node.baseUrl() + "/nifi-api/flow/process-groups/root";
+        Map<String, Object> result;
+        try {
+            nifiClient.testConnection(node);
+            result = healthResult(true, 200, System.currentTimeMillis() - started, "NiFi 节点根流程组访问正常", url);
+        } catch (Exception exception) {
+            result = healthResult(false, 0, System.currentTimeMillis() - started, rootMessage(exception), url);
+        }
+        result.put("healthTime", HEALTH_TIME_FORMAT.format(LocalDateTime.now()));
+        // Include the saved revision so a probe in flight cannot mark an edited node healthy.
+        String cacheKey = "nifi-node-health:" + tenantId + ":" + node.id() + ":" + configured.revision();
+        LocalCache.put(cacheKey, objectMapper.valueToTree(Map.of(
+                "success", result.get("success"), "message", result.get("message"),
+                "healthTime", result.get("healthTime"), "latencyMs", result.get("latencyMs"))).toString());
+        return CommonResponse.success(result);
     }
 
     private Map<String, Object> healthResult(
@@ -188,10 +217,6 @@ public class NodeConfigurationController {
             return normalized + "/api/v1/runtime/health";
         }
         return normalized;
-    }
-
-    private String normalizeNifiApiUrl(String value) {
-        return value == null || value.isBlank() ? "" : value.trim().replaceAll("/+$", "") + "/nifi-api/flow/process-groups/root";
     }
 
     private String text(Object value) {

@@ -12,7 +12,9 @@
   "path": "/info",
   "method": "GET",
   "parameters": [],
-  "options": [],
+  "options": [
+    {"name": "access", "value": "TENANT_SESSION"}
+  ],
   "requestBody": null,
   "headers": [],
   "paths": [],

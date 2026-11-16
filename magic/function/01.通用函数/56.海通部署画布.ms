@@ -93,6 +93,11 @@ return respond(rootCause => {
         if (saved == null) {
             return ResponseEntity.notFound().build()
         }
+        var discardQueueFor = options?.discardQueueFor
+        if (discardQueueFor != null && (options?.forceRebuild != true || options?.startAfterDeploy == true
+            || options?.preserveExisting == true || discardQueueFor != saved.nifiProcessGroupId())) {
+            return ResponseEntity.status(409).body({error: '旧流程关联已改变，请刷新并重新确认清空范围'})
+        }
 
         var log = LoggerFactory.getLogger('com.linewell.dataelement.integration.nifi.canvas.Deployment')
         var attributeSync = new NifiAttributeSync(nifi)
@@ -323,7 +328,7 @@ return respond(rootCause => {
                     }
                 }
 
-                if (javaMapping || hivePartition || hiveMerge) {
+                if (javaMapping || hivePartition || hiveMerge || discardQueueFor != null) {
                     var staged = {groupId: null}
                     var committed = false
                     var previousStopped = false
@@ -337,7 +342,7 @@ return respond(rootCause => {
                         for (groupId in layout.previousIds()) {
                             var aggregate = nifi.getProcessGroupStatus(groupId).path('processGroupStatus').path('aggregateSnapshot')
                             var queued = aggregate.path('queuedCount').asLong(aggregate.path('flowFilesQueued').asLong(-1L))
-                            if (queued != 0) {
+                            if (queued < 0 || (queued > 0 && groupId != discardQueueFor)) {
                                 throw new IllegalStateException(queued < 0 ? '无法确认旧流程队列状态，已保留旧图' : '旧流程还有排队记录，已保留旧图并阻止重建')
                             }
                         }
@@ -361,14 +366,16 @@ return respond(rootCause => {
                         }
                         var compiled = compiler.compile(design, groupId => { staged.groupId = groupId }, layout)
                         staged.groupId = usableGroup(compiled, '候选流程编译失败')
-                        if (hiveMerge && !hivePartition) {
+                        if ((hiveMerge && !hivePartition) || discardQueueFor != null) {
                             nifi.requireValidGeneratedProcessGroup(staged.groupId)
                         }
                         var mapping = buildMapping(design, compiled, design, false)
                         for (groupId in layout.previousIds()) {
                             nifi.setProcessGroupState(groupId, 'STOPPED')
                             nifi.waitForAllProcessorsStopped(groupId, 30000L)
-                            nifi.requireEmptyQueuesForRedeploy(groupId)
+                            if (groupId != discardQueueFor) {
+                                nifi.requireEmptyQueuesForRedeploy(groupId)
+                            }
                         }
                         previousStopped = true
                         for (processor in stateIds) {
@@ -406,7 +413,8 @@ return respond(rootCause => {
                             log.warn('流程已部署，血缘索引归档待恢复，pipeline={}', pipelineId)
                         }
                         var response = result(updated, staged.groupId,
-                            hivePartition ? 'staged-hive-template-deploy' : hiveMerge ? 'staged-hive-merge-deploy' : 'staged-unified-deploy')
+                            hivePartition ? 'staged-hive-template-deploy' : hiveMerge ? 'staged-hive-merge-deploy'
+                                : javaMapping ? 'staged-unified-deploy' : 'full-deploy')
                         response.started = start
                         if (!retained.isEmpty()) {
                             response.retainedStoppedGroups = retained
@@ -422,8 +430,9 @@ return respond(rootCause => {
                             setStatus(PipelineStatus.STOPPED)
                         }
                         return failureResponse(409, hivePartition ? 'hive-template-deployment-failed'
-                            : hiveMerge ? 'hive-merge-deployment-failed' : 'mapping-deployment-failed',
-                            hivePartition ? 'Hive基础候选流程部署失败' : hiveMerge ? 'Hive小文件合并候选流程部署失败' : '统一映射候选流程部署失败',
+                            : hiveMerge ? 'hive-merge-deployment-failed' : javaMapping ? 'mapping-deployment-failed' : 'redeploy-failed',
+                            hivePartition ? 'Hive基础候选流程部署失败' : hiveMerge ? 'Hive小文件合并候选流程部署失败'
+                                : javaMapping ? '统一映射候选流程部署失败' : '重部署未完成',
                             rootCause(failure), committed ? '请检查新流程状态及错误详情。' : '旧流程及其状态已保留，请根据详情修复后重新部署。',
                             {previousGraphRetained: !committed})
                     }

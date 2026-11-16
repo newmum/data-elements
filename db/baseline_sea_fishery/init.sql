@@ -1195,6 +1195,22 @@ CREATE TABLE `data_access_multi_group_t` (
   KEY `idx_multi_group_tenant_active` (`tenant_id`,`is_del`,`created_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='数据接入-多表任务编组';
 
+-- TABLE data_access_native_flow_t
+CREATE TABLE `data_access_native_flow_t` (
+  `tid` varchar(32) COLLATE utf8mb4_general_ci NOT NULL COMMENT '关联记录标识',
+  `tenant_id` varchar(32) COLLATE utf8mb4_general_ci NOT NULL COMMENT '所属行业租户标识',
+  `source_table_id` varchar(32) COLLATE utf8mb4_general_ci NOT NULL COMMENT '已登记来源表标识',
+  `node_id` varchar(32) COLLATE utf8mb4_general_ci NOT NULL COMMENT 'NiFi节点标识',
+  `node_name` varchar(128) COLLATE utf8mb4_general_ci NOT NULL COMMENT '建立关联时的节点名称',
+  `process_group_id` varchar(36) COLLATE utf8mb4_general_ci NOT NULL COMMENT 'NiFi原生流程组UUID',
+  `group_name` varchar(512) COLLATE utf8mb4_general_ci NOT NULL COMMENT '建立关联时的原生流程组名称',
+  `created_by` varchar(32) COLLATE utf8mb4_general_ci NOT NULL COMMENT '创建关联的用户标识',
+  `created_at` bigint NOT NULL COMMENT '关联创建时间戳，Unix毫秒',
+  PRIMARY KEY (`tid`),
+  UNIQUE KEY `uk_native_flow_tenant_group` (`tenant_id`,`node_id`,`process_group_id`),
+  KEY `idx_native_flow_tenant_time` (`tenant_id`,`created_at`,`tid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='数据接入-已登记来源表与NiFi原生流程只读关联';
+
 -- TABLE data_access_task_monitor_snap_t
 CREATE TABLE `data_access_task_monitor_snap_t` (
   `tid` varchar(32) COLLATE utf8mb4_general_ci NOT NULL COMMENT '主键标识',

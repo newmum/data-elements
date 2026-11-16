@@ -1,4 +1,4 @@
-package com.linewell.dataelement.platform.web.config;
+package com.linewell.dataelement.platform.web.compat;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -23,7 +23,7 @@ class IdaasLegacyRoutesTest {
                 new Route("POST", "/idaas/password-recovery/request", "/idaas/recovery/request", true),
                 new Route("GET", "/idaas/password-recovery/requests", "/idaas/recovery/requests", false),
                 new Route("POST", "/idaas/receiver/v2", "/idaas/receiver/v2", true));
-        var filter = new WebConfiguration().legacyResourceRoutes().getFilter();
+        var filter = new LegacyRouteConfiguration().legacyResourceRoutes().getFilter();
         var whitelist = new WhiteListProp();
         for (var route : routes) {
             var request = new MockHttpServletRequest(route.method(), route.previous());

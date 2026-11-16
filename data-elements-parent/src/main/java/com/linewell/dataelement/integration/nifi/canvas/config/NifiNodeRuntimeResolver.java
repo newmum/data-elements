@@ -3,6 +3,7 @@ package com.linewell.dataelement.integration.nifi.canvas.config;
 import com.linewell.dataelement.platform.tenant.config.TenantProperties;
 import com.linewell.dataelement.platform.tenant.domain.TenantContext;
 import com.linewell.dataelement.platform.tenant.infrastructure.datasource.TenantDataSourceRegistry;
+import java.sql.Timestamp;
 import java.util.Locale;
 import java.util.List;
 import java.util.Map;
@@ -49,11 +50,16 @@ public class NifiNodeRuntimeResolver {
         if (rows.isEmpty()) {
             throw new IllegalStateException("当前租户未配置可用的默认 NiFi 节点，请在节点管理中启用并设置一个默认节点");
         }
-        return toRuntimeNode(tenantId, rows.getFirst());
+        return toRuntimeNode(tenantId, rows.getFirst()).requireValidConnection();
     }
 
     /** Resolves one saved node for a server-side connectivity check without accepting credentials from the browser. */
     public RuntimeNode resolveById(String nodeId) {
+        return configuredNodeById(nodeId).runtimeNode().requireValidConnection();
+    }
+
+    /** Keeps the configuration revision used by a manual probe together with the resolved endpoint. */
+    public ConfiguredNode configuredNodeById(String nodeId) {
         String tenantId = TenantContext.getTenantId();
         if (!StringUtils.hasText(tenantId)) {
             tenantId = tenantProperties.getDefaultTenantId();
@@ -64,7 +70,7 @@ public class NifiNodeRuntimeResolver {
         JdbcTemplate jdbc = new JdbcTemplate(tenantDataSourceRegistry.dataSourceForTenant(tenantId));
         List<Map<String, Object>> rows = jdbc.queryForList("""
                 select tid, node_code, base_url, root_process_group_id,
-                       auth_username, auth_password, insecure_tls, jdbc_driver_locations
+                       auth_username, auth_password, insecure_tls, jdbc_driver_locations, updated_time
                   from nifi_node_t
                  where tenant_id = ? and tid = ? and ifnull(is_del, 0) = 0
                  limit 1
@@ -72,27 +78,27 @@ public class NifiNodeRuntimeResolver {
         if (rows.isEmpty()) {
             throw new IllegalArgumentException("数据同步节点不存在或不属于当前租户");
         }
-        return toRuntimeNode(tenantId, rows.getFirst());
+        Map<String, Object> row = rows.getFirst();
+        return new ConfiguredNode(toRuntimeNode(tenantId, row), connectionRevision(row.get("updated_time")));
     }
 
+    private static String connectionRevision(Object updatedTime) {
+        if (updatedTime instanceof Timestamp timestamp) {
+            return timestamp.toLocalDateTime().toString();
+        }
+        return text(updatedTime).replace(' ', 'T');
+    }
+
+    public record ConfiguredNode(RuntimeNode runtimeNode, String revision) {}
+
     private RuntimeNode toRuntimeNode(String tenantId, Map<String, Object> row) {
-        String nodeCode = text(row.get("node_code"));
-        String baseUrl = trimTrailingSlash(text(row.get("base_url")));
-        if (!StringUtils.hasText(nodeCode) || !StringUtils.hasText(baseUrl)) {
-            throw new IllegalStateException("默认 NiFi 节点缺少节点编码或发布地址，请在节点管理中补全");
-        }
-        String username = text(row.get("auth_username"));
-        String password = text(row.get("auth_password"));
-        if (!StringUtils.hasText(username) || !StringUtils.hasText(password)) {
-            throw new IllegalStateException("默认 NiFi 节点缺少认证信息，请在节点管理中补全");
-        }
         return new RuntimeNode(
                 tenantId,
                 text(row.get("tid")),
-                nodeCode,
-                baseUrl,
-                username,
-                password,
+                text(row.get("node_code")),
+                trimTrailingSlash(text(row.get("base_url"))),
+                text(row.get("auth_username")),
+                text(row.get("auth_password")),
                 Boolean.TRUE.equals(row.get("insecure_tls")) || "1".equals(text(row.get("insecure_tls"))),
                 text(row.get("root_process_group_id")),
                 text(row.get("jdbc_driver_locations"))
@@ -102,7 +108,7 @@ public class NifiNodeRuntimeResolver {
     public RestClient restClient(RuntimeNode node) {
         return RestClient.builder()
                 .baseUrl(node.baseUrl())
-                .requestFactory(NifiClientConfig.createRequestFactory(node.insecureTls()))
+                .requestFactory(NifiClientConfig.createRequestFactory(node.skipTlsVerification()))
                 .build();
     }
 
@@ -133,6 +139,24 @@ public class NifiNodeRuntimeResolver {
 
         public String tokenCacheKey() {
             return tenantId + ":" + id + ":" + baseUrl;
+        }
+
+        public RuntimeNode requireValidConnection() {
+            if (!StringUtils.hasText(code) || !StringUtils.hasText(baseUrl)) {
+                throw new IllegalStateException("默认 NiFi 节点缺少节点编码或发布地址，请在节点管理中补全");
+            }
+            if (!isAnonymousHttp() && (!StringUtils.hasText(username) || !StringUtils.hasText(password))) {
+                throw new IllegalStateException("NiFi 节点缺少认证信息，仅 HTTP 节点可同时留空用户名和密码");
+            }
+            return this;
+        }
+
+        public boolean isAnonymousHttp() {
+            return baseUrl.startsWith("http://") && !StringUtils.hasText(username) && !StringUtils.hasText(password);
+        }
+
+        public boolean skipTlsVerification() {
+            return insecureTls && baseUrl.startsWith("https://");
         }
 
         /**

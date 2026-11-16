@@ -1,4 +1,4 @@
-package com.linewell.dataelement.elasticsearch;
+package com.linewell.dataelement.integration.search.config;
 
 import java.io.IOException;
 import java.util.Arrays;

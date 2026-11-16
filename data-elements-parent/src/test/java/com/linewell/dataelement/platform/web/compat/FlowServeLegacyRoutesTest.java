@@ -1,10 +1,14 @@
-package com.linewell.dataelement.platform.web.config;
+package com.linewell.dataelement.platform.web.compat;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 
@@ -16,7 +20,7 @@ class FlowServeLegacyRoutesTest {
                 new Route("PUT", "", "draft"), new Route("POST", "/debug", "debug"),
                 new Route("POST", "/publish", "publish"), new Route("POST", "/offline", "offline"),
                 new Route("GET", "/versions", "versions"));
-        var filter = new WebConfiguration().legacyResourceRoutes().getFilter();
+        var filter = new LegacyRouteConfiguration().legacyResourceRoutes().getFilter();
         for (Route route : routes) {
             var request = new MockHttpServletRequest(route.method(), "/platform/dws/flowserve/flows/flow%2Btest" + route.suffix());
             request.setContextPath("/platform");
@@ -37,10 +41,32 @@ class FlowServeLegacyRoutesTest {
 
     @Test
     void publishedPathsAndUnmappedMethodsContinueUntouched() throws Exception {
-        var filter = new WebConfiguration().legacyResourceRoutes().getFilter();
+        var filter = new LegacyRouteConfiguration().legacyResourceRoutes().getFilter();
         for (String target : List.of("/dws/flowserve/published/portal", "/dws/flowserve/flows/sample/debug")) {
             var request = new MockHttpServletRequest("GET", target);
             filter.doFilter(request, new MockHttpServletResponse(), (actual, response) -> assertThat(actual).isSameAs(request));
+        }
+    }
+
+    @Test
+    void recordsTheOriginalEncodingAndMethodWithoutQueryOrPathParameters() throws Exception {
+        var logger = (Logger) LoggerFactory.getLogger(LegacyRouteConfiguration.class);
+        var events = new ListAppender<ILoggingEvent>();
+        events.start();
+        logger.addAppender(events);
+        try {
+            var filter = new LegacyRouteConfiguration().legacyResourceRoutes().getFilter();
+            var request = new MockHttpServletRequest("PUT", "/platform/dws/flowserve/flows/flow%2Btest;jsessionid=validation");
+            request.setContextPath("/platform");
+            request.setQueryString("id=ignored&version=17");
+            filter.doFilter(request, new MockHttpServletResponse(), (actual, response) -> {
+                assertThat(((HttpServletRequest) actual).getRequestURI()).isEqualTo("/platform/dws/flowserve/draft");
+                assertThat(events.list).singleElement().extracting(ILoggingEvent::getFormattedMessage)
+                        .isEqualTo("Legacy route requested method=PUT originalPath=/platform/dws/flowserve/flows/flow%2Btest targetPath=/dws/flowserve/draft");
+            });
+        } finally {
+            logger.detachAppender(events);
+            events.stop();
         }
     }
 }

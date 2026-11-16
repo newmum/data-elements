@@ -1,4 +1,4 @@
-package com.linewell.dataelement.integration.elasticsearch.config;
+package com.linewell.dataelement.integration.search.config;
 
 import java.util.List;
 import com.linewell.dataelement.elasticsearch.EsCommonService;

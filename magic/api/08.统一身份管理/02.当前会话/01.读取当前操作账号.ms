@@ -13,7 +13,9 @@
   "description": "校验平台会话，读取本人资料、身份域、功能权限及应用管理范围，供控制台展示当前登录状态。",
   "parameters": [],
   "method": "GET",
-  "options": [],
+  "options": [
+    {"name": "access", "value": "IDAAS_PLATFORM_SESSION"}
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

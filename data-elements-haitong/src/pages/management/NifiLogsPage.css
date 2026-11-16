@@ -1,0 +1,46 @@
+.ht-nifi-logs-title h1 { margin: 0 0 6px; font-size: 24px; }
+.ht-nifi-logs-title p { margin: 0; }
+.ht-nifi-logs-workspace {
+  display: grid;
+  grid-template-columns: minmax(200px, 245px) minmax(0, 1fr);
+  align-items: start;
+  gap: 14px;
+}
+.ht-nifi-logs-workspace > .ht-panel { min-width: 0; }
+.ht-nifi-logs-flow-list { padding: 0; margin: 10px 0; list-style: none; }
+.ht-nifi-logs-flow-list button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.ht-nifi-logs-flow-list button:hover { background: var(--surface-soft); }
+.ht-nifi-logs-flow-list button[aria-pressed='true'] {
+  color: var(--primary);
+  background: var(--surface-soft);
+  border-color: var(--primary);
+}
+.ht-nifi-logs-flow-list button > span, .ht-nifi-logs-current, .ht-nifi-log-message {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ht-nifi-logs-flow-list small { margin-inline-start: auto; color: var(--secondary); white-space: nowrap; }
+.ht-nifi-logs-current { font-weight: 600; margin-bottom: 4px; }
+.ht-nifi-log-message { max-width: 100%; text-align: start; }
+.ht-nifi-log-detail { overflow-wrap: anywhere; white-space: pre-wrap; max-height: min(50vh, 26rem); overflow-y: auto; }
+@media (max-width: 860px) {
+  .ht-nifi-logs-workspace { grid-template-columns: minmax(0, 1fr); }
+  .ht-nifi-logs-flow-list { max-height: 145px; overflow-y: auto; }
+}

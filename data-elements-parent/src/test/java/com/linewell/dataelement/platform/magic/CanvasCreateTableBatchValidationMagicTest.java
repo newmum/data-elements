@@ -40,6 +40,23 @@ class CanvasCreateTableBatchValidationMagicTest {
     private CountingPartitions partitions;
 
     @Test
+    void canvasEditorCreatesAndReturnsTheNameFromSubmittedSql() throws Exception {
+        scope.registered = Map.of("dbType", "mysql", "database", "fixture", "host", "fixture.invalid", "username", "validation");
+        physical.allowCreate = true;
+        var result = assertInstanceOf(Map.class, run(Map.of("canvas", true, "dbId", "target-db",
+                "ddl", "CREATE TABLE `validation_renamed` (_id CHAR(24) PRIMARY KEY)")));
+        assertEquals("validation_renamed", result.get("tableName"));
+        assertEquals(true, result.get("created"));
+        assertEquals(1, physical.createdDdls.size());
+        assertTrue(physical.createdDdls.getFirst().contains("validation_renamed"));
+
+        var rejected = assertInstanceOf(ExitValue.class, run(Map.of("canvas", true, "dbId", "target-db",
+                "ddl", "CREATE TABLE another_database.validation_renamed (_id CHAR(24) PRIMARY KEY)")));
+        assertEquals(400, rejected.getValues()[0]);
+        assertEquals(1, physical.createdDdls.size());
+    }
+
+    @Test
     void hiveMaterializationExecutesTheGeneratedMultiCharacterTerminatorVerbatim() throws Exception {
         physical.allowCreate=true;
         var column=new ColumnInfo();column.setColumnName("id");column.setColumnType("STRING");
@@ -485,7 +502,7 @@ class CanvasCreateTableBatchValidationMagicTest {
 
     private Object run(Map<String, Object> body) throws Exception {
         String script = CanonicalMagicSources.byId(SOURCE_ID)
-                .replaceAll("(?m)^import (?!com\\.linewell\\.dataelement\\.(?:metautil\\.(?:model\\.|jdbc\\.JdbcDriverPropertyResolver)|shared\\.error\\.ErrorDetailSanitizer)|java\\.util\\.(?:Map|List))[^\\n]*\\n", "");
+                .replaceAll("(?m)^import (?!com\\.linewell\\.dataelement\\.(?:metautil\\.(?:model\\.|jdbc\\.JdbcDriverPropertyResolver|mongo\\.MongoDatasource)|shared\\.error\\.ErrorDetailSanitizer)|java\\.util\\.(?:Map|List))[^\\n]*\\n", "");
         Map<String, Object> inputs = new LinkedHashMap<>();
         inputs.put("body", body);
         inputs.put("db", db);
@@ -535,7 +552,11 @@ class CanvasCreateTableBatchValidationMagicTest {
             for (String bucket : buckets) result.put(bucket, "hdfs://cluster/events/ods_partition=" + bucket);
             return result;
         }
-        public void createTable(DataSourceConfig config,String ddl) { fail("Reuse must never issue CREATE TABLE"); }
+        public void createTable(DataSourceConfig config, String ddl) {
+            if (!allowCreate) fail("Reuse must never issue CREATE TABLE");
+            assertEquals("fixture", config.getDatabase());
+            createdDdls.add(ddl);
+        }
         public void execDDLSqlInDatabase(String database,String ddl) throws java.sql.SQLException {
             if (!allowCreate) fail("Hive reuse must never issue DDL");
             if (createFailure != null) throw createFailure;

@@ -41,6 +41,18 @@ class EditorParameterDefaultsTest(unittest.TestCase):
         renamed=copy.deepcopy(runtime);renamed['parameters'][0]['name']='other'
         self.assertNotEqual(local,renamed)
 
+    def test_rejects_invalid_public_access_and_detects_runtime_policy_drift(self):
+        resource = {'id': 'validation', 'groupId': 'validation-group', 'method': 'GET',
+                    'path': '/info', 'options': [{'name': 'access', 'value': 'PUBLIC'}]}
+        script = 'return true;'
+        sync.verify_runtime_magic(dict(resource, script=script), resource, script)
+        with self.assertRaisesRegex(ValueError, 'Runtime access policy differs'):
+            sync.verify_runtime_magic(dict(resource, options=[], script=script), resource, script)
+        with self.assertRaisesRegex(ValueError, 'does not match the HTTP method'):
+            sync.magic_access_policy(dict(resource, method='POST'))
+        with self.assertRaisesRegex(ValueError, 'Invalid or duplicate'):
+            sync.magic_access_policy(dict(resource, options=resource['options'] * 2))
+
 
 class Cursor:
     def __init__(self, connection):

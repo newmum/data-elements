@@ -92,6 +92,22 @@ def metadata(content):
     return value, script.strip()
 
 
+def magic_access_policy(meta):
+    options = meta.get('options') or []
+    declarations = [option.get('value') for option in options
+                    if isinstance(option, dict) and option.get('name') == 'access']
+    if not declarations:
+        return None
+    if (len(declarations) != 1 or not isinstance(declarations[0], str)
+            or declarations[0] not in {'PUBLIC', 'TENANT_SESSION', 'IDAAS_PLATFORM_SESSION'}):
+        raise ValueError('Invalid or duplicate Magic API access declaration')
+    method = meta.get('method')
+    if (method not in ('GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS')
+            or declarations[0] == 'PUBLIC' and method not in ('GET', 'HEAD')):
+        raise ValueError('Magic API access does not match the HTTP method')
+    return declarations[0]
+
+
 def local_segment(value):
     """Windows-invalid names use reversible %XX escaping; remote identities stay exact."""
     value = str(value)
@@ -483,6 +499,8 @@ def verify_runtime_magic(loaded, meta, script):
         raise ValueError('Runtime resource identity differs from control database; do not publish')
     if digest(loaded.get('script', '').strip()) != digest(script):
         raise ValueError('Runtime source differs from control database; do not publish')
+    if meta.get('method') and magic_access_policy(loaded) != magic_access_policy(meta):
+        raise ValueError('Runtime access policy differs from control database; inspect before publication')
 
 
 def registration_plan(manifest, remote, files):
@@ -509,6 +527,8 @@ def registration_plan(manifest, remote, files):
             raise ValueError('Incomplete Magic resource identity: ' + file)
         if (not group and not script) or (group and meta.get('type') != root):
             raise ValueError('Incomplete Magic script or wrong group type: ' + file)
+        if not group and root == 'api':
+            magic_access_policy(meta)
         database_path = '/magic-api/' + relative
         if (relative in local_paths or database_path.casefold() in known_paths
                 or identity in known_ids):
@@ -545,6 +565,19 @@ def register_magic(connection, config, files, apply=False):
         return result
     if not runtime_call(config, '/portal/sso/session'):
         raise ValueError('Registration requires an authenticated runtime')
+    access_changes = []
+    for entry in entries:
+        if entry['kind'] != 'api':
+            continue
+        meta, _ = metadata(entry['content'])
+        access = magic_access_policy(meta)
+        if access is not None:
+            access_changes.append({'file': 'magic/' + entry['path'], 'id': meta['id'], 'groupId': meta['groupId'],
+                                   'method': meta['method'], 'path': meta['path'], 'current': access})
+    if access_changes:
+        access_audit = ROOT / 'logs/resources' / ('access-registration-' + digest('|'.join(files)) + '.json')
+        write_json(access_audit, {'database': remote['database'], 'access': access_changes,
+                                  'state': 'publication-requested'})
     # Preserve a bounded recovery record and recheck the full identity registry under lock.
     write_json(ROOT / 'logs/resources/backups' / ('registration-' + digest('|'.join(files)) + '.json'),
                {'database': remote['database'], 'newEntries': entries})
@@ -573,6 +606,9 @@ def register_magic(connection, config, files, apply=False):
         if entry['path'].endswith('.ms'):
             meta, script = metadata(entry['content'])
             verify_runtime_magic(runtime_call(config, '/api/web/resource/file/' + meta['id']), meta, script)
+    if access_changes:
+        write_json(access_audit, {'database': remote['database'], 'access': access_changes,
+                                  'state': 'published-and-runtime-verified'})
     manifest['resources'].extend({key: value for key, value in e.items() if key != 'content'} for e in entries)
     manifest['resources'].sort(key=lambda e: e['path'])
     write_json(ROOT / 'magic/.manifest.json', manifest)
@@ -600,6 +636,7 @@ def publish(connection, config, file, compiled=None, backup=True):
         return {'file': file, 'result': 'already-current'}
     if remote['baseSha256'] != entry['baseSha256']:
         raise ValueError('Concurrent remote change; inspect before publication')
+    access_change = None
     if kind == 'magic':
         meta, script = metadata(local)
         previous_meta, _ = metadata(remote['content'])
@@ -610,6 +647,12 @@ def publish(connection, config, file, compiled=None, backup=True):
         for field in ['id', 'groupId', 'path', 'method']:
             if meta.get(field) != previous_meta.get(field):
                 raise ValueError('Identity/route change requires separate review: ' + field)
+        if rel.startswith('api/'):
+            previous_access = magic_access_policy(previous_meta)
+            access = magic_access_policy(meta)
+            if previous_access != access:
+                access_change = {'id': meta['id'], 'groupId': meta['groupId'], 'method': meta['method'], 'path': meta['path'],
+                                 'previous': previous_access, 'current': access}
         # Authenticate the target runtime and prove it points at this resource before DB writes.
         loaded = runtime_call(config, '/api/web/resource/file/' + urllib.parse.quote(meta['id'], safe=''))
         verify_runtime_magic(loaded, previous_meta, metadata(remote['content'])[1])
@@ -624,6 +667,9 @@ def publish(connection, config, file, compiled=None, backup=True):
         runtime_source = runtime_call(config, '/sym/component/manage?action=getSourceCode&tid=' + urllib.parse.quote(entry['id'], safe=''), {})
         if digest(runtime_source) != digest(remote['content']):
             raise ValueError('Runtime source differs from control database; do not publish')
+    if access_change:
+        access_audit = ROOT / 'logs/resources' / ('access-' + digest(rel + digest(local)) + '.json')
+        write_json(access_audit, {'file': file, 'access': access_change, 'state': 'publication-requested'})
     # Private, ignored rollback material: never a second versioned source location.
     if backup:
         backup_name = kind + '-' + digest(entry['path']) + '-' + hashlib.sha256(remote['content'].encode('utf-8')).hexdigest() + '.json'
@@ -688,6 +734,8 @@ def publish(connection, config, file, compiled=None, backup=True):
     except Exception as exc:
         raise ValueError('Database saved, runtime verification incomplete. Inspect the resource and refresh: '
                          + type(exc).__name__) from None
+    if access_change:
+        write_json(access_audit, {'file': file, 'access': access_change, 'state': 'published-and-runtime-verified'})
     entry['baseSha256'] = digest(local)
     write_json(ROOT / kind / '.manifest.json', manifest)
     return {'file': file, 'result': 'published-and-runtime-verified'}

@@ -1,14 +1,15 @@
 import { useServerSort } from '../../components/serverSort';
-import { Alert, App, Button, Input, Modal, Select, Tag } from 'antd';
+import { Alert, App, Button, Input, Modal, Segmented, Select, Tag } from 'antd';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { integrationPlatformService, type AccessTable, type AccessTask } from '../../api/integrationPlatformService';
 import PageHero from '../../components/PageHero';
 import { DataTable, FlowMini, InsightStrip, Panel, formatTime } from '../../components/Common';
 import Icon from '../../design/Icon';
 import { preloadCanvasReadiness, preloadCanvasWhenIdle } from '../../app/preloadCanvas';
 import { useSessionRevision, useTokenReady } from '../../nifi/api/bridgeSession';
+import NativeFlowAssociations, { NativeFlowLinkForm, nativeFlowQueryKey } from './NativeFlowAssociations';
 
 const text=(value:unknown)=>value==null?'':String(value).trim();
 const statusTag=(value:unknown)=>Number(value)===1?<Tag color="processing">运行中</Tag>:Number(value)===2?<Tag color="error">运行异常</Tag>:<Tag>未启用</Tag>;
@@ -18,9 +19,18 @@ export default function TaskListPage({multi=false}:{multi?:boolean}){
  const navigate=useNavigate(),{message}=App.useApp(),queryClient=useQueryClient();
  const tokenReady=useTokenReady(),sessionRevision=useSessionRevision();
  const [query,setQuery]=useState(''),[keyword,setKeyword]=useState(''),[filter,setFilter]=useState('all'),[page,setPage]=useState(1),[size,setSize]=useState(20);
- const [createOpen,setCreateOpen]=useState(false),[sourceQuery,setSourceQuery]=useState(''),[sourceKeyword,setSourceKeyword]=useState(''),[sourcePage,setSourcePage]=useState(1),[creatingId,setCreatingId]=useState<string>();
+ const [createOpen,setCreateOpen]=useState(false),[sourceQuery,setSourceQuery]=useState(''),[sourceKeyword,setSourceKeyword]=useState(''),[sourcePage,setSourcePage]=useState(1);
+ const [associationSource,setAssociationSource]=useState<AccessTable>();
+ const [params,setParams]=useSearchParams();
+ const view=params.get('view')==='native'?'native':'managed';
+ const setView=(value:'managed'|'native')=>setParams(current=>{
+  const next=new URLSearchParams(current);
+  if(value==='native')next.set('view','native');
+  else next.delete('view');
+  return next;
+ },{replace:true});
  const taskSort=useServerSort(()=>setPage(1)),sourceSort=useServerSort(()=>setSourcePage(1));
- const tasksQuery=useQuery({queryKey:['platform','access-tasks',page,size,filter,keyword,taskSort.sort],queryFn:()=>integrationPlatformService.taskPage({page,size,status:filter,keyword,...taskSort.sort})});
+ const tasksQuery=useQuery({queryKey:['platform','access-tasks',page,size,filter,keyword,taskSort.sort],queryFn:()=>integrationPlatformService.taskPage({page,size,status:filter,keyword,...taskSort.sort}),enabled:multi||view==='managed'});
  const sourcesQuery=useQuery({queryKey:['platform','source-tables',sourcePage,sourceKeyword,sourceSort.sort],queryFn:()=>integrationPlatformService.sourceTablePage({page:sourcePage,size:10,keyword:sourceKeyword,...sourceSort.sort}),enabled:createOpen});
  const tasks=multi?(tasksQuery.data?.list||[]).filter(task=>(task.syncTables?.length||0)>1):tasksQuery.data?.list||[];
  const warmCanvas=()=>{if(tokenReady)preloadCanvasReadiness(queryClient,sessionRevision);};
@@ -35,30 +45,16 @@ export default function TaskListPage({multi=false}:{multi?:boolean}){
   if(!params.size){message.error('当前任务缺少可打开的流程标识');return;}
   navigate(`/development/canvas?${params.toString()}`,{state:{returnTo:multi?'/development/multi-table':'/development/tasks'}});
  };
- const create=async(source:AccessTable)=>{
-  const id=text(source.sourceTableId||source.tableId||source.tid);
-  if(!id){message.error('当前来源表缺少标识，无法创建任务');return;}
-  setCreatingId(id);
-  try{
-   const result=await integrationPlatformService.ensureTask(source);
-   if(result.repairRequired)throw new Error(`已有任务需要修复：${(result.repairReasons??[]).join('；')||'请在任务管理中检查画布与字段治理'}`);
-   const rawTask=result.task||result as AccessTask;
-   const taskId=text(rawTask.tid||result.taskId),pipelineId=text(rawTask.pipelineId||result.pipelineId);
-   if(!taskId&&!pipelineId)throw new Error('任务接口没有返回任务或流程标识');
-   let bindingWarning='';
-   if(text(source.datasourceId)&&pipelineId){
-    try{await integrationPlatformService.bindApiPullTask(text(source.datasourceId),id,pipelineId);}
-    catch{bindingWarning='任务已创建，但 API 拉取规则绑定失败；可先检查画布配置';}
-   }
-   setCreateOpen(false);
-   await queryClient.invalidateQueries({queryKey:['platform','access-tasks']});
-   if(bindingWarning)message.warning(bindingWarning);else message.success(result.created===false?'已找到现有接入任务，正在打开 NiFi 画布':'接入任务已创建，正在打开 NiFi 画布');
-   openCanvas({tid:taskId,pipelineId});
-  }catch(cause){message.error(cause instanceof Error?cause.message:'接入任务创建失败');}
-  finally{setCreatingId(undefined);}
+ const closeCreate=()=>{
+  setCreateOpen(false);
+  setAssociationSource(undefined);
  };
  const search=()=>{setPage(1);setKeyword(query.trim());};
  return <div className="ht-page"><PageHero kicker="任务开发" title={multi?'多表同步任务':'集成任务'} description={multi?'查看已有接入任务的多表编组与成员状态；组级执行尚未接入。':'管理来源表到目标表的接入任务，查看 NiFi 关联、调度与运行状态。'} kind={multi?'multi':'tasks'} tags={multi?['已有任务编组','成员状态','组级执行待接入']:['真实接入任务','NiFi 编排','运行状态']} primaryAction={<Button type="primary" icon={<Icon name="plus" size={17}/>} disabled={multi} title={multi?'平台尚无多表任务创建接口，单表任务请到集成任务页创建':undefined} onClick={()=>{setSourcePage(1);setCreateOpen(true);}}>{multi?'新建多表任务':'新建集成任务'}</Button>}/>
+  {!multi&&<Segmented aria-label="集成任务类型" value={view} onChange={setView} options={[
+   {value:'managed',label:'中台接入任务'},{value:'native',label:'原生流程关联'},
+  ]}/>}
+  {!multi&&view==='native'?<NativeFlowAssociations/>:<>
   <InsightStrip items={[{label:multi?'当前页多表任务':'任务总数',value:multi?tasks.length:tasksQuery.data?.total??'—',icon:'tasks',hint:'当前登录租户的接入任务'},{label:'当前页运行中',value:tasks.filter(t=>Number(t.taskStatus)===1).length,icon:'check',hint:'以数据中台任务状态为准',tone:'cyan'},{label:'当前页异常',value:tasks.filter(t=>Number(t.taskStatus)===2).length,icon:'warning',hint:'可打开流程查看运行错误',tone:'amber'}]}/>
   <Panel><div className="ht-toolbar"><Input allowClear prefix={<Icon name="search" size={17}/>} value={query} onChange={event=>setQuery(event.target.value)} onPressEnter={search} placeholder="搜索任务名称" style={{width:310,maxWidth:'100%'}}/>{!multi&&<Select value={filter} style={{width:138}} onChange={value=>{setPage(1);setFilter(value);}} options={[{value:'all',label:'全部任务状态'},{value:'1',label:'运行中'},{value:'0',label:'未启用'},{value:'2',label:'运行异常'}]}/>}<Button onClick={search}>查询</Button><span className="toolbar-spacer"/><span className="helper">{multi?tasks.length:tasksQuery.data?.total??0} 项真实任务</span></div>
    {tasksQuery.isError&&<Alert type="error" showIcon message="任务读取失败" description={tasksQuery.error instanceof Error?tasksQuery.error.message:'请检查数据中台会话与接口'} action={<Button size="small" onClick={()=>void tasksQuery.refetch()}>重试</Button>} style={{marginBottom:16}}/>}
@@ -73,16 +69,25 @@ export default function TaskListPage({multi=false}:{multi?:boolean}){
     {title:'触发策略',width:114,render:(_,task)=>text(task.scheduleFrequency)||'—'},
     {title:'操作',fixed:'right',className:'ht-task-action-column',width:120,render:(_,task)=><Button type="link" onMouseEnter={warmCanvas} onFocus={warmCanvas} onClick={()=>openCanvas(task)}>查看任务</Button>},
    ]}/>
-  </Panel>
-  <Modal title="选择已登记来源表" width={880} open={createOpen} onCancel={()=>setCreateOpen(false)} footer={<Button onClick={()=>setCreateOpen(false)}>关闭</Button>} destroyOnClose>
-   <div className="ht-toolbar"><Input allowClear value={sourceQuery} onChange={event=>setSourceQuery(event.target.value)} onPressEnter={()=>{setSourcePage(1);setSourceKeyword(sourceQuery.trim());}} placeholder="搜索来源表" style={{width:280}}/><Button onClick={()=>{setSourcePage(1);setSourceKeyword(sourceQuery.trim());}}>查询</Button></div>
+  </Panel></>}
+  <Modal title={associationSource?'关联已有 NiFi 流程':'选择已登记来源表'} width={associationSource?520:880}
+    open={createOpen} onCancel={closeCreate} footer={associationSource?null:<Button onClick={closeCreate}>关闭</Button>}
+    destroyOnClose styles={{body:{maxHeight:'min(65dvh, 640px)',overflowY:'auto'}}}>
+   {associationSource?<NativeFlowLinkForm source={associationSource} onBack={()=>setAssociationSource(undefined)} onCreated={()=>{
+    closeCreate();
+    setView('native');
+    void queryClient.invalidateQueries({queryKey:nativeFlowQueryKey});
+    message.success('原生流程关联已创建');
+   }}/>:<>
+   <div className="ht-toolbar"><Input allowClear value={sourceQuery} onChange={event=>setSourceQuery(event.target.value)} onPressEnter={()=>{setSourcePage(1);setSourceKeyword(sourceQuery.trim());}} placeholder="搜索来源表" aria-label="搜索来源表" style={{width:280,maxWidth:'100%'}}/><Button onClick={()=>{setSourcePage(1);setSourceKeyword(sourceQuery.trim());}}>查询</Button></div>
    {sourcesQuery.isError&&<Alert type="error" showIcon message="来源表读取失败" description={sourcesQuery.error instanceof Error?sourcesQuery.error.message:'请检查会话与接口'} style={{marginBottom:12}}/>}
-   <DataTable<AccessTable> serverSort={sourceSort} rowKey={row=>text(row.sourceTableId||row.tableId||row.tid)} dataSource={sourcesQuery.data?.list||[]} loading={sourcesQuery.isLoading} pagination={{current:sourcePage,pageSize:10,total:sourcesQuery.data?.total||0,onChange:setSourcePage}} columns={[
+   <DataTable<AccessTable> serverSort={sourceSort} rowKey={row=>text(row.sourceTableId||row.tableId||row.tid)} dataSource={sourcesQuery.data?.list||[]} loading={sourcesQuery.isFetching} locale={{emptyText:'没有符合条件的已登记来源表'}} pagination={{current:sourcePage,pageSize:10,total:sourcesQuery.data?.total||0,showSizeChanger:false,onChange:setSourcePage}} columns={[
     {title:'来源表',key:'tableName',width:260,render:(_,row)=><div className="entity-name"><b>{text(row.tableNameCn||row.tableName)||'未命名表'}</b><small>{text(row.tableName)}</small></div>},
     {title:'数据源',width:180,render:(_,row)=>text(row.datasourceName)||'—'},
     {title:'说明',render:(_,row)=>text(row.tableComment)||'—'},
-    {title:'操作',width:130,render:(_,row)=><Button type="link" loading={creatingId===text(row.sourceTableId||row.tableId||row.tid)} onClick={()=>void create(row)}>创建并编排</Button>},
+    {title:'操作',width:118,render:(_,row)=><Button type="link" disabled={!text(row.sourceTableId||row.tableId||row.tid)} onClick={()=>setAssociationSource(row)}>创建任务</Button>},
    ]}/>
+   </>}
   </Modal>
  </div>;
 }

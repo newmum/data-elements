@@ -146,6 +146,36 @@ class PipelineRedeployTest {
     }
 
     @Test
+    void confirmedQueueDiscardValidatesReplacementBeforeTouchingOldGroup() {
+        var original = stored.get();
+        stored.set(new Pipeline(original.id(), original.name(), null, 1L, 1L, original.dsl(), "old-group",
+                PipelineStatus.STOPPED, "old-hash", 1L, null,
+                new NifiNodeMapping(Map.of(), Map.of(), Map.of()), null));
+        var status = JsonNodeFactory.instance.objectNode();
+        status.putObject("processGroupStatus").putObject("aggregateSnapshot").put("queuedCount", 3);
+        when(nifi.getProcessGroupStatus("old-group")).thenReturn(status);
+        compileNewGroup();
+        var options = Map.of("forceRebuild", true, "discardQueueFor", "old-group");
+
+        assertThat(deployment.deploy("p1", Map.of("forceRebuild", true, "discardQueueFor", "other-group"), false)
+                .getStatusCode().value()).isEqualTo(409);
+        doThrow(new IllegalStateException("invalid replacement")).doNothing()
+                .when(nifi).requireValidGeneratedProcessGroup("new-group");
+        assertThat(deployment.deploy("p1", options, false).getStatusCode().value()).isEqualTo(409);
+        assertThat(stored.get().nifiProcessGroupId()).isEqualTo("old-group");
+        verify(nifi, never()).cleanupProcessGroup("old-group");
+
+        clearInvocations(nifi);
+        assertThat(deployment.deploy("p1", options, false).getStatusCode().value()).isEqualTo(200);
+        assertThat(stored.get().nifiProcessGroupId()).isEqualTo("new-group");
+        var sequence = inOrder(nifi);
+        sequence.verify(nifi).requireValidGeneratedProcessGroup("new-group");
+        sequence.verify(nifi).waitForAllProcessorsStopped("old-group", 30_000L);
+        sequence.verify(nifi).cleanupProcessGroup("old-group");
+        verify(nifi, never()).requireEmptyQueuesForRedeploy("old-group");
+    }
+
+    @Test
     void compileFailurePersistsNewGroupAndRetryRemovesItFirst() {
         when(compiler.compile(any(), any(), any())).thenAnswer(i -> {
             Consumer<String> callback = i.getArgument(1);

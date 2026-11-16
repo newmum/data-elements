@@ -28,7 +28,7 @@ import { useCanvasStore } from '@/stores/canvasStore';
 import { useComponentManifests } from '@/api/manifests';
 import { probeColumns, probeTables, testConnection, type ColumnsProbeResult, type MetadataTable, type ProbedColumn } from '@/api/pipelines';
 import { getApiErrorMessage, hiveMetadataConfigError } from '@/api/response';
-import { fetchDatabases, fetchDatabaseDetail, type ApiPullItem, type DbDictItem } from '@/api/dataassets';
+import { fetchDatabases, fetchDatabaseDetail, type ApiPullItem, type DbDictItem, type MaterializeTarget } from '@/api/dataassets';
 import FieldMappingEditor from './FieldMappingEditor';
 import MaterializeTableModal from './MaterializeTableModal';
 import { getNifiOverlayContainer } from './overlayContainer';
@@ -826,6 +826,35 @@ export default function ConfigDrawer() {
   }, [open, node?.category, message]);
 
   const targetDatabaseId = node ? resolveDatasourceId(node.config, dbList) : '';
+  const targetJdbcUrl = String(node?.config.jdbcUrl || node?.config.jdbcURL || '').trim();
+  const mongoHost = String(node?.config.host ?? '').trim();
+  const mongoDatabase = String(node?.config.database ?? '').trim();
+  const mongoTarget = node?.manifestKey === 'sink.mongodb' && mongoHost && mongoDatabase
+    ? {
+        host: mongoHost,
+        port: String(node.config.port ?? '').trim(),
+        database: mongoDatabase,
+        username: String(node.config.username ?? '').trim(),
+        password: String(node.config.password ?? ''),
+        authSource: String(node.config.authSource ?? '').trim(),
+        ssl: node.config.ssl === true,
+      }
+    : undefined;
+  const jdbcMaterializeTarget = node?.manifestKey === 'sink.jdbc' && targetJdbcUrl
+    ? {
+        jdbcUrl: targetJdbcUrl,
+        dbType: String(node.config.dbType ?? ''),
+        username: String(node.config.username ?? '').trim(),
+        password: String(node.config.password ?? ''),
+      }
+    : undefined;
+  const materializeTarget: MaterializeTarget | undefined = targetDatabaseId
+    ? { dbId: targetDatabaseId }
+    : mongoTarget ? { canvasMongo: mongoTarget }
+      : jdbcMaterializeTarget ? { canvasJdbc: jdbcMaterializeTarget } : undefined;
+  const materializeDatabaseLabel = targetDatabaseId
+    ? dbList.find((db) => (db.value || db.id) === targetDatabaseId)?.label || String(node?.config.database || '已登记目标库')
+    : mongoTarget?.database || targetJdbcUrl.match(/^jdbc:[a-z0-9]+:\/\/[^/?#]+\/([^/?#]+)(?:\?|$)/i)?.[1] || '当前 JDBC 连接';
   const materializeSources = useMemo(() => node ? upstreamTableSources(node.id, allNodes, allEdges) : [], [node?.id, allNodes, allEdges]);
 
   // Preserve loaded table/column settings while recognizing legacy task datasource IDs.
@@ -1095,7 +1124,7 @@ export default function ConfigDrawer() {
     const tableHostReady = Boolean(targetDatabaseId) || (isServerManagedHuaweiMrs
       ? Boolean(String(node.config.database ?? node.config.dbName ?? '').trim())
       : manifest.category === 'sink'
-      ? Boolean(node.config.jdbcUrl)
+      ? (manifest.key === 'sink.mongodb' ? Boolean(node.config.host && node.config.database) : Boolean(node.config.jdbcUrl))
       : manifest.key === 'source.ftp' || manifest.key === 'source.sftp'
         ? Boolean(node.config.hostname && node.config.remotePath)
         : manifest.key === 'source.api'
@@ -1199,9 +1228,9 @@ export default function ConfigDrawer() {
     const schemaMatchesConnection = item.schemaName
       && configuredSchema
       && item.schemaName.toLowerCase() === configuredSchema.toLowerCase();
-    // Hive's database is sent separately; do not put a qualified identifier
-    // back into Table Name when choosing a suggestion.
+    // Hive and MongoDB supply the database separately from the table/collection name.
     const value = manifest?.key === 'sink.hive' || manifest?.key === 'source.hive'
+      || manifest?.key === 'sink.mongodb' || manifest?.key === 'source.mongodb'
       || (node?.category === 'sink' && schemaMatchesConnection)
       ? item.tableName
       : item.schemaName ? `${item.schemaName}.${item.tableName}` : item.tableName;
@@ -1317,9 +1346,12 @@ export default function ConfigDrawer() {
               <Divider style={{ margin: '6px 0' }} />
               <Button type="text" block icon={<PlusOutlined />} className="table-picker-create-action" style={{ textAlign: 'left' }}
                 onMouseDown={(event) => event.preventDefault()}
+                disabled={disabled || selectingDatabase}
                 onClick={() => {
-                  if (!targetDatabaseId) {
-                    message.warning('请先在“选择库”中选择已登记的目标库');
+                  if (!materializeTarget) {
+                    const hint = manifest.key === 'sink.mongodb' ? '请填写 MongoDB 目标主机和数据库名'
+                      : manifest.key === 'sink.jdbc' ? '请填写目标 JDBC URL 及数据库名' : '请先配置目标库';
+                    message.warning(hint);
                     return;
                   }
                   setMaterializeOpen(true);
@@ -1358,6 +1390,7 @@ export default function ConfigDrawer() {
       );
     }
     const isJdbcWriterType = manifest.key === 'sink.jdbc' && field.key === 'writerType';
+    const mysqlTarget = ['MySQL', 'OCEANBASE_MYSQL', 'MARIADB'].includes(sinkDbType(String(node.config.dbType ?? '')) ?? '');
     if (isJdbcWriterType) {
       return (
         <Select
@@ -1367,14 +1400,16 @@ export default function ConfigDrawer() {
           disabled={disabled}
           onChange={(nextValue) => {
             const patch: Record<string, unknown> = { [field.key]: nextValue };
-            if (String(nextValue) === LINEWELL_JDBC_WRITER) {
+            if (String(nextValue) === LINEWELL_JDBC_WRITER && !mysqlTarget) {
               patch.statementType = 'MERGE';
               message.info('已选择 LinewellPutDatabaseRecord，写入方式已自动切换为合并（MERGE）');
-            } else {
+            } else if (String(nextValue) !== LINEWELL_JDBC_WRITER) {
               // MERGE belongs solely to the Linewell custom processor. Reset
               // every native-writer switch to the safe append/insert mode.
               patch.statementType = 'INSERT';
               message.info('已切换为 NiFi 原生 PutDatabaseRecord，写入方式已自动切换为新增（INSERT）');
+            } else if (!node.config.statementType || String(node.config.statementType).toUpperCase() === 'MERGE') {
+              patch.statementType = 'INSERT';
             }
             updateConfig(node.id, patch);
           }}
@@ -1385,7 +1420,7 @@ export default function ConfigDrawer() {
     if (isSinkWriteMode) {
       const linewellWriter = effectiveJdbcWriterType(node.config.dbType, node.config.writerType)
         === LINEWELL_JDBC_WRITER;
-      const options = field.options?.map((option) => !linewellWriter && option.value === 'MERGE'
+      const options = field.options?.map((option) => (!linewellWriter || mysqlTarget) && option.value === 'MERGE'
           ? { ...option, disabled: true }
           : option);
       return (
@@ -1396,8 +1431,9 @@ export default function ConfigDrawer() {
           allowClear
           disabled={disabled}
           onChange={(nextValue) => {
-            if (String(nextValue) === 'MERGE' && !linewellWriter) {
-              message.warning('合并（MERGE）仅支持 LinewellPutDatabaseRecord；请先切换目标表写入组件');
+            if (String(nextValue) === 'MERGE' && (!linewellWriter || mysqlTarget)) {
+              message.warning(mysqlTarget ? 'MySQL 不支持 MERGE，请选择 INSERT 或配置业务键后选择 UPSERT'
+                : '合并（MERGE）仅支持 LinewellPutDatabaseRecord；请先切换目标表写入组件');
               return;
             }
             if (['UPSERT', 'MERGE', 'UPDATE', 'DELETE'].includes(String(nextValue))
@@ -1868,15 +1904,17 @@ export default function ConfigDrawer() {
           )}
         </>
       )}
-      {node && <MaterializeTableModal key={`${node.id}:${targetDatabaseId}`}
-        open={materializeOpen} dbId={targetDatabaseId} sources={materializeSources}
+      {node && materializeTarget && <MaterializeTableModal key={`${node.id}:${targetDatabaseId || (mongoTarget ? `${mongoTarget.host}:${mongoTarget.port}/${mongoTarget.database}` : targetJdbcUrl)}`}
+        open={materializeOpen} target={materializeTarget} sources={materializeSources}
         initialTableName={String(node.config.table || node.config.tableName || node.config.targetTable || '')}
-        databaseType={String(node.config.dbType || (node.manifestKey === 'sink.hive' ? 'hive' : ''))}
-        databaseLabel={dbList.find((db) => (db.value || db.id) === targetDatabaseId)?.label
-          || String(node.config.database || node.config.jdbcUrl || '未选择目标库')}
+        databaseType={node.manifestKey === 'sink.mongodb' ? 'mongodb' : String(node.config.dbType || (node.manifestKey === 'sink.hive' ? 'hive' : ''))}
+        databaseLabel={materializeDatabaseLabel}
         onClose={() => setMaterializeOpen(false)} onCreated={async (table) => {
+          if (node.manifestKey === 'sink.mongodb') {
+            updateConfig(node.id, mappingTableSelectionPatch(node, table));
+          }
           await refreshMetadataTables('');
-          await applyTableSelection(table);
+          if (node.manifestKey !== 'sink.mongodb') await applyTableSelection(table);
         }} />}
     </Drawer>
     {probeSummary && <ProbeColumnsModal summary={probeSummary} onClose={() => setProbeSummary(null)} />}

@@ -1,5 +1,7 @@
 package com.linewell.dataelement.elasticsearch;
 
+import com.linewell.dataelement.integration.search.config.ElasticsearchCustomRestClient;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.elasticsearch.client.RestClient;
 import org.junit.jupiter.api.Test;

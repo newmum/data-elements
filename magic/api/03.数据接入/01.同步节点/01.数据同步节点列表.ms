@@ -11,7 +11,7 @@
   "paths": [],
   "requestBody": "{\n  \"keyword\": \"主节点\"\n}",
   "responseBody": "{\n  \"list\": [],\n  \"total\": 0\n}",
-  "description": "数据同步节点列表（POST /ods/node/page）。读取当前登录租户的 nifi_node_t，仅返回本租户未删除节点；使用请求参数 keyword。",
+  "description": "数据抽取和推送节点列表（POST /ods/node/page）。按 keyword 查询当前登录租户的未删除节点并回显最近一次连通检测。nodeType=push 且 action=health 时检测指定推送节点。",
   "script": null
 }
 ================================
@@ -21,12 +21,11 @@ import cn.hutool.http.HttpRequest
 import com.fasterxml.jackson.databind.ObjectMapper
 import java.util.Map
 import java.text.SimpleDateFormat
+import java.sql.Timestamp
 import com.linewell.dataelement.utils.LocalCache
 
-// POST /ods/node/page 数据同步节点列表。
-// 接口：01.数据抽取节点列表
-// 路由：POST /ods/node/page
-// 业务说明：数据抽取节点列表（POST /ods/node/page）。读取当前登录租户的 nifi_node_t，仅返回本租户未删除节点；使用请求参数 keyword。
+// POST /ods/node/page 查询当前租户的抽取或推送节点，支持 keyword 筛选并回显最近一次连通检测。
+// 仅 nodeType=push 且 action=health 会连接请求中的推送节点，抽取节点检测使用 NiFi 客户端接口。
 
 var text = value => value == null ? '' : value + ''
 // 读取请求中的业务标识与筛选条件，供下面的校验和查询使用。
@@ -109,6 +108,7 @@ var nodePage = db.table('nifi_node_t').where().eq('tenant_id', tenantId).eq('is_
 if (nodePage != null && nodePage.total > 1000) { exit 422, '节点超过1000项，请使用节点分页查询' }
 var rows = nodePage == null || nodePage.list == null ? [] : nodePage.list
 var list = []
+var mapper = new ObjectMapper()
 for (row in (rows == null ? [] : rows)) {
     var nodeName = row.nodeName == null ? row.node_name : row.nodeName
     var nodeCode = row.nodeCode == null ? row.node_code : row.nodeCode
@@ -124,6 +124,11 @@ for (row in (rows == null ? [] : rows)) {
     if (keyword != '' && text(nodeName).indexOf(keyword) < 0 && text(nodeCode).indexOf(keyword) < 0 && networkCode.indexOf(keyword) < 0 && networkName.indexOf(keyword) < 0) {
         continue
     }
+    // 仅为已通过租户筛选的节点读取内存结果，与检测时的配置版本一致才显示。
+    var updatedTime = row.updatedTime == null ? row.updated_time : row.updatedTime
+    var revision = updatedTime instanceof Timestamp ? updatedTime.toLocalDateTime().toString() : text(updatedTime).trim().replace(' ', 'T')
+    var healthJson = LocalCache.get('nifi-node-health:' + tenantId + ':' + text(row.tid) + ':' + revision)
+    var checked = healthJson == null ? null : mapper.readValue(healthJson, Map)
     list.add({
         tid: row.tid,
         nodeName: nodeName,
@@ -139,7 +144,11 @@ for (row in (rows == null ? [] : rows)) {
         remark: row.remark,
         enabled: row.enabled == null ? 1 : row.enabled,
         isDefault: row.isDefault == null ? row.is_default : row.isDefault,
-        updatedTime: row.updatedTime == null ? row.updated_time : row.updatedTime
+        updatedTime: updatedTime,
+        healthStatus: checked == null ? 'unknown' : (checked.success ? 'reachable' : 'unreachable'),
+        healthMessage: text(checked?.message),
+        healthTime: text(checked?.healthTime),
+        healthLatencyMs: checked?.latencyMs
     })
 }
 list=tableSort.rows(list,body,{name:'nodeName',nodeName:'nodeName',updatedTime:'updatedTime'},'updatedTime','tid')

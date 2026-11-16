@@ -79,9 +79,10 @@ return respond(rootCause => mutation.withMutationLock(() => {
             warning: 'NiFi 已接受停止请求，正在等待运行中的任务结束'})
     }
     // 停止时间和接入任务状态一起写入。写入失败可用原生组现状重试。
+    var stoppedAt = System.currentTimeMillis()
     transactions.execute(transaction => {
-        writeRuntime(pipelineId, tenantId, {status: PipelineStatus.STOPPED, stoppedAt: System.currentTimeMillis()})
+        writeRuntime(pipelineId, tenantId, {status: PipelineStatus.STOPPED, stoppedAt: stoppedAt})
         return syncTask(pipelineId, 'stopped', null)
     })
-    return ResponseEntity.ok({processGroupId: groupId, state: 'STOPPED'})
+    return ResponseEntity.ok({processGroupId: groupId, state: 'STOPPED', stoppedAt: stoppedAt})
 }))

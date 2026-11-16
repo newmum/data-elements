@@ -13,7 +13,9 @@
   "description": "匿名读取登录页可公开的品牌与安全设置，仅返回允许公开的字段，不暴露密钥及内部认证策略。",
   "parameters": [],
   "method": "GET",
-  "options": [],
+  "options": [
+    {"name": "access", "value": "PUBLIC"}
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

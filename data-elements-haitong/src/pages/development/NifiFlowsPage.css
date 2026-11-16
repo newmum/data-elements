@@ -1,0 +1,18 @@
+.ht-table-wrap .ht-nifi-flow-name {
+  max-width: 100%;
+  min-width: 0;
+  padding-inline: 0;
+}
+
+.ht-nifi-flow-name > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ht-nifi-flow-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.ht-nifi-flow-actions > .ant-btn { flex: 1 1 0; min-width: 0; padding-inline: 0; }

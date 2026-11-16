@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.ser.LocalDateTimeSerializer;
+import com.linewell.dataelement.magic.runtime.security.PolicyAwareApiResourceStorage;
 import com.linewell.dataelement.platform.audit.AuditIdentityResolver;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -19,7 +20,9 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.web.filter.OncePerRequestFilter;
 import org.springframework.web.util.ContentCachingRequestWrapper;
+import org.ssssssss.magicapi.core.config.MagicAPIProperties;
 import org.ssssssss.magicapi.core.config.MagicConfiguration;
+import org.ssssssss.magicapi.core.service.impl.ApiInfoMagicResourceStorage;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
@@ -35,6 +38,11 @@ public class MagicBootConfiguration {
     private static final Pattern MAPPING_JSON = Pattern.compile(
             "/nifi/(template/(save|import)|dict/(snapshot|lookup)|map/(schema|sample|check|preview|recommend|compile|convert)"
                     + "|plan/restore|maprun/(upgrade|start))");
+
+    @Bean
+    ApiInfoMagicResourceStorage apiInfoMagicResourceStorage(MagicAPIProperties properties) {
+        return new PolicyAwareApiResourceStorage(properties.getPrefix());
+    }
 
     /** Preserve exact decimal JSON for mapping scripts without changing the other Magic or MVC converters. */
     @Bean

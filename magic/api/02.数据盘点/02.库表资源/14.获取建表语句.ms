@@ -23,6 +23,7 @@
 }
 ================================
 import '@/common/datasourceConnectionConfig' as datasourceConnectionConfig
+import '@/common/nifiProbeSettings' as probeSettings
 import jsons
 import cn.hutool.json.JSONUtil as poolJsons
 import tenantRuntime
@@ -486,7 +487,8 @@ var columnsFor = (request, dsConfig) => {
     var columns = []
     for (item in request.tableItems) {
         var columnInfo = new ColumnInfo()
-        columnInfo.setSourceDatabaseType(firstValue(item, ['sourceDatabaseType']) || (request.sourceDatabaseType == null ? null : textOf(request.sourceDatabaseType)))
+        var sourceType = firstValue(item, ['sourceDatabaseType']) || request.sourceDatabaseType
+        columnInfo.setSourceDatabaseType(blank(sourceType) ? null : textOf(sourceType).trim())
         var columnName = firstValue(item, ['columnName', 'name'])
         var normalizedColumnName = blank(columnName) ? '' : textOf(columnName).trim().toUpperCase()
         var dataType = firstValue(item, ['dataType', 'type'])
@@ -524,6 +526,18 @@ var columnsFor = (request, dsConfig) => {
         if (rowValue(item, ['byteLength']) != null) { columnInfo.setByteLength(rowValue(item, ['byteLength'])::long) }
         columnInfo.setCollation(rowValue(item, ['collation']))
         columnInfo.setExtra(rowValue(item, ['extra']))
+        // 直接探查返回 BSON 原生类型。ObjectId 的十六进制表示固定为 24 个字符，可保留 MySQL 主键约束。
+        if ('mongodb'.equalsIgnoreCase(columnInfo.getSourceDatabaseType()) &&
+            [DatabaseType.MYSQL, DatabaseType.MARIADB, DatabaseType.OCEANBASE_MYSQL].contains(dsConfig.getEffectiveDatabaseType())) {
+            var nativeType = blank(columnType) ? '' : textOf(columnType).trim().toLowerCase()
+            var mysqlTypes = {objectid:'char(24)', int32:'int', int64:'bigint', date:'datetime'}
+            var mysqlType = mysqlTypes.get(nativeType)
+            if (mysqlType != null) {
+                columnInfo.setDataType(mysqlType)
+                columnInfo.setColumnType(mysqlType)
+                if (nativeType == 'objectid') { columnInfo.setLength(24L) }
+            }
+        }
         columns.add(columnInfo)
     }
     return columns
@@ -595,7 +609,8 @@ if (body?.canvasBatchGenerate == true) {
 // 解析请求体并为可选参数设置默认值。
 var propList = body == null ? null : body.propList
 var tableItems = body == null ? null : body.tableItems
-if (tableItems == null || tableItems.size() == 0) {
+var mongoDirect = body?.canvas == true && body?.canvasMongo instanceof Map
+if ((tableItems == null || tableItems.size() == 0) && !mongoDirect) {
     // 参数或业务状态不满足要求时立即终止请求。
     exit 500, '字段列表不能为空'
 }
@@ -606,7 +621,18 @@ if (propList == null || blank(propList.tableName)) {
 
 var dsConfig
 if (body.canvas == true) {
-    dsConfig = canvasConfig(propList.dbId)
+    if (mongoDirect && (body?.canvasJdbc instanceof Map || !blank(propList.dbId))) {
+        exit 400, '请选择一种目标库连接方式'
+    }
+    // 直连预览与执行共用 JDBC 方言和目标库解析，预览无需传递账号密码。
+    if (mongoDirect) {
+        dsConfig = probeSettings('sink.mongodb', body.canvasMongo, 'mongoDdlPreview', null, null, null)
+    } else if (body?.canvasJdbc instanceof Map) {
+        if (!blank(propList.dbId)) { exit 400, '请选择一种目标库连接方式' }
+        dsConfig = probeSettings('sink.jdbc', body.canvasJdbc, 'jdbcDdl', null, null, null)
+    } else {
+        dsConfig = canvasConfig(propList.dbId)
+    }
 } else if (propList != null && !blank(propList.dbId)) {
     var dbAsset = loadAsset(propList.dbId)
     if (dbAsset == null) {
@@ -632,7 +658,7 @@ if (body.canvas == true) {
     dsConfig.setUsername('root')
 }
 
-var columns = columnsFor(body, dsConfig)
+var columns = mongoDirect && (tableItems == null || tableItems.size() == 0) ? [] : columnsFor(body, dsConfig)
 try {
     return renderDdl(body, dsConfig, columns)
 } catch (e) {

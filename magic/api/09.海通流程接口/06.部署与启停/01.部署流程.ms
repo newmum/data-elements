@@ -13,6 +13,12 @@
       "required": true,
       "dataType": "String",
       "description": "流程或映射资源标识"
+    },
+    {
+      "name": "discardQueueFor",
+      "required": false,
+      "dataType": "String",
+      "description": "用户确认允许清空队列的当前旧流程组 ID，仅适用于显式重部署"
     }
   ],
   "options": [
@@ -39,5 +45,12 @@ return respond(rootCause => {
         'com.linewell.dataelement.integration.nifi.canvas.controller.PipelineRunController$DeployRequest', null)
     var options = request == null ? null : {catalogTid: request.catalogTid(),
         preserveExisting: request.preserveExisting(), forceRebuild: request.forceRebuild()}
+    // 仅画布显式确认的重部署能丢弃绑定旧组的排队数据。
+    if (param.discardQueueFor != null && !param.discardQueueFor.isBlank()) {
+        if (options == null || options.forceRebuild != true || options.preserveExisting == true) {
+            exit 400, '清空队列只适用于已确认的重新部署'
+        }
+        options.discardQueueFor = param.discardQueueFor
+    }
     return deploy(param.id, options, false)
 })

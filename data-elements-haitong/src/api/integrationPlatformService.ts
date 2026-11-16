@@ -168,7 +168,8 @@ export const integrationPlatformService = {
       beginTime: query.beginTime || '', endTime: query.endTime || '',sortField:query.sortField,sortDir:query.sortDir,
     }));
   },
-  monitorTrend: (beginTime: string, endTime: string) => platformApi<MonitorTrend>('/ods/monitor/trend', { beginTime, endTime, interval: 'hour' }),
+  monitorTrend: (beginTime: string, endTime: string, signal?: AbortSignal) =>
+    platformApi<MonitorTrend>('/ods/monitor/trend', { beginTime, endTime, interval: 'hour' }, { signal }),
   async distributionTaskPage(query: { page?: number; size?: number; keyword?: string; status?: string; sortField?: string; sortDir?: 'asc'|'desc' } = {}): Promise<PageResult<DistributionTask>> {
     return asPage<DistributionTask>(await platformApi('/ods/dist/page', {
       pageNum: query.page || 1, pageSize: query.size || 20, keyword: query.keyword || '', status: query.status || '', sortField:query.sortField,sortDir:query.sortDir,

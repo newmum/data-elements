@@ -54,17 +54,17 @@
       "dialect": "dameng",
       "file": "baseline_beijing_gd/init.sql",
       "objects": {
-        "tables": 206,
+        "tables": 207,
         "views": 4,
-        "indexes": 872,
-        "explicitIndexes": 455,
+        "indexes": 876,
+        "explicitIndexes": 456,
         "foreignKeys": 2,
         "triggers": 20,
         "procedures": 0,
         "functions": 0,
         "sequences": 0
       },
-      "sha256": "f1dcb744415db3576e23317c6e832dc678bb89dfa052710005f9589312907158",
+      "sha256": "a6d91bda1db4eabc014f9a0a062aa6a0b8777f09e1ddd74f269934acab79f0fc",
       "exportNotes": {
         "definitions": "DBMS_METADATA.GET_DDL",
         "comments": "DBA_TAB_COMMENTS/DBA_COL_COMMENTS",
@@ -77,16 +77,16 @@
       "dialect": "kingbase",
       "file": "baseline_ct/init.sql",
       "objects": {
-        "tables": 163,
+        "tables": 164,
         "views": 0,
-        "indexes": 589,
+        "indexes": 592,
         "foreignKeys": 2,
         "triggers": 20,
         "functions": 49,
         "procedures": 0,
         "events": 0
       },
-      "sha256": "54bbc847bd16caf5110b9a410c61b111ba75487482d3b584e915ba80377050f1",
+      "sha256": "ca10b556bf6c0f995f49c7ad0474b37b7d4c04eb3d77f66b06d4b4683ad7dee8",
       "exportNotes": {
         "definitions": "Kingbase native catalogs and pg_get_*def",
         "sqlSchema": "public",
@@ -99,16 +99,16 @@
       "dialect": "mysql",
       "file": "baseline_ga/init.sql",
       "objects": {
-        "tables": 206,
+        "tables": 207,
         "views": 4,
-        "indexes": 745,
+        "indexes": 748,
         "foreignKeys": 2,
         "triggers": 0,
         "procedures": 0,
         "functions": 0,
         "events": 0
       },
-      "sha256": "2215a2d7a4e90b2cbdbfae8b76a1643c493076c42234d70be117cd9ec1264852",
+      "sha256": "1d10b2ae30f5c02257cfc85b0e9bd087b1ffdd7ffc2c421e38c9a7133bf345bd",
       "exportNotes": {
         "definitions": "SHOW CREATE",
         "routineDefiners": "omitted",
@@ -121,16 +121,16 @@
       "dialect": "mysql",
       "file": "baseline_sea_fishery/init.sql",
       "objects": {
-        "tables": 206,
+        "tables": 207,
         "views": 4,
-        "indexes": 745,
+        "indexes": 748,
         "foreignKeys": 2,
         "triggers": 0,
         "procedures": 0,
         "functions": 0,
         "events": 0
       },
-      "sha256": "9c95bacece0fc58b31ee5eeb1d38ed37a3254e5b1c123cbb4f93576e7e2ae069",
+      "sha256": "c4edfe2ba696a346f0c42e185b6bb61a6faf3ded281868a9f1220317c9ae551b",
       "exportNotes": {
         "definitions": "SHOW CREATE",
         "routineDefiners": "omitted",

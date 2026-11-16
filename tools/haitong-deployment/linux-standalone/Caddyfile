@@ -1,0 +1,19 @@
+{
+    admin off
+    auto_https off
+    persist_config off
+}
+
+http://:{$HAITONG_HTTP_PORT} {
+    bind {$HAITONG_HTTP_BIND}
+    @private path /prod-api/api/web* /prod-api/nifi-ui* /prod-api/nifi-api* /prod-api/nifi/api/nifi/*
+    route {
+        respond @private 404
+        handle_path /prod-api/* {
+            reverse_proxy 127.0.0.1:{$HAITONG_BACKEND_PORT}
+        }
+        root * www
+        header /haitong/deployment.js Cache-Control no-store
+        file_server
+    }
+}

@@ -30,6 +30,7 @@ import com.linewell.dataelement.elasticsearch.EsCommonService as esCommonService
 import com.linewell.dataelement.metautil.model.dto.DataSourceConfig
 import com.linewell.dataelement.metautil.model.dto.ColumnInfo
 import com.linewell.dataelement.metautil.model.enums.DatabaseType
+import com.linewell.dataelement.metautil.mongo.MongoDatasource
 import com.linewell.dataelement.metautil.service.MetadataExplorerService as metadataExplorerService
 import java.util.Map
 import java.util.List
@@ -37,6 +38,7 @@ import java.lang.IllegalArgumentException
 import com.linewell.dataelement.shared.error.ErrorDetailSanitizer
 import tenantRuntime
 import canvasTableDdl
+import '@/common/nifiProbeSettings' as probeSettings
 import hwhive
 import com.linewell.dataelement.dataassets.runtime.DataSourceConnectionPropertyResolver as connectionProperties
 import com.linewell.dataelement.metautil.jdbc.JdbcDriverPropertyResolver
@@ -503,7 +505,10 @@ var dbId = body == null ? null : body.dbId
 var ddl = body == null ? null : body.ddl
 var tableName = body == null ? null : body.tableName
 var skipIfExists = body != null && body.skipIfExists == true
-if (blank(dbId)) {
+var jdbcDirect = body?.canvas == true && body?.canvasJdbc instanceof Map
+var mongoDirect = body?.canvas == true && body?.canvasMongo instanceof Map
+var direct = jdbcDirect || mongoDirect
+if (blank(dbId) && !direct) {
     // 参数或业务状态不满足要求时立即终止请求。
     exit 500, 'dbId参数不正确'
 }
@@ -516,20 +521,29 @@ if (blank(ddl)) {
 // its selected target exclusively inside the active tenant, then validate DDL.
 if (body.canvas == true) {
     var tenantId = tenantRuntime.id()
+    if (direct && (body?.reuseExistingOnly == true || !blank(dbId) || (jdbcDirect && mongoDirect))) {
+        exit 400, '直连建表只接受一个目标连接'
+    }
     // 内部物化批次才会设置 Servlet 属性。直接 HTTP 请求始终从当前租户重新解析登记连接。
     var internal = request?.get()?.getAttribute('ods.materialization.targets')
     var trustedBatch = internal != null && !blank(tenantId) && textOf(internal.tenantId) == textOf(tenantId)
         && internal.prepared != null && internal.connections != null && internal.connections[textOf(dbId)] != null
-    var registered = trustedBatch ? internal.connections[textOf(dbId)] : connectionProperties.resolve(tenantId, textOf(dbId))
-    if (registered == null || registered.isEmpty()) { exit 404, '当前租户中不存在所选目标数据源' }
+    var registered = direct ? null : (trustedBatch ? internal.connections[textOf(dbId)] : connectionProperties.resolve(tenantId, textOf(dbId)))
+    if (!direct && (registered == null || registered.isEmpty())) { exit 404, '当前租户中不存在所选目标数据源' }
     var prepared = trustedBatch ? internal.prepared[textOf(dbId)] : null
+    var nameFromDdl = direct || (!trustedBatch && body?.reuseExistingOnly != true && blank(tableName))
     if (prepared != null && (prepared.requestedDdl != textOf(ddl) || prepared.requestedTable != textOf(tableName))) {
         exit 409, '物化目标配置已变化，请重新预检'
     }
     var managedHive = false
     var config = null
     var parsed = null
-    if (prepared != null) {
+    if (mongoDirect) {
+        config = probeSettings('sink.mongodb', body.canvasMongo, 'mongoDdl', null, null, null)
+    } else if (jdbcDirect) {
+        config = probeSettings('sink.jdbc', body.canvasJdbc, 'jdbcDdl', null, null, null)
+        if (blank(config.getUsername())) { exit 400, '请填写目标节点 JDBC 用户名' }
+    } else if (prepared != null) {
         managedHive = prepared.managedHive
         config = prepared.config
         parsed = prepared.parsed
@@ -552,14 +566,29 @@ if (body.canvas == true) {
         } else {
             config = dataSourceOf(registered)
         }
-        parsed = canvasTableDdl.submitted(textOf(ddl), textOf(tableName), config)
+        if (!nameFromDdl) {
+            parsed = canvasTableDdl.submitted(textOf(ddl), textOf(tableName), config)
+        }
         if (trustedBatch && body.validateOnly == true) {
             internal.prepared[textOf(dbId)] = {config:config, parsed:parsed, managedHive:managedHive,
                 requestedDdl:textOf(ddl), requestedTable:textOf(tableName)}
         }
     }
+    // 画布 SQL 编辑器以最终提交的语句为准；兼容只发 dbId 和 DDL 的旧画布。
+    if (nameFromDdl) {
+        try {
+            if (config.getEffectiveDatabaseType() == DatabaseType.MONGODB) {
+                var command = MongoDatasource.parseCreateCommand(textOf(ddl))
+                parsed = canvasTableDdl.submitted(textOf(ddl), command.collection(), config)
+            } else {
+                parsed = canvasTableDdl.parse(textOf(ddl), config)
+            }
+        } catch (error) {
+            exit 400, ErrorDetailSanitizer.errorText(error.message)
+        }
+    }
     if (body.validateOnly == true) {
-        return { valid: true, tableName: parsed.tableName, targetScope: parsed.schemaName, ddl: parsed.ddl, partitionPlan:body?.partitionPlan, syntaxChecked:false, sideEffectsApplied: false }
+        return { valid: true, tableName: parsed.tableName, targetScope: parsed.schemaName, ddl: parsed.ddl, partitionPlan:body?.partitionPlan, syntaxChecked:nameFromDdl, sideEffectsApplied: false }
     }
     config.setSchema(parsed.schemaName)
     if (body.reuseExistingOnly == true) {
@@ -597,12 +626,13 @@ if (body.canvas == true) {
             tableItems:tableItems, compatibilityWarnings:warnings, partitionPlan:body?.partitionPlan}
     }
     // 直接执行限定目标的CREATE。已有对象由数据库错误码处理，目录权限或旧驱动的探查失败不再阻断建表。
+    var createdTableName = nameFromDdl ? parsed.lookupName : parsed.tableName
     try {
         if (managedHive) { hwhive.execDDLSqlInDatabase(config.getDatabase(), parsed.ddl) }
         else { metadataExplorerService.createTable(config, parsed.ddl) }
     } catch (e) {
         if (canvasTableDdl.alreadyExists(e)) {
-            return { status: 'exists', created: false, tableName: parsed.tableName, message: '目标表已存在，请直接选择已有表' }
+            return { status: 'exists', created: false, tableName: createdTableName, message: '目标表已存在，请直接选择已有表' }
         }
         var databaseFailure = e
         var causeDepth = 0
@@ -614,7 +644,7 @@ if (body.canvas == true) {
         if (trustedBatch) { return {status:'failed', code:500, message:message} }
         exit 500, message
     }
-    return { status: 'created', created: true, tableName: parsed.tableName, partitionPlan:body?.partitionPlan, message: '物化建表成功' }
+    return { status: 'created', created: true, tableName: createdTableName, partitionPlan:body?.partitionPlan, message: '物化建表成功' }
 }
 
 var dbAsset = loadAsset(dbId)

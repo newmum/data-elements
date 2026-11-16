@@ -35,12 +35,24 @@ TENANT_TABLES = {
     "data_gov_quality_rule", "push_node_t", "service_node_t",
 }
 MAGIC_IDS = {
-    "portal_login_01", "ga_local_login_01", "bced293de53e4b348940f99b1b5bdf9f",
+    "portal_login_01", "bced293de53e4b348940f99b1b5bdf9f",
 }
 MAGIC_PATHS = {
-    "api/01.系统门户/03.系统登出/01.系统登出.ms",
+    "api/01.系统门户/02.登录与会话/02.系统登出.ms",
     "function/13.统一身份管理/21.接收端账号安全校验.ms",
 }
+STANDALONE_API_GROUPS = (
+    "api/03.数据接入/",
+    "api/09.海通流程接口/",
+)
+STANDALONE_API_ROUTES = {
+    "post:/dst/db/hive", "get:/sym/dict/query", "post:/sym/user/me", "get:/portal/sso/session",
+    "post:/dst/db/srcpage", "post:/dst/db/srcdetail", "post:/dst/db/ddl", "post:/dst/db/create",
+    "post:/dst/db/dept", "get:/dst/db/tables", "get:/dst/db/fields",
+    "post:/dst/file/register", "post:/dst/file/manage", "post:/dst/file/submit",
+}
+# These two functions are called by the Java NiFi lifecycle synchronizer.
+STANDALONE_NIFI_CALLBACKS = {"/common/ensureNifiCatalogAccessTask", "/common/nifiTaskState"}
 
 
 def literal(value):
@@ -54,7 +66,7 @@ def ddl(canonical, database, requested):
     tables = {name: statement for statement, name in re.findall(
         r"(?ms)^(CREATE TABLE `([^\x60]+)` \(.*?^\) ENGINE=[^\r\n]+;)", source
     )}
-    selected = set(requested)
+    selected = set(tables if requested is None else requested)
     while True:
         required = {ref for name in selected for ref in re.findall(r"REFERENCES `([^\x60]+)`", tables[name])}
         if required <= selected:
@@ -74,13 +86,38 @@ def ddl(canonical, database, requested):
     return header + "\n\n".join(statements) + "\nSET FOREIGN_KEY_CHECKS=1;\n", sorted(selected)
 
 
-def magic_rows():
+def magic_rows(standalone=False):
     root = ROOT / "magic"
     index = json.loads((root / ".manifest.json").read_text(encoding="utf-8"))
     records = {entry["path"]: entry for entry in index["resources"]}
     paths = MAGIC_PATHS | {entry["path"] for entry in records.values() if entry.get("metadataId") in MAGIC_IDS}
     if len(paths) != len(MAGIC_PATHS) + len(MAGIC_IDS):
         raise ValueError("A required Magic resource is missing from the canonical index")
+    if standalone:
+        routes = {}
+        for path in records:
+            if path.startswith(("function/", "api/")) and path.endswith(".ms"):
+                parent = Path(path).parent
+                groups = [group for group in (*reversed(parent.parents), parent) if len(group.parts) > 1]
+                metadata = json.loads((root / path).read_text(encoding="utf-8").split("================================")[0])
+                route = "".join(json.loads((root / group / "group.json").read_text(encoding="utf-8").split("================================")[0])["path"]
+                                for group in groups) + metadata["path"]
+                if path.startswith("api/"):
+                    route = metadata["method"].lower() + ":" + route
+                    if path.startswith(STANDALONE_API_GROUPS) or route in STANDALONE_API_ROUTES:
+                        paths.add(path)
+                routes[route] = path
+        paths.update(routes[route] for route in STANDALONE_NIFI_CALLBACKS)
+        pending = list(paths)
+        while pending:
+            source = (root / pending.pop()).read_text(encoding="utf-8")
+            for route in re.findall(r"""(?m)^\s*import\s+['"]@((?:\w+:)?/[^'"]+)['"]""", source):
+                dependency = routes.get(route)
+                if dependency is None:
+                    raise ValueError(f"Missing Magic dependency: {route}")
+                if dependency not in paths:
+                    paths.add(dependency)
+                    pending.append(dependency)
     for path in list(paths):
         for parent in Path(path).parents:
             directory = "" if parent == Path(".") else parent.as_posix()
@@ -92,6 +129,8 @@ def magic_rows():
     rows = []
     for path in sorted(paths):
         entry = records[path]
+        if entry.get("publicationBlocked"):
+            raise ValueError(f"Cannot distribute blocked Magic resource: {path}")
         is_dir = entry["kind"] == "directory"
         content = "this is directory" if is_dir else (root / path).read_text(encoding="utf-8")
         row_ids = entry.get("rowIds", [])
@@ -118,10 +157,10 @@ VALUES ('8fb3fdba44d54a729098000000000006','{TENANT}','{ROLE}','{MENU}');
     return control, tenant
 
 
-def database_files():
-    control, control_tables = ddl("baseline", "baseline", CONTROL_TABLES)
-    tenant, tenant_tables = ddl("baseline_ga", "baseline_haitong", TENANT_TABLES)
-    rows, magic_paths = magic_rows()
+def database_files(standalone=False):
+    control, control_tables = ddl("baseline", "baseline", None if standalone else CONTROL_TABLES)
+    tenant, tenant_tables = ddl("baseline_ga", "baseline_haitong", None if standalone else TENANT_TABLES)
+    rows, magic_paths = magic_rows(standalone)
     control_seed, tenant_seed = seed_sql()
     resources = [f"({literal(row_id)},{literal(path)},{literal(content)},0)" for row_id, path, content in rows]
     control += control_seed + "INSERT INTO api_file_t (tid,file_path,file_content,is_del) VALUES\n" + ",\n".join(resources) + ";\n"
@@ -140,14 +179,14 @@ def pack(output, name, files):
     target = output / name
     with ZipFile(target, "w", ZIP_DEFLATED) as archive:
         for relative, source in sorted(files.items()):
-            if isinstance(source, Path):
-                if source.suffix == ".sh":
-                    script = ZipInfo(relative)
-                    script.create_system = 3
-                    script.external_attr = 0o100755 << 16
-                    archive.writestr(script, source.read_text(encoding="utf-8").encode("utf-8"), compress_type=ZIP_DEFLATED)
-                else:
-                    archive.write(source, relative, compress_type=ZIP_STORED if source.suffix in (".jar", ".gz") else ZIP_DEFLATED)
+            if relative.endswith(".sh"):
+                script = ZipInfo(relative)
+                script.create_system = 3
+                script.external_attr = 0o100755 << 16
+                contents = source.read_text(encoding="utf-8").encode("utf-8") if isinstance(source, Path) else source
+                archive.writestr(script, contents, compress_type=ZIP_DEFLATED)
+            elif isinstance(source, Path):
+                archive.write(source, relative, compress_type=ZIP_STORED if source.suffix in (".jar", ".gz", ".zip", ".xz") else ZIP_DEFLATED)
             else:
                 archive.writestr(relative, source)
     with ZipFile(target) as archive:
@@ -164,15 +203,18 @@ def main():
     parser.add_argument("--frontend", type=Path, default=BUILD / "frontend")
     parser.add_argument("--nacos", action="store_true", help="Use the standard backend and import configuration from Nacos")
     parser.add_argument("--dm8-runtime-dir", type=Path, help="Bundle DM8 SQL and verified Linux x64/ARM64 runtimes")
+    parser.add_argument("--linux-runtime-dir", type=Path, help="Bundle x86_64 MySQL, Redis, NiFi, Caddy and Java 21")
     layout = parser.add_mutually_exclusive_group()
     layout.add_argument("--database-only", action="store_true")
     layout.add_argument("--bundle", action="store_true", help="Package the complete deployment in a single ZIP")
     args = parser.parse_args()
     if args.dm8_runtime_dir and (not args.bundle or args.nacos):
         parser.error("--dm8-runtime-dir requires --bundle with Nacos disabled")
+    if args.linux_runtime_dir and (not args.bundle or args.nacos or args.dm8_runtime_dir):
+        parser.error("--linux-runtime-dir requires the no-Nacos MySQL bundle")
     args.output.mkdir(parents=True, exist_ok=True)
     database = (dameng_database_files(ROOT, CONTROL_TABLES, TENANT_TABLES, TENANT, magic_rows(), seed_sql())
-                if args.dm8_runtime_dir else database_files())
+                if args.dm8_runtime_dir else database_files(bool(args.linux_runtime_dir)))
     if args.database_only:
         pack(args.output, "haitong-database-lite.zip", database)
         return
@@ -198,6 +240,10 @@ def main():
         driver = next(name for name in names if re.fullmatch(r"BOOT-INF/lib/mariadb-java-client-\d[^/]*\.jar", name))
         mariadb = examples_build / Path(driver).name
         mariadb.write_bytes(jar.read(driver))
+        if args.linux_runtime_dir:
+            driver = next(name for name in names if re.fullmatch(r"BOOT-INF/lib/mysql-connector-j-\d[^/]*\.jar", name))
+            mysql_driver = examples_build / Path(driver).name
+            mysql_driver.write_bytes(jar.read(driver))
         if args.dm8_runtime_dir:
             dm_driver = next(name for name in names if re.fullmatch(r"BOOT-INF/lib/DmJdbcDriver18-\d[^/]*\.jar", name, re.I))
             dm_library = examples_build / Path(dm_driver).name
@@ -240,6 +286,35 @@ def main():
         "temp/.gitkeep": b"",
     })
     configuration = "nacos" if args.nacos else "no-nacos"
+    if args.linux_runtime_dir:
+        configuration = "linux-x86_64-no-nacos"
+        linux = TEMPLATES / "linux-standalone"
+        assets = ("java21.tar.gz", "mysql.tar.xz", "redis.tar.gz", "nifi.zip", "caddy.tar.gz", "mysql-libs.tar.gz")
+        for asset in assets:
+            file = args.linux_runtime_dir / asset
+            if not file.is_file():
+                raise ValueError(f"Missing verified Linux runtime asset: {asset}")
+            backend[f"vendor/{asset}"] = file
+        backend.update({f"config/{name}": linux / name for name in ("ports.json", "Caddyfile")})
+        config = runtime_config.read_text(encoding="utf-8")
+        for setting in ("monitor-enabled", "provenance-sync-enabled"):
+            config = config.replace(f"{setting}: false", f"{setting}: true")
+        backend["config/application.yml"] = config.encode("utf-8")
+        backend["tools/standalone.py"] = linux / "standalone.py"
+        backend["部署说明.md"] = linux / "deployment.md"
+        frontend["www/haitong/deployment.js"] = (
+            f"window.haitongDeployment = {{ tenantId: '{TENANT}', appId: '{APP}', nifiUiUrl: '' }};\n"
+        ).encode()
+        for command in ("start", "stop", "status", "init-db"):
+            backend[f"{command}.sh"] = (
+                f'#!/usr/bin/env bash\nset -euo pipefail\ncd -- "$(dirname -- "${{BASH_SOURCE[0]}}")"\n'
+                f'exec python3 tools/standalone.py {command} "$@"\n'
+            ).encode()
+        backend[f"drivers/{mysql_driver.name}"] = mysql_driver
+        backend[f"drivers/{mariadb.name}"] = mariadb
+        del backend["start-backend.ps1"]
+        del backend["start-backend.sh"]
+        del frontend["config/nginx.conf"]
     if args.dm8_runtime_dir:
         configuration = "dm8-no-nacos-kylin-v10"
         backend.update(linux_runtime_files(TEMPLATES, args.dm8_runtime_dir))

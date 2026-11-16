@@ -6,6 +6,8 @@
 
 前端业务 HTTP 接口优先在 Magic API 直接注册。迁移以整类移除可替代的 Java Controller、Service 和专用文件为交付目标，并按 [Java 文件、旧对象与测试清理](docs/data-elements.md#backend-simplification) 核对入口、依赖、退役顺序和回归证据。每批独立统计生产 Java 文件与类、Controller 和测试文件。测试按有效覆盖和构建耗时整理，等价验证就绪后再删除重复或退役用例。
 
+共享后端的 Java 移包、HTTP 旧地址退役和 Magic 访问策略迁移沿用现有批次，执行 [共享后端包职责与访问策略](docs/data-elements-parent.md#backend-package-access)。旧地址按改写前的方法和路径核查实际调用。公开访问和参数兼容按资源与实际调用逐项验证。
+
 新增、修改或归类 Magic 资源必须遵守 [Magic API 目录组织](docs/data-elements.md#lowcode-magic--magic-api-organization) 和 [Magic 脚本可读性与注释规范](docs/data-elements.md#lowcode-magic--magic-api-readability-and-documentation)。同级资源连续编号，API 使用同一深度的叶分组，业务目录最多三层。分组和 API 的 `path` 各使用一个有名字的 URL 段，采用简短的小写英文单词或通用缩写，避免连字符，由层级拼成完整地址。涉及实际路由或导入变化时，同批迁移并验证调用方。所有 `import` 放在脚本最前面，紧接中文说明。接口应直接展示本入口的业务编排，确有共享实现的短入口必须说明复用关系和业务实现位置。
 
 独立 Magic Function 只承载多个现役入口实际共用的逻辑。沿引用核对 API、任务、兼容别名及 Java 回调；同一入口的多层转发只算一个调用入口。单入口的校验、权限、CRUD、事务和流程编排直接写在对应 API 脚本，需要分段时使用脚本内的局部函数。GET 和 HEAD 可以共用实现。退役独立函数前核对运行引用并备份选定资源。

@@ -2571,6 +2571,40 @@ COMMENT ON COLUMN "public"."data_access_multi_group_t"."updated_time" IS '编组
 
 COMMENT ON COLUMN "public"."data_access_multi_group_t"."is_del" IS '逻辑删除标志：0有效，1已删除';
 
+CREATE TABLE "public"."data_access_native_flow_t" (
+  "tid" character varying(32 char) NOT NULL,
+  "tenant_id" character varying(32 char) NOT NULL,
+  "source_table_id" character varying(32 char) NOT NULL,
+  "node_id" character varying(32 char) NOT NULL,
+  "node_name" character varying(128 char) NOT NULL,
+  "process_group_id" character varying(36 char) NOT NULL,
+  "group_name" character varying(512 char) NOT NULL,
+  "created_by" character varying(32 char) NOT NULL,
+  "created_at" bigint NOT NULL,
+  CONSTRAINT "pk_data_access_native_flow_t" PRIMARY KEY (tid),
+  CONSTRAINT "uk_native_flow_tenant_group" UNIQUE (tenant_id, node_id, process_group_id)
+);
+
+COMMENT ON TABLE "public"."data_access_native_flow_t" IS '数据接入-已登记来源表与NiFi原生流程只读关联';
+
+COMMENT ON COLUMN "public"."data_access_native_flow_t"."tid" IS '关联记录标识';
+
+COMMENT ON COLUMN "public"."data_access_native_flow_t"."tenant_id" IS '所属行业租户标识';
+
+COMMENT ON COLUMN "public"."data_access_native_flow_t"."source_table_id" IS '已登记来源表标识';
+
+COMMENT ON COLUMN "public"."data_access_native_flow_t"."node_id" IS 'NiFi节点标识';
+
+COMMENT ON COLUMN "public"."data_access_native_flow_t"."node_name" IS '建立关联时的节点名称';
+
+COMMENT ON COLUMN "public"."data_access_native_flow_t"."process_group_id" IS 'NiFi原生流程组UUID';
+
+COMMENT ON COLUMN "public"."data_access_native_flow_t"."group_name" IS '建立关联时的原生流程组名称';
+
+COMMENT ON COLUMN "public"."data_access_native_flow_t"."created_by" IS '创建关联的用户标识';
+
+COMMENT ON COLUMN "public"."data_access_native_flow_t"."created_at" IS '关联创建时间戳，Unix毫秒';
+
 CREATE TABLE "public"."data_access_task_monitor_snap_t" (
   "tid" character varying(32 char) NOT NULL,
   "task_id" character varying(32 char),
@@ -10589,6 +10623,8 @@ CREATE UNIQUE INDEX ix_cc17d3ccb04e9c9fdfc497d1 ON public.data_access_multi_grou
 CREATE INDEX ix_f5296a814dccad3db66af870 ON public.data_access_multi_group_item_t USING btree (tenant_id, access_task_id);
 
 CREATE INDEX ix_b93bede06e56b9b92e2f8991 ON public.data_access_multi_group_t USING btree (tenant_id, is_del, created_time);
+
+CREATE INDEX idx_native_flow_tenant_time ON public.data_access_native_flow_t USING btree (tenant_id, created_at, tid);
 
 CREATE UNIQUE INDEX ix_29d4deb2fc86506ba00bac31 ON public.data_access_task_monitor_snap_t USING btree (tid);
 

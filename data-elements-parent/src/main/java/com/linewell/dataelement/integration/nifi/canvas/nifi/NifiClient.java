@@ -262,6 +262,7 @@ public class NifiClient {
     }
 
     private String authHeader(RuntimeNode node) {
+        if (node.isAnonymousHttp()) return null;
         TokenHolder cached = tokens.get(node.tokenCacheKey());
         if (cached != null && cached.expiresAt.isAfter(Instant.now())) {
             return "Bearer " + cached.token;
@@ -306,12 +307,11 @@ public class NifiClient {
     }
 
     /**
-     * Verifies a saved NiFi node through NiFi's authenticated root-flow API.
+     * Verifies a saved NiFi node through NiFi's root-flow API using the node's authentication settings.
      * Credentials stay in the tenant node record and never pass through the browser.
      */
-    public void testConnection(String nodeId) {
-        RuntimeNode node = runtimeResolver.resolveById(nodeId);
-        get(node, "/flow/process-groups/root", JsonNode.class);
+    public void testConnection(RuntimeNode node) {
+        get(node.requireValidConnection(), "/flow/process-groups/root", JsonNode.class);
     }
 
     /** Reads NiFi system diagnostics for one tenant-owned saved node. */
@@ -1108,20 +1108,21 @@ public class NifiClient {
     public JsonNode getRuntimeRootStatus(RuntimeNode node) {
         var client = RestClient.builder().baseUrl(node.baseUrl()).requestFactory(
                 com.linewell.dataelement.integration.nifi.canvas.config.NifiClientConfig.createRequestFactory(
-                        node.insecureTls(), Duration.ofSeconds(3), Duration.ofSeconds(5))).build();
+                        node.skipTlsVerification(), Duration.ofSeconds(3), Duration.ofSeconds(5))).build();
         for (int attempt = 0; attempt < 2; attempt++) {
-            String token = runtimeToken(node, client);
+            String token = node.isAnonymousHttp() ? null : runtimeToken(node, client);
             try {
                 String root = node.rootProcessGroupId() == null || node.rootProcessGroupId().isBlank() ? "root" : node.rootProcessGroupId();
-                return client.get().uri(API_PREFIX + "/flow/process-groups/" + root + "/status?recursive=true")
-                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token).exchange((request, response) -> {
+                var requestSpec = client.get().uri(API_PREFIX + "/flow/process-groups/" + root + "/status?recursive=true");
+                if (token != null) requestSpec.headers(headers -> headers.setBearerAuth(token));
+                return requestSpec.exchange((request, response) -> {
                             if (response.getStatusCode().isError()) throw new NifiException("NiFi 状态读取失败（HTTP " + response.getStatusCode().value() + "）", response.getStatusCode().value(), null);
                             byte[] bytes = response.getBody().readNBytes(16 * 1024 * 1024 + 1);
                             if (bytes.length > 16 * 1024 * 1024) throw new IllegalStateException("NiFi 状态响应超过 16 MB 上限");
                             return mapper.readTree(bytes);
                         });
             } catch (NifiException e) {
-                if (e.status() != 401 || attempt != 0) throw e;
+                if (token == null || e.status() != 401 || attempt != 0) throw e;
                 tokens.computeIfPresent(node.tokenCacheKey(), (key, cached) -> cached.token.equals(token) ? null : cached);
             }
         }

@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.*;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.linewell.dataelement.integration.nifi.canvas.config.NifiNodeRuntimeResolver;
 import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient;
 import com.linewell.dataelement.platform.tenant.domain.TenantContext;
 import java.util.Map;
@@ -16,7 +17,8 @@ import org.ssssssss.magicapi.core.service.MagicResourceService;
 class NodeConfigurationDiagnosticsTest {
     private final NifiClient nifiClient = mock(NifiClient.class);
     private final NodeConfigurationController controller = new NodeConfigurationController(
-            mock(MagicResourceService.class), mock(Resource.class), nifiClient);
+            mock(MagicResourceService.class), mock(Resource.class), nifiClient,
+            mock(NifiNodeRuntimeResolver.class), new ObjectMapper());
 
     @AfterEach
     void clearTenant() {

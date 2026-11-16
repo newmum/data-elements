@@ -162,6 +162,7 @@ export interface Pipeline {
 }
 
 export interface DeploymentResult {
+  retainedStoppedGroups?: string[];
   pipeline?: Pipeline;
   processGroupId?: string;
   started?: boolean;
@@ -170,10 +171,10 @@ export interface DeploymentResult {
 
 const KEY = ['pipelines'] as const;
 
-export function usePipelinePage(page:number,size:number,sort:{sortField?:string;sortDir?:string}={}) {
+export function usePipelinePage(page:number,size:number,sort:{sortField?:string;sortDir?:string}={},keyword='') {
   const tokenReady=useTokenReady(),sessionRevision=useSessionRevision();
-  return useQuery({enabled:tokenReady,queryKey:[...KEY,'page',sessionRevision,page,size,sort],queryFn:async()=>{
-    const result=(await api.get<{list:PipelineSummary[];total:number}>('/flow/page',{params:{page,size,...sort}})).data;
+  return useQuery({enabled:tokenReady,queryKey:[...KEY,'page',sessionRevision,page,size,sort,keyword],queryFn:async({signal})=>{
+    const result=(await api.get<{list:PipelineSummary[];total:number}>('/flow/page',{params:{page,size,...sort,...(keyword?{q:keyword}:{})},signal})).data;
     if(!Array.isArray(result.list)||!Number.isFinite(result.total))throw new Error('流程分页响应不完整');
     return result;
   }});
@@ -275,12 +276,15 @@ export function useDeletePipeline() {
 export function useDeployPipeline() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, catalogTid, preserveExisting = true, forceRebuild = false }: {
-      id: string; catalogTid?: string | null; preserveExisting?: boolean; forceRebuild?: boolean;
+    mutationFn: async ({ id, catalogTid, preserveExisting = true, forceRebuild = false, discardQueueFor }: {
+      id: string; catalogTid?: string | null; preserveExisting?: boolean; forceRebuild?: boolean; discardQueueFor?: string;
     }) => {
       requireEditableTask(id);
       return performFlowAction(id, 'deploy', async () => {
-        const result = (await api.post<DeploymentResult>(`/life/deploy?id=${encodeURIComponent(id)}`, { catalogTid, preserveExisting, forceRebuild })).data;
+        // A rebuild waits for NiFi queue checks, cleanup and compilation on the same request.
+        const result = (await api.post<DeploymentResult>(`/life/deploy?id=${encodeURIComponent(id)}`, {
+          catalogTid, preserveExisting, forceRebuild,
+        }, { timeout: 120_000, params: discardQueueFor ? { discardQueueFor } : undefined })).data;
         if (!result || result.pipeline?.id !== id) {
           throw Object.assign(new Error('部署接口未返回有效的流程结果，请刷新状态确认执行结果'), { payload: result });
         }
@@ -431,7 +435,9 @@ export function useStopPipeline() {
   return useMutation({
     mutationFn: async (id: string) => {
       requireEditableTask(id);
-      return performFlowAction(id, 'stop', async () => (await api.post(`/life/stop?id=${encodeURIComponent(id)}`)).data);
+      return performFlowAction(id, 'stop', async () => (await api.post<{
+        state: 'STOPPED' | 'STOPPING'; stoppedAt?: number; warning?: string;
+      }>(`/life/stop?id=${encodeURIComponent(id)}`)).data);
     },
   });
 }
@@ -491,12 +497,17 @@ export function useFlowErrors(id: string | null) {
   return useQuery<FlowError[]>({
     enabled: tokenReady && !!id,
     queryKey: ['pipeline-errors', id, sessionRevision],
-    queryFn: async ({ signal }) => requireListResponse<FlowError>((await api.get<unknown>(`/event/errors?id=${encodeURIComponent(id ?? '')}`, { ...BACKGROUND_REQUEST_OPTIONS, signal })).data, '流程错误列表'),
+    queryFn: ({ signal }) => readFlowErrorHistory(id ?? '', signal),
     refetchInterval: () => {
       const status = statusQuery.data?.status;
       return status === 'RUNNING' ? 3000 : 30000;
     },
   });
+}
+
+export async function readFlowErrorHistory(id: string, signal: AbortSignal) {
+  const response = await api.get<unknown>(`/event/errors?id=${encodeURIComponent(id)}`, { ...BACKGROUND_REQUEST_OPTIONS, signal });
+  return requireListResponse<FlowError>(response.data, '流程错误列表');
 }
 
 export interface LiveFlowBulletin {
@@ -508,6 +519,12 @@ export interface LiveFlowBulletin {
   timestamp: string;
 }
 
+export async function readLiveFlowBulletins(id: string, signal: AbortSignal) {
+  const response = await api.get<unknown>(import.meta.env.MODE === 'flow-lite'
+    ? `/pipelines/${encodeURIComponent(id)}/bulletins/live` : `/event/live?id=${encodeURIComponent(id)}`, { ...BACKGROUND_REQUEST_OPTIONS, signal });
+  return requireListResponse<LiveFlowBulletin>(response.data, 'NiFi 当前告警');
+}
+
 /** A single authorized read covers all nodes in the selected, deployed flow. */
 export function useLiveFlowBulletins(id: string | null, deployed: boolean, poll = true) {
   const tokenReady = useTokenReady();
@@ -515,9 +532,7 @@ export function useLiveFlowBulletins(id: string | null, deployed: boolean, poll 
   return useQuery<LiveFlowBulletin[]>({
     enabled: poll && tokenReady && !!id && deployed,
     queryKey: ['pipeline-live-bulletins', id, sessionRevision],
-    queryFn: async ({ signal }) => requireListResponse<LiveFlowBulletin>((await api.get<unknown>(
-      import.meta.env.MODE === 'flow-lite'
-        ? `/pipelines/${encodeURIComponent(id ?? '')}/bulletins/live` : `/event/live?id=${encodeURIComponent(id ?? '')}`, { ...BACKGROUND_REQUEST_OPTIONS, signal })).data, 'NiFi 当前告警'),
+    queryFn: ({ signal }) => readLiveFlowBulletins(id ?? '', signal),
     refetchInterval: 5000,
   });
 }

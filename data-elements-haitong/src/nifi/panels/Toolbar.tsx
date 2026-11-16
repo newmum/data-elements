@@ -71,6 +71,7 @@ import { planSaveSync, saveSyncMode } from '../utils/saveSyncPlan';
 import type { CanvasDsl } from '@/types/dsl';
 import { useTaskChainStore } from '../stores/taskChainStore';
 import { buildFlowRuntimeMetrics } from '../runtime/runtimeMetrics';
+import { canvasLifecycle, runtimeReflectsStopReceipt } from '../runtime/canvasLifecycle';
 import { nativeDetailsAccess } from '../utils/nativeDetailsAccess';
 
 function BusyIndicator() {
@@ -185,17 +186,23 @@ export default function Toolbar() {
 
   const statusQuery = useFlowStatus(currentPipelineId, 3000);
   const liveBulletins = useLiveFlowBulletins(currentPipelineId, statusQuery.data?.deployed === true, false);
-  const liveStatus = statusQuery.data?.status;
+  const { status: liveStatus, stoppedWithInvalidProcessors } = canvasLifecycle(statusQuery.data);
   const errorCount = statusQuery.data?.errors?.length ?? 0;
   const [optimisticStatus, setOptimisticStatus] = useState<PipelineStatus | null>(null);
+  const stopConfirmedAt = useRef(0);
+  const [redeploy, setRedeploy] = useState<{ id: string; groupId?: string; reason: string; saved?: CanvasDsl }>();
+  const [redeployError, setRedeployError] = useState('');
   const effectiveStatus: PipelineStatus = optimisticStatus ?? liveStatus ?? (currentPipelineId ? 'SAVED' : 'DRAFT');
   const viz = useMemo(() => {
     const current = vizFor(effectiveStatus, errorCount);
+    if (stoppedWithInvalidProcessors && effectiveStatus === 'STOPPED') {
+      return { ...current, label: '已停止 · 配置异常', color: '#faad14', clickable: errorCount > 0 };
+    }
     if (!optimisticStatus && statusQuery.data?.runtimeLabel) return { ...current,
       label: statusQuery.data.runtimeLabel,
       color: ['UNKNOWN', 'MISSING'].includes(statusQuery.data.runtimeState || '') ? '#faad14' : current.color };
     return current;
-  }, [effectiveStatus, errorCount, optimisticStatus, statusQuery.data?.runtimeLabel, statusQuery.data?.runtimeState]);
+  }, [effectiveStatus, errorCount, optimisticStatus, statusQuery.data?.runtimeLabel, statusQuery.data?.runtimeState, stoppedWithInvalidProcessors]);
 
   const isRunning = effectiveStatus === 'RUNNING' || effectiveStatus === 'RUN_ERROR';
   const isTransitioning = effectiveStatus === 'DEPLOYING' || effectiveStatus === 'STOPPING';
@@ -246,6 +253,8 @@ export default function Toolbar() {
 
   useEffect(() => {
     setOptimisticStatus(null);
+    stopConfirmedAt.current = 0;
+    setRedeploy(undefined);
     setStartDialogOpen(false);
     setAttributeSyncOpen(false);
     setCleanupDialogOpen(false);
@@ -264,6 +273,13 @@ export default function Toolbar() {
 
   useEffect(() => {
     if (!optimisticStatus || !liveStatus) return;
+    if (optimisticStatus === 'STOPPED') {
+      // The tenant-wide runtime snapshot can still describe the moment before the stop receipt.
+      if (runtimeReflectsStopReceipt(statusQuery.data, stopConfirmedAt.current)) {
+        setOptimisticStatus(null);
+      }
+      return;
+    }
     if (liveStatus === optimisticStatus) {
       setOptimisticStatus(null);
       return;
@@ -271,18 +287,12 @@ export default function Toolbar() {
     if (optimisticStatus === 'RUNNING' && (liveStatus === 'RUN_ERROR' || liveStatus === 'DEPLOY_FAILED')) {
       setOptimisticStatus(null);
     }
-    if (optimisticStatus === 'STOPPING' && liveStatus !== 'RUNNING') {
-      setOptimisticStatus(null);
-    }
-    if (optimisticStatus === 'STOPPED' && liveStatus !== 'RUNNING' && liveStatus !== 'STOPPING') {
-      setOptimisticStatus(null);
-    }
-  }, [optimisticStatus, liveStatus]);
+  }, [optimisticStatus, liveStatus, statusQuery.data]);
 
   const deploySavedPipeline = async (id: string, name: string, submitted: CanvasDsl,
     catalogTid: string | null = taskChain?.items.find(item => item.pipeline.id === id)?.sourceTableId || getTid(),
-    forceRebuild = false) => {
-    const result = await deploy.mutateAsync({ id, catalogTid, preserveExisting: !isChengtianIntegration && !forceRebuild, forceRebuild });
+    forceRebuild = false, discardQueueFor?: string) => {
+    const result = await deploy.mutateAsync({ id, catalogTid, preserveExisting: !isChengtianIntegration && !forceRebuild, forceRebuild, discardQueueFor });
     if (!isCurrentSession()) return;
     if (result.mode === 'candidate-created') {
       message.success('候选流程已部署为停止态，可从保存旁的菜单切换。');
@@ -292,7 +302,17 @@ export default function Toolbar() {
       const accepted = useCanvasStore.getState().acceptDeployment(submitted, result.pipeline.dsl);
       if (!accepted) message.info('已部署保存时的版本；部署期间新增的修改保留在画布中，请保存后再启动。');
     }
-    message.success(isChengtianIntegration ? `设计已保存并发布：${name}。外部执行需另行授权。` : `已保存并部署:${name}`);
+    if (result.retainedStoppedGroups?.length) {
+      message.warning('新流程已部署。旧流程已停止，队列或旧流程清理尚未完成。');
+    } else {
+      message.success(isChengtianIntegration ? `设计已保存并发布：${name}。外部执行需另行授权。` : `已保存并部署:${name}`);
+    }
+  };
+
+  const requestRedeploy = (id: string, groupId: string | null | undefined, reason: string, saved?: CanvasDsl) => {
+    if (!isCurrentSession() || useCanvasStore.getState().currentPipelineId !== id) return;
+    setRedeployError('');
+    setRedeploy({ id, groupId: groupId || undefined, reason, saved });
   };
 
   const reportSaveOrDeployFailure = (error: any, deploymentAttempted: boolean, action: string, failedPipelineId = currentPipelineId) => {
@@ -311,12 +331,17 @@ export default function Toolbar() {
       return;
     }
     if (mode === 'missing-mapping') {
-      message.warning('设计已保存。NiFi 历史流程组或组件关联不完整，请核对原生流程后从保存旁菜单选择重新部署。');
+      requestRedeploy(saved.id, saved.nifiProcessGroupId, '画布已保存。现有流程缺少完整的组件关联，需要重新部署才能应用这份设计。', saved.dsl);
       return;
     }
     const preview = await previewRuntimeAttributes(saved.id);
     if (!isCurrentSession()) return;
-    const { automatic: changed, unresolved, needsRedeploy } = planSaveSync(previousDsl, saved.dsl, preview.changes);
+    const { automatic: changed, unresolved, needsRedeploy, redeployReasons } = planSaveSync(previousDsl, saved.dsl, preview.changes);
+    if (needsRedeploy) {
+      requestRedeploy(saved.id, saved.nifiProcessGroupId,
+        `画布已保存。${redeployReasons.join('，') || '当前设计需要重新生成原生流程'}，重新部署后生效。`, saved.dsl);
+      return;
+    }
     for (let offset = 0; offset < changed.length; offset += 100) {
       const selections = changed.slice(offset, offset + 100).map(row => ({
         nodeId: row.nodeId, field: row.field, processorId: row.processorId,
@@ -333,8 +358,6 @@ export default function Toolbar() {
     if (unresolved.length) {
       message.warning('设计已保存，部分 NiFi 属性需要核对后才能同步。');
       setAttributeSyncOpen(true);
-    } else if (needsRedeploy) {
-      message.warning('设计已保存并同步可更新的属性。节点、连接或其他配置变化需要重新部署流程。');
     } else {
       message.success('流程已保存，支持的 NiFi 属性已同步');
     }
@@ -417,18 +440,25 @@ export default function Toolbar() {
   };
 
   const deployDesign = async () => {
-    if (!isCurrentSession() || actionLock.current || readOnlySnapshot || !currentPipelineId || !currentPipelineName) return;
+    if (!isCurrentSession() || !redeploy || redeploy.id !== currentPipelineId || actionLock.current
+      || readOnlySnapshot || !currentPipelineName || isRunning || isTransitioning) return;
     actionLock.current = true;
     setOperationBusy(true);
     setActiveAction('deploy');
-    let savedSuccessfully = false;
+    setRedeployError('');
     try {
-      const saved = await save.mutateAsync({ id: currentPipelineId, name: currentPipelineName, dsl: toDsl() });
-      savedSuccessfully = true;
+      const submitted = toDsl();
+      const saved = redeploy.saved && sameDesignDsl(redeploy.saved, submitted)
+        ? { id: redeploy.id, name: currentPipelineName, dsl: redeploy.saved }
+        : await save.mutateAsync({ id: redeploy.id, name: currentPipelineName, dsl: submitted });
       if (!isCurrentSession()) return;
-      await deploySavedPipeline(saved.id, saved.name, saved.dsl, undefined, true);
+      await deploySavedPipeline(saved.id, saved.name, saved.dsl, undefined, true, redeploy.groupId);
+      if (isCurrentSession()) setRedeploy(undefined);
     } catch (error) {
-      reportSaveOrDeployFailure(error, savedSuccessfully, '保存', currentPipelineId);
+      if (isCurrentSession()) {
+        const diagnostic = flowActionFailure(error, 'deploy');
+        setRedeployError([diagnostic.message, diagnostic.detail].filter(Boolean).join('。'));
+      }
     } finally {
       actionLock.current = false;
       setOperationBusy(false);
@@ -575,19 +605,25 @@ export default function Toolbar() {
 
   const handleStop = async () => {
     if (!isCurrentSession()) return;
-    if (!currentPipelineId) return;
+    if (!currentPipelineId || stop.isPending) return;
+    const id = currentPipelineId;
+    const stillCurrent = () => isCurrentSession() && useCanvasStore.getState().currentPipelineId === id;
     setOperationBusy(true);
     try {
-      setOptimisticStatus('STOPPING');
-      const result = await stop.mutateAsync(currentPipelineId);
+      const result = await stop.mutateAsync(id);
+      if (!stillCurrent()) return;
       if (result?.state === 'STOPPING') {
         message.info(result.warning || 'NiFi 正在停止');
-      } else {
+      } else if (result?.state === 'STOPPED') {
+        stopConfirmedAt.current = Number(result.stoppedAt) || Number(statusQuery.data?.runtimeObservedAt || 0) + 1;
         setOptimisticStatus('STOPPED');
         message.success('已停止');
+      } else {
+        message.warning('停止结果待确认，正在刷新 NiFi 状态。');
       }
       void statusQuery.refetch();
     } catch (e: any) {
+      if (!stillCurrent()) return;
       setOptimisticStatus(null);
       message.error(`停止失败: ${e?.response?.data?.error ?? e?.message ?? e}`);
     } finally {
@@ -919,8 +955,9 @@ export default function Toolbar() {
 
         {!isChengtianIntegration && <Dropdown trigger={['click']} getPopupContainer={getNifiOverlayContainer}
           menu={{ items: [
-            { key: 'deploy', label: '重新部署流程', disabled: isRunning, onClick: () => {
-              modal.confirm({ title: '重新部署流程', content: '将保存当前画布并重建 NiFi 流程。请先确认旧流程及队列已处理完毕。', okText: '重新部署', cancelText: '取消', onOk: deployDesign });
+            { key: 'deploy', label: '重新部署流程', disabled: isRunning || !currentPipelineId, onClick: () => {
+              if (currentPipelineId) requestRedeploy(currentPipelineId,
+                savedPipeline?.nifiProcessGroupId ?? statusQuery.data?.processGroupId, '系统将使用当前画布配置重建 NiFi 流程。');
             } },
             ...(candidate ? [{ key: 'activate', label: '切换到候选流程', disabled: isRunning, onClick: activatePreparedCandidate }] : []),
           ] }}>
@@ -930,16 +967,16 @@ export default function Toolbar() {
         </Dropdown>}
         </div>
 
-        {isRunning ? (
+        {isRunning || effectiveStatus === 'STOPPING' || (stop.isPending && effectiveStatus !== 'STOPPED') ? (
           <Button
             danger
             className="coze-toolbar__action"
-            aria-busy={stop.isPending || (effectiveStatus as string) === 'STOPPING'}
-            icon={stop.isPending || (effectiveStatus as string) === 'STOPPING' ? <BusyIndicator /> : <PauseCircleOutlined />}
+            aria-busy={stop.isPending || effectiveStatus === 'STOPPING'}
+            icon={stop.isPending || effectiveStatus === 'STOPPING' ? <BusyIndicator /> : <PauseCircleOutlined />}
             disabled={readOnlySnapshot || stop.isPending || isTransitioning}
             onClick={handleStop}
           >
-            {stop.isPending || (effectiveStatus as string) === 'STOPPING' ? '停止中' : '停止'}
+            {stop.isPending || effectiveStatus === 'STOPPING' ? '停止中' : '停止'}
           </Button>
         ) : (
           <div className="canvas-start-actions">
@@ -973,6 +1010,22 @@ export default function Toolbar() {
           <Button icon={<CloseOutlined />} onClick={handleCloseTab} />
         </Tooltip>
       </div>
+
+      <Modal title="重新部署流程" open={Boolean(redeploy)} width={480} centered
+        getContainer={getNifiOverlayContainer} confirmLoading={activeAction === 'deploy'}
+        styles={{ body: { maxHeight: 'min(55vh, 420px)', overflowY: 'auto', overflowWrap: 'anywhere' } }}
+        maskClosable={false} closable={activeAction !== 'deploy'} keyboard={activeAction !== 'deploy'}
+        okText="重新部署" cancelText="取消"
+        okButtonProps={{ disabled: isRunning || isTransitioning || readOnlySnapshot }}
+        cancelButtonProps={{ disabled: activeAction === 'deploy' }}
+        onCancel={() => { if (activeAction !== 'deploy') setRedeploy(undefined); }}
+        onOk={() => void deployDesign()}>
+        <p style={{ margin: '0 0 14px' }}>{redeploy?.reason}</p>
+        {redeploy?.groupId && <Alert showIcon type="warning" message="重新部署会清空旧队列"
+          description="新流程通过检查后，系统会清理旧流程中尚未处理和等待重试的数据。这些排队数据无法恢复。" />}
+        {isRunning && <p style={{ margin: '12px 0 0' }}>请先停止当前流程，再重新部署。</p>}
+        {redeployError && <Alert style={{ marginTop: 12 }} type="error" showIcon message={redeployError} />}
+      </Modal>
 
       {attributeSyncOpen && currentPipelineId && <NifiAttributeSyncDialog pipelineId={currentPipelineId}
         onClose={() => setAttributeSyncOpen(false)} />}

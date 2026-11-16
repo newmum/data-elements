@@ -2,7 +2,7 @@ package com.linewell.dataelement.platform.magic;
 
 import static org.assertj.core.api.Assertions.*;
 
-import com.linewell.dataelement.platform.magic.module.MagicResourceLinkModule;
+import com.linewell.dataelement.magic.module.MagicResourceLinkModule;
 import com.linewell.dataelement.platform.tenant.domain.TenantContext;
 import com.linewell.dataelement.utils.StructuredValues;
 import java.nio.file.*;

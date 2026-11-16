@@ -49,7 +49,7 @@ function harness(post) {
   const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
   vm.runInNewContext(compiled, { exports, require(id) {
     if (id === '@tanstack/react-query') return { useMutation: options => options, useQueryClient: () => ({ getQueryData: () => undefined }) };
-    if (id === './client') return { apiClient: { post: async (path, body) => { requests.push(path); return post(path, body); } } };
+    if (id === './client') return { apiClient: { post: async (path, body, config) => { requests.push(path); return post(path, body, config); } } };
     if (id === './bridgeSession') return { getSessionRevision: () => revision };
     if (id === '../stores/canvasStore') return { useCanvasStore: { getState: () => state } };
     if (id === '../stores/taskChainStore') return { useTaskChainStore: { getState: () => ({ chain: null }) } };
@@ -63,7 +63,10 @@ function harness(post) {
 
 test('20/100 mapping fields both make one deploy request and no per-row diagnostic reads', async () => {
   for (const count of [20, 100]) {
-    const h = harness(async () => { throw failure(count); });
+    const h = harness(async (_path, _body, config) => {
+      assert.equal(config.timeout, 120_000);
+      throw failure(count);
+    });
     await assert.rejects(h.hooks.useDeployPipeline().mutationFn({ id: 'p' }));
     assert.deepEqual(h.requests, ['/life/deploy?id=p']);
     assert.equal(h.failures.length, 1);

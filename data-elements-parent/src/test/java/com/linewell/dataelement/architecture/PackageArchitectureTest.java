@@ -137,6 +137,25 @@ class PackageArchitectureTest {
     }
 
     @Test
+    void runtimeDiagnosticsAndSearchClientConfigurationHaveDedicatedPackages() {
+        assertThat(JAVA_ROOT.resolve("magic/runtime/diagnostics/MagicApiRuntimeProbe.java")).exists();
+        assertThat(JAVA_ROOT.resolve("magic/module/MagicResourceLinkModule.java")).exists();
+        assertThat(JAVA_ROOT.resolve("integration/search/config/ElasticsearchCustomRestClient.java")).exists();
+        assertThat(JAVA_ROOT.resolve("integration/search/config/EsIndexInit.java")).exists();
+        assertThat(JAVA_ROOT.resolve("platform/magic/diagnostics/MagicApiRuntimeProbe.java")).doesNotExist();
+        assertThat(JAVA_ROOT.resolve("platform/magic/module/MagicResourceLinkModule.java")).doesNotExist();
+        assertThat(JAVA_ROOT.resolve("elasticsearch/ElasticsearchCustomRestClient.java")).doesNotExist();
+        assertThat(JAVA_ROOT.resolve("integration/elasticsearch/config/EsIndexInit.java")).doesNotExist();
+    }
+
+    @Test
+    void mvcConfigurationDoesNotOwnLegacyRouteRewrites() {
+        assertThat(read(JAVA_ROOT.resolve("platform/web/config/WebConfiguration.java")))
+                .doesNotContain("HttpServletRequestWrapper", "legacyResourceRoutes", "LegacyRouteConfiguration");
+        assertThat(JAVA_ROOT.resolve("platform/web/compat/LegacyRouteConfiguration.java")).exists();
+    }
+
+    @Test
     void productionJavaSourcesAreNotEmptyOrDisabledSpringShells() throws Exception {
         List<Path> sources = javaFiles(JAVA_ROOT);
 

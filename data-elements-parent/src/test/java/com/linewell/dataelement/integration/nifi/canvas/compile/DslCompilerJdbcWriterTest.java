@@ -59,7 +59,8 @@ class DslCompilerJdbcWriterTest {
                 "org.apache.nifi.processors.standard.PutDatabaseRecord");
         org.assertj.core.api.Assertions.assertThat(names.getAllValues()).containsExactly("目标表/put");
         org.assertj.core.api.Assertions.assertThat(properties.getAllValues().getFirst())
-                .containsEntry("Record Reader", "global-json-reader");
+                .containsEntry("Record Reader", "global-json-reader")
+                .doesNotContainKey("Translate Field Names");
         verify(nifi, never()).createConnection(anyString(), anyString(), anyString(), anyString(),
                 anyString(), eq(List.of("merged")));
     }
@@ -86,11 +87,13 @@ class DslCompilerJdbcWriterTest {
                 "host", "db", "port", "1521", "sid", "ORCL", "username", "reader", "password", "secret",
                 "table", "SOURCE_TABLE", "incrementalColumn", "EVENT_TIME", "sourceColumns", List.of(
                         Map.of("columnName", "ID", "dataType", "NUMBER"),
+                        Map.of("columnName", "_ID", "dataType", "CHAR"),
                         Map.of("columnName", "EVENT_TIME", "dataType", "DATE"))));
         Map<String, Object> targetConfig = new LinkedHashMap<>(Map.of(
                 "dbType", "MySQL", "jdbcUrl", "jdbc:mysql://db:3306/ods", "username", "writer",
                 "password", "secret", "table", "TARGET_TABLE", "targetColumns", List.of(
                         Map.of("columnName", "ID", "dataType", "BIGINT"),
+                        Map.of("columnName", "_ID", "dataType", "CHAR"),
                         Map.of("columnName", "EVENT_TIME", "dataType", "TIMESTAMP"))));
         Pipeline pipeline = new Pipeline("test", "Temporal JDBC", null, null, null,
                 new Pipeline.Dsl(1, List.of(
@@ -106,7 +109,8 @@ class DslCompilerJdbcWriterTest {
         verify(nifi, never()).createProcessor(eq("pg"), eq("org.apache.nifi.processors.standard.MergeRecord"),
                 anyString(), anyDouble(), anyDouble(), anyMap(), nullable(String.class), nullable(String.class));
         verify(nifi).createProcessor(eq("pg"), eq("org.apache.nifi.processors.standard.PutDatabaseRecord"),
-                eq("目标表/put"), anyDouble(), anyDouble(), anyMap(), nullable(String.class), nullable(String.class));
+                eq("目标表/put"), anyDouble(), anyDouble(), argThat(properties -> "false".equals(properties.get("Translate Field Names"))),
+                nullable(String.class), nullable(String.class));
         var sink = result.nodes().get("sink");
         verify(nifi).createConnection("pg", sink.processorIds.get("normalize"), "PROCESSOR",
                 sink.processorIds.get("put"), "PROCESSOR", List.of("success"));

@@ -475,6 +475,11 @@ export interface MaterializeTableResult {
   message?: string;
 }
 
+export type MaterializeTarget =
+  | { dbId: string }
+  | { canvasJdbc: { jdbcUrl: string; dbType?: string; username: string; password: string } }
+  | { canvasMongo: { host: string; port?: string; database: string; username: string; password: string; authSource: string; ssl: boolean } };
+
 /** A registered materialization template returned by `/ods/target/template`. */
 export interface MaterializationTemplateColumn {
   columnName: string;
@@ -547,17 +552,22 @@ export async function fetchMaterializationTemplate(sourceTableId: string): Promi
 }
 
 export async function generateTargetTableDdl(
-  dbId: string,
+  target: MaterializeTarget,
   tableName: string,
   columns: TargetTableDdlColumn[],
   sourceDatabaseType: string,
 ): Promise<string> {
   const revision = getSessionRevision();
   const headers = authHeaders();
+  const jdbcPreview = 'canvasJdbc' in target
+    ? { jdbcUrl: target.canvasJdbc.jdbcUrl, dbType: target.canvasJdbc.dbType }
+    : undefined;
   const { data } = await axios.post(`${dataassetsBase}/dst/db/ddl`, {
     canvas: true,
+    canvasJdbc: jdbcPreview,
+    canvasMongo: 'canvasMongo' in target ? { database: target.canvasMongo.database } : undefined,
     sourceDatabaseType,
-    propList: { dbId, tableName },
+    propList: { dbId: 'dbId' in target ? target.dbId : undefined, tableName },
     tableItems: columns.map((column) => ({
       columnName: column.columnName, columnComment: column.columnComment,
       dataType: column.dataType, columnType: column.columnType || column.typeName || column.dataType,
@@ -576,11 +586,11 @@ export async function generateTargetTableDdl(
 }
 
 /** Same physical CREATE capability used by /ods/createTapleApply. */
-export async function materializeTargetTable(dbId: string, ddl: string): Promise<MaterializeTableResult> {
+export async function materializeTargetTable(target: MaterializeTarget, ddl: string): Promise<MaterializeTableResult> {
   const revision = getSessionRevision();
   const headers = authHeaders();
   const { data } = await axios.post(`${dataassetsBase}/dst/db/create`,
-    { dbId, ddl, canvas: true }, { headers, timeout: requestTimeout });
+    { ...target, ddl, canvas: true }, { headers, timeout: requestTimeout });
   assertCurrentSession(revision);
   const result = unwrapResponse<Partial<MaterializeTableResult> | null>(data);
   if (!result || !['created', 'exists'].includes(String(result.status)) || !result.tableName) {

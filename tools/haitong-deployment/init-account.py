@@ -31,6 +31,7 @@ def main():
     parser.add_argument("--mysql", default="mysql")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=3306)
+    parser.add_argument("--socket", help="Initialize through a local MySQL Unix socket")
     parser.add_argument("--user", required=True)
     parser.add_argument("--defaults-extra-file", help="Client option file outside the installation package")
     parser.add_argument("--nifi-url")
@@ -45,8 +46,9 @@ def main():
         command += [f"--defaults-extra-file={args.defaults_extra_file}"]
     else:
         command += ["--password"]
-    command += ["--protocol=tcp", "--host", args.host, "--port", str(args.port), "--user", args.user,
-                "--default-character-set=utf8mb4", "baseline_haitong"]
+    connection = ["--protocol=socket", "--socket", args.socket] if args.socket else [
+        "--protocol=tcp", "--host", args.host, "--port", str(args.port)]
+    command += connection + ["--user", args.user, "--default-character-set=utf8mb4", "baseline_haitong"]
     sql = "START TRANSACTION;\n"
     if not args.nifi_url:
         password = os.getenv("HAITONG_ADMIN_PASSWORD")

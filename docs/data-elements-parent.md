@@ -229,6 +229,41 @@ magic-api:
 ```
 
 
+<a id="backend-package-access"></a>
+
+#### 共享后端包职责与访问策略
+
+沿用后端精简批次。在迁移业务的同一批，逐组归并职责明确的 Java 技术类。仅为实际迁入的类建立目标包。
+
+| 包 | 职责 |
+| --- | --- |
+| `config` | 应用级 Spring 装配和配置绑定 |
+| `platform` | Web、安全、租户、数据源、事务、审计、缓存、调度 |
+| `magic.module` | MagicScript 可调用的 Java 模块 |
+| `magic.runtime` | Magic 资源加载、刷新和运行诊断 |
+| `integration.nifi` | NiFi 客户端、编译、部署和原生状态 |
+| `integration.metadata` | JDBC、Mongo、Hive 物理元数据探查 |
+| `integration.search` | Elasticsearch 适配 |
+| `integration.workflow` | Warm-Flow 引擎和回调适配 |
+| `integration.transfer` | FTP、SFTP 等传输协议 |
+| `integration.flink` | 实际接入风驰 Flink 时建立 |
+
+- 移包同步核对 Mapper 扫描、XML、Spring 注册、Magic 模块名、脚本导入和反射使用的 Java 全类名，并比对在线资源与编译产物。更新 `PackageArchitectureTest` 固化已迁入的职责。业务规则、业务权限、CRUD 和事务编排优先迁入 Magic，验收后同批清理被替代的 Java 实现与专用依赖。
+- `WebConfiguration` 负责 MVC 注册。剩余旧地址兼容归入 `platform.web.compat`，按原始 HTTP 方法和参数语义改写。流量核查记录改写前的原始路径和方法，并与目标路由请求审计关联。按业务域核对源码、部署前端、在线低代码编译产物、Magic、服务登记、网关、任务、外部回调和实际流量。确认现役调用均已切换后同批删除旧映射，验证旧地址下线及新地址可用。仍使用的兼容记录调用方、方法、参数优先级和退役条件。
+- 正式 Magic URL 来自资源 `path`。将访问类型随资源声明，统一框架在脚本执行前依据实际匹配的接口执行行业会话、IDAAS 平台会话、公开访问、签名或票据策略。未声明的普通业务按保护规则处理。Java 框架与外部协议入口由各自模块管理。兼容旧地址可在验证后随目标资源声明，按原方法在鉴权前解析并沿用目标的认证、租户及审计规则。
+- 访问策略第一批选 `GET /idaas/auth/settings` 的公开登录品牌、`GET /idaas/session/me` 的平台操作员会话和 `GET /sym/approval/info` 的行业受保护读取。已知 `/idaas/receiver/v2` 和 `/portal/sso/redeem` 分别使用签名与票据，逐项检查现有验证位置后再迁入。发布时校验 HTTP 方法、实际目标资源及其访问配置，编辑保存和受控发布共用校验，热刷新与冷加载共用执行规则。公开策略及其变更纳入受控发布审计。试点需要覆盖鉴权与脚本执行顺序、匿名副作用、错误信封、旧参数优先级、跨租户、热刷新和冷启动，之后逐域删除重复的 Java 和 Nacos 白名单。
+- 当前源码盘点 `WhiteListProp` 含 31 个精确路径，其中 29 项匹配 Magic 路由，`/portal/sso/options` 与 `/portal/sso/settings` 对应 Java 入口。四项 IDAAS OAuth2、OIDC 路径或前缀归协议模块核查。`AdditionalPublicEndpoints` 扩展点在共享后端源码中未查到提供者。基础与 86 金仓配置镜像各 12 项白名单，按实际 86 配置与路由分别复核。`WebConfiguration` 中会话和租户拦截器分别有 9 项、7 项排除。首批兼容基线含 154 个显式 POST 旧地址、34 个显式 GET/HEAD 旧地址，另有文件下载与流程、入湖参数路径。按真实原始流量继续核对退役。
+- 精确路径按脚本实际校验归类。品牌等公开读取、登录和恢复、行业会话、统一认证账号会话、MFA 挑战或现有会话、签名接收、票据兑换及 API Bearer 均有各自的凭证边界。例如接收管理 `/idaas/receiver/admin` 使用行业本地会话，`/idaas/identity/me` 使用统一认证账号会话，`/idaas/api/whoami` 校验 API Bearer。迁移前保留各入口的现有错误信封和会话域。
+- 接续批次的本地首组已归并 Elasticsearch 客户端配置与索引预检、Magic 运行探针及资源关联模块。86 上 971 条有效 Magic 记录和 154 条有效低代码记录的源码及编译产物未引用这四个旧 Java 全类名。Spring 注册与 `magicResourceLink` 模块名保持兼容。`LegacyRouteConfiguration` 接管旧地址和参数适配，通过原路径、HTTP 方法及目标路径记录改写命中，日志排除查询串及路径参数，`request_id` 可与目标审计关联。待发布采样后按调用证据退役旧映射。
+- 本地首组最终离线 `mvn verify` 在 JDK 21.0.8 下执行 227.32 秒，共 3,300 项、零失败、8 项跳过。当前工作区共 501 个生产 Java 文件、819 个编译类、13 个 Controller、379 个测试 Java 文件。首组迁移 4 个生产文件，拆出 1 个配置类，生产 Java 净增 19 行。`WebConfiguration` 从 384 行减为 67 行。运行发布及真实客户端验收待接续批次切换时执行。
+- 三个试点在 `options` 中声明 `access`。MVC 根据命中的模板和 HTTP 方法读取实际注册的 Magic 资源，在脚本前校验访问类型。若热刷新在 MVC 校验后切换了待执行资源的访问类型，脚本入口重新校验，并沿用原业务错误信封。未声明的存量接口继续使用原白名单和会话规则。试点仅允许 GET、HEAD 声明公开访问，发布与编辑保存拒绝重复、未知或与方法不匹配的声明。受控发布比对资源身份、方法、路径、脚本和访问类型，并记录变更与编辑器回读结果。
+- 86 只读比对确认三个试点的资源 ID、分组、HTTP 方法、路由和脚本正文一致，当前数据库尚无试点声明，证据见 `logs/magic-first/backend-package-compat/access-pilot-baseline.json`。本地测试覆盖同路径分方法、默认保护、会话域互斥、热刷替换、配置错误信封和存储回读。第 126 批待真实 IDAAS 操作员会话验收，试点待随后发布、热刷新和冷启动验收。保留现行 Java 与 Nacos 白名单和各公开兼容地址。
+- 回环地址上的隔离 Spring MVC 和 Magic API 2.2.2 服务通过 28 项实际 HTTP 检查。试点使用当前资源元数据、验证脚本和进程内会话。编辑器拒绝重复策略，有效保存立即改变鉴权，显式刷新和进程重启后回读一致。受拒的匿名请求未进入脚本，平台与行业会话互斥，审批夹具验证行业隔离。旧流程地址的路径 ID 优先于同名查询参数，已认证的新旧 HEAD 均为 HTTP 200、JSON 响应头和空响应体。旧路径日志以 `request_id` 关联响应，查询串和路径参数不进入日志。隔离证据见 `logs/magic-first/backend-package-compat/http-validation/verify.json`。8088 的三个试点脚本同版本且仍是现行访问配置，编辑器只读回读见 `access-pilot-8088-baseline.json`。
+- 试点离线 `mvn verify` 使用 JDK 21.0.8 和干净输出目录，用时 214.16 秒，3,304 项、零失败、8 项跳过，资源同步工具 34 项通过。当前工作区有 503 个生产 Java 文件、823 个编译类、13 个 Controller、380 个测试 Java 文件。相对本地首组，试点新增 2 个生产 Java 文件、1 个测试 Java 文件，生产 Java 增 161 行、删 20 行。完整构建日志见 `logs/magic-first/backend-package-compat/access-pilot-full.log`。
+- 本地全量回归包与 8088 实际包的嵌入依赖一致。按类文件比较，回归包还包含工作区另外 11 个 NiFi 编译与客户端类的差异。回归包用于本地验证。试点换包前按实际运行基线复核发布范围及回退包，类文件差异见 `logs/magic-first/backend-package-compat/access-candidate-runtime-package-diff.json`。
+- 已在 `logs/goal-126-candidate/` 生成限定范围的候选包。以 Git 基线和 27 个经核对的试点或现役文件构建，保留 8088 的 11 个 NiFi 类字节和 11 个仅有换行差异的既有资源。最终包与运行包相比只有试点内 22 个类文件变更及 `git.properties` 的构建信息变化，其余类与嵌入依赖逐字节相同，归档类与回归实际加载的类一致。503 个生产 Java 文件、823 个编译类、13 个 Controller、379 个测试 Java 文件。JDK 21.0.8 干净目录离线 `mvn verify` 用时 279.55 秒，恢复现役字节后的离线回归和重新打包用时 171.74 秒，均为 3,300 项、零失败、8 项跳过。隔离 HTTP 复跑 28 项通过。包校验、回归及 86 三个资源的只读发布计划见 `logs/magic-first/backend-package-compat/` 下的 `scoped-candidate-package-comparison.json`、`scoped-release-regression.log` 和 `scoped-magic-release-plan.json`。
+- 本机 `http://localhost:3005/` 页面和代理均返回 HTTP 200。品牌接口返回业务码 `0`，匿名平台会话返回 `100120`，空登录请求返回 `400`。86 控制库只读复核显示 4 个业务应用的认证模式和 4 个启用租户的账号来源均为 `LOCAL`。证据见同目录的 `idaas-local-proxy.json` 和 `idaas-auth-boundary.json`。
+
 <a id="backend-simplification-handoff"></a>
 
 #### 后端精简与接手顺序
@@ -453,6 +488,10 @@ magic-api:
    - 第 126 批整理统一身份管理 45 条方法与地址，涉及 10 个叶组和 55 条 Magic 记录。旧地址通过原鉴权链兼容，签名接收协议沿用 `/idaas/receiver/v2`。登录页品牌设置使用结构化读取。批量停用 20 和 100 人均为一次写请求和一次工作区刷新，业务使用 2 条读取、2 条更新 SQL。隔离测试验证逐人组织范围、版本冲突和审计失败回滚。操作员重置验证同版本并发只允许一次成功，凭据轮换和审计同事务。
    - 86 已发布 55 条所选记录，8088 冷启动回读 539 条路由和 45 个脚本，目录关系完整。API 自身待处理计数为 0 个多段、8 个单段、0 个分组。旧地址和新地址共完成 10 组 HTTP 契约核验，涵盖品牌字段、未认证拒绝及签名接收。3005 直连 8088 验证登录页与公共品牌读取通过。四个行业应用和租户均已只读确认使用 `LOCAL` 本地认证。浏览器真实公安会话回读 `PUBLIC_SECURITY` 和 `LOCAL`，资产新旧 POST 分页在页大小 20 和 100 时均返回业务码 0 及相同分页结果，匿名请求均返回 100120。公安会话访问 IDAAS 操作员会话、平台角色及批量停用新旧地址均返回 100120。IDAAS 管理控制台仍待真实平台操作员会话验收。独立海通 18083 健康。批外仅余「日志参数关键词条件」序列化差异。
    - B126 使用 JDK 21.0.8 和干净目录离线 `mvn install` 用时 640.95 秒，3,291 项、零失败、8 项跳过，构建期间并行运行浏览器回归。构建包含当前工作区 500 个生产 Java 文件、817 个编译类、13 个 Controller、378 个测试 Java 文件。B126 两个生产 Java 文件增 58 行、删 13 行，新增一个测试 Java 文件。IDAAS 前端 117 项单元测试通过，120 项浏览器契约由全跑及定向复跑覆盖。完成真实会话验收后继续处理共享余项和独立海通。
+   - 本机当前运行复查，86 上所选 55 条记录与发布清单一致，8088 编辑器回读通过 45 个脚本、45 条路由和 10 个分组。随后用真实 IDAAS 操作员会话验收总览、组织与用户、应用列表、应用分组、系统角色及日志管理。`/idaas/session/me` 和工作区返回业务码 0，会话无行业租户。用户列表切换至 20 或 100 条均发一次短地址请求，观测的 Vite 开发页初次进入组织与用户时列表和操作占位各发两次请求。证据见 `logs/magic-first/batch-126/runtime-acceptance-recheck.json` 和 `operator-browser-acceptance.json`。
+   - 当前源码、86 数据库与 8088 编辑器树逐 ID 比对一致，包含 540 个共享 API 和 132 个分组。API 自身待规范项为 0 个多段、8 个单段，分组为 0 个。独立海通有 62 个 API 和 21 个分组，4 个单段和 1 个分组待核对。92 条资源与独立清单一致，数据库有 25 条目录记录，本地包校验和与 B125 一致。证据见 `logs/magic-first/backend-package-compat/route-inventory-recheck.json` 和 `haitong-baseline-recheck.json`。
+   - 共享 8 个余项的直接引用复核覆盖 133 个有编译 JS 的在线组件和 971 条 Magic 记录。登记所属系统、目录保存、目录树统计分别有 1、7、1 个在线编译组件含旧地址。目录保存还有 2 个 Magic 导入，批量重建资产索引有 3 个 Magic 导入，连接测试仍有 Java 调用。改址同批更新这些调用，沿网关、服务登记及改写前请求日志补齐使用证据。命中清单见同目录 `remaining-route-direct-references.json`。
+   - 18083 曾无监听。使用原包和仓库外原配置恢复前，投递、文件检查点、可领取上传收尾均为 0。冷启动后健康为 `UP`，62 个 API、21 个分组与数据库一致，回读 70 个脚本。表推送与密钥签发的匿名请求均返回 HTTP 401。使用现有本机管理凭据提交空正文，表推送在入队前返回 HTTP 422 `INVALID_BODY`，签发在事务前返回 HTTP 400 `INVALID_REQUEST`，两者均带 `Cache-Control: no-store`。证据见同目录的 `haitong-startup-preflight.json` 和 `haitong-runtime-restored.json`。正式改址后的客户端正向验收仍按独立批次执行。
    - 共享有 29 组同址 GET/HEAD，独立海通有 1 组。原版 Magic 的隔离实验中，只注册 GET 时 HEAD 未找到对应处理器，合法 GET 的 202 在 HEAD 变成 200。合并前验证运行映射、鉴权、状态码、响应头及空响应体。独立 Function 只保留多个现役入口实际共用的逻辑，单入口逻辑留在 API 脚本。
    - 改址同批更新现役前端、低代码源码和编译产物、Magic、Java 权限与调用、Mock、工具和已知外部回调，并用真实页面验收。路径切换后接续 Function 清理、Java 整类精简、目录列表分页及测试整理。
 

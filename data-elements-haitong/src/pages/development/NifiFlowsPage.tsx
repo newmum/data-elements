@@ -10,6 +10,7 @@ import { useDeletePipeline, usePipelinePage, type PipelineSummary } from '../../
 import { getBridgeToken, useSessionRevision, useTokenReady } from '../../nifi/api/bridgeSession';
 import { getPlatformLoginUrl, redirectToPlatformLogin, syncNifiPlatformSession } from '../../services/platformSession';
 import { preloadCanvasReadiness, preloadCanvasWhenIdle } from '../../app/preloadCanvas';
+import './NifiFlowsPage.css';
 
 /** The platform session bridge supplies NiFi access; no credential entry is needed here. */
 export function NifiSessionPrompt({ redirectOnMissing = false }: { redirectOnMissing?: boolean } = {}) {
@@ -82,19 +83,20 @@ export default function NifiFlowsPage() {
    {tokenReady&&list.isLoading&&<p role="status">正在读取 NiFi 流程…</p>}
    {tokenReady&&!list.isLoading&&!list.isError&&<DataTable<PipelineSummary>
     rowKey="id"
+    scroll={{x:820}}
     dataSource={list.data?.list??[]} serverSort={order} pagination={{current:page,pageSize:size,total:list.data?.total||0,onChange:(p,n)=>{setPage(n===size?p:1);setSize(n);}}}
     columns={[
-     {title:'流程名称',dataIndex:'name',key:'name',width:220,ellipsis:{showTitle:false},render:(name:string,item:PipelineSummary)=><Button type="link" title={name} style={{maxWidth:188,minWidth:0}} onClick={()=>open(item.id)}>
-      <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{name}</span>
+     {title:'流程名称',dataIndex:'name',key:'name',width:'34%',ellipsis:{showTitle:false},render:(name:string,item:PipelineSummary)=><Button type="link" title={name} className="ht-nifi-flow-name" onClick={()=>open(item.id)}>
+      <span>{name}</span>
      </Button>},
-     {title:'流程 ID',dataIndex:'id',key:'id',ellipsis:true},
-     {title:'组件数',dataIndex:'nodeCount',key:'nodeCount',width:100,render:(value:number|undefined)=>value??'—'},
+     {title:'流程 ID',dataIndex:'id',key:'id',width:168,ellipsis:true},
+     {title:'组件数',dataIndex:'nodeCount',key:'nodeCount',width:76,align:'center',render:(value:number|undefined)=>value??'—'},
      {title:'NiFi Process Group',dataIndex:'nifiProcessGroupId',key:'nifiProcessGroupId',ellipsis:true,render:(value:string|null|undefined)=>value||'未部署'},
-     {title:'操作',key:'action',width:190,render:(_:unknown,item:PipelineSummary)=><Space>
-      <Button onMouseEnter={warmCanvas} onFocus={warmCanvas} onClick={()=>open(item.id)}>打开画布</Button>
-      <Button danger disabled={deletePipeline.isPending} loading={deletePipeline.isPending && deletePipeline.variables === item.id}
+     {title:'操作',key:'action',width:122,align:'center',className:'ht-nifi-flow-action-cell',render:(_:unknown,item:PipelineSummary)=><div className="ht-nifi-flow-actions">
+      <Button size="small" autoInsertSpace={false} onMouseEnter={warmCanvas} onFocus={warmCanvas} onClick={()=>open(item.id)}>查看</Button>
+      <Button size="small" autoInsertSpace={false} danger disabled={deletePipeline.isPending} loading={deletePipeline.isPending && deletePipeline.variables === item.id}
        onClick={()=>confirmDelete(item)}>删除</Button>
-     </Space>},
+     </div>},
     ]}
     locale={{emptyText:<EmptyState title="暂无 NiFi 流程" text="可以新建一个流程并在画布中配置组件。" compact/>}}
    />}

@@ -1,4 +1,4 @@
-package com.linewell.dataelement.platform.web.config;
+package com.linewell.dataelement.platform.web.compat;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -26,7 +26,7 @@ class LakeGovernanceLegacyRoutesTest {
                 new Route("PUT", "/zones/zone%2Btest/rules", "/dws/lakerule/rules", true),
                 new Route("POST", "/ingest/check", "/dws/lakerule/ingest", false),
                 new Route("POST", "/egress/apply", "/dws/lakerule/egress", false));
-        var filter = new WebConfiguration().legacyResourceRoutes().getFilter();
+        var filter = new LegacyRouteConfiguration().legacyResourceRoutes().getFilter();
         byte[] body = "{\"status\":\"ENABLED\"}".getBytes(StandardCharsets.UTF_8);
         for (var route : routes) {
             var request = new MockHttpServletRequest(route.method(), "/app/dws/service/lake" + route.suffix());
@@ -48,7 +48,7 @@ class LakeGovernanceLegacyRoutesTest {
 
     @Test
     void leavesUnmappedMethodsAndSiblingGovernancePathsAlone() throws Exception {
-        var filter = new WebConfiguration().legacyResourceRoutes().getFilter();
+        var filter = new LegacyRouteConfiguration().legacyResourceRoutes().getFilter();
         for (String path : List.of("/dws/service/lake/zones/zone/objects/batch", "/dws/service/gateway/routes")) {
             var request = new MockHttpServletRequest("GET",path);
             filter.doFilter(request,new MockHttpServletResponse(),(incoming,response) ->

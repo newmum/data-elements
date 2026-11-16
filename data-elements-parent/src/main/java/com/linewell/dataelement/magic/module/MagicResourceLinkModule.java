@@ -1,4 +1,4 @@
-package com.linewell.dataelement.platform.magic.module;
+package com.linewell.dataelement.magic.module;
 
 import com.linewell.dataelement.platform.tenant.infrastructure.datasource.UseControlDataSource;
 import java.util.LinkedHashMap;

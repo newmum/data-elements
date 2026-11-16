@@ -1043,6 +1043,21 @@ CREATE TABLE "baseline_beijing_gd"."data_access_multi_group_t"
 CONSTRAINT "ga_data_access_multi_group_t_pk_7678412308bd" NOT CLUSTER PRIMARY KEY("tid"),
 CONSTRAINT "ga_data_access_multi_group_t_is_del_range_96bfa9adfc94" CHECK("is_del" BETWEEN (-128) AND 127)) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
+-- TABLE data_access_native_flow_t
+CREATE TABLE "baseline_beijing_gd"."data_access_native_flow_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32) NOT NULL,
+"source_table_id" VARCHAR(32) NOT NULL,
+"node_id" VARCHAR(32) NOT NULL,
+"node_name" VARCHAR(128) NOT NULL,
+"process_group_id" VARCHAR(36) NOT NULL,
+"group_name" VARCHAR(512) NOT NULL,
+"created_by" VARCHAR(32) NOT NULL,
+"created_at" BIGINT NOT NULL,
+CONSTRAINT "pk_data_access_native_flow_t" NOT CLUSTER PRIMARY KEY("tid"),
+CONSTRAINT "uk_native_flow_tenant_group" UNIQUE("tenant_id", "node_id", "process_group_id")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
 -- TABLE data_access_task_monitor_snap_t
 CREATE TABLE "baseline_beijing_gd"."data_access_task_monitor_snap_t"
 (
@@ -5130,6 +5145,8 @@ CREATE OR REPLACE  INDEX "idx_metadata_collection_latest" ON "baseline_beijing_g
 
 CREATE OR REPLACE  INDEX "idx_metadata_collection_running" ON "baseline_beijing_gd"."metadata_table_collection_job_t"("tenant_id" ASC,"datasource_id" ASC,"status" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
+CREATE OR REPLACE  INDEX "idx_native_flow_tenant_time" ON "baseline_beijing_gd"."data_access_native_flow_t"("tenant_id" ASC,"created_at" ASC,"tid" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
 CREATE OR REPLACE  INDEX "idx_res_materialization_execution_plan" ON "baseline_beijing_gd"."res_materialization_execution"("tenant_id" ASC,"plan_id" ASC,"execution_status" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 CREATE OR REPLACE  INDEX "idx_sec_encryption_task_status" ON "baseline_beijing_gd"."sec_encryption_task"("tenant_id" ASC,"task_status" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
@@ -5834,6 +5851,7 @@ COMMENT ON TABLE "baseline_beijing_gd"."data_access_mapping_publication_t" IS '�
 COMMENT ON TABLE "baseline_beijing_gd"."data_access_mapping_resource_t" IS '数据接入-字段映射模板及字典快照版本';
 COMMENT ON TABLE "baseline_beijing_gd"."data_access_multi_group_item_t" IS '数据接入-多表任务编组成员';
 COMMENT ON TABLE "baseline_beijing_gd"."data_access_multi_group_t" IS '数据接入-多表任务编组';
+COMMENT ON TABLE "baseline_beijing_gd"."data_access_native_flow_t" IS '数据接入-已登记来源表与NiFi原生流程只读关联';
 COMMENT ON TABLE "baseline_beijing_gd"."data_access_task_monitor_snap_t" IS '数据接入-数据接入监控快照';
 COMMENT ON TABLE "baseline_beijing_gd"."data_api_authorization_t" IS '数据服务-共享交付服务接口授权台账；网关受控启用前保留待生效审批记录';
 COMMENT ON TABLE "baseline_beijing_gd"."data_apply_form_t" IS '资源申请-数据申请单';
@@ -6803,6 +6821,15 @@ COMMENT ON COLUMN "baseline_beijing_gd"."data_access_multi_group_t"."is_del" IS 
 COMMENT ON COLUMN "baseline_beijing_gd"."data_access_multi_group_t"."tenant_id" IS '当前会话所属租户标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."data_access_multi_group_t"."tid" IS '多表任务编组标识，由客户端固定请求标识生成';
 COMMENT ON COLUMN "baseline_beijing_gd"."data_access_multi_group_t"."updated_time" IS '编组最后修改时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."data_access_native_flow_t"."created_at" IS '关联创建时间戳，Unix毫秒';
+COMMENT ON COLUMN "baseline_beijing_gd"."data_access_native_flow_t"."created_by" IS '创建关联的用户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."data_access_native_flow_t"."group_name" IS '建立关联时的原生流程组名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."data_access_native_flow_t"."node_id" IS 'NiFi节点标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."data_access_native_flow_t"."node_name" IS '建立关联时的节点名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."data_access_native_flow_t"."process_group_id" IS 'NiFi原生流程组UUID';
+COMMENT ON COLUMN "baseline_beijing_gd"."data_access_native_flow_t"."source_table_id" IS '已登记来源表标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."data_access_native_flow_t"."tenant_id" IS '所属行业租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."data_access_native_flow_t"."tid" IS '关联记录标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."data_access_task_monitor_snap_t"."active_thread_count" IS '活跃线程数量';
 COMMENT ON COLUMN "baseline_beijing_gd"."data_access_task_monitor_snap_t"."bytes_in" IS '字节输入';
 COMMENT ON COLUMN "baseline_beijing_gd"."data_access_task_monitor_snap_t"."bytes_out" IS '字节输出';
