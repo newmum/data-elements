@@ -1,8 +1,9 @@
+import type {ModelSchedule} from './modelSchedule';
 import {isConfigurationOnly,previewModel,type ModelNode} from './modeling';
 import {modelInputCapacity,modelHasOutput} from './modelingInteractions';
 import type {TableDef} from './data';
-export type ExecutionSettings={engine:'flink'|'spark';mode:'batch'|'stream';scheduleEnabled?:boolean;intervalMinutes?:number;runImmediately?:boolean};
-export function normalizeExecutionSettings(settings:ExecutionSettings):Required<ExecutionSettings>{return {...settings,scheduleEnabled:settings.scheduleEnabled??false,intervalMinutes:settings.intervalMinutes??60,runImmediately:settings.runImmediately??false}}
+export type ExecutionSettings={engine:'flink'|'spark';mode:'batch'|'stream';scheduleEnabled?:boolean;intervalMinutes?:number;runImmediately?:boolean;schedule?:ModelSchedule};
+export function normalizeExecutionSettings(settings:ExecutionSettings):ExecutionSettings&Required<Pick<ExecutionSettings,'scheduleEnabled'|'intervalMinutes'|'runImmediately'>>{return {...settings,scheduleEnabled:settings.scheduleEnabled??false,intervalMinutes:settings.intervalMinutes??60,runImmediately:settings.runImmediately??false}}
 export type ExecutionIssue={level:'error'|'warning';message:string;nodeId?:string};
 const streaming=new Set(['kafkaInput','cdcInput','fileWatcher','slidingWindow','tumblingWindow','sessionWindow','eventTimeWindow']);
 const bounded=new Set(['sort','rank','percentile','pivot','crossJoin','fuzzy','excelInput','excelOutput']);

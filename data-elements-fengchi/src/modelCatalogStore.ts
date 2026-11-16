@@ -1,3 +1,4 @@
+import {scheduleConfig,scheduleError,type ModelSchedule} from './modelSchedule';
 import type {ModelNode} from './modeling';
 import {nodeLabels} from './modeling';
 import {normalizeExecutionSettings,type ExecutionSettings} from './modelingExecution';
@@ -5,19 +6,19 @@ import type {TableDef} from './data';
 export const MODEL_CATALOG_SCHEMA_VERSION=1 as const;
 export const MODEL_DOCUMENT_MAX_CHARACTERS=2_000_000;
 const PREFIX='fengchi:model-catalog:v1:';
-export type ModelDocument={schemaVersion:1;sourceId?:string;sourceLabel?:string;id:string;name:string;category:string;nodes:ModelNode[];executionSettings:ExecutionSettings;importedTables:Record<string,TableDef>;revision:number;createdAt:string;updatedAt:string};
-export type ModelDraft=Pick<ModelDocument,'id'|'name'|'category'|'sourceId'|'sourceLabel'|'nodes'|'executionSettings'|'importedTables'>;
+export type ModelDocument={schemaVersion:1;startPosition?:{x:number;y:number};sourceId?:string;sourceLabel?:string;id:string;name:string;category:string;nodes:ModelNode[];executionSettings:ExecutionSettings;importedTables:Record<string,TableDef>;revision:number;createdAt:string;updatedAt:string};
+export type ModelDraft=Pick<ModelDocument,'startPosition'|'id'|'name'|'category'|'sourceId'|'sourceLabel'|'nodes'|'executionSettings'|'importedTables'>;
 export type ModelStorage=Pick<Storage,'length'|'key'|'getItem'|'setItem'>;
 const fail=(message:string):never=>{throw new Error(message)};
 const record=(value:unknown):value is Record<string,unknown>=>Boolean(value)&&typeof value==='object'&&!Array.isArray(value);
 function text(value:unknown,max:number,label:string){if(typeof value!=='string'||!value.trim()||value.length>max)fail(`${label}为空或过长`);return value as string}
 function check(value:unknown):asserts value is ModelDocument {
  if(!record(value)||value.schemaVersion!==1)fail('模型版本不兼容，未覆盖原记录');
- const d=value as Record<string,unknown>;text(d.id,100,'模型 ID');text(d.name,80,'模型名称');text(d.category,80,'业务分类');
+ const d=value as Record<string,unknown>;if(d.startPosition!==undefined){if(!record(d.startPosition)||typeof d.startPosition.x!=='number'||typeof d.startPosition.y!=='number'||!Number.isFinite(d.startPosition.x)||!Number.isFinite(d.startPosition.y)||d.startPosition.x<12||d.startPosition.x>3200||d.startPosition.y<12||d.startPosition.y>2000)fail('开始节点位置无效')} text(d.id,100,'模型 ID');text(d.name,80,'模型名称');text(d.category,80,'业务分类');
  if(!Number.isSafeInteger(d.revision)||Number(d.revision)<1)fail('模型修订号无效');
  for(const key of ['createdAt','updatedAt'])if(typeof d[key]!=='string'||!Number.isFinite(Date.parse(d[key] as string)))fail('模型保存时间无效');
  if(!record(d.executionSettings)||!['flink','spark'].includes(String(d.executionSettings.engine))||!['batch','stream'].includes(String(d.executionSettings.mode)))fail('模型执行设置无效');
- const options=d.executionSettings as Record<string,unknown>;
+ const options=d.executionSettings as Record<string,unknown>;if(options.schedule!==undefined){if(!record(options.schedule))fail('调度配置无效');const issue=scheduleError(scheduleConfig(options.schedule as Partial<ModelSchedule>),Number(options.intervalMinutes??60));if(issue)fail(issue)}
  for(const field of ['scheduleEnabled','runImmediately'])if(options[field]!==undefined&&typeof options[field]!=='boolean')fail('调度开关须为布尔值');
  if(options.intervalMinutes!==undefined&&(!Number.isSafeInteger(options.intervalMinutes)||Number(options.intervalMinutes)<1||Number(options.intervalMinutes)>10080))fail('调度间隔须为 1–10080 分钟整数');
  if(!Array.isArray(d.nodes)||d.nodes.length>30)fail('模型节点最多 30 个');const ids=new Set<string>();
@@ -34,3 +35,5 @@ export function listModelDocuments(provided?:ModelStorage):ModelDocument[]{const
 /** Explicit user save only. Revision checks detect stale tabs; never auto-overwrite. */
 export function saveModelDocument(draft:ModelDraft,expectedRevision:number|null,provided?:ModelStorage):ModelDocument{const s=storage(provided),old=loadModelDocument(draft.id,s);if((old?.revision??null)!==expectedRevision)fail('模型已被其他窗口修改，请重新加载或另存为');const now=new Date().toISOString();const d:ModelDocument={...draft,schemaVersion:1,revision:(old?.revision??0)+1,createdAt:old?.createdAt??now,updatedAt:now};check(d);const raw=JSON.stringify(d);if(raw.length>MODEL_DOCUMENT_MAX_CHARACTERS)fail('模型及本地文件数据超过 200 万字符，请减少导入数据');try{s.setItem(key(d.id),raw)}catch{throw new Error('本地存储写入失败或空间不足，模型尚未保存')}return parse(raw,d.id)}
 export function changeModelCategory(id:string,category:string,expectedRevision:number,provided?:ModelStorage):ModelDocument{const d=loadModelDocument(id,provided);if(!d)fail('模型不存在');return saveModelDocument({...d!,category},expectedRevision,provided)}
+
+export function renameModelDocument(id:string,name:string,expectedRevision:number,provided?:ModelStorage):ModelDocument{const d=loadModelDocument(id,provided);if(!d)fail('模型不存在');return saveModelDocument({...d!,name:name.trim()},expectedRevision,provided)}

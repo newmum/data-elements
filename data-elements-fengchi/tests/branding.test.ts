@@ -14,3 +14,13 @@ describe('Fengchi branding',()=>{
  it('shares the current wind mark between product and favicon',()=>{expect(productLogo).toContain('src="/fengchi-mark.svg?v=4"');expect(mark.match(/<path /g)).toHaveLength(3);expect(mark).toMatch(/c9 0 12-9/);expect(mark).not.toMatch(/stroke-linejoin|<text|<image/);});
  it('restores the chosen historical artwork while keeping the approved plug',()=>{expect(icons).toContain('published version 2 (e9af2c0)');expect(icons).toContain('return <ConnectionIcon size={size} className={className}/>');expect(icons).not.toMatch(/https?:/);});
 });
+
+ it('places the brand in the bottom-left footer instead of the menu bar',()=>{
+  const menu=app.split('<div className="menubar">')[1].split('<nav className="main-toolbar">')[0];
+  const footer=app.split('<footer className="statusbar">')[1].split('</footer>')[0];
+  expect(menu).not.toContain('product-brand');
+  expect(footer.startsWith('<div className="product-brand"')).toBe(true);
+  expect(footer).not.toContain('工作区已就绪');
+  expect(footer).not.toContain('status-connected');
+  expect(footer).toContain('pane-controls');
+ });

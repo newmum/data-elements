@@ -1,13 +1,14 @@
 import {describe,it,expect} from 'vitest';
 import source from '../src/App.tsx?raw';
 import editor from '../src/ModelingWorkspace.tsx?raw';
+import startNode from '../src/ModelingStartNode.tsx?raw';
 describe('model workspace integration',()=>{
  it('reuses the Fengchi brand inside the immersive editor',()=>{expect(editor).toContain('ProductLogo');expect(editor).toContain('风驰数据计算平台');});
  it('keeps an independent immersive editor surface',()=>{expect(source).toContain('className="modeling-overlay"');});
  it('blocks background query shortcuts while modeling is open',()=>{expect(source).toContain('if(modelingOpen){if((e.ctrlKey||e.metaKey)');});
  it('places a single model entry after views and keeps the existing workspace',()=>{
   expect(source).toContain("'视图',openViews)}{tool(<BranchesOutlined");
-  expect(source.match(/'模型',/g)).toHaveLength(1);
+  expect(source.split('<nav className="main-toolbar">')[1].split('</nav>')[0].match(/'模型',/g)).toHaveLength(1);
   expect(source).toContain('catalogTarget={modelCatalogTarget}');
   expect(source).toContain("display:modelingOpen&&modelingImmersive?'flex':'none'");
  });
@@ -73,14 +74,20 @@ describe('operator library refinement',()=>{it('uses collapsible categories and 
 
 describe('compact modeling workspace',()=>{it('keeps equal default panels and inline preview status',()=>{expect(editor).toContain('[paletteWidth,setPaletteWidth]=useState(250),[propertiesWidth,setPropertiesWidth]=useState(250)');expect(editor).toContain('<strong>属性配置</strong>');expect(editor).toContain('modeling-collapsed-rail');expect(editor).toContain('modeling-preview-tab-status');expect(editor).toContain("scroll={{x:'max-content'}}");expect(editor).not.toContain("y:Math.max(70,previewHeight-130)");});});
 
-describe('modeling task entry',()=>{it('opens the isolated mock task panel without replacing the canvas',()=>{expect(editor).toContain('aria-label="开始：配置任务"');expect(editor).toContain('open={executionOpen}');expect(editor).toContain('<ModelingExecutionPanel nodes={nodes} tables={effectiveTables} settings={executionSettings} onSettingsChange={setExecutionSettings}/>');expect(editor).toContain('forceRender');});});
+describe('modeling task entry',()=>{it('opens the isolated mock task panel without replacing the canvas',()=>{expect(startNode).toContain('aria-label="开始：配置任务"');expect(editor).toContain('onConfigure={()=>setExecutionOpen(true)}');expect(editor).toContain('open={executionOpen}');expect(editor).toContain('<ModelingExecutionPanel nodes={nodes} tables={effectiveTables} settings={executionSettings} onSettingsChange={setExecutionSettings}/>');expect(editor).toContain('forceRender');});});
 
-describe("inline model catalog",()=>{it("ports only the catalog into the original workbench and retains the editor",()=>{expect(source).toContain('className="model-catalog-workbench"');expect(editor).toContain('createPortal(<ModelingCatalog');expect(editor).toContain('props.catalogTarget');expect(editor).toContain('关闭画布，返回模型列表');expect(editor).toContain('d.sourceId===props.sourceId')})});
+describe("inline model catalog",()=>{it("ports only the catalog into the original workbench and retains the editor",()=>{expect(source).toContain('className="model-catalog-workbench"');expect(editor).toContain('createPortal(<ModelingCatalog');expect(editor).toContain('props.catalogTarget');expect(editor).toContain('返回模型列表');expect(editor).toContain('d.sourceId===props.sourceId')})});
 
 describe('catalog matches original table workbench',()=>{it('inherits the workbench Ant prefix rather than the isolated canvas prefix',()=>{expect(editor).toContain('<ConfigProvider prefixCls="ant"><div');expect(editor).toContain('<ConfigProvider prefixCls="model-ant" componentSize="middle"');});});
 
-describe("single model return action",()=>{it("keeps the close action and mounted editors without a duplicate list button",()=>{expect(editor).not.toContain(">模型列表</Button>");expect(editor).toContain('aria-label="关闭画布，返回模型列表"');expect(editor).toContain('onClose={()=>{setCatalog(true);refresh()}}');expect(editor).toContain("opened.map(doc=>");})});
+describe("single model return action",()=>{it("keeps the close action and mounted editors without a duplicate list button",()=>{expect(editor).not.toContain(">模型列表</Button>");expect(editor).toContain('aria-label="返回模型列表"');expect(editor).toContain('onClose={()=>{setCatalog(true);refresh()}}');expect(editor).toContain("opened.map(doc=>");})});
 
-describe('preview only bottom panel',()=>{it('removes node information and retains preview and JSON export',()=>{expect(editor).not.toContain("label:'节点信息'");expect(editor).toContain("label:'数据预览'");expect(editor).toContain('>导出 JSON</Button>');})});
+describe('preview only bottom panel',()=>{it('retains preview without a JSON export toolbar action',()=>{expect(editor).not.toContain("label:'节点信息'");expect(editor).toContain("label:'数据预览'");expect(editor).not.toContain('>导出 JSON</Button>');})});
 
 describe('local run control',()=>{it('separates control edges, locks editing and supports reduced motion',()=>{expect(editor).toContain('modeling-control-edges');expect(editor).toContain('inert={localRunning}');expect(editor).toContain('runToken.current!==token');expect(editor).toContain('validateExecution(nodes,executionSettings)');expect(editor).not.toContain('>调试单次</Button>');})});
+
+it('keeps save run start as the three right-hand actions',()=>{const actions=editor.split('<div className="modeling-tools">')[1].split('</div></div>')[0];expect(actions.indexOf('onClick={save}')).toBeLessThan(actions.indexOf('className="modeling-run"'));expect(actions.indexOf('className="modeling-run"')).toBeLessThan(actions.indexOf('onClick={startTask}'));expect(actions).not.toContain('onClick={onClose}');expect(actions).not.toContain('导出 JSON');expect(actions).toContain('SaveOutlined');expect(actions).toContain('PlayCircleOutlined');expect(actions).toContain('PoweroffOutlined')});
+
+it('separates run from start with the existing toolbar divider',()=>{expect(editor).toContain('>运行</Button><i/>{localRunning?')});
+
+it('uses a back arrow and retains mounted draft editors on return',()=>{expect(editor).toContain('icon={<ArrowLeftOutlined/>} aria-label="返回模型列表"');expect(editor).toContain('disabled={localRunning} onClick={onClose}');expect(editor).toContain("display:!catalog&&active===doc.id?'block':'none'");expect(editor).toContain("window.addEventListener('beforeunload',warn)")});

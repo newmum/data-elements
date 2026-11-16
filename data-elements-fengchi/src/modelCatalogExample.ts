@@ -1,7 +1,7 @@
 import {createModelingDemo} from './modelingDemo';
 import {loadModelDocument,saveModelDocument,type ModelStorage} from './modelCatalogStore';
 export const ORDER_EXAMPLE_ID='builtin-cross-database-orders-v1';
-/** Explicit opt-in seed. Existing saved changes, including this example, are never overwritten. */
+/** Idempotent catalog seed for the standalone demo workspace. Existing saved changes, including this example, are never overwritten. */
 export function openOrderExample(storage?:ModelStorage){
  const existing=loadModelDocument(ORDER_EXAMPLE_ID,storage);if(existing)return existing;
  const demo=createModelingDemo();

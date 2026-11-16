@@ -12,7 +12,7 @@ describe('mock execution control',()=>{
  it('clearly limits local streaming compatibility',()=>{const nodes=initialModel(tables);nodes[1]={...createModelNode('sort','node-2',1),inputs:['node-1'],config:{field:'id',direction:'asc'}};expect(validateExecution(nodes,{engine:'spark',mode:'stream'}).some(i=>i.level==='error'&&i.message.includes('有限数据集'))).toBe(true)});
  it('advances manually and returns genuine local preview row counts only',()=>{let run=createMockRun(initialModel(tables),settings);run=advanceMockRun(run,tables);expect(run.state).toBe('running');run=advanceMockRun(run,tables);expect(run.state).toBe('succeeded');expect(run.rows).toBe(2);expect(advanceMockRun(run,tables)).toBe(run);expect(()=>retryMockRun(run)).toThrow('仅失败')});
  it('bounds retries to three attempts and supports cancellation',()=>{let run=createMockRun(initialModel(tables),settings);for(let i=1;i<=3;i++){run=advanceMockRun(run,tables);run=advanceMockRun(run,tables,true);expect(run.state).toBe('failed');expect(run.attempt).toBe(i);if(i<3)run=retryMockRun(run)}expect(()=>retryMockRun(run)).toThrow('最多');expect(cancelMockRun(createMockRun(initialModel(tables),settings)).state).toBe('cancelled')});
- it('reports data failures and validates schedule ranges without timers',()=>{let run=createMockRun(initialModel(tables),settings);run=advanceMockRun(run,{});expect(advanceMockRun(run,{}).state).toBe('failed');expect(validateSchedule('0','','')).not.toBe('');expect(validateSchedule('60','2026-11-15T10:00','2026-11-15T09:00')).not.toBe('');expect(validateSchedule('60','','')).toBe('');expect(panel).not.toContain('setInterval(');expect(panel).not.toContain('fetch(');expect(panel).toContain('执行服务未连接');expect(panel).not.toContain('createMockRun')});
+ it('reports data failures and validates schedule ranges without timers',()=>{let run=createMockRun(initialModel(tables),settings);run=advanceMockRun(run,{});expect(advanceMockRun(run,{}).state).toBe('failed');expect(validateSchedule('0','','')).not.toBe('');expect(validateSchedule('60','2026-11-15T10:00','2026-11-15T09:00')).not.toBe('');expect(validateSchedule('60','','')).toBe('');expect(panel).not.toContain('setInterval(');expect(panel).not.toContain('fetch(');expect(panel).toContain('确认启动');expect(panel).not.toContain('createMockRun')});
 });
 
 describe('schedule ISO input and compact summary',()=>{
@@ -21,7 +21,7 @@ describe('schedule ISO input and compact summary',()=>{
  expect(validateSchedule('60','2026-11-14T00:00Z','2026-11-15T00:00Z')).toBe('');
  for(const start of ['2026-11-14T00:00','2026-02-30T00:00Z','2026-11-14T24:00Z','2026-11-14T00:00+14:30'])expect(validateSchedule('60',start,'2026-12-15T00:00Z')).not.toBe('');
  });
- it('uses plain text dates, concise safety tag and actual graph input/output names',()=>{
- expect(panel).not.toContain('datetime-local');expect(panel).toContain('执行服务未连接');expect(panel).not.toContain('<Alert type="info"');expect(panel).toContain('scheduleEnabled');expect(panel).toContain('intervalMinutes');expect(panel).toContain('runImmediately');
+ it('uses explicit local simulation notice and structured schedule settings',()=>{
+ expect(panel).not.toContain('datetime-local');expect(panel).toContain('确认启动');expect(panel).toContain('<Alert type="info"');expect(panel).toContain('scheduleEnabled');expect(panel).toContain('intervalMinutes');expect(panel).toContain('runImmediately');
  });
 });
