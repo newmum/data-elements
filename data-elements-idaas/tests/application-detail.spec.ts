@@ -25,9 +25,14 @@ async function installApplicationContract(page: Page, options: { writable?: bool
         resources: [{ id: 'local-m1', name: '本地用户菜单', code: 'USER_MENU', path: '/users', status: 'enabled' }],
         authorizedUsers: [{ id: 'local-u1', name: '本地人员甲', account: 'local.one', status: 'enabled', orgNames: ['本地机构甲'], roleNames: ['本地管理员'], authorized: true }],
     };
-    await page.route('**/api/idaas/applications/local-inventory**', async route => {
-        expect(route.request().url()).toContain('local-inventory');
-        await route.fulfill({ json: { code: 0, data: localInventory } });
+    await page.route('**/api/idaas/applications/inventory**', async route => {
+        const params = new URL(route.request().url()).searchParams;
+        const kind = params.get('kind') as keyof typeof localInventory;
+        const items = localInventory[kind];
+        const data = Array.isArray(items)
+            ? { available: true, list: items, total: items.length, page: 1, size: 20 }
+            : { available: localInventory.available, source: localInventory.source, counts: localInventory.counts };
+        await route.fulfill({ json: { code: 0, data } });
     });
     let deny = options.denyOnce;
     await page.route('**/api/idaas/assignments/**', async route => {
@@ -39,7 +44,12 @@ async function installApplicationContract(page: Page, options: { writable?: bool
             if (deny) {
                 return route.fulfill({ json: { code: 503, msg: '应用资料暂时无法读取', data: null } });
             }
-            return route.fulfill({ json: { code: 0, data: rows } });
+            const params = url.searchParams;
+            if (params.get('summary') === 'true') {
+                return route.fulfill({ json: { code: 0, data: { subjects: rows.subjects.length, orgs: rows.orgs.length } } });
+            }
+            const list = params.get('kind') === 'org' ? rows.orgs : rows.subjects;
+            return route.fulfill({ json: { code: 0, data: { list, total: list.length, page: 1, size: 20 } } });
         }
         saved.push(request.postDataJSON());
         await route.fulfill({ json: { code: 0, data: { id: 'saved-assignment' } } });
@@ -178,7 +188,7 @@ test('应用目录区分本地与平台授权，并在编辑中保存排序和�
     session.appPermissions = { [application.id]: ['sync:write'] };
     const saves: Array<Record<string, any>> = [];
     const pushes: Array<Record<string, any>> = [];
-    await page.route('**/api/idaas/applications/local-inventory**', async route => {
+    await page.route('**/api/idaas/applications/inventory**', async route => {
         const params = new URL(route.request().url()).searchParams;
         const item = (appId: string) => ({ appId, available: appId === application.id,
             counts: appId === application.id ? { users: 5, authorizedUsers: 3 } : { users: 0, authorizedUsers: 0 } });
@@ -194,7 +204,7 @@ test('应用目录区分本地与平台授权，并在编辑中保存排序和�
         application.logoUrl = application.portalConfig?.logo;
         await route.fulfill({ json: { code: 0, data: { id: application.id } } });
     });
-    await page.route('**/api/idaas/applications/push-portal-config', async route => {
+    await page.route('**/api/idaas/applications/portal', async route => {
         pushes.push(route.request().postDataJSON());
         await route.fulfill({ json: { code: 0, data: { synced: true } } });
     });
@@ -260,7 +270,7 @@ for (const width of [390, 1440, 1920]) test(`应用目录调整后页面布局 $
     session.appWriteIds = [application.id];
     application.portalConfig = { logo: `data:image/svg+xml;base64,${Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><rect width="40" height="40" fill="#5267f5"/></svg>').toString('base64')}` };
     application.logoUrl = application.portalConfig.logo;
-    await page.route('**/api/idaas/applications/local-inventory**', async route => {
+    await page.route('**/api/idaas/applications/inventory**', async route => {
         const params = new URL(route.request().url()).searchParams;
         const item = (appId: string) => ({ appId, available: appId === application.id,
             counts: appId === application.id ? { users: 5, authorizedUsers: 3 } : { users: 0, authorizedUsers: 0 } });
@@ -295,7 +305,7 @@ for (const size of [20, 100]) test(`应用列表 ${size} 项只按 50 项批量�
         runtimeTenantId: 'tenant-contract', sortNo: index + 1,
     }));
     const batches: string[][] = [];
-    await page.route('**/api/idaas/applications/local-inventory**', async route => {
+    await page.route('**/api/idaas/applications/inventory**', async route => {
         const ids = (new URL(route.request().url()).searchParams.get('appIds') || '').split(',').filter(Boolean);
         batches.push(ids);
         await route.fulfill({ json: { code: 0, data: { items: ids.map(appId => ({

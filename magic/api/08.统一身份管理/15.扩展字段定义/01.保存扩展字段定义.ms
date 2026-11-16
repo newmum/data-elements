@@ -20,9 +20,6 @@
   "responseBody": null
 }
 ================================
-// 接口：02.保存扩展字段定义
-// 路由：POST /idaas/field-definitions/save
-// 业务说明：校验请求字段、所属范围和版本；新建或更新扩展字段定义及必要关联记录，写入审计并返回保存结果。只维护白名单内的人员或机构扩展字段定义；校验字段类型与版本，并保护保留字段。
 import db;
 import cn.hutool.core.util.IdUtil;
 import cn.hutool.json.JSONUtil;
@@ -36,6 +33,9 @@ import '@/idaas/field-values' as fieldValues;
 import identityRuntime;
 import request;
 import '@/idaas/api-call' as apiCall;
+
+// POST /idaas/field/save。
+// 业务说明：校验请求字段、所属范围和版本；新建或更新扩展字段定义及必要关联记录，写入审计并返回保存结果。只维护白名单内的人员或机构扩展字段定义；校验字段类型与版本，并保护保留字段。
 
 
 return identityRuntime.control(()=>apiCall(()=>{

@@ -20,9 +20,6 @@
   "responseBody": null
 }
 ================================
-// 接口：04.停用应用认证协议
-// 路由：POST /idaas/protocol-config/disable
-// 业务说明：校验应用权限后关闭指定协议客户端或联邦配置，撤销其继续使用统一认证的能力。
 import db;
 import identityProtocol;
 import identityTransport;
@@ -36,6 +33,9 @@ import '@/idaas/audit' as audit;
 import identityRuntime;
 import request;
 import '@/idaas/api-call' as apiCall;
+
+// POST /idaas/protocol/disable。
+// 业务说明：校验应用权限后关闭指定协议客户端或联邦配置，撤销其继续使用统一认证的能力。
 
 
 return identityRuntime.control(()=>apiCall(()=>{

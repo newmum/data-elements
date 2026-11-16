@@ -20,9 +20,6 @@
   "responseBody": null
 }
 ================================
-// 接口：01.查询统一认证账号列表
-// 路由：GET /idaas/auth-accounts/list
-// 业务说明：读取符合请求筛选条件的统一认证账号，应用权限及身份域过滤后返回可展示字段；不发生写入。统一认证账号与平台操作账号、租户本地账号是三套隔离的身份体系。
 import db;
 import authSession;
 import iamSecurity;
@@ -35,6 +32,9 @@ import identityRuntime;
 import tableSort;
 import request;
 import '@/idaas/api-call' as apiCall;
+
+// GET /idaas/accounts/list。
+// 业务说明：读取符合请求筛选条件的统一认证账号，应用权限及身份域过滤后返回可展示字段；不发生写入。统一认证账号与平台操作账号、租户本地账号是三套隔离的身份体系。
 
 
 return identityRuntime.control(()=>apiCall(()=>{

@@ -20,9 +20,6 @@
   "responseBody": null
 }
 ================================
-// 接口：02.登录统一认证账号
-// 路由：POST /idaas/auth-account/login
-// 业务说明：校验账号状态、密码、锁定和多因子策略，签发统一认证会话并记录认证事件；该会话不能登录管理控制台。
 import auditEvents;
 import identityTransport;
 import db;
@@ -39,6 +36,9 @@ import '@/idaas/auth-session-policy' as sessionPolicy;
 import identityRuntime;
 import request;
 import '@/idaas/api-call' as apiCall;
+
+// POST /idaas/identity/login。
+// 业务说明：校验账号状态、密码、锁定和多因子策略，签发统一认证会话并记录认证事件；该会话不能登录管理控制台。
 
 
 return identityRuntime.control(()=>apiCall(()=>{

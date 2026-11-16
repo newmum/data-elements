@@ -9,7 +9,7 @@
   "lock": null,
   "createBy": null,
   "updateBy": null,
-  "path": "/bind-entity",
+  "path": "/entity",
   "description": "核验统一认证账号和目标法人状态后建立成员关系，记录办理身份范围与审计。",
   "parameters": [],
   "method": "POST",
@@ -20,9 +20,6 @@
   "responseBody": null
 }
 ================================
-// 接口：05.绑定法人办理身份
-// 路由：POST /idaas/auth-accounts/bind-entity
-// 业务说明：核验统一认证账号和目标法人状态后建立成员关系，记录办理身份范围与审计。
 import db;
 import authSession;
 import iamSecurity;
@@ -34,6 +31,9 @@ import '@/idaas/password-policy' as passwordPolicy;
 import identityRuntime;
 import request;
 import '@/idaas/api-call' as apiCall;
+
+// POST /idaas/accounts/entity。
+// 业务说明：核验统一认证账号和目标法人状态后建立成员关系，记录办理身份范围与审计。
 
 
 return identityRuntime.control(()=>apiCall(()=>{

@@ -20,9 +20,6 @@
   "responseBody": null
 }
 ================================
-// 接口：02.保存应用分组
-// 路由：POST /idaas/application-groups/save
-// 业务说明：校验请求字段、所属范围和版本；新建或更新应用分组及必要关联记录，写入审计并返回保存结果。只操作控制库的应用分组，并维护排序和软删除状态；关联应用仍按独立应用记录管理。
 import db;
 import '@/idaas/guard' as guard;
 import '@/idaas/mutate' as mutate;
@@ -30,6 +27,9 @@ import '@/idaas/audit' as audit;
 import cn.hutool.core.util.IdUtil;
 import identityRuntime;
 import '@/idaas/api-call' as apiCall;
+
+// POST /idaas/appgroup/save。
+// 业务说明：校验请求字段、所属范围和版本；新建或更新应用分组及必要关联记录，写入审计并返回保存结果。只操作控制库的应用分组，并维护排序和软删除状态；关联应用仍按独立应用记录管理。
 
 
 return identityRuntime.control(()=>apiCall(()=>{

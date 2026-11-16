@@ -9,7 +9,7 @@
   "lock": null,
   "createBy": null,
   "updateBy": null,
-  "path": "/revoke-session",
+  "path": "/revoke",
   "description": "核验目标会话属于当前统一认证账号后撤销指定会话，保存撤销原因与时间。",
   "parameters": [],
   "method": "POST",
@@ -20,9 +20,6 @@
   "responseBody": null
 }
 ================================
-// 接口：07.撤销认证账号会话
-// 路由：POST /idaas/auth-account/revoke-session
-// 业务说明：核验目标会话属于当前统一认证账号后撤销指定会话，保存撤销原因与时间。
 import identityTransport;
 import db;
 import authSession;
@@ -38,6 +35,9 @@ import '@/idaas/auth-session-policy' as sessionPolicy;
 import identityRuntime;
 import request;
 import '@/idaas/api-call' as apiCall;
+
+// POST /idaas/identity/revoke。
+// 业务说明：核验目标会话属于当前统一认证账号后撤销指定会话，保存撤销原因与时间。
 
 
 return identityRuntime.control(()=>apiCall(()=>{

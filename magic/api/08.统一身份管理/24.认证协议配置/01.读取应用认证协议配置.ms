@@ -20,9 +20,6 @@
   "responseBody": null
 }
 ================================
-// 接口：01.读取应用认证协议配置
-// 路由：GET /idaas/protocol-config/read
-// 业务说明：读取指定应用的统一认证协议开通状态、客户端及回调配置，对密钥脱敏后供管理界面展示。
 import db;
 import identityProtocol;
 import identityTransport;
@@ -36,6 +33,9 @@ import '@/idaas/audit' as audit;
 import identityRuntime;
 import request;
 import '@/idaas/api-call' as apiCall;
+
+// GET /idaas/protocol/read。
+// 业务说明：读取指定应用的统一认证协议开通状态、客户端及回调配置，对密钥脱敏后供管理界面展示。
 
 
 return identityRuntime.control(()=>apiCall(()=>{

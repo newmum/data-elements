@@ -20,9 +20,6 @@
   "responseBody": null
 }
 ================================
-// 接口：03.归档扩展字段定义
-// 路由：POST /idaas/field-definitions/remove
-// 业务说明：按标识加载扩展字段定义并检查所属范围与版本；执行软删除或撤销关联，保留审计历史。只维护白名单内的人员或机构扩展字段定义；校验字段类型与版本，并保护保留字段。
 import db;
 import cn.hutool.core.util.IdUtil;
 import cn.hutool.json.JSONUtil;
@@ -36,6 +33,9 @@ import '@/idaas/field-values' as fieldValues;
 import identityRuntime;
 import request;
 import '@/idaas/api-call' as apiCall;
+
+// POST /idaas/field/remove。
+// 业务说明：按标识加载扩展字段定义并检查所属范围与版本；执行软删除或撤销关联，保留审计历史。只维护白名单内的人员或机构扩展字段定义；校验字段类型与版本，并保护保留字段。
 
 
 return identityRuntime.control(()=>apiCall(()=>{

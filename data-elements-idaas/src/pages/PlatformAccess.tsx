@@ -39,8 +39,8 @@ export default function PlatformAccess({ kind = 'operators' }: { kind?: 'operato
         try {
             if (!rolePage&&can('operators:read')) {const result=await foundationApi.read<{list:Operator[];total:number}>('/idaas/operators/list?'+order.query+(kind==='locked'?'&locked=true':''));setOperators(result.list);setTotal(result.total);}
             if (can('platform-roles:read')) {
-                if(rolePage){const result=await foundationApi.read<{list:Role[];total:number}>('/idaas/platform-roles/list?'+order.query);setRoles(result.list);setTotal(result.total);}else setRoles(await foundationApi.list<Role>('/idaas/platform-roles/list'));
-                setResources(await foundationApi.list<Resource>('/idaas/platform-roles/resources'));
+                if(rolePage){const result=await foundationApi.read<{list:Role[];total:number}>('/idaas/adminrole/list?'+order.query);setRoles(result.list);setTotal(result.total);}else setRoles(await foundationApi.list<Role>('/idaas/adminrole/list'));
+                setResources(await foundationApi.list<Resource>('/idaas/adminrole/resources'));
             }
         } catch (e) { setError(e instanceof Error ? e.message : '读取失败'); }
         finally { setBusy(false); }
@@ -62,7 +62,7 @@ export default function PlatformAccess({ kind = 'operators' }: { kind?: 'operato
         try { values = await form.validateFields(); }
         catch (error) { message.error(formErrorText(error)); return; }
         try {
-            await perform(() => foundationApi.write(`/idaas/${rolePage ? 'platform-roles' : 'operators'}/save`, {
+            await perform(() => foundationApi.write(`/idaas/${rolePage ? 'adminrole' : 'operators'}/save`, {
                 record: { ...values, id: editing?.id, version: editing?.version, subjectVersion: editing && 'subject_version' in editing ? editing.subject_version : undefined }, creating: !editing,
             }), '已保存');
             setOpen(false);
@@ -71,7 +71,7 @@ export default function PlatformAccess({ kind = 'operators' }: { kind?: 'operato
     const assign = async (row: Operator) => {
         setBusy(true);
         try {
-            const existing = await foundationApi.list<Assignment>(`/idaas/platform-roles/assignments?operatorId=${encodeURIComponent(row.id)}`);
+            const existing = await foundationApi.list<Assignment>(`/idaas/adminrole/assignments?operatorId=${encodeURIComponent(row.id)}`);
             setScopes(existing.flatMap(a => a.scopes.map(s => ({ roleId: a.role_id, validFrom: localTime(a.valid_from), validUntil: localTime(a.valid_until), scopeKind: s.scope_kind as ScopeEditor['scopeKind'], appId: s.app_id, orgId: s.org_id, includeChildren: s.include_children === 1 }))));
             setAssigning(row);
         } catch (e) { message.error(e instanceof Error ? e.message : '读取角色分配失败'); }
@@ -82,7 +82,7 @@ export default function PlatformAccess({ kind = 'operators' }: { kind?: 'operato
         if (scopes.some(s => !s.roleId || (s.scopeKind === 'APPLICATION' && !s.appId) || (s.scopeKind === 'ORG' && !s.orgId))) { message.error('请完整选择角色和范围'); return; }
         const assignments = [...new Set(scopes.map(s => s.roleId))].map(roleId => ({ roleId, validFrom: scopes.find(s => s.roleId === roleId)?.validFrom ? new Date(scopes.find(s => s.roleId === roleId)!.validFrom!).toISOString() : undefined, validUntil: scopes.find(s => s.roleId === roleId)?.validUntil ? new Date(scopes.find(s => s.roleId === roleId)!.validUntil!).toISOString() : undefined, scopes: scopes.filter(s => s.roleId === roleId)
             .map(s => ({ identityDomain: 'workforce', scopeKind: s.scopeKind, ...(s.scopeKind === 'APPLICATION' ? { appId: s.appId } : s.scopeKind === 'ORG' ? { orgId: s.orgId, includeChildren: s.includeChildren } : {}) })) }));
-        await perform(() => foundationApi.write('/idaas/platform-roles/assign', { operatorId: assigning.id, version: assigning.version, assignments }), '角色与管理范围已保存');
+        await perform(() => foundationApi.write('/idaas/adminrole/assign', { operatorId: assigning.id, version: assigning.version, assignments }), '角色与管理范围已保存');
         setAssigning(null);
     };
     const operatorRows = kind === 'locked' ? operators.filter(o => o.locked_until && Date.parse(o.locked_until) > Date.now()) : operators;
@@ -131,7 +131,7 @@ export default function PlatformAccess({ kind = 'operators' }: { kind?: 'operato
             try { values = await passwordForm.validateFields(); }
             catch (error) { message.error(formErrorText(error)); return; }
             if (!resetting) return;
-            try { await perform(() => foundationApi.write('/idaas/operators/reset-password', { id: resetting.id, version: resetting.version, password: values.password }), '密码已重置，原会话已失效'); setResetting(null); setRecoveryVersion(value => value + 1); }
+            try { await perform(() => foundationApi.write('/idaas/operators/reset', { id: resetting.id, version: resetting.version, password: values.password }), '密码已重置，原会话已失效'); setResetting(null); setRecoveryVersion(value => value + 1); }
             catch { /* perform already shows the server error */ }
         }}><Form size="small" form={passwordForm} layout="vertical" onFinishFailed={failure => message.error(formErrorText(failure))}><Form.Item name="password" label="新密码" rules={[{ required: true }, { min: db.settings.workforce.minLength || 8 }]}><Input.Password autoComplete="new-password"/></Form.Item></Form></Modal>
         <Modal title={`${assigning?.display_name || ''} · 角色与管理范围`} open={!!assigning} onCancel={() => setAssigning(null)} onOk={saveAssignments} okText="保存授权" cancelText="取消" confirmLoading={busy} width={736}>

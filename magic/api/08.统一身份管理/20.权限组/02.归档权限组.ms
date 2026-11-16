@@ -20,9 +20,6 @@
   "responseBody": null
 }
 ================================
-// 接口：03.归档权限组
-// 路由：POST /idaas/permission-groups/remove
-// 业务说明：按标识加载权限组并检查所属范围与版本；执行软删除或撤销关联，保留审计历史。维护业务应用的权限组及成员关系，用于聚合可授权的人员范围。
 import db;
 import cn.hutool.core.util.IdUtil;
 import '@/idaas/guard' as guard;
@@ -34,6 +31,9 @@ import '@/idaas/rebuild-projections' as rebuild;
 import identityRuntime;
 import request;
 import '@/idaas/api-call' as apiCall;
+
+// POST /idaas/permgroup/remove。
+// 业务说明：按标识加载权限组并检查所属范围与版本；执行软删除或撤销关联，保留审计历史。维护业务应用的权限组及成员关系，用于聚合可授权的人员范围。
 
 
 return identityRuntime.control(()=>apiCall(()=>{

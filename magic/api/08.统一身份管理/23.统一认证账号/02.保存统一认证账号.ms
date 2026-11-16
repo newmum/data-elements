@@ -20,9 +20,6 @@
   "responseBody": null
 }
 ================================
-// 接口：02.保存统一认证账号
-// 路由：POST /idaas/auth-accounts/save
-// 业务说明：校验请求字段、所属范围和版本；新建或更新统一认证账号及必要关联记录，写入审计并返回保存结果。统一认证账号与平台操作账号、租户本地账号是三套隔离的身份体系。
 import db;
 import authSession;
 import iamSecurity;
@@ -34,6 +31,9 @@ import '@/idaas/password-policy' as passwordPolicy;
 import identityRuntime;
 import request;
 import '@/idaas/api-call' as apiCall;
+
+// POST /idaas/accounts/save。
+// 业务说明：校验请求字段、所属范围和版本；新建或更新统一认证账号及必要关联记录，写入审计并返回保存结果。统一认证账号与平台操作账号、租户本地账号是三套隔离的身份体系。
 
 
 return identityRuntime.control(()=>apiCall(()=>{

@@ -4,7 +4,7 @@
   "script": null,
   "groupId": "07899fe85f4d59fd90de0507c7f4d188",
   "name": "11.设置应用本地初始密码",
-  "path": "/set-initial-password",
+  "path": "/password",
   "description": "人工创建人员并完成下发后，以一次性签名事件为目标租户新账号设置初始密码；不在中央人员或任务表保存密码。",
   "parameters": [],
   "method": "POST",
@@ -15,9 +15,6 @@
   "responseBody": null
 }
 ================================
-// 接口：12.设置应用本地初始密码
-// 路由：POST /idaas/provision/set-initial-password
-// 密码只在本次人工请求中转换为 SM3 摘要，并由目标租户按本地算法加盐保存。
 import db;
 import identityTransport;
 import cn.hutool.crypto.SmUtil;
@@ -29,6 +26,9 @@ import '@/idaas/audit' as audit;
 import identityRuntime;
 import request;
 import '@/idaas/api-call' as apiCall;
+
+// POST /idaas/provision/password。 设置应用本地初始密码。
+// 密码只在本次人工请求中转换为 SM3 摘要，并由目标租户按本地算法加盐保存。
 
 return identityRuntime.control(()=>apiCall(()=>{
     var p=body||{};

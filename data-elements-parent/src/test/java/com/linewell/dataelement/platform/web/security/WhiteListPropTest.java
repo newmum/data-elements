@@ -31,8 +31,8 @@ class WhiteListPropTest {
     void identityLoginIsPublicWithoutOpeningBusinessApis() {
         WhiteListProp properties = new WhiteListProp();
         assertTrue(properties.isWhiteListed("/idaas/auth/login"));
-        assertTrue(properties.isWhiteListed("/idaas/password-recovery/request"));
-        assertFalse(properties.isWhiteListed("/idaas/password-recovery/requests"));
+        assertTrue(properties.isWhiteListed("/idaas/recovery/request"));
+        assertFalse(properties.isWhiteListed("/idaas/recovery/requests"));
         assertFalse(properties.isWhiteListed("/idaas/auth/session"));
         assertFalse(properties.isWhiteListed("/idaas/users/save"));
         assertFalse(properties.isWhiteListed("/idaas/auth/login/anything"));

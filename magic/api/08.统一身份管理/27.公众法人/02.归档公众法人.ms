@@ -20,9 +20,6 @@
   "responseBody": null
 }
 ================================
-// 接口：03.归档公众法人
-// 路由：POST /idaas/public-entities/remove
-// 业务说明：按标识加载公众法人并检查所属范围与版本；执行软删除或撤销关联，保留审计历史。管理公众法人资料及法人账号成员关系；成员启用或撤销须核验当前办理身份。
 import db;
 import cn.hutool.core.util.IdUtil;
 import cn.hutool.json.JSONUtil;
@@ -33,6 +30,9 @@ import '@/idaas/time-window' as timeWindow;
 import identityRuntime;
 import request;
 import '@/idaas/api-call' as apiCall;
+
+// POST /idaas/legal/remove。
+// 业务说明：按标识加载公众法人并检查所属范围与版本；执行软删除或撤销关联，保留审计历史。管理公众法人资料及法人账号成员关系；成员启用或撤销须核验当前办理身份。
 
 
 return identityRuntime.control(()=>apiCall(()=>{

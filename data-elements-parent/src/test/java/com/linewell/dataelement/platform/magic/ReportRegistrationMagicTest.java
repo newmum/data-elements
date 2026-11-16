@@ -115,6 +115,8 @@ class ReportRegistrationMagicTest {
         }
         fixture.base.jdbc.update("insert into file_upload_t(tid,tenant_id,created_by,is_del) values(?,?,?,0)",
                 "other-actor", fixture.base.scope.id(), "different-user");
+        fixture.base.jdbc.update("insert into file_upload_t values(?,?,?,?,?,?,?)",
+                "legacy", fixture.base.scope.id(), "validation-user", 0, "legacy.csv", csv.length, "attachment/legacy.csv");
         var opened = new ArrayList<String>();
         fixture.reportOriginal = (context, arguments) -> {
             assertEquals("open", arguments[0]);
@@ -133,6 +135,19 @@ class ReportRegistrationMagicTest {
         var first = assertInstanceOf(Map.class, originals.getFirst());
         var tables = assertInstanceOf(List.class, first.get("tables"));
         assertEquals("success", assertInstanceOf(Map.class, tables.getFirst()).get("status"));
+
+        opened.clear();
+        var mixed = assertInstanceOf(Map.class, fixture.run(Map.of("action", "parse", "fileIds", List.of(ids.getFirst(), "legacy"))));
+        var mixedFiles = assertInstanceOf(List.class, mixed.get("files"));
+        var statuses = new HashMap<String, Object>();
+        for (Object item : mixedFiles) {
+            var original = assertInstanceOf(Map.class, item);
+            var regions = assertInstanceOf(List.class, original.get("tables"));
+            statuses.put((String) original.get("fileId"), assertInstanceOf(Map.class, regions.getFirst()).get("status"));
+        }
+        assertEquals(Map.of(ids.getFirst(), "success", "legacy", "failed"), statuses);
+        assertEquals(List.of("report-local:" + ids.getFirst()), opened);
+        assertEquals(1, fixture.base.reads);
 
         opened.clear();
         assertInstanceOf(ExitValue.class, fixture.run(Map.of("action", "parse", "fileIds", List.of(ids.getFirst(), "other-actor"))));

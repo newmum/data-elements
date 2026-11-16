@@ -1084,6 +1084,41 @@ var resolveElasticsearchConnection = (sourceCfg) => {
     return { nodes: String.join(',', hosts), protocol: protocol, authMethod: authMethod }
 }
 
+// 仅判断已保存画布中的来源节点，无需额外读取任务记录。
+var sourceRepairReasons = (dsl) => {
+    var taskReasons = []
+    for (existingNode in (dsl.nodes == null ? [] : dsl.nodes)) {
+        if (['source.ftp', 'source.sftp'].contains(text(existingNode.manifestKey))
+            && blank(existingNode.config?.sourceFileName) && blank(existingNode.config?.logicalSourceDatasourceId)) {
+            taskReasons.add('文件来源仍使用旧表名匹配规则，需确认后重新生成精确文件采集配置')
+        }
+        if (existingNode.manifestKey == 'source.elasticsearch'
+                && (blank(existingNode.config?.nodes) || text(existingNode.config.nodes).matches('(?i)^https?://.*'))) {
+            taskReasons.add('Elasticsearch 来源缺少可部署的节点配置，需确认后按登记连接重新生成')
+        }
+    }
+    return taskReasons
+}
+
+// 每个登记索引或主题只生成当前表对应的采集配置。
+var applyIndexAndTopicSourceConfig = (manifestKey, sourceNodeConfig, sourceCfg, sourceTableName, tenantId, sourceTableId) => {
+    if (manifestKey == 'source.elasticsearch') {
+        sourceNodeConfig.putAll(resolveElasticsearchConnection(sourceCfg))
+        sourceNodeConfig.defaultIndex = sourceTableName
+        sourceNodeConfig.queryJson = '{"query":{"match_all":{}},"size":1000}'
+        sourceNodeConfig.syncMode = 'FULL'
+    }
+    if (manifestKey == 'source.kafka') {
+        // Keep polling the consumer so partition assignment and heartbeats can complete.
+        sourceNodeConfig.schedulingPeriod = '0 sec'
+        sourceNodeConfig.bootstrapServers = first(sourceCfg, ['kafkaBootstrapServers','bootstrapServers'])
+        sourceNodeConfig.topic = sourceTableName
+        sourceNodeConfig.groupId = 'ingestion-' + tenantId + '-' + sourceTableId
+        sourceNodeConfig.securityProtocol = first(sourceCfg, ['kafkaSecurityProtocol','securityProtocol']) || 'PLAINTEXT'
+        sourceNodeConfig.syncMode = 'FULL'
+    }
+}
+
 return db.transaction(() => {
 var sourceTableId = text(body?.tableId || body?.sourceTableId || body?.tid).trim()
 if (blank(tenantId)) { exit 401, '当前登录租户无效，请重新登录' }
@@ -1564,16 +1599,7 @@ for (existingTask in existingTasks) {
         continue
     }
     var taskReasons = []
-    for (existingNode in (existingDslObject.nodes == null ? [] : existingDslObject.nodes)) {
-        if (['source.ftp', 'source.sftp'].contains(text(existingNode.manifestKey))
-            && blank(existingNode.config?.sourceFileName) && blank(existingNode.config?.logicalSourceDatasourceId)) {
-            taskReasons.add('文件来源仍使用旧表名匹配规则，需确认后重新生成精确文件采集配置')
-        }
-        if (existingNode.manifestKey == 'source.elasticsearch'
-                && (blank(existingNode.config?.nodes) || text(existingNode.config.nodes).matches('(?i)^https?://.*'))) {
-            taskReasons.add('Elasticsearch 来源缺少可部署的节点配置，需确认后按登记连接重新生成')
-        }
-    }
+    taskReasons.addAll(sourceRepairReasons(existingDslObject))
     if (wrongHopSource) { taskReasons.add('已有任务的来源与所选目标顺序不一致，需确认后按级联链路重建') }
     if (legacyMultiTarget) { taskReasons.add('历史任务包含多个目标库，需确认后拆分为独立任务') }
     if (pipeline == null || blank(existingDsl)) { taskReasons.add('关联流程不存在或没有画布定义') }
@@ -1807,23 +1833,7 @@ if (sourceManifestKey == 'source.minio') {
     sourceNodeConfig.minioObjectKey = minioObjectKey
     sourceNodeConfig.syncMode = 'FULL'
 }
-// Each registered index/topic is a distinct dataset; a datasource-wide wildcard or
-// comma-separated topic scope must never flow into an individual table's task.
-if (sourceManifestKey == 'source.elasticsearch') {
-    sourceNodeConfig.putAll(resolveElasticsearchConnection(sourceCfg))
-    sourceNodeConfig.defaultIndex = sourceTableName
-    sourceNodeConfig.queryJson = '{"query":{"match_all":{}},"size":1000}'
-    sourceNodeConfig.syncMode = 'FULL'
-}
-if (sourceManifestKey == 'source.kafka') {
-    // Keep polling the consumer so partition assignment and heartbeats can complete.
-    sourceNodeConfig.schedulingPeriod = '0 sec'
-    sourceNodeConfig.bootstrapServers = first(sourceCfg, ['kafkaBootstrapServers','bootstrapServers'])
-    sourceNodeConfig.topic = sourceTableName
-    sourceNodeConfig.groupId = 'ingestion-' + tenantId + '-' + sourceTableId
-    sourceNodeConfig.securityProtocol = first(sourceCfg, ['kafkaSecurityProtocol','securityProtocol']) || 'PLAINTEXT'
-    sourceNodeConfig.syncMode = 'FULL'
-}
+applyIndexAndTopicSourceConfig(sourceManifestKey, sourceNodeConfig, sourceCfg, sourceTableName, tenantId, sourceTableId)
 
 var pipelineRows = []
 var taskRows = []

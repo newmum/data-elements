@@ -32,7 +32,7 @@ export function ApplicationDirectorySync({ app, domain, canSync, canImport, canP
         setBusy(true); setError('');
         try {
             const [result, receivers] = await Promise.all([
-                foundationApi.read<Comparison>(`/idaas/applications/directory-compare?appId=${encodeURIComponent(app.id)}`),
+                foundationApi.read<Comparison>(`/idaas/applications/compare?appId=${encodeURIComponent(app.id)}`),
                 canSync ? provisionApi.configs() : Promise.resolve([]),
             ]);
             setComparison(result); setConfigs(receivers.filter(c => c.appId === app.id));
@@ -56,7 +56,7 @@ export function ApplicationDirectorySync({ app, domain, canSync, canImport, canP
             onOk: async () => {
                 setBusy(true);
                 try {
-                    const result = await foundationApi.write<{ createdUsers: number; updatedUsers: number; createdOrgs: number; updatedOrgs: number }>('/idaas/applications/directory-pull', {
+                    const result = await foundationApi.write<{ createdUsers: number; updatedUsers: number; createdOrgs: number; updatedOrgs: number }>('/idaas/applications/import', {
                         appId: app.id, revision: comparison.revision, items: rows.map(row => ({ type: row.type, localId: row.localId })),
                     });
                     message.success(`已导入：人员新增 ${result.createdUsers}、更新 ${result.updatedUsers}；机构新增 ${result.createdOrgs}、更新 ${result.updatedOrgs}`);
@@ -99,7 +99,7 @@ export function ApplicationDirectorySync({ app, domain, canSync, canImport, canP
         onOk: async () => {
             setBusy(true);
             try {
-                const result = await foundationApi.write<{ synced: boolean; message?: string }>('/idaas/applications/push-portal-config', { appId: app.id, appVersion: app.version });
+                const result = await foundationApi.write<{ synced: boolean; message?: string }>('/idaas/applications/portal', { appId: app.id, appVersion: app.version });
                 if (!result.synced) throw new Error(result.message || '接收端未确认配置');
                 message.success('界面配置已下发');
             } catch (cause) { message.error(cause instanceof Error ? cause.message : '界面配置下发失败'); throw cause; }

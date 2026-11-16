@@ -20,9 +20,6 @@
   "responseBody": null
 }
 ================================
-// 接口：04.查询平台功能资源
-// 路由：GET /idaas/platform-roles/resources
-// 业务说明：读取平台角色可配置的功能资源树，按当前操作人可授予范围过滤，供角色授权界面使用。
 import db;
 import '@/idaas/guard' as guard;
 import '@/idaas/mutate' as mutate;
@@ -32,6 +29,9 @@ import cn.hutool.core.util.IdUtil;
 import java.time.Instant;
 import identityRuntime;
 import '@/idaas/api-call' as apiCall;
+
+// GET /idaas/adminrole/resources。
+// 业务说明：读取平台角色可配置的功能资源树，按当前操作人可授予范围过滤，供角色授权界面使用。
 
 
 return identityRuntime.control(()=>apiCall(()=>{

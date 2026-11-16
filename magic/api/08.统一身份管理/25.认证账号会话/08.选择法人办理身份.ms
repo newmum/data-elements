@@ -9,7 +9,7 @@
   "lock": null,
   "createBy": null,
   "updateBy": null,
-  "path": "/select-entity",
+  "path": "/entity",
   "description": "校验当前认证账号与目标法人的有效成员关系，切换本次会话的办理身份并返回更新后上下文。",
   "parameters": [],
   "method": "POST",
@@ -20,9 +20,6 @@
   "responseBody": null
 }
 ================================
-// 接口：08.选择法人办理身份
-// 路由：POST /idaas/auth-account/select-entity
-// 业务说明：校验当前认证账号与目标法人的有效成员关系，切换本次会话的办理身份并返回更新后上下文。
 import identityTransport;
 import db;
 import request;
@@ -38,6 +35,9 @@ import '@/idaas/audit' as audit;
 import '@/idaas/auth-session-policy' as sessionPolicy;
 import identityRuntime;
 import '@/idaas/api-call' as apiCall;
+
+// POST /idaas/identity/entity。
+// 业务说明：校验当前认证账号与目标法人的有效成员关系，切换本次会话的办理身份并返回更新后上下文。
 
 
 return identityRuntime.control(()=>apiCall(()=>{

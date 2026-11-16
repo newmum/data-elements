@@ -44,8 +44,7 @@ import '@/common/reportoriginal' as reportOriginal
 import systemConfig
 import response;
 import cn.dev33.satoken.stp.StpUtil
-import java.nio.charset.StandardCharsets
-import org.springframework.http.ContentDisposition
+import java.net.URLEncoder
 
 // GET /dst/file/download 校验当前租户的附件记录，通过 /common/reportoriginal 流式读取磁盘原件。
 // 其他记录沿用原存储位置，返回文件原始字节及附件响应头。
@@ -61,8 +60,9 @@ if (fileInfo.filePath != null && fileInfo.filePath.startsWith('report-local:')) 
     try { stream = reportOriginal('open', tenantId, fileInfo.filePath, null) }
     catch (e) { exit 404, '上传原件不可读取' }
     try {
+        var filename = URLEncoder.encode(fileInfo.fileName, 'UTF-8').replace('+', '%20')
         response.setHeader('Content-Type', 'application/octet-stream')
-        response.setHeader('Content-Disposition', ContentDisposition.attachment().filename(fileInfo.fileName, StandardCharsets.UTF_8).toString())
+        response.setHeader('Content-Disposition', "attachment; filename*=UTF-8''" + filename)
         stream.transferTo(response.getOutputStream())
     } finally { stream.close() }
     return response.end();

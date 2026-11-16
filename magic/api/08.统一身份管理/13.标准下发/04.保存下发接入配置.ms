@@ -9,7 +9,7 @@
   "lock": null,
   "createBy": null,
   "updateBy": null,
-  "path": "/save-config",
+  "path": "/config",
   "description": "校验应用管理权限、接收地址和认证参数，将接入配置写入控制库；仅保存配置，不发起数据传输。",
   "parameters": [],
   "method": "POST",
@@ -20,9 +20,6 @@
   "responseBody": null
 }
 ================================
-// 接口：04.保存下发接入配置
-// 路由：POST /idaas/provision/save-config
-// 业务说明：校验应用管理权限、接收地址和认证参数，将接入配置写入控制库；仅保存配置，不发起数据传输。
 import db;
 import identityTransport;
 import cn.hutool.core.util.IdUtil;
@@ -34,6 +31,9 @@ import '@/idaas/audit' as audit;
 import identityRuntime;
 import request;
 import '@/idaas/api-call' as apiCall;
+
+// POST /idaas/provision/config。
+// 业务说明：校验应用管理权限、接收地址和认证参数，将接入配置写入控制库；仅保存配置，不发起数据传输。
 
 
 return identityRuntime.control(()=>apiCall(()=>{

@@ -31,7 +31,7 @@ export function ApplicationRuntimeConnection({ app }: { app: Application }) {
         <Modal title={app.bindingStatus === 'VERIFIED' ? '重新检查应用关联' : '检查并保存应用关联'} open={open} onCancel={() => setOpen(false)} okText="检查并保存" cancelText="取消" confirmLoading={busy} onOk={async () => {
             try {
                 const values = await form.validateFields();
-                await run(async () => { await foundationApi.write('/idaas/applications/runtime-binding', { id: app.id, version: app.version, ...values }); await refreshWorkspace(); setOpen(false); }, '应用关联已检查');
+                await run(async () => { await foundationApi.write('/idaas/applications/binding', { id: app.id, version: app.version, ...values }); await refreshWorkspace(); setOpen(false); }, '应用关联已检查');
             } catch (error) { message.error(formErrorText(error)); }
         }}>
             <Form size="small" form={form} layout="vertical" onFinishFailed={failure => message.error(formErrorText(failure))}>

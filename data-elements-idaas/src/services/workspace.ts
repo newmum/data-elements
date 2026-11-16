@@ -9,7 +9,7 @@ const listeners = new Set<() => void>();
 const sessionListeners = new Set<() => void>();
 const stateListeners = new Set<() => void>();
 const userOperationListeners = new Set<() => void>();
-const tablePaths: Partial<Record<EntityTable, string>> = { users: 'users', orgs: 'orgs', apps: 'applications', roles: 'roles', resources: 'resources', grants: 'grants', groups: 'permission-groups', legalEntities: 'public-entities' };
+const tablePaths: Partial<Record<EntityTable, string>> = { users: 'users', orgs: 'orgs', apps: 'applications', roles: 'roles', resources: 'resources', grants: 'grants', groups: 'permgroup', legalEntities: 'legal' };
 const mutationIds = new Map<string, string>();
 async function requestIdFor(value: unknown): Promise<{ key: string; requestId: string }> {
     const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(value)));
@@ -84,7 +84,7 @@ export async function loginTenants(): Promise<TenantOption[]> {
     return rows.map(row => ({ tenantId: String(row.tenantId || row.tid || row.id || ''), tenantName: row.tenantName || row.name || '', tenantCode: row.tenantCode })).filter(row => row.tenantId && row.tenantName);
 }
 export async function loginBrand(): Promise<Pick<Settings, 'title' | 'subtitle' | 'logoUrl'>> {
-    const value = await request<Pick<Settings, 'title' | 'subtitle' | 'logoUrl'>>('/idaas/auth/public-settings');
+    const value = await request<Pick<Settings, 'title' | 'subtitle' | 'logoUrl'>>('/idaas/auth/settings');
     return { ...value, title: normalizeSystemTitle(value.title), subtitle: normalizeSystemDescription(value.subtitle) };
 }
 function unavailable(): never { throw new DomainError('当前服务尚未开通此功能。', 'CAPABILITY_UNAVAILABLE'); }
@@ -159,7 +159,7 @@ export const api = {
     async save<K extends EntityTable>(table: K, record: EntityOf<K>, action = '保存'): Promise<string> {
         const catalog = table === 'catalog' ? record as Database['catalog'][number] : null;
         const directoryCatalog = catalog && ['line', 'dictionary', 'extension'].includes(catalog.category);
-        const path = catalog?.category === 'app-group' ? 'application-groups' : directoryCatalog ? catalog.category === 'extension' ? 'field-definitions' : 'dictionaries' : tablePaths[table];
+        const path = catalog?.category === 'app-group' ? 'appgroup' : directoryCatalog ? catalog.category === 'extension' ? 'field' : 'dictionaries' : tablePaths[table];
         const editableKey = catalog?.category === 'app-group' ? 'app-groups' : directoryCatalog ? 'directory' : table;
         if (!path || !session?.editableTables?.includes(editableKey)) return unavailable();
         const creating = !database[table].some(row => row.id === record.id);
@@ -180,7 +180,7 @@ export const api = {
         if (!session?.editableTables?.includes('users')) return unavailable();
         if (!entries.length || entries.length > 100 || new Set(entries.map(row => row.id)).size !== entries.length)
             throw new DomainError('每次请选择 1 至 100 个不同的用户。');
-        const result = await authenticated<{ count: number }>('/idaas/users/batch-disable', {
+        const result = await authenticated<{ count: number }>('/idaas/users/disable', {
             domain, entries, requestId: crypto.randomUUID(),
         });
         await refreshWorkspace();
@@ -212,7 +212,7 @@ export const api = {
     async remove<K extends EntityTable>(table: K, id: string): Promise<void> {
         const catalog = table === 'catalog' ? database.catalog.find(row => row.id === id) : null;
         const directoryCatalog = catalog && ['line', 'dictionary', 'extension'].includes(catalog.category);
-        const path = catalog?.category === 'app-group' ? 'application-groups' : directoryCatalog ? catalog.category === 'extension' ? 'field-definitions' : 'dictionaries' : tablePaths[table];
+        const path = catalog?.category === 'app-group' ? 'appgroup' : directoryCatalog ? catalog.category === 'extension' ? 'field' : 'dictionaries' : tablePaths[table];
         const editableKey = catalog?.category === 'app-group' ? 'app-groups' : directoryCatalog ? 'directory' : table;
         if (!path || !session?.editableTables?.includes(editableKey)) return unavailable();
         const value = database[table].find(row => row.id === id);
@@ -288,7 +288,7 @@ export const provisionApi = {
     itemPage:(id:string,query:string)=>authenticated<{list:ProvisionItem[];total:number}>(`/idaas/provision/tasks?id=${encodeURIComponent(id)}&kind=items&${query}`),
     objects: (query: { configId: string; kind: string; page: number; size: number; q?: string;sortField?:string;sortDir?:string }) => authenticated<{ list: ProvisionObject[]; total: number; page: number; size: number }>(
         `/idaas/provision/objects?${new URLSearchParams({ configId: query.configId, kind: query.kind, page: String(query.page), size: String(query.size), q: query.q || '', ...(query.sortField?{sortField:query.sortField,sortDir:query.sortDir||'asc'}:{}) })}`),
-    save: (values: Partial<ReceiverConfig> & { secret?: string }) => foundationApi.write('/idaas/provision/save-config', values),
+    save: (values: Partial<ReceiverConfig> & { secret?: string }) => foundationApi.write('/idaas/provision/config', values),
     async test(configId: string) { const result = await foundationApi.write<{ verified: boolean; message?: string }>('/idaas/provision/test', { configId }); if (!result.verified) throw new DomainError(result.message || '接收方的应用、实例或签名核验失败，请检查配置。'); return result; },
     create: (configId: string, requestId: string, kind?: string, selectedIds?: string[]) => authenticated<{ id: string }>('/idaas/provision/create', { configId, requestId, kind, selectedIds }),
     execute: (id: string) => foundationApi.write('/idaas/provision/execute', { id }),

@@ -20,9 +20,6 @@
   "responseBody": null
 }
 ================================
-// 接口：04.读取当前认证账号
-// 路由：GET /idaas/auth-account/me
-// 业务说明：核验统一认证会话，返回账号、绑定人员及可办理法人身份，不暴露安全凭据。
 import identityTransport;
 import db;
 import authSession;
@@ -38,6 +35,9 @@ import '@/idaas/auth-session-policy' as sessionPolicy;
 import identityRuntime;
 import request;
 import '@/idaas/api-call' as apiCall;
+
+// GET /idaas/identity/me。
+// 业务说明：核验统一认证会话，返回账号、绑定人员及可办理法人身份，不暴露安全凭据。
 
 
 return identityRuntime.control(()=>apiCall(()=>{

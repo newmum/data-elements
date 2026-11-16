@@ -4,7 +4,7 @@
   "name": "31.密码找回",
   "type": "api",
   "parentId": "1ae52a0ba8565e9d820f00dec5d199af",
-  "path": "/password-recovery",
+  "path": "/recovery",
   "createTime": 1791193400395,
   "updateTime": 1791193400395,
   "createBy": null,

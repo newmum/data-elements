@@ -20,9 +20,6 @@
   "responseBody": null
 }
 ================================
-// 接口：02.查询本人法人登记
-// 路由：GET /idaas/self-entities/mine
-// 业务说明：按当前认证账号查询其申请或可办理的法人资料和审核状态，仅返回本人可见记录。
 import db;
 import tableSort;
 import identityTransport;
@@ -34,6 +31,9 @@ import '@/idaas/audit' as audit;
 import identityRuntime;
 import request;
 import '@/idaas/api-call' as apiCall;
+
+// GET /idaas/self/mine。
+// 业务说明：按当前认证账号查询其申请或可办理的法人资料和审核状态，仅返回本人可见记录。
 
 
 return identityRuntime.control(()=>apiCall(()=>{

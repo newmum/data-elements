@@ -41,6 +41,7 @@ export async function installContract(page: Page) {
         let data: unknown;
         if (pathname.endsWith('/idaas/logs/query')) data = loggingQuery(new URL(route.request().url()).searchParams);
         else if (pathname.endsWith('/portal/sso/options')) data = [{ tenantId: session.tenantId, tenantName: session.tenantName }];
+        else if (pathname.endsWith('/idaas/auth/settings')) data = database.settings.workforce;
         else if (pathname.endsWith('/idaas/auth/login')) {
             const body = route.request().postDataJSON();
             expect(body.tenantId).toBeUndefined();
@@ -51,7 +52,7 @@ export async function installContract(page: Page) {
             data = params.has('table') ? tablePage(database, params, session.domain) : { session, database, capabilities: session.capabilities };
         }
         else if (pathname.endsWith('/idaas/auth/logout')) data = true;
-        else if (pathname.endsWith('/idaas/password-recovery/request')) {
+        else if (pathname.endsWith('/idaas/recovery/request')) {
             recoveryRequests.push(route.request().postDataJSON());
             data = { accepted: true, message: '申请已提交' };
         }
@@ -89,7 +90,7 @@ export async function installContract(page: Page) {
             const appId = new URL(route.request().url()).searchParams.get('appId');
             const params = new URL(route.request().url()).searchParams;
             const subjects = assignments.filter(item => item.app_id === appId);
-            if (params.get('summary') === 'true') data = { subjectCount: subjects.length, orgCount: 0 };
+            if (params.get('summary') === 'true') data = { subjects: subjects.length, orgs: 0 };
             else if (params.has('kind')) {
                 const list = params.get('kind') === 'subject' ? subjects : [];
                 const size = Number(params.get('size') || 20), page = Number(params.get('page') || 1);
@@ -132,7 +133,7 @@ export async function installContract(page: Page) {
             const task = provisionTasks.find(item => item.id === body.id);
             if (!task) return route.fulfill({ json: { code: 404, message: '任务不存在', data: null } });
             task.status = 'success'; task.items[0].status = 'success'; data = { status: 'success' };
-        } else if (pathname.endsWith('/idaas/provision/set-initial-password')) {
+        } else if (pathname.endsWith('/idaas/provision/password')) {
             const body = route.request().postDataJSON() as { taskId: string; subjectId: string; initialPassword: string };
             if (!provisionTasks.some(task => task.id === body.taskId && task.status === 'success') ||
                 !database.users.some(user => user.id === body.subjectId) || body.initialPassword.length < 6)
@@ -177,7 +178,7 @@ export async function installConsoleContract(page: Page, options: { publicAllowe
     await page.route('**/api/**', async route => {
         const path = new URL(route.request().url()).pathname;
         let data: unknown;
-        if (path.endsWith('/idaas/auth/public-settings')) data = database.settings.workforce;
+        if (path.endsWith('/idaas/auth/settings')) data = database.settings.workforce;
         else if (path.endsWith('/idaas/auth/login')) data = { token: 'console-contract-token', session };
         else if (path.endsWith('/idaas/session/me')) data = session;
         else if (path.endsWith('/idaas/workspace/bootstrap')) {
@@ -195,7 +196,7 @@ export async function installConsoleContract(page: Page, options: { publicAllowe
             session.domain = domain;
             data = bootstrap();
         } else if (path.endsWith('/idaas/auth/logout')) data = true;
-        else if (path.endsWith('/idaas/auth-accounts/list') || path.endsWith('/idaas/users/operations') || path.endsWith('/idaas/verifications/list')) data = [];
+        else if (path.endsWith('/idaas/accounts/list') || path.endsWith('/idaas/users/operations') || path.endsWith('/idaas/verifications/list')) data = [];
         else if (path.endsWith('/idaas/verifications/provider')) data = { status: 'UNCONFIGURED' };
         else if (path.endsWith('/idaas/logs/query')) data = loggingQuery(new URL(route.request().url()).searchParams);
         else if (path.endsWith('/idaas/audit/list')) data = { list: [], total: 0 };

@@ -19,7 +19,7 @@ class ApiReferencesTest(unittest.TestCase):
         self.assertIn('/ods/job/detail', [v for _, v in values])
 
     def test_ternary_question_mark_is_not_query_separator(self):
-        value = "/idaas/${isRole ? 'platform-roles' : 'operators'}/save?x=1"
+        value = "/idaas/${isRole ? 'adminrole' : 'operators'}/save?x=1"
         self.assertTrue(audit.template_matches('/idaas/operators/save', value, set()))
         self.assertFalse(audit.template_matches('/idaas/operators/remove', value, set()))
         self.assertFalse(audit.template_matches('/idaas/users/save', value, set()))

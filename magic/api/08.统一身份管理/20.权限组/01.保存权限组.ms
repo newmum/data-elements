@@ -20,9 +20,6 @@
   "responseBody": null
 }
 ================================
-// 接口：02.保存权限组
-// 路由：POST /idaas/permission-groups/save
-// 业务说明：校验请求字段、所属范围和版本；新建或更新权限组及必要关联记录，写入审计并返回保存结果。维护业务应用的权限组及成员关系，用于聚合可授权的人员范围。
 import db;
 import cn.hutool.core.util.IdUtil;
 import '@/idaas/guard' as guard;
@@ -34,6 +31,9 @@ import '@/idaas/rebuild-projections' as rebuild;
 import identityRuntime;
 import request;
 import '@/idaas/api-call' as apiCall;
+
+// POST /idaas/permgroup/save。
+// 业务说明：校验请求字段、所属范围和版本；新建或更新权限组及必要关联记录，写入审计并返回保存结果。维护业务应用的权限组及成员关系，用于聚合可授权的人员范围。
 
 
 return identityRuntime.control(()=>apiCall(()=>{

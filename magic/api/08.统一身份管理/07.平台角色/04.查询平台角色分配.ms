@@ -20,9 +20,6 @@
   "responseBody": null
 }
 ================================
-// 接口：05.查询平台角色分配
-// 路由：GET /idaas/platform-roles/assignments
-// 业务说明：读取平台角色与操作账号的分配及应用对象范围，按当前操作人的管理权限过滤；只读。
 import db;
 import '@/idaas/guard' as guard;
 import '@/idaas/mutate' as mutate;
@@ -32,8 +29,11 @@ import cn.hutool.core.util.IdUtil;
 import java.time.Instant;
 import identityRuntime;
 import '@/idaas/api-call' as apiCall;
-
 import request;
+
+// GET /idaas/adminrole/assignments。
+// 业务说明：读取平台角色与操作账号的分配及应用对象范围，按当前操作人的管理权限过滤；只读。
+
 
 return identityRuntime.control(()=>apiCall(()=>{
     var values=request.getValues('operatorId');

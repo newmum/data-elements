@@ -349,6 +349,24 @@ class DataAggTaskEnsureBatchMagicTest {
     }
 
     @Test
+    void convertsRegisteredEsHttpAddressAndCredentialsToNativeSourceConfiguration() throws Exception {
+        var fixture = Fixture.forCreation(1);
+        fixture.jdbc.update("update db_datasource_t set db_type='elasticsearch',pool_cfg=? where tid='source-db'", """
+                {"jdbcURL":"https://search.invalid:9243/","host":"search.invalid","port":9243,
+                 "username":"fixture","password":"fixture-password","database":"*-events"}
+                """);
+        assertInstanceOf(Map.class, fixture.run());
+        String dsl = fixture.jdbc.queryForObject("select dsl_json from nifi_pipeline_t", String.class);
+        var node = cn.hutool.json.JSONUtil.parseObj(dsl).getJSONArray("nodes").getJSONObject(0);
+        var configuration = node.getJSONObject("config");
+        assertEquals("source.elasticsearch", node.getStr("manifestKey"));
+        assertEquals("search.invalid:9243", configuration.getStr("nodes"));
+        assertEquals("https", configuration.getStr("protocol"));
+        assertEquals("BASIC", configuration.getStr("authMethod"));
+        assertEquals("person", configuration.getStr("defaultIndex"));
+    }
+
+    @Test
     void ftpSelectedFileIsResolvedOnceAndClientCannotOverrideItsManagedLocator() throws Exception {
         Fixture fixture = Fixture.forCreation(20);
         fixture.jdbc.update("update db_datasource_t set db_type='ftp',pool_cfg=? where tid='source-db'",

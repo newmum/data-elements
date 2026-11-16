@@ -28,7 +28,7 @@ export default function PasswordRecoveryRequests({ realm, domain, refreshKey = 0
         let active = true;
         setLoading(true);
         const params = new URLSearchParams(order.query);params.set('realm',realm);params.set('domain',domain);
-        void foundationApi.read<{ list: RecoveryRequest[]; total: number }>(`/idaas/password-recovery/requests?${params}`)
+        void foundationApi.read<{ list: RecoveryRequest[]; total: number }>(`/idaas/recovery/requests?${params}`)
             .then(result => { if (active) { setRows(result.list); setTotal(result.total); setError(''); } })
             .catch(failure => { if (active) setError(failure instanceof Error ? failure.message : '找回申请读取失败'); })
             .finally(() => { if (active) setLoading(false); });

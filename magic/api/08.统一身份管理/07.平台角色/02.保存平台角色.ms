@@ -20,9 +20,6 @@
   "responseBody": null
 }
 ================================
-// 接口：02.保存平台角色
-// 路由：POST /idaas/platform-roles/save
-// 业务说明：校验请求字段、所属范围和版本；新建或更新平台角色及必要关联记录，写入审计并返回保存结果。核验平台功能权限与对象范围；角色资源和分配范围不得超过当前操作人的可管理权限。
 import db;
 import '@/idaas/guard' as guard;
 import '@/idaas/mutate' as mutate;
@@ -32,6 +29,9 @@ import cn.hutool.core.util.IdUtil;
 import java.time.Instant;
 import identityRuntime;
 import '@/idaas/api-call' as apiCall;
+
+// POST /idaas/adminrole/save。
+// 业务说明：校验请求字段、所属范围和版本；新建或更新平台角色及必要关联记录，写入审计并返回保存结果。核验平台功能权限与对象范围；角色资源和分配范围不得超过当前操作人的可管理权限。
 
 
 return identityRuntime.control(()=>apiCall(()=>{

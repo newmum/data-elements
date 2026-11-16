@@ -9,7 +9,7 @@
   "lock": null,
   "createBy": null,
   "updateBy": null,
-  "path": "/push-portal-config",
+  "path": "/portal",
   "description": "用户显式发起后读取应用配置表的界面配置，核验运行绑定并调用租户接收端写入；返回每次下发结果，不后台轮询。",
   "parameters": [],
   "method": "POST",
@@ -20,9 +20,6 @@
   "responseBody": null
 }
 ================================
-// 接口：10.手动下发应用界面配置
-// 路由：POST /idaas/applications/push-portal-config
-// 业务说明：用户显式发起后读取应用配置表的界面配置，核验运行绑定并调用租户接收端写入；返回每次下发结果，不后台轮询。
 import db;
 import identityTransport;
 import cn.hutool.core.util.IdUtil;
@@ -33,6 +30,9 @@ import '@/idaas/mutate' as mutate;
 import '@/idaas/audit' as audit;
 import identityRuntime;
 import '@/idaas/api-call' as apiCall;
+
+// POST /idaas/applications/portal。
+// 业务说明：用户显式发起后读取应用配置表的界面配置，核验运行绑定并调用租户接收端写入；返回每次下发结果，不后台轮询。
 
 
 return identityRuntime.control(()=>apiCall(()=>{

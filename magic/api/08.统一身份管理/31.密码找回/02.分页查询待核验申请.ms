@@ -20,8 +20,6 @@
   "responseBody": null
 }
 ================================
-// 接口：分页查询待管理员核验的密码找回申请。
-// 路由：GET /idaas/password-recovery/requests
 import db;
 import identityRuntime;
 import tableSort;
@@ -29,6 +27,8 @@ import request;
 import java.lang.Long;
 import '@/idaas/api-call' as apiCall;
 import '@/idaas/guard' as guard;
+
+// GET /idaas/recovery/requests。 分页查询待核验申请。
 
 return identityRuntime.control(()=>apiCall(()=>{
     var param=(key,fallback)=>{

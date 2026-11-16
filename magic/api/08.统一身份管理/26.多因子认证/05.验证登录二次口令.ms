@@ -9,7 +9,7 @@
   "lock": null,
   "createBy": null,
   "updateBy": null,
-  "path": "/verify-login",
+  "path": "/verify",
   "description": "校验登录挑战、时间窗内的一次性口令和重放状态，成功后完成认证会话签发。",
   "parameters": [],
   "method": "POST",
@@ -20,9 +20,6 @@
   "responseBody": null
 }
 ================================
-// 接口：05.验证登录二次口令
-// 路由：POST /idaas/mfa/verify-login
-// 业务说明：校验登录挑战、时间窗内的一次性口令和重放状态，成功后完成认证会话签发。
 import db;
 import platformSession;
 import authSession;
@@ -40,6 +37,9 @@ import '@/idaas/auth-session-policy' as sessionPolicy;
 import identityRuntime;
 import request;
 import '@/idaas/api-call' as apiCall;
+
+// POST /idaas/mfa/verify。
+// 业务说明：校验登录挑战、时间窗内的一次性口令和重放状态，成功后完成认证会话签发。
 
 
 return identityRuntime.control(()=>apiCall(()=>{

@@ -20,9 +20,6 @@
   "responseBody": null
 }
 ================================
-// 接口：01.注册统一认证账号
-// 路由：POST /idaas/auth-account/register
-// 业务说明：校验注册策略、账号唯一性和密码强度，在独立认证账号表创建账号与安全记录；不创建平台操作账号或租户账号。
 import identityTransport;
 import db;
 import authSession;
@@ -38,6 +35,9 @@ import '@/idaas/auth-session-policy' as sessionPolicy;
 import identityRuntime;
 import request;
 import '@/idaas/api-call' as apiCall;
+
+// POST /idaas/identity/register。
+// 业务说明：校验注册策略、账号唯一性和密码强度，在独立认证账号表创建账号与安全记录；不创建平台操作账号或租户账号。
 
 
 return identityRuntime.control(()=>apiCall(()=>{

@@ -9,7 +9,7 @@
   "lock": null,
   "createBy": null,
   "updateBy": null,
-  "path": "/local-inventory",
+  "path": "/inventory",
   "method": "GET",
   "parameters": [],
   "options": [],
@@ -22,9 +22,6 @@
   "responseBodyDefinition": null
 }
 ================================
-// 接口：07.读取应用本地资料
-// 路由：GET /idaas/applications/local-inventory
-// 业务说明：通过已核验的运行绑定只读查询指定租户的人员、机构、角色、资源及授权现状；读取失败明确报错，不修改平台或租户数据。
 import db;
 import '@/idaas/guard' as guard;
 import '@/idaas/context' as context;
@@ -33,6 +30,9 @@ import identityRuntime;
 import request;
 import '@/idaas/local-inventory' as localInventory;
 import '@/idaas/api-call' as apiCall;
+
+// GET /idaas/applications/inventory。
+// 业务说明：通过已核验的运行绑定只读查询指定租户的人员、机构、角色、资源及授权现状；读取失败明确报错，不修改平台或租户数据。
 
 
 return identityRuntime.control(()=>apiCall(()=>{

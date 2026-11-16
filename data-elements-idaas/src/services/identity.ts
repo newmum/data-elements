@@ -20,19 +20,19 @@ export async function identityRequest<T>(path: string, body?: unknown): Promise<
 }
 export const identityApi = {
     requestRecovery: (username: string, realm: 'platform' | 'auth-account', domain: Domain) =>
-        request<{ accepted: boolean; message: string }>('/idaas/password-recovery/request', {
+        request<{ accepted: boolean; message: string }>('/idaas/recovery/request', {
             method: 'POST', body: { username, realm, domain },
         }),
     async login(username: string, password: string, domain: Domain) {
-        const value = await request<{ token?: string; profile?: IdentityProfile; mfaRequired?: boolean; challenge?: string }>('/idaas/auth-account/login', { method: 'POST', body: { username, password, domain } });
+        const value = await request<{ token?: string; profile?: IdentityProfile; mfaRequired?: boolean; challenge?: string }>('/idaas/identity/login', { method: 'POST', body: { username, password, domain } });
         if (value.token) retainIdentityToken(value.token);
         return value;
     },
-    register: (values: { username: string; name: string; password: string; phone?: string; email?: string; consent: boolean; requestId: string }) => request<{ id: string; subjectId: string; verificationStatus: string }>('/idaas/auth-account/register', { method: 'POST', body: { ...values, domain: 'public' } }),
-    me: () => identityRequest<IdentityProfile>('/idaas/auth-account/me'),
+    register: (values: { username: string; name: string; password: string; phone?: string; email?: string; consent: boolean; requestId: string }) => request<{ id: string; subjectId: string; verificationStatus: string }>('/idaas/identity/register', { method: 'POST', body: { ...values, domain: 'public' } }),
+    me: () => identityRequest<IdentityProfile>('/idaas/identity/me'),
     async logout() {
         const currentToken = identityToken;
-        const revocation = currentToken ? request('/idaas/auth-account/logout', { token: currentToken, method: 'POST', body: {} }) : Promise.resolve();
+        const revocation = currentToken ? request('/idaas/identity/logout', { token: currentToken, method: 'POST', body: {} }) : Promise.resolve();
         retainIdentityToken('');
         try { await revocation; }
         catch (error) {
@@ -40,9 +40,9 @@ export const identityApi = {
             throw error;
         }
     },
-    async password(oldPassword: string, password: string) { await identityRequest('/idaas/auth-account/password', { oldPassword, password }); retainIdentityToken(''); },
+    async password(oldPassword: string, password: string) { await identityRequest('/idaas/identity/password', { oldPassword, password }); retainIdentityToken(''); },
     async verify(challenge: string, code: string) {
-        const result = await request<{ token: string; realm?: string; session?: import('../domain/types').Session }>('/idaas/mfa/verify-login', { method: 'POST', body: { challenge, code } });
+        const result = await request<{ token: string; realm?: string; session?: import('../domain/types').Session }>('/idaas/mfa/verify', { method: 'POST', body: { challenge, code } });
         return result;
     },
 };

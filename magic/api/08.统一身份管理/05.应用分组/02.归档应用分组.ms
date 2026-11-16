@@ -20,9 +20,6 @@
   "responseBody": null
 }
 ================================
-// 接口：03.归档应用分组
-// 路由：POST /idaas/application-groups/remove
-// 业务说明：按标识加载应用分组并检查所属范围与版本；执行软删除或撤销关联，保留审计历史。只操作控制库的应用分组，并维护排序和软删除状态；关联应用仍按独立应用记录管理。
 import db;
 import '@/idaas/guard' as guard;
 import '@/idaas/mutate' as mutate;
@@ -30,6 +27,9 @@ import '@/idaas/audit' as audit;
 import cn.hutool.core.util.IdUtil;
 import identityRuntime;
 import '@/idaas/api-call' as apiCall;
+
+// POST /idaas/appgroup/remove。
+// 业务说明：按标识加载应用分组并检查所属范围与版本；执行软删除或撤销关联，保留审计历史。只操作控制库的应用分组，并维护排序和软删除状态；关联应用仍按独立应用记录管理。
 
 
 return identityRuntime.control(()=>apiCall(()=>{

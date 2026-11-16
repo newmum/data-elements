@@ -20,9 +20,6 @@
   "responseBody": null
 }
 ================================
-// 接口：02.配置应用认证协议
-// 路由：POST /idaas/protocol-config/configure
-// 业务说明：校验回调地址、客户端类型和应用权限，登记协议客户端并保存可选统一认证配置；不改变租户本地登录体系。
 import db;
 import identityProtocol;
 import identityTransport;
@@ -36,6 +33,9 @@ import '@/idaas/audit' as audit;
 import identityRuntime;
 import request;
 import '@/idaas/api-call' as apiCall;
+
+// POST /idaas/protocol/configure。
+// 业务说明：校验回调地址、客户端类型和应用权限，登记协议客户端并保存可选统一认证配置；不改变租户本地登录体系。
 
 
 return identityRuntime.control(()=>apiCall(()=>{

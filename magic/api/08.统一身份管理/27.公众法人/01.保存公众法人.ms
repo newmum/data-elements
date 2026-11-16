@@ -20,9 +20,6 @@
   "responseBody": null
 }
 ================================
-// 接口：02.保存公众法人
-// 路由：POST /idaas/public-entities/save
-// 业务说明：校验请求字段、所属范围和版本；新建或更新公众法人及必要关联记录，写入审计并返回保存结果。管理公众法人资料及法人账号成员关系；成员启用或撤销须核验当前办理身份。
 import db;
 import cn.hutool.core.util.IdUtil;
 import cn.hutool.json.JSONUtil;
@@ -33,6 +30,9 @@ import '@/idaas/time-window' as timeWindow;
 import identityRuntime;
 import request;
 import '@/idaas/api-call' as apiCall;
+
+// POST /idaas/legal/save。
+// 业务说明：校验请求字段、所属范围和版本；新建或更新公众法人及必要关联记录，写入审计并返回保存结果。管理公众法人资料及法人账号成员关系；成员启用或撤销须核验当前办理身份。
 
 
 return identityRuntime.control(()=>apiCall(()=>{

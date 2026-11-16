@@ -9,7 +9,7 @@
   "lock": null,
   "createBy": null,
   "updateBy": null,
-  "path": "/directory-compare",
+  "path": "/compare",
   "description": "用户手动触发租户与控制库的人员、机构、角色和资源定义比对，按应用与身份域列出仅存在一侧或字段不一致的资料；不自动同步。",
   "parameters": [],
   "method": "GET",
@@ -20,9 +20,6 @@
   "responseBody": null
 }
 ================================
-// 接口：08.比较应用目录差异
-// 路由：GET /idaas/applications/directory-compare
-// 业务说明：用户手动触发租户与控制库的人员、机构、角色和资源定义比对，按应用与身份域列出仅存在一侧或字段不一致的资料；不自动同步。
 import db;
 import cn.hutool.core.util.IdUtil;
 import cn.hutool.crypto.digest.DigestUtil;
@@ -34,6 +31,9 @@ import '@/idaas/audit' as audit;
 import identityRuntime;
 import request;
 import '@/idaas/api-call' as apiCall;
+
+// GET /idaas/applications/compare。
+// 业务说明：用户手动触发租户与控制库的人员、机构、角色和资源定义比对，按应用与身份域列出仅存在一侧或字段不一致的资料；不自动同步。
 
 
 var ids=request.getValues('appId');

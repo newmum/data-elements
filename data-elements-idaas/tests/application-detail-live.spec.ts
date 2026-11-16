@@ -60,10 +60,10 @@ test('真实应用资料同步仅在点击后读取差异，且不自动导入',
     await page.goto('/#/console/workforce/apps/2084109831682699264');
     await expect(page.getByRole('tab', { name: '资料同步' })).toBeVisible({ timeout: 60000 });
     let pulls = 0;
-    page.on('request', request => { if (request.url().includes('/idaas/applications/directory-pull')) pulls++; });
+    page.on('request', request => { if (request.url().includes('/idaas/applications/import')) pulls++; });
     await page.getByRole('tab', { name: '资料同步' }).click();
     await expect(page.getByText('点击“查看差异”读取当前租户与平台资料')).toBeVisible();
-    const compare = page.waitForResponse(response => response.url().includes('/idaas/applications/directory-compare'));
+    const compare = page.waitForResponse(response => response.url().includes('/idaas/applications/compare'));
     await page.getByRole('button', { name: '查看差异' }).click();
     expect((await (await compare).json()).code).toBe(0);
     await expect(page.getByText('租户人员 5')).toBeVisible();

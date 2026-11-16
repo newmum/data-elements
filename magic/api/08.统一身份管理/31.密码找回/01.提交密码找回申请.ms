@@ -20,13 +20,13 @@
   "responseBody": null
 }
 ================================
-// 接口：提交管理员核验的密码找回申请；统一回执不暴露账号是否存在。
-// 路由：POST /idaas/password-recovery/request
 import db;
 import identityRuntime;
 import request;
 import '@/idaas/api-call' as apiCall;
 import '@/idaas/audit' as audit;
+
+// POST /idaas/recovery/request。 提交密码找回申请。
 
 return identityRuntime.control(()=>apiCall(()=>{
     var p=body||{};

@@ -9,7 +9,7 @@
   "lock": null,
   "createBy": null,
   "updateBy": null,
-  "path": "/runtime-binding",
+  "path": "/binding",
   "description": "校验应用和运行租户标识、权限应用标识的关联，维护控制库运行绑定及核验状态；不创建租户本地账号。",
   "parameters": [],
   "method": "POST",
@@ -20,9 +20,6 @@
   "responseBody": null
 }
 ================================
-// 接口：06.保存应用运行绑定
-// 路由：POST /idaas/applications/runtime-binding
-// 业务说明：校验应用和运行租户标识、权限应用标识的关联，维护控制库运行绑定及核验状态；不创建租户本地账号。
 import db;
 import '@/idaas/rebuild-projections' as rebuild;
 import '@/idaas/guard' as guard;
@@ -33,6 +30,9 @@ import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.NumberUtil;
 import identityRuntime;
 import '@/idaas/api-call' as apiCall;
+
+// POST /idaas/applications/binding。
+// 业务说明：校验应用和运行租户标识、权限应用标识的关联，维护控制库运行绑定及核验状态；不创建租户本地账号。
 
 
 return identityRuntime.control(()=>apiCall(()=>{

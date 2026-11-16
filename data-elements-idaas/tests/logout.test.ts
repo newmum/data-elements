@@ -93,12 +93,12 @@ test('统一认证退出网络失败也立即清令牌，旧请求不会清除�
     let logoutToken = '';
     globalThis.fetch = async (input, options) => {
         const path = String(input);
-        if (path.endsWith('/auth-account/login')) return response({ token: `identity-token-${++loginCount}` });
-        if (path.endsWith('/auth-account/logout')) {
+        if (path.endsWith('/identity/login')) return response({ token: `identity-token-${++loginCount}` });
+        if (path.endsWith('/identity/logout')) {
             logoutToken = (options?.headers as Record<string, string>).token;
             return new Promise<Response>((_, reject) => { failLogout = reject; });
         }
-        if (path.endsWith('/auth-account/me')) return new Promise<Response>(resolve => { finishOldRead = resolve; });
+        if (path.endsWith('/identity/me')) return new Promise<Response>(resolve => { finishOldRead = resolve; });
         throw new Error(`Unexpected request: ${path}`);
     };
     await identity.identityApi.login('user', 'password', 'public');
@@ -118,7 +118,7 @@ test('统一认证退出网络失败也立即清令牌，旧请求不会清除�
 });
 
 test('已失效的退出令牌视为本地退出完成', async () => {
-    globalThis.fetch = async input => String(input).endsWith('/auth-account/logout')
+    globalThis.fetch = async input => String(input).endsWith('/identity/logout')
         ? response(null, 401, 401) : response({ token: 'expired-identity-token' });
     await identity.identityApi.login('user', 'password', 'public');
     await identity.identityApi.logout();

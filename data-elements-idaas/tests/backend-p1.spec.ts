@@ -102,12 +102,15 @@ test('P1 登录页舒展控件和工作区在 390/1440/1920px 可用', async ({ 
         await page.goto('/#/login');
         expect(await page.getByLabel('管理账号').locator('..').evaluate(element => element.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
         await login(page);
-        for (const path of ['overview', 'organization', 'apps', 'apps/a1', 'audit/operations', 'audit/logins']) {
+        for (const path of ['overview', 'organization', 'apps', 'apps/a1', 'audit/logs']) {
             await page.goto(`/#/console/workforce/${path}`);
             if (path === 'overview') await expect(page.getByText('身份用户总数', { exact: true })).toBeVisible();
             else if (path === 'apps') await expect(page.getByText('应用数量', { exact: true })).toBeVisible();
             else if (path === 'organization') await expect(page.locator('.organization-layout .table-card')).toBeVisible();
-            else await expect(page.locator('.page-heading, .application-detail-hero').first()).toBeVisible();
+            else if (path === 'audit/logs') {
+                await expect(page.getByRole('tab', { name: '登录日志', exact: true })).toBeVisible();
+                await expect(page.getByRole('tab', { name: '操作日志', exact: true })).toBeVisible();
+            } else await expect(page.locator('.application-detail-hero')).toBeVisible();
             expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width + 1);
         }
         await page.screenshot({ path: testInfo.outputPath(`p1-${width}.png`), fullPage: true });

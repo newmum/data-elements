@@ -9,7 +9,7 @@
   "lock": null,
   "createBy": null,
   "updateBy": null,
-  "path": "/public-settings",
+  "path": "/settings",
   "description": "匿名读取登录页可公开的品牌与安全设置，仅返回允许公开的字段，不暴露密钥及内部认证策略。",
   "parameters": [],
   "method": "GET",
@@ -20,26 +20,19 @@
   "responseBody": null
 }
 ================================
-// 接口：03.读取登录页设置
-// 路由：GET /idaas/auth/public-settings
-// 业务说明：匿名读取登录页可公开的品牌与安全设置，仅返回允许公开的字段，不暴露密钥及内部认证策略。
 import identityRuntime;
 import '@/idaas/api-call' as apiCall;
 import db;
 import cn.hutool.json.JSONUtil;
 
+// GET /idaas/auth/settings。
+// 业务说明：匿名读取登录页可公开的品牌与安全设置，仅返回允许公开的字段，不暴露密钥及内部认证策略。
+
 return identityRuntime.control(()=>apiCall(()=>{
-    var r=db.normal().selectOne("""
-select value_json
-from iam_setting_t
-where scope_kind='GLOBAL'
-    and scope_key='global'
-    and category='BRANDING'
-    and config_key='brand'
-    and is_del=0
-    and status='ACTIVE'
-""");
-    var v=r==null?{}:JSONUtil.parseObj(r.value_json);
+    var setting = db.normal().table('iam_setting_t').columns('value_json').where()
+        .eq('scope_kind', 'GLOBAL').eq('scope_key', 'global').eq('category', 'BRANDING')
+        .eq('config_key', 'brand').eq('is_del', 0).eq('status', 'ACTIVE').selectOne();
+    var v = setting == null ? {} : JSONUtil.parseObj(setting.value_json);
     return {
         title:v.title,subtitle:v.subtitle,logoUrl:v.logoUrl
     };

@@ -51,7 +51,7 @@ test('折叠侧栏保留可访问的切换入口', async ({ page }) => {
 const desktopGroup = (page: Page, group: string) => page.locator('.app-sider .ant-menu-submenu-title').filter({ hasText: group });
 const visibleSubmenu = (page: Page) => page.locator('.business-navigation-popup').filter({ visible: true });
 
-for (const group of ['应用管理', '组织与用户', '授权管理', '同步管理', '审计日志', '系统管理']) {
+for (const group of ['应用管理', '组织与用户', '授权管理', '同步管理', '系统管理']) {
     test(`折叠侧栏悬停${group}可进入二级功能`, async ({ page }, info) => {
         await page.setViewportSize({ width: 1039, height: 582 });
         await login(page);
@@ -80,6 +80,15 @@ for (const group of ['应用管理', '组织与用户', '授权管理', '同步�
         await expect(page.locator('.app-sider')).toHaveClass(/ant-layout-sider-collapsed/);
     });
 }
+
+test('折叠侧栏直接打开日志管理', async ({ page }) => {
+    await page.setViewportSize({ width: 1039, height: 582 });
+    await login(page);
+    await page.locator('.app-sider').getByRole('menuitem', { name: /日志管理/ }).click();
+    await expect(page).toHaveURL(/console\/workforce\/audit\/logs$/);
+    await expect(page.getByRole('tab', { name: '登录日志', exact: true })).toBeVisible();
+    await expect(visibleSubmenu(page)).toHaveCount(0);
+});
 
 test('折叠菜单点击、离开关闭与展开后当前分组保持一致', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 1000 });
@@ -137,7 +146,9 @@ test('公众身份折叠菜单可直接进入功能并保留组织菜单', async
     await expect(page.locator('.workspace-label, .domain-switch')).toHaveCount(0);
     await expect(desktopGroup(page, '组织与用户')).toBeVisible();
     await desktopGroup(page, '公众身份').hover();
-    await expect(visibleSubmenu(page).getByRole('menuitem')).toHaveCount(8);
+    await expect(visibleSubmenu(page).getByRole('menuitem')).toHaveText([
+        '公众总览', '自然人管理', '法人管理', '公众认证账号', '身份核验', '公众应用', '公众应用分组',
+    ]);
     await visibleSubmenu(page).getByRole('menuitem', { name: '法人管理', exact: true }).click();
     await expect(page).toHaveURL(/console\/public\/entities$/);
     await expect(page.getByRole('heading', { name: '法人管理', exact: true })).toBeVisible();
@@ -160,11 +171,12 @@ test('手机导航抽屉仍以内联菜单选择功能', async ({ page }) => {
 });
 
 // 拦截导航请求仅核对点击后的目标；不将替代响应作为目标系统运行证据。
+const centerPorts = { wanxiang: 3010, haitong: 3002, fengchi: 3020, qizhi: 3001, idaas: 3005 };
 for (const center of productGroups.flatMap(group => [...group.centers]).filter(center => center.id !== 'idaas')) {
     test(`点击${center.name}进入所属系统并使用当前标签页`, async ({ page, context }) => {
         await login(page);
-        const port = center.owner === 'wanxiang' ? 3010 : center.owner === 'haitong' ? 3002 : 3001;
-        const destination = `http://localhost:${port}/#${center.home}`;
+        const port = centerPorts[center.owner];
+        const destination = `http://localhost:${port}/${center.home ? '#' + center.home : ''}`;
         await context.route(`http://localhost:${port}/**`, route => route.fulfill({ contentType: 'text/html', body: '<p>navigation target</p>' }));
         await page.getByRole('button', { name: '切换工作中心' }).click();
         await page.getByRole('menuitem', { name: new RegExp(center.name) }).click();

@@ -9,7 +9,7 @@
   "lock": null,
   "createBy": null,
   "updateBy": null,
-  "path": "/save-provider",
+  "path": "/configure",
   "description": "校验提供方接口地址、验签材料与权限后保存配置；敏感材料加密存储。",
   "parameters": [],
   "method": "POST",
@@ -20,9 +20,6 @@
   "responseBody": null
 }
 ================================
-// 接口：02.保存实名核验服务配置
-// 路由：POST /idaas/verifications/save-provider
-// 业务说明：校验提供方接口地址、验签材料与权限后保存配置；敏感材料加密存储。
 import db;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -39,6 +36,9 @@ import '@/idaas/audit' as audit;
 import identityRuntime;
 import request;
 import '@/idaas/api-call' as apiCall;
+
+// POST /idaas/verifications/configure。
+// 业务说明：校验提供方接口地址、验签材料与权限后保存配置；敏感材料加密存储。
 
 
 return identityRuntime.control(()=>apiCall(()=>{

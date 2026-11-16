@@ -4,7 +4,7 @@
   "name": "27.公众法人",
   "type": "api",
   "parentId": "1ae52a0ba8565e9d820f00dec5d199af",
-  "path": "/public-entities",
+  "path": "/legal",
   "createTime": 1790635007936,
   "updateTime": 1790946845378,
   "createBy": null,

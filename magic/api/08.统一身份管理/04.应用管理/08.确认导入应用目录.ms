@@ -9,7 +9,7 @@
   "lock": null,
   "createBy": null,
   "updateBy": null,
-  "path": "/directory-pull",
+  "path": "/import",
   "description": "根据用户确认的差异项把租户人员、机构、角色和资源定义导入控制库，校验应用范围与版本并返回结果；不复制租户密码。",
   "parameters": [],
   "method": "POST",
@@ -20,9 +20,6 @@
   "responseBody": null
 }
 ================================
-// 接口：09.确认导入应用目录
-// 路由：POST /idaas/applications/directory-pull
-// 业务说明：根据用户确认的差异项把租户人员、机构、角色和资源定义导入控制库，校验应用范围与版本并返回结果；不复制租户密码。
 import db;
 import cn.hutool.core.util.IdUtil;
 import cn.hutool.crypto.digest.DigestUtil;
@@ -33,6 +30,9 @@ import '@/idaas/mutate' as mutate;
 import '@/idaas/audit' as audit;
 import identityRuntime;
 import '@/idaas/api-call' as apiCall;
+
+// POST /idaas/applications/import。
+// 业务说明：根据用户确认的差异项把租户人员、机构、角色和资源定义导入控制库，校验应用范围与版本并返回结果；不复制租户密码。
 
 
 return identityRuntime.control(()=>apiCall(()=>{

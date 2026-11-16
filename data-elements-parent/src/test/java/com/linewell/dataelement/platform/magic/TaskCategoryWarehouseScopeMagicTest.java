@@ -39,12 +39,14 @@ class TaskCategoryWarehouseScopeMagicTest {
         var counter = f.countQueries();
         var page = run(f, INGEST_PAGE, Map.of("viewLevel", "table", "pageSize", count,
                 "datasourceIds", List.of("files", "raw", "warehouse", "foreign")));
-        assertThat(page.get("total")).isEqualTo((long) count);
+        assertThat(((Number) page.get("total")).intValue()).isEqualTo(count);
         assertThat((List<?>) page.get("list")).hasSize(count)
                 .allSatisfy(row -> assertThat(((Map<?, ?>) row).get("datasourceId")).isEqualTo("files"));
         assertThat(counter.reads).isEqualTo(7);
+        counter.reads = 0;
         var tree = run(f, INGEST_TREE, Map.of());
         assertThat(((Number) tree.get("total")).intValue()).isEqualTo(count * 2 + 6);
+        assertThat(counter.reads).isEqualTo(3);
         assertThat(((Number) run(f, DISTRIBUTE_PAGE, Map.of("datasourceIds", List.of("files")))
                 .get("total")).intValue()).isEqualTo(count);
     }

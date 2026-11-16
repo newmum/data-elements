@@ -48,7 +48,7 @@ test('工作区最初为空，登录失败不会载入初始身份或伪造会�
 });
 test('密码找回申请以未登录请求提交，且只传账号、身份类型和身份域', async () => {
     globalThis.fetch = async (input, options) => {
-        assert.equal(input, '/api/idaas/password-recovery/request');
+        assert.equal(input, '/api/idaas/recovery/request');
         assert.equal((options?.headers as Record<string, string>).token, undefined);
         assert.deepEqual(JSON.parse(String(options?.body)), { username: 'manager', realm: 'platform', domain: 'workforce' });
         return response({ accepted: true, message: '申请已提交' });
@@ -99,7 +99,7 @@ test('20/100 项批量停用和 CSV 导入各只发送一次写请求与一次�
         globalThis.fetch = async (input, options) => {
             const path = String(input);
             paths.push(path);
-            if (path.endsWith('/users/batch-disable')) {
+            if (path.endsWith('/users/disable')) {
                 const body = JSON.parse(String(options?.body));
                 assert.equal(body.entries.length, size);
                 assert.equal(body.domain, 'workforce');
@@ -116,7 +116,7 @@ test('20/100 项批量停用和 CSV 导入各只发送一次写请求与一次�
         };
         assert.equal(await workspace.api.batchDisableUsers(Array.from({ length: size }, (_, i) => ({ id: `user-${i}`, version: 1 })), 'workforce'), size);
         assert.equal(await workspace.api.importUsers(Array.from({ length: size }, (_, i) => ({ name: `Person ${i}`, account: `user${i}`, email: '', phone: '', orgCode: 'ORG', post: '' })), 'workforce'), size);
-        assert.equal(paths.filter(path => path.endsWith('/users/batch-disable')).length, 1);
+        assert.equal(paths.filter(path => path.endsWith('/users/disable')).length, 1);
         assert.equal(paths.filter(path => path.endsWith('/users/import')).length, 1);
         assert.equal(paths.filter(path => path.endsWith('/workspace/bootstrap')).length, 2);
     }

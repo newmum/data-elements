@@ -12,9 +12,9 @@ import org.ssssssss.script.MagicScript;
 import org.ssssssss.script.MagicScriptContext;
 
 class ReportTextFormatsMagicTest {
-    @Test void storageClientHasAnOverallTimeoutShorterThanThePageRequest() throws Exception {
+    @Test void legacyStorageClientHasAnOverallTimeoutShorterThanThePageRequest() throws Exception {
         String source=ReportRegistrationMagicTest.source();
-        int start=source.indexOf("var storageHttpClient ="),end=source.indexOf("\n    var minioClient =",start);
+        int start=source.indexOf("var storageHttpClient ="),end=source.indexOf('\n',start);
         assertTrue(start>=0&&end>start);
         String script="import okhttp3.OkHttpClient\nimport java.time.Duration\n"+source.substring(start,end)
                 +"\nreturn {call:storageHttpClient.callTimeoutMillis(),connect:storageHttpClient.connectTimeoutMillis(),read:storageHttpClient.readTimeoutMillis()}";

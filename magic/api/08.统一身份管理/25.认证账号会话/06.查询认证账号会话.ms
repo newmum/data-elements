@@ -20,9 +20,6 @@
   "responseBody": null
 }
 ================================
-// 接口：06.查询认证账号会话
-// 路由：GET /idaas/auth-account/sessions
-// 业务说明：按当前账号列出有效统一认证会话及设备信息，过滤已撤销记录和敏感令牌。
 import identityTransport;
 import db;
 import authSession;
@@ -39,6 +36,9 @@ import identityRuntime;
 import request;
 import tableSort;
 import '@/idaas/api-call' as apiCall;
+
+// GET /idaas/identity/sessions。
+// 业务说明：按当前账号列出有效统一认证会话及设备信息，过滤已撤销记录和敏感令牌。
 
 
 return identityRuntime.control(()=>apiCall(()=>{

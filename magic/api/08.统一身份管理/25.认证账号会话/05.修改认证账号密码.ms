@@ -20,9 +20,6 @@
   "responseBody": null
 }
 ================================
-// 接口：05.修改认证账号密码
-// 路由：POST /idaas/auth-account/password
-// 业务说明：核验当前统一认证会话与原密码，执行密码策略并更新安全版本，使旧会话失效。
 import identityTransport;
 import db;
 import authSession;
@@ -38,6 +35,9 @@ import '@/idaas/auth-session-policy' as sessionPolicy;
 import identityRuntime;
 import request;
 import '@/idaas/api-call' as apiCall;
+
+// POST /idaas/identity/password。
+// 业务说明：核验当前统一认证会话与原密码，执行密码策略并更新安全版本，使旧会话失效。
 
 
 return identityRuntime.control(()=>apiCall(()=>{

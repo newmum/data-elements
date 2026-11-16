@@ -176,8 +176,7 @@ import systemConfig
 import response;
 import cn.hutool.core.util.StrUtil;
 import cn.dev33.satoken.stp.StpUtil
-import java.nio.charset.StandardCharsets
-import org.springframework.http.ContentDisposition
+import java.net.URLEncoder
 
 // POST /dst/file/manage 按当前租户上传、删除或流式读取业务附件。上传接收 multipart 文件，返回附件标识和下载地址。
 // upload-report 校验上传者与原件类型，通过 /common/reportoriginal 写磁盘；登记失败时清除此份原件。
@@ -237,8 +236,9 @@ if (action == 'download' || action == 'delete') {
         try { stream = reportOriginal('open', tenantId, existing.filePath, null) }
         catch (e) { exit 404, '上传原件不可读取' }
         try {
+            var filename = URLEncoder.encode(existing.fileName, 'UTF-8').replace('+', '%20')
             response.setHeader('Content-Type', 'application/octet-stream')
-            response.setHeader('Content-Disposition', ContentDisposition.attachment().filename(existing.fileName, StandardCharsets.UTF_8).toString())
+            response.setHeader('Content-Disposition', "attachment; filename*=UTF-8''" + filename)
             stream.transferTo(response.getOutputStream())
         } finally { stream.close() }
         return response.end()

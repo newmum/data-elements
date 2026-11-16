@@ -20,12 +20,14 @@
   "responseBody": null
 }
 ================================
-// 先撤销当前统一认证会话；协议会话撤销与审计故障不阻止本地退出。
 import db;
 import authSession;
 import auditEvents;
 import identityRuntime;
 import log;
+
+// POST /idaas/identity/logout。 退出统一认证会话。
+// 先撤销当前统一认证会话；协议会话撤销与审计故障不阻止本地退出。
 return identityRuntime.control(()=>{
     if(!authSession.isLogin()){return {loggedOut:true};}
     var id=authSession.id();

@@ -20,9 +20,6 @@
   "responseBody": null
 }
 ================================
-// 接口：06.分配平台角色与范围
-// 路由：POST /idaas/platform-roles/assign
-// 业务说明：逐项核验被授予的功能及对象范围不超过当前操作人权限，更新平台角色分配并记录审计。
 import db;
 import '@/idaas/guard' as guard;
 import '@/idaas/mutate' as mutate;
@@ -32,6 +29,9 @@ import cn.hutool.core.util.IdUtil;
 import java.time.Instant;
 import identityRuntime;
 import '@/idaas/api-call' as apiCall;
+
+// POST /idaas/adminrole/assign。
+// 业务说明：逐项核验被授予的功能及对象范围不超过当前操作人权限，更新平台角色分配并记录审计。
 
 
 return identityRuntime.control(()=>apiCall(()=>{

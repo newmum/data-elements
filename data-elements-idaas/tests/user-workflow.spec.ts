@@ -1,5 +1,10 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { installContract, login } from './helpers/backend-contract';
+
+async function selectReceiver(page: Page, drawer: Locator, name: string) {
+    await drawer.getByLabel('接收配置').click();
+    await page.locator('.ant-select-dropdown:visible').getByText(name, { exact: true }).click();
+}
 
 for (const count of [20, 100]) test(`已有应用独立账号可下发，${count}条分配只读取一次`, async ({ page }) => {
     const fixture = await installContract(page);
@@ -25,9 +30,7 @@ for (const count of [20, 100]) test(`已有应用独立账号可下发，${count
     await drawer.getByRole('checkbox', { name: '保存后立即下发此用户' }).check();
     await drawer.getByLabel('下发应用').click();
     await page.locator('.ant-select-dropdown:visible').getByText(fixture.database.apps.find(app => app.id === 'a1')!.name, { exact: true }).click();
-    await drawer.getByLabel('接收配置').click();
-    await drawer.getByLabel('接收配置').press('ArrowDown');
-    await drawer.getByLabel('接收配置').press('Enter');
+    await selectReceiver(page, drawer, '业务接收端');
     await drawer.getByRole('button', { name: /保\s*存/ }).click();
     await expect(drawer).toHaveCount(0);
     expect(reads).toBe(1);
@@ -62,9 +65,7 @@ test('新建失败后修改账号，更新未确认分配并完成下发，不�
     await drawer.getByRole('checkbox', { name: '保存后立即下发此用户' }).check();
     await drawer.getByLabel('下发应用').click();
     await page.locator('.ant-select-dropdown:visible').getByText(fixture.database.apps.find(app => app.id === 'a1')!.name, { exact: true }).click();
-    await drawer.getByLabel('接收配置').click();
-    await drawer.getByLabel('接收配置').press('ArrowDown');
-    await drawer.getByLabel('接收配置').press('Enter');
+    await selectReceiver(page, drawer, '业务接收端');
     await drawer.getByLabel('初始密码', { exact: true }).fill('ContractUser#2026');
     await drawer.getByLabel('确认初始密码').fill('ContractUser#2026');
     await drawer.getByRole('button', { name: /保\s*存/ }).click();
@@ -118,9 +119,7 @@ test('新建用户时预览角色权限、授权并明确下发同一用户', as
     await page.screenshot({ path: testInfo.outputPath('user-grant-error-toast.png') });
     await drawer.getByLabel('授权原因').fill('新用户开通公安元数据业务');
     await drawer.getByRole('checkbox', { name: '保存后立即下发此用户' }).check();
-    await drawer.getByLabel('接收配置').click();
-    await drawer.getByLabel('接收配置').press('ArrowDown');
-    await drawer.getByLabel('接收配置').press('Enter');
+    await selectReceiver(page, drawer, '公安元数据管理平台');
     await drawer.getByLabel('初始密码', { exact: true }).fill('NewUser#2026');
     await drawer.getByLabel('确认初始密码').fill('NewUser#2026');
     await expect(drawer.getByRole('checkbox', { name: '同时添加应用授权' })).toBeChecked();
@@ -242,9 +241,7 @@ test('接收端冲突时在页面顶部提示任务的具体原因', async ({ pa
     await drawer.getByLabel('应用角色').press('Enter');
     await drawer.getByLabel('授权原因').fill('测试接收端冲突提示');
     await drawer.getByRole('checkbox', { name: '保存后立即下发此用户' }).check();
-    await drawer.getByLabel('接收配置').click();
-    await drawer.getByLabel('接收配置').press('ArrowDown');
-    await drawer.getByLabel('接收配置').press('Enter');
+    await selectReceiver(page, drawer, '公安元数据管理平台');
     await drawer.getByRole('button', { name: /保\s*存/ }).click();
     await expect(page.getByRole('alert').filter({ hasText: '接收实例或本地映射不一致' })).toBeVisible({ timeout: 30000 });
     await expect(drawer).toBeVisible();

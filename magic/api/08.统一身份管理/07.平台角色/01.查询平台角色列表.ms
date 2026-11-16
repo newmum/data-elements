@@ -20,9 +20,6 @@
   "responseBody": null
 }
 ================================
-// 接口：01.查询平台角色列表
-// 路由：GET /idaas/platform-roles/list
-// 业务说明：读取符合请求筛选条件的平台角色，应用权限及身份域过滤后返回可展示字段；不发生写入。核验平台功能权限与对象范围；角色资源和分配范围不得超过当前操作人的可管理权限。
 import db;
 import '@/idaas/guard' as guard;
 import '@/idaas/mutate' as mutate;
@@ -34,6 +31,9 @@ import identityRuntime;
 import tableSort;
 import request;
 import '@/idaas/api-call' as apiCall;
+
+// GET /idaas/adminrole/list。
+// 业务说明：读取符合请求筛选条件的平台角色，应用权限及身份域过滤后返回可展示字段；不发生写入。核验平台功能权限与对象范围；角色资源和分配范围不得超过当前操作人的可管理权限。
 
 
 return identityRuntime.control(()=>apiCall(()=>{

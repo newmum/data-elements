@@ -43,7 +43,7 @@ export function useLocalInventory(appId: string, domain: Domain, enabled: boolea
         const request = ++requestNumber.current;
         setLoading(true);
         try {
-            const result = await foundationApi.read<LocalInventory>(`/idaas/applications/local-inventory?appId=${encodeURIComponent(appId)}&domain=${domain}&summary=1`);
+            const result = await foundationApi.read<LocalInventory>(`/idaas/applications/inventory?appId=${encodeURIComponent(appId)}&domain=${domain}&summary=1`);
             if (currentKey.current === key && request === requestNumber.current) { setValue({ key, inventory: result }); setError(''); }
         } catch (cause) {
             if (currentKey.current === key && request === requestNumber.current) setError(cause instanceof Error ? cause.message : '本地资料读取失败');
@@ -67,11 +67,11 @@ export function ApplicationLocalInventory({ inventory, loading: parentLoading, e
     const [rows,setRows]=useState<any[]>([]),[total,setTotal]=useState(0),[pending,setPending]=useState(false),[failure,setFailure]=useState('');
     const load=useCallback(async()=>{
         setPending(true);
-        try { const data=await foundationApi.read<{available:boolean;list?:any[];total?:number}>(`/idaas/applications/local-inventory?appId=${encodeURIComponent(appId)}&domain=${domain}&kind=${kind}&${order.query}`);setRows(data.list||[]);setTotal(data.total||0);setFailure(''); }
+        try { const data=await foundationApi.read<{available:boolean;list?:any[];total?:number}>(`/idaas/applications/inventory?appId=${encodeURIComponent(appId)}&domain=${domain}&kind=${kind}&${order.query}`);setRows(data.list||[]);setTotal(data.total||0);setFailure(''); }
         catch(cause){setFailure(cause instanceof Error?cause.message:'本地资料读取失败');}
         finally{setPending(false);}
     },[appId,domain,kind,order.query]);
-    useEffect(()=>{let active=true;setPending(true);foundationApi.read<{list?:any[];total?:number}>(`/idaas/applications/local-inventory?appId=${encodeURIComponent(appId)}&domain=${domain}&kind=${kind}&${order.query}`).then(data=>{if(active){setRows(data.list||[]);setTotal(data.total||0);setFailure('');}}).catch(cause=>{if(active)setFailure(cause instanceof Error?cause.message:'本地资料读取失败');}).finally(()=>{if(active)setPending(false);});return()=>{active=false;};},[appId,domain,kind,order.query]);
+    useEffect(()=>{let active=true;setPending(true);foundationApi.read<{list?:any[];total?:number}>(`/idaas/applications/inventory?appId=${encodeURIComponent(appId)}&domain=${domain}&kind=${kind}&${order.query}`).then(data=>{if(active){setRows(data.list||[]);setTotal(data.total||0);setFailure('');}}).catch(cause=>{if(active)setFailure(cause instanceof Error?cause.message:'本地资料读取失败');}).finally(()=>{if(active)setPending(false);});return()=>{active=false;};},[appId,domain,kind,order.query]);
     const loading=parentLoading||pending,error=failure||parentError;
     const actions=<Button icon={<ReloadOutlined/>} loading={loading} onClick={()=>{onLoad();void load();}}>刷新列表</Button>;
     const tableProps={dataSource:rows,pagination:order.pagination(total),onChange:order.onChange};

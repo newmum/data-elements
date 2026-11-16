@@ -20,9 +20,6 @@
   "responseBody": null
 }
 ================================
-// 接口：05.配置应用联邦认证
-// 路由：POST /idaas/protocol-config/federation
-// 业务说明：校验指定应用的联邦认证参数及回调白名单，保存可选统一认证开关与映射配置。
 import db;
 import identityProtocol;
 import identityTransport;
@@ -36,6 +33,9 @@ import '@/idaas/audit' as audit;
 import identityRuntime;
 import request;
 import '@/idaas/api-call' as apiCall;
+
+// POST /idaas/protocol/federation。
+// 业务说明：校验指定应用的联邦认证参数及回调白名单，保存可选统一认证开关与映射配置。
 
 
 return identityRuntime.control(()=>apiCall(()=>{

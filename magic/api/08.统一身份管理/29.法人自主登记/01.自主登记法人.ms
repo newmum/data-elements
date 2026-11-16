@@ -20,9 +20,6 @@
   "responseBody": null
 }
 ================================
-// 接口：01.自主登记法人
-// 路由：POST /idaas/self-entities/register
-// 业务说明：校验当前认证账号及法人登记资料，创建待核验法人和申请人与法人的成员关系。
 import db;
 import identityTransport;
 import cn.hutool.core.util.IdUtil;
@@ -33,6 +30,9 @@ import '@/idaas/audit' as audit;
 import identityRuntime;
 import request;
 import '@/idaas/api-call' as apiCall;
+
+// POST /idaas/self/register。
+// 业务说明：校验当前认证账号及法人登记资料，创建待核验法人和申请人与法人的成员关系。
 
 
 return identityRuntime.control(()=>apiCall(()=>{

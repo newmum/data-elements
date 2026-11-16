@@ -82,7 +82,7 @@ export default function Applications({ domain }: {
                 if (!active) break;
                 try {
                     const query = new URLSearchParams({ appIds: batch.join(','), domain, summary: '1' });
-                    const response = await foundationApi.read<{ items: LocalInventorySummary[] }>(`/idaas/applications/local-inventory?${query}`);
+                    const response = await foundationApi.read<{ items: LocalInventorySummary[] }>(`/idaas/applications/inventory?${query}`);
                     if (!Array.isArray(response?.items)) throw new Error('本地应用汇总返回格式不正确');
                     const expected = new Set(batch);
                     const byId = new Map<string, LocalInventorySummary>();

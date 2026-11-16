@@ -188,7 +188,7 @@ export default function UserEditor({ open, user, initial, fields, domain, onClos
             }
             if (!user && state.credentialDoneFor !== configId) {
                 try {
-                    await foundationApi.write('/idaas/provision/set-initial-password', {
+                    await foundationApi.write('/idaas/provision/password', {
                         taskId: state.taskId, subjectId: state.userId, initialPassword,
                     });
                     state.credentialDoneFor = configId;

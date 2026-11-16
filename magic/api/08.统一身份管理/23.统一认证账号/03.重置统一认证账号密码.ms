@@ -20,9 +20,6 @@
   "responseBody": null
 }
 ================================
-// 接口：04.重置统一认证账号密码
-// 路由：POST /idaas/auth-accounts/reset
-// 业务说明：校验统一认证账号及管理权限，按密码策略更新独立凭据并废止旧会话，不影响平台或租户本地账号。
 import db;
 import authSession;
 import iamSecurity;
@@ -34,6 +31,9 @@ import '@/idaas/password-policy' as passwordPolicy;
 import identityRuntime;
 import request;
 import '@/idaas/api-call' as apiCall;
+
+// POST /idaas/accounts/reset。
+// 业务说明：校验统一认证账号及管理权限，按密码策略更新独立凭据并废止旧会话，不影响平台或租户本地账号。
 
 
 return identityRuntime.control(()=>apiCall(()=>{
