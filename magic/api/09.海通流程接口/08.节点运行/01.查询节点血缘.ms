@@ -181,7 +181,8 @@ try {
     try {
         // 本次查询和清理共用一次节点绑定，轮询及候选遍历期间不再查询节点配置。
         var searchDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
-        runtime = nifi.bindRuntimeNode()
+        var nodeId = mapping?.runtimeNodeId()
+        runtime = nodeId == null ? nifi.bindRuntimeNode() : nifi.bindAssignedNode(nodeId)
         var events = []
         for (processorId in processorIds) {
             if (System.nanoTime() >= searchDeadline) {

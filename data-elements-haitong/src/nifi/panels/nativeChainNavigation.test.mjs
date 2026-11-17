@@ -81,6 +81,16 @@ test('standalone details uses the configured HTTPS NiFi path and the resolved pr
   ]);
 });
 
+test('the deployed node link takes precedence over the standalone default NiFi address', async () => {
+  const url = 'https://assigned-nifi.example/nifi/#/process-groups/group-p1';
+  const { run, events } = nativeDetailsHandler({
+    deployment: { tenantId: 'validation-tenant', appId: 'validation-app', nifiUiUrl: 'https://default-nifi.example/nifi/' },
+    resolveUiLink: async id => ({ ...nativeUiTarget(id), url, directNode: true, reusesBrowserSession: false }),
+  });
+  await run();
+  assert.deepEqual(events.slice(2), [['request', 'p1'], ['navigate', url], ['checking', false]]);
+});
+
 test('details never falls back to another deployed task when the selected task cannot be opened', async () => {
   for (const overrides of [{ canOpenNative: false }, { currentPipelineId: null }, { isCurrentSession: () => false }]) {
     const { run, events } = nativeDetailsHandler(overrides);

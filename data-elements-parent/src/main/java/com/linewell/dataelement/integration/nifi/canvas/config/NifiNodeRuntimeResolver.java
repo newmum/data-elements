@@ -58,6 +58,22 @@ public class NifiNodeRuntimeResolver {
         return configuredNodeById(nodeId).runtimeNode().requireValidConnection();
     }
 
+    public RuntimeNode resolveAssignedNode(String nodeId) {
+        if (!StringUtils.hasText(TenantContext.getTenantId()) || TenantContext.usesControlDatabase() || TenantContext.isIgnored()) {
+            throw new IllegalStateException("接入节点必须在当前行业租户中解析");
+        }
+        ConfiguredNode configured;
+        try {
+            configured = configuredNodeById(nodeId);
+        } catch (IllegalArgumentException missing) {
+            throw new IllegalStateException("任务绑定的数据接入节点不存在或不属于当前租户", missing);
+        }
+        if (!configured.enabled()) {
+            throw new IllegalStateException("任务绑定的数据接入节点已停用，请在节点管理中启用该节点");
+        }
+        return configured.runtimeNode().requireValidConnection();
+    }
+
     /** Keeps the configuration revision used by a manual probe together with the resolved endpoint. */
     public ConfiguredNode configuredNodeById(String nodeId) {
         String tenantId = TenantContext.getTenantId();
@@ -70,7 +86,7 @@ public class NifiNodeRuntimeResolver {
         JdbcTemplate jdbc = new JdbcTemplate(tenantDataSourceRegistry.dataSourceForTenant(tenantId));
         List<Map<String, Object>> rows = jdbc.queryForList("""
                 select tid, node_code, base_url, root_process_group_id,
-                       auth_username, auth_password, insecure_tls, jdbc_driver_locations, updated_time
+                       auth_username, auth_password, insecure_tls, jdbc_driver_locations, updated_time, enabled
                   from nifi_node_t
                  where tenant_id = ? and tid = ? and ifnull(is_del, 0) = 0
                  limit 1
@@ -79,7 +95,9 @@ public class NifiNodeRuntimeResolver {
             throw new IllegalArgumentException("数据同步节点不存在或不属于当前租户");
         }
         Map<String, Object> row = rows.getFirst();
-        return new ConfiguredNode(toRuntimeNode(tenantId, row), connectionRevision(row.get("updated_time")));
+        Object enabled = row.get("enabled");
+        return new ConfiguredNode(toRuntimeNode(tenantId, row), connectionRevision(row.get("updated_time")),
+                Boolean.TRUE.equals(enabled) || "1".equals(text(enabled)));
     }
 
     private static String connectionRevision(Object updatedTime) {
@@ -89,7 +107,11 @@ public class NifiNodeRuntimeResolver {
         return text(updatedTime).replace(' ', 'T');
     }
 
-    public record ConfiguredNode(RuntimeNode runtimeNode, String revision) {}
+    public record ConfiguredNode(RuntimeNode runtimeNode, String revision, boolean enabled) {
+        public ConfiguredNode(RuntimeNode runtimeNode, String revision) {
+            this(runtimeNode, revision, true);
+        }
+    }
 
     private RuntimeNode toRuntimeNode(String tenantId, Map<String, Object> row) {
         return new RuntimeNode(
@@ -143,7 +165,7 @@ public class NifiNodeRuntimeResolver {
 
         public RuntimeNode requireValidConnection() {
             if (!StringUtils.hasText(code) || !StringUtils.hasText(baseUrl)) {
-                throw new IllegalStateException("默认 NiFi 节点缺少节点编码或发布地址，请在节点管理中补全");
+                throw new IllegalStateException("NiFi 节点缺少节点编码或发布地址，请在节点管理中补全");
             }
             if (!isAnonymousHttp() && (!StringUtils.hasText(username) || !StringUtils.hasText(password))) {
                 throw new IllegalStateException("NiFi 节点缺少认证信息，仅 HTTP 节点可同时留空用户名和密码");

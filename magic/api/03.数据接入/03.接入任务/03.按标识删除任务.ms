@@ -23,6 +23,7 @@
 }
 ================================
 import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient as nifiClient
+import jsons
 import log
 import tenantRuntime
 import auditEvents
@@ -70,6 +71,11 @@ if (body?.dryRun == true) {
 }
 
 // 任务和流程的生命周期与监控历史保留期限独立。
+var pipelineId = text(task.pipelineId || task.pipeline_id)
+var pipeline = pipelineId == '' ? null : db.table('nifi_pipeline_t').where()
+    .eq('id', pipelineId).eq('tenant_id', tenantId).eq('is_del', 0).selectOne()
+var mappingJson = text(pipeline?.nodeMappingJson || pipeline?.node_mapping_json)
+var nodeId = mappingJson == '' ? '' : text(jsons.toJSONObject(mappingJson)?.runtimeNodeId)
 var now = new Date()
 var deletedTaskCount = db.table('data_access_agg_task_t').where().eq('tid', tid).eq('tenant_id', tenantId).eq('is_del', 0)
     .update({is_del: 1, task_status: 0, updated_time: now})
@@ -104,10 +110,14 @@ if (task.dataCatalogId != null && task.dataCatalogId != '') {
 }
 
 if (task.processGroupId != null && task.processGroupId != '') {
+    var runtime = null
     try {
+        if (nodeId != '') { runtime = nifiClient.bindAssignedNode(nodeId) }
         nifiClient.cleanupProcessGroup(task.processGroupId)
     } catch (e) {
         log.warn('NiFi进程组清理失败, processGroupId={}, message={}', task.processGroupId, e.message)
+    } finally {
+        if (runtime != null) { runtime.close() }
     }
 }
 

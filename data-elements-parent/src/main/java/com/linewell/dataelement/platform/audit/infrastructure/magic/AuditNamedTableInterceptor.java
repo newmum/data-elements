@@ -1,5 +1,6 @@
 package com.linewell.dataelement.platform.audit.infrastructure.magic;
 
+import cn.dev33.satoken.exception.SaTokenContextException;
 import cn.dev33.satoken.stp.StpUtil;
 import java.time.LocalDateTime;
 import org.springframework.stereotype.Component;
@@ -48,10 +49,13 @@ public class AuditNamedTableInterceptor implements NamedTableInterceptor {
     }
 
     private String currentActor() {
-        if (!StpUtil.isLogin()) {
+        Object loginId;
+        try {
+            loginId = StpUtil.getLoginIdDefaultNull();
+        } catch (SaTokenContextException unavailable) {
+            // Background writes still receive audit timestamps when no request session is bound.
             return null;
         }
-        Object loginId = StpUtil.getLoginId();
         if (loginId == null) {
             return null;
         }

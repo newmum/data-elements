@@ -93,6 +93,7 @@ return respond(rootCause => {
         if (saved == null) {
             return ResponseEntity.notFound().build()
         }
+        var nodeId = saved.nodeMapping()?.runtimeNodeId()
         var discardQueueFor = options?.discardQueueFor
         if (discardQueueFor != null && (options?.forceRebuild != true || options?.startAfterDeploy == true
             || options?.preserveExisting == true || discardQueueFor != saved.nifiProcessGroupId())) {
@@ -189,7 +190,7 @@ return respond(rootCause => {
             var pending = {groupId: null}
             var runtime = null
             try {
-                runtime = nifi.bindRuntimeNode()
+                runtime = nodeId == null ? nifi.bindRuntimeNode() : nifi.bindAssignedNode(nodeId)
                 // 模板只初始化一次增量字段。候选编译不得回写用户手工选择。
                 var independentSources = ['source.api', 'source.ftp', 'source.sftp', 'source.kafka', 'source.minio',
                     'source.hdfs', 'source.hbase', 'source.elasticsearch', 'source.iotdb']
@@ -250,7 +251,9 @@ return respond(rootCause => {
         errorStore.replacePhase(pipelineId, ErrorPhase.RUNTIME, [])
         setStatus(PipelineStatus.DEPLOYING)
         var design = saved
+        var runtime = null
         try {
+            if (nodeId != null) { runtime = nifi.bindAssignedNode(nodeId) }
             tasks.ensureCatalogAccessTask(options?.catalogTid, design)
             var bound = mappingBinder.bind(design)
             if (bound != design) {
@@ -298,197 +301,191 @@ return respond(rootCause => {
                 return ResponseEntity.ok(reuse)
             }
 
-            var runtime = nifi.bindRuntimeNode()
-            try {
-                var preserveOld = () => ({previousGraphRetained: true})
-                if (!hiveTarget) {
-                    var error = preflight(() => compiler.preflightSqlRecordWriter(design), 'NIFI_SQL_RECORD_WRITER_UNAVAILABLE',
-                        'SQL 采集 Writer 核验失败', '请核对当前 NiFi 根作用域已启用 PUBLIC-WRITER-JSON-TIME_FORMAT。', preserveOld())
-                    if (error != null) {
-                        return error
-                    }
-                }
-                var checks = [
-                    {run: () => compiler.preflightSchedules(design), code: 'SCHEDULE_PREFLIGHT_FAILED', message: '调度配置发布前检查失败',
-                        hint: '请先保存任务，并核对 NiFi 时区；旧流程已保留。'},
-                    {run: () => compiler.preflightSources(design), code: 'SOURCE_FETCH_PREFLIGHT_FAILED', message: '来源时间分片发布前检查失败',
-                        hint: '请核对登记时间戳字段与 GenerateDateTableFetch 扩展；旧流程已保留。'},
-                    {run: () => compiler.preflightWriters(design), code: 'JDBC_WRITER_PREFLIGHT_FAILED', message: '目标表写入组件发布前检查失败',
-                        hint: '请核对各 NiFi 节点已安装的 LinewellPutDatabaseRecord 扩展；系统自动选择最高已注册版本，旧流程已保留。'}
-                ]
-                var javaMapping = DslHasher.usesJavaMapping(design.dsl())
-                if (javaMapping) {
-                    checks.add({run: () => compiler.preflightMapping(design), code: 'MAPPING_PREFLIGHT_FAILED', message: '字段映射发布前检查失败',
-                        hint: '请根据详情核对字段映射配置、扩展版本及依赖服务；旧流程已保留。'})
-                }
-                for (check in checks) {
-                    var error = preflight(check.run, check.code, check.message, check.hint, preserveOld())
-                    if (error != null) {
-                        return error
-                    }
-                }
-
-                if (javaMapping || hivePartition || hiveMerge || discardQueueFor != null) {
-                    var staged = {groupId: null}
-                    var committed = false
-                    var previousStopped = false
-                    var stateIds = new LinkedHashSet()
-                    var hasState = processor => {
-                        var state = nifi.get('/processors/' + processor + '/state', JsonNode).path('componentState')
-                        return !state.path('localState').path('state').isEmpty() || !state.path('clusterState').path('state').isEmpty()
-                    }
-                    try {
-                        // 编译前检查全部旧组队列与原生来源状态，阻止重建导致已采集记录或水位丢失。
-                        for (groupId in layout.previousIds()) {
-                            var aggregate = nifi.getProcessGroupStatus(groupId).path('processGroupStatus').path('aggregateSnapshot')
-                            var queued = aggregate.path('queuedCount').asLong(aggregate.path('flowFilesQueued').asLong(-1L))
-                            if (queued < 0 || (queued > 0 && groupId != discardQueueFor)) {
-                                throw new IllegalStateException(queued < 0 ? '无法确认旧流程队列状态，已保留旧图' : '旧流程还有排队记录，已保留旧图并阻止重建')
-                            }
-                        }
-                        if (!layout.previousIds().isEmpty()) {
-                            var processors = design.nodeMapping()?.processorIdToCanvasNode()
-                            if (processors == null) {
-                                throw new IllegalStateException('旧流程缺少原生组件映射，不能证明来源状态可安全重建')
-                            }
-                            stateIds.addAll(processors.keySet())
-                            if (stateIds.size() > 128) {
-                                throw new IllegalStateException('原生组件数量超过安全状态核验上限')
-                            }
-                            for (processor in stateIds) {
-                                if (hasState(processor)) {
-                                    setStatus(saved.status())
-                                    return failureResponse(409, 'source-state-migration-required', '来源状态需要保留，已阻止流程重建',
-                                        new IllegalStateException('来源组件已有增量水位或文件状态。本次保留旧流程，请先采用能够保留来源组件ID的迁移方式。'),
-                                        '请保留来源组件 ID 和已有增量水位，不要通过清空状态或队列重试。', {sourceProcessorId: processor, previousGraphRetained: true})
-                                }
-                            }
-                        }
-                        var compiled = compiler.compile(design, groupId => { staged.groupId = groupId }, layout)
-                        staged.groupId = usableGroup(compiled, '候选流程编译失败')
-                        if ((hiveMerge && !hivePartition) || discardQueueFor != null) {
-                            nifi.requireValidGeneratedProcessGroup(staged.groupId)
-                        }
-                        var mapping = buildMapping(design, compiled, design, false)
-                        for (groupId in layout.previousIds()) {
-                            nifi.setProcessGroupState(groupId, 'STOPPED')
-                            nifi.waitForAllProcessorsStopped(groupId, 30000L)
-                            if (groupId != discardQueueFor) {
-                                nifi.requireEmptyQueuesForRedeploy(groupId)
-                            }
-                        }
-                        previousStopped = true
-                        for (processor in stateIds) {
-                            if (hasState(processor)) {
-                                throw new IllegalStateException('来源状态在候选编译期间发生变化，已保留旧流程与水位')
-                            }
-                        }
-                        var updated = transactions.execute(transaction => {
-                            var after = update({expectedDesignHash: design.designHash(), groupId: staged.groupId, status: PipelineStatus.STOPPED,
-                                deployedHash: deploymentHash, deployedAt: System.currentTimeMillis(), mapping: mapping, lastBulletinId: 0L})
-                            versions.activate(design, compiled.planVersionIds(), staged.groupId)
-                            return after
-                        })
-                        committed = true
-                        syncTask(pipelineId, 'group', staged.groupId)
-                        var retained = []
-                        for (groupId in layout.previousIds()) {
-                            try {
-                                nifi.cleanupProcessGroup(groupId)
-                            } catch (failure) {
-                                retained.add(groupId)
-                                log.warn('已停止旧流程保留待清理，pipeline={}, group={}', pipelineId, groupId)
-                            }
-                        }
-                        if (start) {
-                            startNative(design, staged.groupId, mapping)
-                            updated = setStatus(PipelineStatus.RUNNING)
-                            syncTask(pipelineId, 'started', null)
-                        } else {
-                            syncTask(pipelineId, 'status', 0)
-                        }
-                        try {
-                            lineage.captureDeployment(updated)
-                        } catch (failure) {
-                            log.warn('流程已部署，血缘索引归档待恢复，pipeline={}', pipelineId)
-                        }
-                        var response = result(updated, staged.groupId,
-                            hivePartition ? 'staged-hive-template-deploy' : hiveMerge ? 'staged-hive-merge-deploy'
-                                : javaMapping ? 'staged-unified-deploy' : 'full-deploy')
-                        response.started = start
-                        if (!retained.isEmpty()) {
-                            response.retainedStoppedGroups = retained
-                        }
-                        return ResponseEntity.ok(response)
-                    } catch (failure) {
-                        if (!committed) {
-                            cleanupCandidate(staged.groupId)
-                            update({groupId: design.nifiProcessGroupId(), status: previousStopped ? PipelineStatus.STOPPED : saved.status(),
-                                deployedHash: design.lastDeployedHash(), deployedAt: design.lastDeployedAt(), stoppedAt: design.lastStoppedAt(),
-                                mapping: design.nodeMapping(), lastBulletinId: design.lastBulletinId()})
-                        } else {
-                            setStatus(PipelineStatus.STOPPED)
-                        }
-                        return failureResponse(409, hivePartition ? 'hive-template-deployment-failed'
-                            : hiveMerge ? 'hive-merge-deployment-failed' : javaMapping ? 'mapping-deployment-failed' : 'redeploy-failed',
-                            hivePartition ? 'Hive基础候选流程部署失败' : hiveMerge ? 'Hive小文件合并候选流程部署失败'
-                                : javaMapping ? '统一映射候选流程部署失败' : '重部署未完成',
-                            rootCause(failure), committed ? '请检查新流程状态及错误详情。' : '旧流程及其状态已保留，请根据详情修复后重新部署。',
-                            {previousGraphRetained: !committed})
-                    }
-                }
-
-                var previousParents = groups.parentIds(layout.previousIds())
-                // 常规重部署先核验全部旧组队列，再清理旧组。新组 ID 在建节点前写入，失败后可重试。
-                for (groupId in layout.previousIds()) {
-                    nifi.requireEmptyQueuesForRedeploy(groupId)
-                }
-                for (groupId in layout.previousIds()) {
-                    try {
-                        nifi.cleanupProcessGroup(groupId)
-                    } catch (failure) {
-                        var detail = FlowFailureDetails.describe(rootCause(failure))
-                        setStatus(PipelineStatus.DEPLOY_FAILED)
-                        syncTask(pipelineId, 'status', 2)
-                        writeError(phase, '无法清理旧 Process Group', '旧 PG ' + groupId + ' 清理失败：' + detail
-                            + '。已中止重新部署，避免在 NiFi 中产生孤儿 PG。请在当前节点的 NiFi 原生画布中检查该组后重试。')
-                        return ResponseEntity.status(500).body({error: 'cleanup-failed', processGroupId: groupId, detail: detail})
-                    }
-                }
-                groups.pruneEmptyAncestors(previousParents, layout.parentId())
-                var recordGroup = groupId => {
-                    update({groupId: groupId, status: PipelineStatus.DEPLOYING, deployedHash: null, deployedAt: null, mapping: null, lastBulletinId: null})
-                    syncTask(pipelineId, 'group', groupId)
-                }
-                recordGroup(null)
-                var compiled = compiler.compile(design, recordGroup, layout)
-                var groupId = usableGroup(compiled, '流程编译未生成可部署的处理组，请检查流程配置后重试')
-                var mapping = buildMapping(design, compiled, design, false)
-                if (start) {
-                    startNative(design, groupId, mapping)
-                }
-                var updated = update({expectedDesignHash: design.designHash(), groupId: groupId,
-                    status: start ? PipelineStatus.RUNNING : PipelineStatus.STOPPED, deployedHash: deploymentHash,
-                    deployedAt: System.currentTimeMillis(), mapping: mapping, lastBulletinId: 0L})
-                var response = result(updated, groupId, 'full-deploy')
-                response.started = start
-                try {
-                    lineage.captureDeployment(updated)
-                } catch (failure) {
-                    log.warn('无法归档部署血缘，pipeline={}', pipelineId)
-                    response.lineageIndexWarning = '流程已部署，但依赖快照暂未归档；请联系管理员检查血缘索引'
-                }
-                if (start) {
-                    syncTask(pipelineId, 'started', null)
-                } else {
-                    syncTask(pipelineId, 'status', 0)
-                }
-                return ResponseEntity.ok(response)
-            } finally {
-                if (runtime != null) {
-                    runtime.close()
+            if (nodeId == null) { runtime = nifi.bindRuntimeNode() }
+            var preserveOld = () => ({previousGraphRetained: true})
+            if (!hiveTarget) {
+                var error = preflight(() => compiler.preflightSqlRecordWriter(design), 'NIFI_SQL_RECORD_WRITER_UNAVAILABLE',
+                    'SQL 采集 Writer 核验失败', '请核对当前 NiFi 根作用域已启用 PUBLIC-WRITER-JSON-TIME_FORMAT。', preserveOld())
+                if (error != null) {
+                    return error
                 }
             }
+            var checks = [
+                {run: () => compiler.preflightSchedules(design), code: 'SCHEDULE_PREFLIGHT_FAILED', message: '调度配置发布前检查失败',
+                    hint: '请先保存任务，并核对 NiFi 时区；旧流程已保留。'},
+                {run: () => compiler.preflightSources(design), code: 'SOURCE_FETCH_PREFLIGHT_FAILED', message: '来源时间分片发布前检查失败',
+                    hint: '请核对登记时间戳字段与 GenerateDateTableFetch 扩展；旧流程已保留。'},
+                {run: () => compiler.preflightWriters(design), code: 'JDBC_WRITER_PREFLIGHT_FAILED', message: '目标表写入组件发布前检查失败',
+                    hint: '请核对各 NiFi 节点已安装的 LinewellPutDatabaseRecord 扩展；系统自动选择最高已注册版本，旧流程已保留。'}
+            ]
+            var javaMapping = DslHasher.usesJavaMapping(design.dsl())
+            if (javaMapping) {
+                checks.add({run: () => compiler.preflightMapping(design), code: 'MAPPING_PREFLIGHT_FAILED', message: '字段映射发布前检查失败',
+                    hint: '请根据详情核对字段映射配置、扩展版本及依赖服务；旧流程已保留。'})
+            }
+            for (check in checks) {
+                var error = preflight(check.run, check.code, check.message, check.hint, preserveOld())
+                if (error != null) {
+                    return error
+                }
+            }
+
+            if (javaMapping || hivePartition || hiveMerge || discardQueueFor != null) {
+                var staged = {groupId: null}
+                var committed = false
+                var previousStopped = false
+                var stateIds = new LinkedHashSet()
+                var hasState = processor => {
+                    var state = nifi.get('/processors/' + processor + '/state', JsonNode).path('componentState')
+                    return !state.path('localState').path('state').isEmpty() || !state.path('clusterState').path('state').isEmpty()
+                }
+                try {
+                    // 编译前检查全部旧组队列与原生来源状态，阻止重建导致已采集记录或水位丢失。
+                    for (groupId in layout.previousIds()) {
+                        var aggregate = nifi.getProcessGroupStatus(groupId).path('processGroupStatus').path('aggregateSnapshot')
+                        var queued = aggregate.path('queuedCount').asLong(aggregate.path('flowFilesQueued').asLong(-1L))
+                        if (queued < 0 || (queued > 0 && groupId != discardQueueFor)) {
+                            throw new IllegalStateException(queued < 0 ? '无法确认旧流程队列状态，已保留旧图' : '旧流程还有排队记录，已保留旧图并阻止重建')
+                        }
+                    }
+                    if (!layout.previousIds().isEmpty()) {
+                        var processors = design.nodeMapping()?.processorIdToCanvasNode()
+                        if (processors == null) {
+                            throw new IllegalStateException('旧流程缺少原生组件映射，不能证明来源状态可安全重建')
+                        }
+                        stateIds.addAll(processors.keySet())
+                        if (stateIds.size() > 128) {
+                            throw new IllegalStateException('原生组件数量超过安全状态核验上限')
+                        }
+                        for (processor in stateIds) {
+                            if (hasState(processor)) {
+                                setStatus(saved.status())
+                                return failureResponse(409, 'source-state-migration-required', '来源状态需要保留，已阻止流程重建',
+                                    new IllegalStateException('来源组件已有增量水位或文件状态。本次保留旧流程，请先采用能够保留来源组件ID的迁移方式。'),
+                                    '请保留来源组件 ID 和已有增量水位，不要通过清空状态或队列重试。', {sourceProcessorId: processor, previousGraphRetained: true})
+                            }
+                        }
+                    }
+                    var compiled = compiler.compile(design, groupId => { staged.groupId = groupId }, layout)
+                    staged.groupId = usableGroup(compiled, '候选流程编译失败')
+                    if ((hiveMerge && !hivePartition) || discardQueueFor != null) {
+                        nifi.requireValidGeneratedProcessGroup(staged.groupId)
+                    }
+                    var mapping = buildMapping(design, compiled, design, false)
+                    for (groupId in layout.previousIds()) {
+                        nifi.setProcessGroupState(groupId, 'STOPPED')
+                        nifi.waitForAllProcessorsStopped(groupId, 30000L)
+                        if (groupId != discardQueueFor) {
+                            nifi.requireEmptyQueuesForRedeploy(groupId)
+                        }
+                    }
+                    previousStopped = true
+                    for (processor in stateIds) {
+                        if (hasState(processor)) {
+                            throw new IllegalStateException('来源状态在候选编译期间发生变化，已保留旧流程与水位')
+                        }
+                    }
+                    var updated = transactions.execute(transaction => {
+                        var after = update({expectedDesignHash: design.designHash(), groupId: staged.groupId, status: PipelineStatus.STOPPED,
+                            deployedHash: deploymentHash, deployedAt: System.currentTimeMillis(), mapping: mapping, lastBulletinId: 0L})
+                        versions.activate(design, compiled.planVersionIds(), staged.groupId)
+                        return after
+                    })
+                    committed = true
+                    syncTask(pipelineId, 'group', staged.groupId)
+                    var retained = []
+                    for (groupId in layout.previousIds()) {
+                        try {
+                            nifi.cleanupProcessGroup(groupId)
+                        } catch (failure) {
+                            retained.add(groupId)
+                            log.warn('已停止旧流程保留待清理，pipeline={}, group={}', pipelineId, groupId)
+                        }
+                    }
+                    if (start) {
+                        startNative(design, staged.groupId, mapping)
+                        updated = setStatus(PipelineStatus.RUNNING)
+                        syncTask(pipelineId, 'started', null)
+                    } else {
+                        syncTask(pipelineId, 'status', 0)
+                    }
+                    try {
+                        lineage.captureDeployment(updated)
+                    } catch (failure) {
+                        log.warn('流程已部署，血缘索引归档待恢复，pipeline={}', pipelineId)
+                    }
+                    var response = result(updated, staged.groupId,
+                        hivePartition ? 'staged-hive-template-deploy' : hiveMerge ? 'staged-hive-merge-deploy'
+                            : javaMapping ? 'staged-unified-deploy' : 'full-deploy')
+                    response.started = start
+                    if (!retained.isEmpty()) {
+                        response.retainedStoppedGroups = retained
+                    }
+                    return ResponseEntity.ok(response)
+                } catch (failure) {
+                    if (!committed) {
+                        cleanupCandidate(staged.groupId)
+                        update({groupId: design.nifiProcessGroupId(), status: previousStopped ? PipelineStatus.STOPPED : saved.status(),
+                            deployedHash: design.lastDeployedHash(), deployedAt: design.lastDeployedAt(), stoppedAt: design.lastStoppedAt(),
+                            mapping: design.nodeMapping(), lastBulletinId: design.lastBulletinId()})
+                    } else {
+                        setStatus(PipelineStatus.STOPPED)
+                    }
+                    return failureResponse(409, hivePartition ? 'hive-template-deployment-failed'
+                        : hiveMerge ? 'hive-merge-deployment-failed' : javaMapping ? 'mapping-deployment-failed' : 'redeploy-failed',
+                        hivePartition ? 'Hive基础候选流程部署失败' : hiveMerge ? 'Hive小文件合并候选流程部署失败'
+                            : javaMapping ? '统一映射候选流程部署失败' : '重部署未完成',
+                        rootCause(failure), committed ? '请检查新流程状态及错误详情。' : '旧流程及其状态已保留，请根据详情修复后重新部署。',
+                        {previousGraphRetained: !committed})
+                }
+            }
+
+            var previousParents = groups.parentIds(layout.previousIds())
+            // 常规重部署先核验全部旧组队列，再清理旧组。新组 ID 在建节点前写入，失败后可重试。
+            for (groupId in layout.previousIds()) {
+                nifi.requireEmptyQueuesForRedeploy(groupId)
+            }
+            for (groupId in layout.previousIds()) {
+                try {
+                    nifi.cleanupProcessGroup(groupId)
+                } catch (failure) {
+                    var detail = FlowFailureDetails.describe(rootCause(failure))
+                    setStatus(PipelineStatus.DEPLOY_FAILED)
+                    syncTask(pipelineId, 'status', 2)
+                    writeError(phase, '无法清理旧 Process Group', '旧 PG ' + groupId + ' 清理失败：' + detail
+                        + '。已中止重新部署，避免在 NiFi 中产生孤儿 PG。请在当前节点的 NiFi 原生画布中检查该组后重试。')
+                    return ResponseEntity.status(500).body({error: 'cleanup-failed', processGroupId: groupId, detail: detail})
+                }
+            }
+            groups.pruneEmptyAncestors(previousParents, layout.parentId())
+            var recordGroup = groupId => {
+                update({groupId: groupId, status: PipelineStatus.DEPLOYING, deployedHash: null, deployedAt: null, mapping: null, lastBulletinId: null})
+                syncTask(pipelineId, 'group', groupId)
+            }
+            recordGroup(null)
+            var compiled = compiler.compile(design, recordGroup, layout)
+            var groupId = usableGroup(compiled, '流程编译未生成可部署的处理组，请检查流程配置后重试')
+            var mapping = buildMapping(design, compiled, design, false)
+            if (start) {
+                startNative(design, groupId, mapping)
+            }
+            var updated = update({expectedDesignHash: design.designHash(), groupId: groupId,
+                status: start ? PipelineStatus.RUNNING : PipelineStatus.STOPPED, deployedHash: deploymentHash,
+                deployedAt: System.currentTimeMillis(), mapping: mapping, lastBulletinId: 0L})
+            var response = result(updated, groupId, 'full-deploy')
+            response.started = start
+            try {
+                lineage.captureDeployment(updated)
+            } catch (failure) {
+                log.warn('无法归档部署血缘，pipeline={}', pipelineId)
+                response.lineageIndexWarning = '流程已部署，但依赖快照暂未归档；请联系管理员检查血缘索引'
+            }
+            if (start) {
+                syncTask(pipelineId, 'started', null)
+            } else {
+                syncTask(pipelineId, 'status', 0)
+            }
+            return ResponseEntity.ok(response)
         } catch (failure) {
             var cause = rootCause(failure)
             setStatus(PipelineStatus.DEPLOY_FAILED)
@@ -506,6 +503,8 @@ return respond(rootCause => {
                     '请根据 NiFi 响应检查处理器属性、Controller Service 和节点连接。', {})
             }
             return failureResponse(500, 'DEPLOYMENT_FAILED', '部署异常', cause, '请根据错误详情检查部署配置。', {})
+        } finally {
+            if (runtime != null) { runtime.close() }
         }
     }
     // 强制启动由已有启动入口在同一锁内调用。直接部署和登记表调用在这里加锁。

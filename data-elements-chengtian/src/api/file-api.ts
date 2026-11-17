@@ -54,13 +54,18 @@ const FileAPI = {
     });
   },
 
-  /** 下载文件 */
-  download(url: string, fileName?: string) {
-    // 旧附件保存的是平台生成的相对地址。外部文件链接按原地址请求。
-    const legacyPath = "/data/download?";
-    const downloadUrl = url.startsWith(legacyPath) ? "/dst/file/download?" + url.slice(legacyPath.length) : url;
+  /** 从文件记录读取下载参数，并请求已登记的 Magic 接口。 */
+  download(file: Pick<FileInfo, "name" | "tid"> & { url?: string }) {
+    const { name, tid, url } = file;
+    const fileUrl = url && new URL(url, window.location.origin);
+    const platformFile = fileUrl && fileUrl.origin === window.location.origin &&
+      (fileUrl.pathname === "/dst/file/download" || fileUrl.pathname === "/data/download");
+    // 历史附件可能只保存链接。读取其中的文件 ID，下载统一使用正式入口。
+    const fileId = platformFile ? fileUrl.searchParams.get("fileId") || tid : !url ? tid : undefined;
+    if (!fileId && (!url || platformFile)) return;
     return request({
-      url: downloadUrl,
+      url: fileId ? "/dst/file/download" : url,
+      params: fileId ? { fileId } : undefined,
       method: "get",
       responseType: "blob",
     }).then((res) => {
@@ -68,7 +73,7 @@ const FileAPI = {
       const a = document.createElement("a");
       const urlObject = window.URL.createObjectURL(blob);
       a.href = urlObject;
-      a.download = fileName || "下载文件";
+      a.download = name || "下载文件";
       a.click();
       window.URL.revokeObjectURL(urlObject);
     });

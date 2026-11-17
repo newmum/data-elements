@@ -871,8 +871,12 @@ for (task in (targetUnlinked ? [] : (tasks == null ? [] : tasks))) {
 var selectedPipelineRows = selectedPipelineIds.size() == 0 ? [] : db.table('nifi_pipeline_t').where()
     .eq('tenant_id', tenantId).in('id', selectedPipelineIds).eq('is_del', 0).select()
 var processGroupByPipelineId = {}
+var nodeByPipelineId = {}
 for (pipeline in selectedPipelineRows) {
-    processGroupByPipelineId[text(pipeline.id)] = text(first(pipeline, ['nifiProcessGroupId', 'nifi_process_group_id']))
+    var pipelineId = text(pipeline.id)
+    processGroupByPipelineId[pipelineId] = text(first(pipeline, ['nifiProcessGroupId', 'nifi_process_group_id']))
+    var mapping = text(first(pipeline, ['nodeMappingJson', 'node_mapping_json']))
+    nodeByPipelineId[pipelineId] = blank(mapping) ? '' : text(jsons.toJSONObject(mapping)?.runtimeNodeId)
 }
 var processGroupOf = (task) => {
     var direct = first(task, ['processGroupId', 'process_group_id'])
@@ -881,15 +885,40 @@ var processGroupOf = (task) => {
 var processGroupCleanupPendingCount = 0
 var cleanedProcessGroups = []
 var pendingProcessGroups = []
+var nodeFor = task => text(nodeByPipelineId[text(first(task, ['pipelineId', 'pipeline_id']))])
+var scopedGroup = (nodeId, processGroupId) => nodeId + ':' + processGroupId
+var groupsByNode = {}
 for (task in (targetUnlinked ? [] : (tasks == null ? [] : tasks))) {
     var processGroupId = processGroupOf(task)
-    if (!blank(processGroupId) && !cleanedProcessGroups.contains(processGroupId)) {
-        cleanedProcessGroups.add(processGroupId)
-        try { nifiClient.cleanupProcessGroup(processGroupId) } catch (error) {
-            processGroupCleanupPendingCount = processGroupCleanupPendingCount + 1
-            pendingProcessGroups.add(processGroupId)
-            log.warn('NiFi cleanup pending; processGroupId={}', processGroupId)
+    if (!blank(processGroupId)) {
+        var nodeId = nodeFor(task)
+        if (groupsByNode[nodeId] == null) { groupsByNode[nodeId] = [] }
+        if (!groupsByNode[nodeId].contains(processGroupId)) { groupsByNode[nodeId].add(processGroupId) }
+    }
+}
+for (nodeId, groupIds in groupsByNode) {
+    var runtime = null
+    var nodeUnavailable = false
+    try {
+        runtime = nifiClient.bindAssignedNode(nodeId)
+    } catch (error) {
+        nodeUnavailable = true
+    }
+    try {
+        for (processGroupId in groupIds) {
+            var scopedId = scopedGroup(nodeId, processGroupId)
+            cleanedProcessGroups.add(scopedId)
+            try {
+                if (nodeUnavailable) { throw new IllegalStateException('任务绑定的数据接入节点暂不可用') }
+                nifiClient.cleanupProcessGroup(processGroupId)
+            } catch (error) {
+                processGroupCleanupPendingCount = processGroupCleanupPendingCount + 1
+                pendingProcessGroups.add(scopedId)
+                log.warn('NiFi cleanup pending; processGroupId={}', processGroupId)
+            }
         }
+    } finally {
+        if (runtime != null) { runtime.close() }
     }
 }
 if (deleteTargetTable && processGroupCleanupPendingCount > 0) {
@@ -927,7 +956,7 @@ var pendingTaskIds = []
 for (task in (targetUnlinked ? [] : (tasks == null ? [] : tasks))) {
     var taskId = text(first(task, ['tid']))
     var pipelineId = text(first(task, ['pipelineId', 'pipeline_id']))
-    if (pendingProcessGroups.contains(processGroupOf(task))) { pendingTaskIds.add(taskId); continue }
+    if (pendingProcessGroups.contains(scopedGroup(nodeFor(task), processGroupOf(task)))) { pendingTaskIds.add(taskId); continue }
     completedTaskIds.add(taskId)
     var completedTaskName = text(first(task, ['taskName', 'task_name']))
     if (completedTaskNames.size() < 10 && !blank(completedTaskName)) {

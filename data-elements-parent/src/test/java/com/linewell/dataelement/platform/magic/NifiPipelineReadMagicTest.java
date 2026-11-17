@@ -2,6 +2,7 @@ package com.linewell.dataelement.platform.magic;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -49,6 +50,26 @@ class NifiPipelineReadMagicTest {
     private static final String PIPELINE_API = API;
     private static final String COMMON = "function/01.通用函数/";
     private static final ObjectMapper JSON = new ObjectMapper();
+
+    @Test void nativeLinkUsesTheDeployedNodeOnlyAfterTheCanvasPassesTenantAuthorization() throws Exception {
+        var fixture = new Fixture();
+        fixture.flow("selected", "运行中的画布", "STOPPED", "tenant-a", 0, 50L, 60L);
+        fixture.flow("foreign", "外部画布", "STOPPED", "tenant-b", 0, 50L, 60L);
+        fixture.jdbc.update("UPDATE nifi_pipeline_t SET nifi_process_group_id=?, node_mapping_json=?",
+                "group-a", "{\"runtimeNodeId\":\"secondary\"}");
+        var nifi = mock(NifiClient.class);
+        var bindings = Map.<String, Object>of("nifi", nifi);
+        var url = "https://secondary-nifi.test/nifi/#/process-groups/group-a";
+        when(nifi.assignedNodeUiUrl("secondary", "group-a")).thenReturn(url);
+
+        assertThat(fixture.runRead("ui", false, "foreign", bindings).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        verifyNoInteractions(nifi);
+        for (boolean head : List.of(false, true)) {
+            assertThat(body(fixture.runRead("ui", head, "selected", bindings)))
+                    .containsEntry("url", url).containsEntry("directNode", true)
+                    .containsEntry("processGroupId", "group-a").containsEntry("authenticatedByBackend", false);
+        }
+    }
 
     @Test void runtimeReadUsesSavedBindingAndCompilerFingerprintWithoutExposingForeignRows() throws Exception {
         var fixture = new Fixture();

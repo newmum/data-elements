@@ -1502,6 +1502,25 @@ if (targetDatasourceIds.size() > 1) {
 }
 loadGovernanceForTableIds(targetTableIds)
 
+// 物化登记保存所选节点。一次读取全部涉及的启用节点，避免逐跳查库。
+var nodeIdByTarget = {}
+var requestedNodeIds = []
+for (target in targetTables) {
+    var config = parseGovernanceConfig(first(target, ['fieldGovernanceConfig', 'field_governance_config']))
+    var nodeId = text(config?.nifiNodeId).trim()
+    if (blank(nodeId)) { continue }
+    nodeIdByTarget[text(target.tid)] = nodeId
+    if (!requestedNodeIds.contains(nodeId)) { requestedNodeIds.add(nodeId) }
+}
+if (requestedNodeIds.size() > 0) {
+    var availableNodes = db.table('nifi_node_t').columns('tid').where().eq('tenant_id', tenantId)
+        .eq('is_del', 0).eq('enabled', 1).in('tid', requestedNodeIds).select()
+    var availableNodeIds = availableNodes.map(node => text(node.tid))
+    for (requestedNodeId in requestedNodeIds) {
+        if (!availableNodeIds.contains(requestedNodeId)) { exit 400, '物化记录的数据接入节点已停用或不属于当前租户，请重新选择' }
+    }
+}
+
 // 一次查询全部所选目标字段，独立任务分别使用自己的目标字段和映射。
 var targetColumnRows = db.table('db_table_column_t').where()
     .eq('tenant_id', tenantId).in('table_id', targetTableIds).eq('is_del', 0)
@@ -1582,9 +1601,17 @@ for (existingTask in existingTasks) {
     var legacyMultiTarget = coveredIds.size() > 1
     var expectedSource = hopSourceByTarget[primaryTargetId]
     var wrongHopSource = expectedSource != null && text(first(existingTask, ['sourceTableId', 'source_table_id'])) != text(expectedSource.tid)
+    var existingGroupId = text(first(pipeline, ['nifiProcessGroupId', 'nifi_process_group_id']))
+    var existingMapping = parseGovernanceConfig(first(pipeline, ['nodeMappingJson', 'node_mapping_json']))
+    var selectedNodeId = nodeIdByTarget[primaryTargetId]
+    var changedNode = !blank(selectedNodeId) && selectedNodeId != text(existingMapping?.runtimeNodeId)
+    var hasNativeGroup = !blank(existingGroupId) || !blank(text(first(existingTask, ['processGroupId', 'process_group_id'])))
+        || !blank(text(existingMapping?.candidate?.processGroupId))
+    if (changedNode && hasNativeGroup) {
+        exit 409, '已有任务包含部署关联。请先处理旧流程，再保留物化目标表并按所选节点创建任务'
+    }
     if (forceRebuild) {
-        if (!blank(first(existingTask, ['processGroupId', 'process_group_id']))
-            || ['RUNNING', 'DEPLOYED', 'STARTING'].contains(text(pipeline?.status).toUpperCase())) {
+        if (hasNativeGroup || ['RUNNING', 'DEPLOYED', 'STARTING', 'DEPLOYING'].contains(text(pipeline?.status).toUpperCase())) {
             exit 409, '所选历史任务已部署，请先停止并删除该任务，再按新链路创建，目标表及数据可保留'
         }
         // 替换历史多目标画布必须选择其全部仍有效目标，防止遗漏原任务中的其它目标。
@@ -1599,6 +1626,7 @@ for (existingTask in existingTasks) {
         continue
     }
     var taskReasons = []
+    if (changedNode && !hasNativeGroup) { taskReasons.add('已有草稿绑定的接入节点与本次选择不同，需确认后按所选节点重建') }
     taskReasons.addAll(sourceRepairReasons(existingDslObject))
     if (wrongHopSource) { taskReasons.add('已有任务的来源与所选目标顺序不一致，需确认后按级联链路重建') }
     if (legacyMultiTarget) { taskReasons.add('历史任务包含多个目标库，需确认后拆分为独立任务') }
@@ -2157,6 +2185,7 @@ for (targetIndex, targetCandidate in [targetTable]) {
     })
 }
 var dsl = { version: 1, nodes: dslNodes, edges: dslEdges, accessChain: {rootSourceTableId: rootSourceTableId, targetTableIds: targetTableIds} }
+var selectedNodeId = nodeIdByTarget[targetTableId]
 pipelineRows.add({
     id: pipelineId,
     tenant_id: tenantId,
@@ -2165,6 +2194,7 @@ pipelineRows.add({
     status: 'SAVED',
     dsl_json: jsons.toJSONStr(dsl),
     dsl_version: 1,
+    node_mapping_json: blank(selectedNodeId) ? null : jsons.toJSONStr({runtimeNodeId: selectedNodeId}),
     created_at: nowMs,
     updated_at: nowMs,
     is_del: 0
@@ -2196,64 +2226,27 @@ taskRows.add({
     is_del: 0
 })
 
-var mappings = []
-for (targetIndex, targetColumn in (targetColumns == null ? [] : targetColumns)) {
-    var targetName = text(colName(targetColumn))
-    var systemMapping = firstHop ? odsSystemMapping(targetName) : null
-    if (systemMapping != null) {
-        mappings.add({
-            tid: IdUtil.getSnowflakeNextIdStr(),
-            task_id: taskId,
-            source_field: 'SYSTEM:' + targetName,
-            source_field_cn: 'NiFi系统字段',
-            source_field_length: 0,
-            source_data_type: 'SYSTEM_EXPRESSION',
-            target_field: targetName,
-            target_field_cn: first(targetColumn, ['columnComment', 'column_comment']),
-            target_field_length: first(targetColumn, ['length']),
-            target_data_type: first(targetColumn, ['dataType', 'data_type']),
-            dict_enable: 0,
-            func_enable: 1,
-            func_code: 'EXPRESSION',
-            func_value: systemMapping.expression,
-            sort_no: targetIndex,
-            is_del: 0,
-            created_time: now,
-            updated_time: now
-        })
-        continue
-    }
-    var targetBinding = targetBindingByField[targetName.toLowerCase()]
-    var dictionarySourceName = targetBinding == null ? '' : text(targetBinding.sourceField).trim()
-    var dictionaryRelation = blank(dictionarySourceName) ? null
-        : sourceDictionaryRelations[dictionarySourceName.toLowerCase()]
-    if (dictionaryRelation != null) {
-        var dictionarySourceColumn = sourceColumnMap[text(dictionaryRelation.sourceName).toLowerCase()]
-        if (dictionarySourceColumn != null && dictionaryRelation.relationKind == 'MANDATORY_STANDARD') {
-            var standardValueMap = {}
-            for (standardValue in dictionaryRelation.standardValues) {
-                standardValueMap[standardValue.code] = standardValue.label
-            }
+var appendFieldMappings = () => {
+    var mappings = []
+    for (targetIndex, targetColumn in (targetColumns == null ? [] : targetColumns)) {
+        var targetName = text(colName(targetColumn))
+        var systemMapping = firstHop ? odsSystemMapping(targetName) : null
+        if (systemMapping != null) {
             mappings.add({
                 tid: IdUtil.getSnowflakeNextIdStr(),
                 task_id: taskId,
-                source_field: colName(dictionarySourceColumn),
-                source_field_cn: first(dictionarySourceColumn, ['columnComment', 'column_comment']),
-                source_field_length: first(dictionarySourceColumn, ['length']),
-                source_data_type: first(dictionarySourceColumn, ['dataType', 'data_type']),
+                source_field: 'SYSTEM:' + targetName,
+                source_field_cn: 'NiFi系统字段',
+                source_field_length: 0,
+                source_data_type: 'SYSTEM_EXPRESSION',
                 target_field: targetName,
                 target_field_cn: first(targetColumn, ['columnComment', 'column_comment']),
                 target_field_length: first(targetColumn, ['length']),
                 target_data_type: first(targetColumn, ['dataType', 'data_type']),
                 dict_enable: 0,
                 func_enable: 1,
-                func_code: 'ENUM_MAP',
-                // Persist the executable map, not merely a marker.  The canvas
-                // may be opened before deployment, so the enhanced component
-                // must be able to restore every mandatory-standard category.
-                func_value: jsons.toJSONStr({ ruleKind: 'MANDATORY_STANDARD', values: standardValueMap,
-                    multiValue: dictionaryRelation.multiValue == true,
-                    multiValueSeparator: dictionaryRelation.multiValueSeparator }),
+                func_code: 'EXPRESSION',
+                func_value: systemMapping.expression,
                 sort_no: targetIndex,
                 is_del: 0,
                 created_time: now,
@@ -2261,89 +2254,129 @@ for (targetIndex, targetColumn in (targetColumns == null ? [] : targetColumns)) 
             })
             continue
         }
-        if (dictionarySourceColumn != null && dictionaryRelation.relationKind == 'DICTIONARY') {
-            var dictionaryDatasource = dictionaryLookupSources[dictionarySourceName.toLowerCase()]
-            if (dictionaryDatasource == null) {
-                dictionaryDatasource = dictionaryLookupSource(dictionaryRelation)
+        var targetBinding = targetBindingByField[targetName.toLowerCase()]
+        var dictionarySourceName = targetBinding == null ? '' : text(targetBinding.sourceField).trim()
+        var dictionaryRelation = blank(dictionarySourceName) ? null
+            : sourceDictionaryRelations[dictionarySourceName.toLowerCase()]
+        if (dictionaryRelation != null) {
+            var dictionarySourceColumn = sourceColumnMap[text(dictionaryRelation.sourceName).toLowerCase()]
+            if (dictionarySourceColumn != null && dictionaryRelation.relationKind == 'MANDATORY_STANDARD') {
+                var standardValueMap = {}
+                for (standardValue in dictionaryRelation.standardValues) {
+                    standardValueMap[standardValue.code] = standardValue.label
+                }
+                mappings.add({
+                    tid: IdUtil.getSnowflakeNextIdStr(),
+                    task_id: taskId,
+                    source_field: colName(dictionarySourceColumn),
+                    source_field_cn: first(dictionarySourceColumn, ['columnComment', 'column_comment']),
+                    source_field_length: first(dictionarySourceColumn, ['length']),
+                    source_data_type: first(dictionarySourceColumn, ['dataType', 'data_type']),
+                    target_field: targetName,
+                    target_field_cn: first(targetColumn, ['columnComment', 'column_comment']),
+                    target_field_length: first(targetColumn, ['length']),
+                    target_data_type: first(targetColumn, ['dataType', 'data_type']),
+                    dict_enable: 0,
+                    func_enable: 1,
+                    func_code: 'ENUM_MAP',
+                    // Persist the executable map, not merely a marker.  The canvas
+                    // may be opened before deployment, so the enhanced component
+                    // must be able to restore every mandatory-standard category.
+                    func_value: jsons.toJSONStr({ ruleKind: 'MANDATORY_STANDARD', values: standardValueMap,
+                        multiValue: dictionaryRelation.multiValue == true,
+                        multiValueSeparator: dictionaryRelation.multiValueSeparator }),
+                    sort_no: targetIndex,
+                    is_del: 0,
+                    created_time: now,
+                    updated_time: now
+                })
+                continue
             }
-            if (dictionaryDatasource == null || dictionaryDatasource.config == null) {
-                exit 400, '字段「' + dictionaryRelation.sourceName + '」关联的字典表未找到有效数据源配置，请检查数据源登记和字段关联配置'
+            if (dictionarySourceColumn != null && dictionaryRelation.relationKind == 'DICTIONARY') {
+                var dictionaryDatasource = dictionaryLookupSources[dictionarySourceName.toLowerCase()]
+                if (dictionaryDatasource == null) {
+                    dictionaryDatasource = dictionaryLookupSource(dictionaryRelation)
+                }
+                if (dictionaryDatasource == null || dictionaryDatasource.config == null) {
+                    exit 400, '字段「' + dictionaryRelation.sourceName + '」关联的字典表未找到有效数据源配置，请检查数据源登记和字段关联配置'
+                }
+                var dictionaryName = qualifiedDictionaryTable(dictionaryRelation, dictionaryDatasource)
+                var dictionaryConditions = dictionaryLookupConditions(dictionaryRelation)
+                var dictionaryLookupSql = 'SELECT ' + dictionaryRelation.dictionaryLabelField + ' AS ' + targetName
+                    + ' FROM ' + dictionaryName + ' WHERE ' + dictionaryRelation.dictionaryKeyField + ' = ?'
+                if (dictionaryConditions.size() > 0) {
+                    dictionaryLookupSql = dictionaryLookupSql + ' AND ' + dictionaryConditions.join(' AND ')
+                }
+                mappings.add({
+                    tid: IdUtil.getSnowflakeNextIdStr(),
+                    task_id: taskId,
+                    source_field: colName(dictionarySourceColumn),
+                    source_field_cn: first(dictionarySourceColumn, ['columnComment', 'column_comment']),
+                    source_field_length: first(dictionarySourceColumn, ['length']),
+                    source_data_type: first(dictionarySourceColumn, ['dataType', 'data_type']),
+                    target_field: targetName,
+                    target_field_cn: first(targetColumn, ['columnComment', 'column_comment']),
+                    target_field_length: first(targetColumn, ['length']),
+                    target_data_type: first(targetColumn, ['dataType', 'data_type']),
+                    dict_enable: 1,
+                    dict_value: dictionaryRelation.dictionaryTable,
+                    dict_code: dictionaryRelation.dictionaryKeyField + '->' + dictionaryRelation.dictionaryLabelField,
+                    func_enable: 1,
+                    func_code: 'LOOKUP',
+                    // 多值翻译保存完整执行契约；批量写入前统一校验当前租户实际容量。
+                    func_value: dictionaryRelation.multiValue
+                        ? jsons.toJSONStr({ ruleKind: 'DICTIONARY', table: dictionaryRelation.dictionaryTable,
+                            keyField: dictionaryRelation.dictionaryKeyField,
+                            labelField: dictionaryRelation.dictionaryLabelField,
+                            query: multiDictionaryQuery(dictionaryRelation, dictionaryName), multiValue: true,
+                            multiValueSeparator: dictionaryRelation.multiValueSeparator,
+                            dataSource: { datasourceId: dictionaryDatasource.config.datasourceId,
+                                dbType: dictionaryDatasource.config.dbType } })
+                        : dictionaryRelation.dictionaryTable + ':'
+                            + dictionaryRelation.dictionaryKeyField + '->' + dictionaryRelation.dictionaryLabelField,
+                    sort_no: targetIndex,
+                    is_del: 0,
+                    created_time: now,
+                    updated_time: now
+                })
+                continue
             }
-            var dictionaryName = qualifiedDictionaryTable(dictionaryRelation, dictionaryDatasource)
-            var dictionaryConditions = dictionaryLookupConditions(dictionaryRelation)
-            var dictionaryLookupSql = 'SELECT ' + dictionaryRelation.dictionaryLabelField + ' AS ' + targetName
-                + ' FROM ' + dictionaryName + ' WHERE ' + dictionaryRelation.dictionaryKeyField + ' = ?'
-            if (dictionaryConditions.size() > 0) {
-                dictionaryLookupSql = dictionaryLookupSql + ' AND ' + dictionaryConditions.join(' AND ')
+        }
+        var sourceColumn = sourceColumnMap[targetName.toLowerCase()]
+        if (sourceColumn == null && targetColumn.sourceTableColumnId != null) {
+            for (candidateSource in (sourceColumns == null ? [] : sourceColumns)) {
+                if (text(candidateSource.tid) == text(targetColumn.sourceTableColumnId)) {
+                    sourceColumn = candidateSource
+                }
             }
-            mappings.add({
-                tid: IdUtil.getSnowflakeNextIdStr(),
-                task_id: taskId,
-                source_field: colName(dictionarySourceColumn),
-                source_field_cn: first(dictionarySourceColumn, ['columnComment', 'column_comment']),
-                source_field_length: first(dictionarySourceColumn, ['length']),
-                source_data_type: first(dictionarySourceColumn, ['dataType', 'data_type']),
-                target_field: targetName,
-                target_field_cn: first(targetColumn, ['columnComment', 'column_comment']),
-                target_field_length: first(targetColumn, ['length']),
-                target_data_type: first(targetColumn, ['dataType', 'data_type']),
-                dict_enable: 1,
-                dict_value: dictionaryRelation.dictionaryTable,
-                dict_code: dictionaryRelation.dictionaryKeyField + '->' + dictionaryRelation.dictionaryLabelField,
-                func_enable: 1,
-                func_code: 'LOOKUP',
-                // 多值翻译保存完整执行契约；批量写入前统一校验当前租户实际容量。
-                func_value: dictionaryRelation.multiValue
-                    ? jsons.toJSONStr({ ruleKind: 'DICTIONARY', table: dictionaryRelation.dictionaryTable,
-                        keyField: dictionaryRelation.dictionaryKeyField,
-                        labelField: dictionaryRelation.dictionaryLabelField,
-                        query: multiDictionaryQuery(dictionaryRelation, dictionaryName), multiValue: true,
-                        multiValueSeparator: dictionaryRelation.multiValueSeparator,
-                        dataSource: { datasourceId: dictionaryDatasource.config.datasourceId,
-                            dbType: dictionaryDatasource.config.dbType } })
-                    : dictionaryRelation.dictionaryTable + ':'
-                        + dictionaryRelation.dictionaryKeyField + '->' + dictionaryRelation.dictionaryLabelField,
-                sort_no: targetIndex,
-                is_del: 0,
-                created_time: now,
-                updated_time: now
-            })
+        }
+        if (sourceColumn == null) {
             continue
         }
+        mappings.add({
+            tid: IdUtil.getSnowflakeNextIdStr(),
+            task_id: taskId,
+            source_field: colName(sourceColumn),
+            source_field_cn: first(sourceColumn, ['columnComment', 'column_comment']),
+            source_field_length: first(sourceColumn, ['length']),
+            source_data_type: first(sourceColumn, ['dataType', 'data_type']),
+            target_field: targetName,
+            target_field_cn: first(targetColumn, ['columnComment', 'column_comment']),
+            target_field_length: first(targetColumn, ['length']),
+            target_data_type: first(targetColumn, ['dataType', 'data_type']),
+            dict_enable: 0,
+            func_enable: blank(sourceTemporalMappings[text(colName(sourceColumn)).toLowerCase()]) ? 0 : 1,
+            func_code: blank(sourceTemporalMappings[text(colName(sourceColumn)).toLowerCase()]) ? null : 'EXPRESSION',
+            func_value: sourceTemporalMappings[text(colName(sourceColumn)).toLowerCase()],
+            sort_no: targetIndex,
+            is_del: 0,
+            created_time: now,
+            updated_time: now
+        })
     }
-    var sourceColumn = sourceColumnMap[targetName.toLowerCase()]
-    if (sourceColumn == null && targetColumn.sourceTableColumnId != null) {
-        for (candidateSource in (sourceColumns == null ? [] : sourceColumns)) {
-            if (text(candidateSource.tid) == text(targetColumn.sourceTableColumnId)) {
-                sourceColumn = candidateSource
-            }
-        }
-    }
-    if (sourceColumn == null) {
-        continue
-    }
-    mappings.add({
-        tid: IdUtil.getSnowflakeNextIdStr(),
-        task_id: taskId,
-        source_field: colName(sourceColumn),
-        source_field_cn: first(sourceColumn, ['columnComment', 'column_comment']),
-        source_field_length: first(sourceColumn, ['length']),
-        source_data_type: first(sourceColumn, ['dataType', 'data_type']),
-        target_field: targetName,
-        target_field_cn: first(targetColumn, ['columnComment', 'column_comment']),
-        target_field_length: first(targetColumn, ['length']),
-        target_data_type: first(targetColumn, ['dataType', 'data_type']),
-        dict_enable: 0,
-        func_enable: blank(sourceTemporalMappings[text(colName(sourceColumn)).toLowerCase()]) ? 0 : 1,
-        func_code: blank(sourceTemporalMappings[text(colName(sourceColumn)).toLowerCase()]) ? null : 'EXPRESSION',
-        func_value: sourceTemporalMappings[text(colName(sourceColumn)).toLowerCase()],
-        sort_no: targetIndex,
-        is_del: 0,
-        created_time: now,
-        updated_time: now
-    })
+    for (mapping in mappings) { mapping.tenant_id = tenantId; allMappings.add(mapping) }
 }
-for (mapping in mappings) { mapping.tenant_id = tenantId; allMappings.add(mapping) }
+appendFieldMappings()
 for (summary in targetSummaries) { allTargetSummaries.add(summary) }
 }
 // 完整规则不截断；一次检查当前租户真实列容量，dryRun同样执行且不写入。

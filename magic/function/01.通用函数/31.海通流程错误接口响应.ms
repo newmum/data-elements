@@ -84,7 +84,7 @@ var loadPipeline = () => {
             objectMapper.readValue(pipeline.dsl, PipelineDsl)
         }
         if (pipeline.mapping != null && !pipeline.mapping.isBlank()) {
-            objectMapper.readValue(pipeline.mapping, NifiNodeMapping)
+            pipeline.runtimeNodeId = objectMapper.readValue(pipeline.mapping, NifiNodeMapping)?.runtimeNodeId()
         }
     } catch (failure) {
         if (rootCause(failure) instanceof JsonProcessingException) {
@@ -95,13 +95,19 @@ var loadPipeline = () => {
     return pipeline
 }
 
-var liveBulletins = processGroupId => {
+var liveBulletins = (processGroupId, nodeId) => {
     if (processGroupId == null || processGroupId.isBlank()) {
         return ResponseEntity.badRequest().body({error: '流程尚未部署'})
     }
 
     // 从保存的组标识发出一次原生读取，按原顺序仅保留 ERROR 和 WARNING。
-    var bulletins = nifi.getBulletinBoard(processGroupId, 0L).path('bulletinBoard').path('bulletins')
+    var runtime = nodeId == null ? null : nifi.bindAssignedNode(nodeId)
+    var bulletins = null
+    try {
+        bulletins = nifi.getBulletinBoard(processGroupId, 0L).path('bulletinBoard').path('bulletins')
+    } finally {
+        if (runtime != null) { runtime.close() }
+    }
     var result = []
     if (bulletins.isArray()) {
         for (item in bulletins.elements()) {
@@ -122,12 +128,12 @@ var liveBulletins = processGroupId => {
     return ResponseEntity.ok(result)
 }
 
-var clearHistory = processGroupId => {
+var clearHistory = (processGroupId, nodeId) => {
     var cleared = 0
     var nativeCleared = true
     if (processGroupId != null && !processGroupId.isBlank()) {
         try {
-            var runtime = nifi.bindRuntimeNode()
+            var runtime = nodeId == null ? nifi.bindRuntimeNode() : nifi.bindAssignedNode(nodeId)
             var operationFailure = null
             try {
                 cleared = nifi.clearGroupBulletins(processGroupId, Instant.now())
@@ -166,7 +172,7 @@ try {
         return mutation.withMutationLock(() => {
             // 与原画布写操作一致，持有锁后才核对流程归属并清理。
             var pipeline = loadPipeline()
-            return pipeline == null ? ResponseEntity.notFound().build() : clearHistory(pipeline.processGroupId)
+            return pipeline == null ? ResponseEntity.notFound().build() : clearHistory(pipeline.processGroupId, pipeline.runtimeNodeId)
         })
     }
     if (operation != 'history' && operation != 'bulletins') {
@@ -176,7 +182,7 @@ try {
     if (pipeline == null) {
         return ResponseEntity.notFound().build()
     }
-    return operation == 'history' ? ResponseEntity.ok(errorStore.list(flowId)) : liveBulletins(pipeline.processGroupId)
+    return operation == 'history' ? ResponseEntity.ok(errorStore.list(flowId)) : liveBulletins(pipeline.processGroupId, pipeline.runtimeNodeId)
 } catch (failure) {
     // 业务异常继续使用原 Spring MVC 的响应信封。原始状态分支已在操作中返回。
     var cause = rootCause(failure)

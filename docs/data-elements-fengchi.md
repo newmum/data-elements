@@ -66,7 +66,7 @@ npm run preview
 
 | 能力 | 复用的元数据接口 |
 | --- | --- |
-| 当前租户与组织 | `GET /portal/sso/session`、`POST /sym/org/getOrgTree` |
+| 当前租户与组织 | `GET /portal/sso/session`、`POST /sym/org/tree` |
 | 组织下数据源 | `POST /dst/db/stats` 的 `orgApps/datasources` |
 | 数据源及表/视图目录 | `POST /dst/db/srcdetail`、`GET /dst/db/tables` |
 | 字段结构 | `GET /dst/db/fields`，携带 `tid/snapshotOnly` |

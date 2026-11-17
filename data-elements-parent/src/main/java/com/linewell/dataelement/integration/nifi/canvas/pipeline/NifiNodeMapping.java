@@ -23,28 +23,37 @@ public record NifiNodeMapping(
         Map<String, Map<String, AttributeBaseline>> attributeBaselines,
         Set<String> oneShotSources,
         Boolean cleanupConfirmationRequired,
-        Candidate candidate
+        Candidate candidate,
+        String runtimeNodeId
 ) {
         public NifiNodeMapping(Map<String, String> primary, Map<String, String> reverse, Map<String, EdgeEndpoint> edges) {
-            this(primary, reverse, edges, null, null, null, null);
+            this(primary, reverse, edges, null, null, null, null, null);
+        }
+
+        /** Keep the assigned NiFi independent of the generated processor and connection IDs. */
+        public NifiNodeMapping withRuntimeNode(String nodeId) {
+            return new NifiNodeMapping(primaryProcessorIds, processorIdToCanvasNode, edgeProcessorEndpoints,
+                    attributeBaselines, oneShotSources, cleanupConfirmationRequired, candidate, nodeId);
         }
 
         public NifiNodeMapping withAttributes(Map<String, Map<String, AttributeBaseline>> baselines) {
-            return new NifiNodeMapping(primaryProcessorIds, processorIdToCanvasNode, edgeProcessorEndpoints, baselines, oneShotSources, cleanupConfirmationRequired, candidate);
+            return new NifiNodeMapping(primaryProcessorIds, processorIdToCanvasNode, edgeProcessorEndpoints,
+                    baselines, oneShotSources, cleanupConfirmationRequired, candidate, runtimeNodeId);
         }
 
         public NifiNodeMapping withRuntimePolicy(Set<String> oneShot, boolean cleanupConfirmation) {
         return new NifiNodeMapping(primaryProcessorIds, processorIdToCanvasNode, edgeProcessorEndpoints,
-                attributeBaselines, oneShot, cleanupConfirmation, candidate);
+                attributeBaselines, oneShot, cleanupConfirmation, candidate, runtimeNodeId);
     }
 
     public NifiNodeMapping withEndpoints(Map<String, String> primary, Map<String, String> reverse, Map<String, EdgeEndpoint> edges) {
-        return new NifiNodeMapping(primary, reverse, edges, attributeBaselines, oneShotSources, cleanupConfirmationRequired, candidate);
+            return new NifiNodeMapping(primary, reverse, edges, attributeBaselines, oneShotSources,
+                    cleanupConfirmationRequired, candidate, runtimeNodeId);
     }
 
     public NifiNodeMapping withCandidate(Candidate next) {
             return new NifiNodeMapping(primaryProcessorIds, processorIdToCanvasNode, edgeProcessorEndpoints,
-                    attributeBaselines, oneShotSources, cleanupConfirmationRequired, next);
+                    attributeBaselines, oneShotSources, cleanupConfirmationRequired, next, runtimeNodeId);
         }
 
         public record AttributeBaseline(String processorId, String designValue, String nativeValue) {}

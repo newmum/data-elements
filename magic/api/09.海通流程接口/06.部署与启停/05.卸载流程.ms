@@ -93,7 +93,8 @@ return respond(rootCause => mutation.withMutationLock(() => {
     try {
         if (!linked.isEmpty() || canvas.lastDeployedAt() != null || canvas.lastDeployedHash() != null
             || canvas.nodeMapping() != null || !['SAVED', 'DRAFT'].contains(canvas.status().name())) {
-            var runtime = nifi.bindRuntimeNode()
+            var nodeId = canvas.nodeMapping()?.runtimeNodeId()
+            var runtime = nodeId == null ? nifi.bindRuntimeNode() : nifi.bindAssignedNode(nodeId)
             try {
                 var ids = organizer.existingIds(canvas, new ArrayList(linked))
                 if (!ids.isEmpty()) {

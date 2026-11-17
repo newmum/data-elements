@@ -87,6 +87,25 @@ class PipelineRedeployTest {
     }
 
     @Test
+    void assignedNodeIsBoundBeforeGroupDiscoveryAndIsNeverReplacedByTheDefault() {
+        Pipeline prior = stored.get();
+        stored.set(new Pipeline(prior.id(), prior.name(), prior.description(), prior.createdAt(), prior.updatedAt(),
+                prior.dsl(), prior.nifiProcessGroupId(), prior.status(), deployedHash(prior.dsl()), prior.lastDeployedAt(),
+                prior.lastStoppedAt(), new NifiNodeMapping(null, null, null).withRuntimeNode("secondary"), null));
+        when(groups.isCurrent(any(), eq("old-group"))).thenReturn(true);
+        var scope = mock(NifiClient.RuntimeScope.class);
+        when(nifi.bindAssignedNode("secondary")).thenReturn(scope);
+
+        assertThat(deployment.deploy("p1", null, false).getStatusCode().value()).isEqualTo(200);
+
+        var order = inOrder(nifi, groups, scope);
+        order.verify(nifi).bindAssignedNode("secondary");
+        order.verify(groups).prepare(any());
+        order.verify(scope).close();
+        verify(nifi, never()).bindRuntimeNode();
+    }
+
+    @Test
     void cleanupFailurePreventsCreation() {
         doThrow(new IllegalStateException("still running")).when(nifi).cleanupProcessGroup("old-group");
         assertThat(deployment.deploy("p1", null, false).getStatusCode().value()).isEqualTo(500);

@@ -39,9 +39,9 @@ function setup(role = "admin", code = "police") {
   return { runtime, storage, sessionStorage };
 }
 
-test("71 项契约指向真实实现及当前审阅版本", async () => {
+test("澄天契约指向真实实现及当前审阅版本", async () => {
   const result = await checkContracts();
-  assert.equal(result.interfaces, 71);
+  assert.equal(result.interfaces, 88);
   assert.deepEqual(result.errors, []);
 });
 
@@ -633,7 +633,7 @@ test("菜单及组织树保持当前数据库层级，空租户不复制公安�
   for (const item of configuration.tenants) {
     const {runtime}=setup("admin",item.scenario);
     const tree=(await request(runtime,"/sym/org/tree")).body.data;
-    assert.deepEqual((await request(runtime,"/sym/org/getOrgTree")).body.data, tree);
+    assert.equal((await request(runtime,"/sym/org/getOrgTree")).status, 501);
     assert.deepEqual((await request(runtime,"/sym/org/tree",{parentId:"validation-missing"})).body.data, []);
 
     const flatten=(nodes)=>nodes.flatMap(node=>[node,...flatten(node.children||[])]);

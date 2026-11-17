@@ -84,8 +84,14 @@ return respond(rootCause => {
             }
             throw new ResponseStatusException(HttpStatus.CONFLICT, '请先停止对应 NiFi 流程组并等待运行任务结束，再切换关联')
         }
-        requireStopped(canvas.nifiProcessGroupId(), true)
-        requireStopped(candidate.processGroupId(), false)
+        var nodeId = canvas.nodeMapping()?.runtimeNodeId()
+        var runtime = nodeId == null ? null : nifi.bindAssignedNode(nodeId)
+        try {
+            requireStopped(canvas.nifiProcessGroupId(), true)
+            requireStopped(candidate.processGroupId(), false)
+        } finally {
+            if (runtime != null) { runtime.close() }
+        }
         var updated = bindCandidate(canvas, candidate, tenantId)
         return ResponseEntity.ok({pipeline: updated, processGroupId: candidate.processGroupId(), mode: 'candidate-activated', started: false})
     })

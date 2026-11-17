@@ -351,7 +351,7 @@ export interface ConnectionTestResult {
 
 export async function getNifiUiLink(id: string) {
   requireEditableTask(id);
-  return (await api.get<{ url: string; processGroupId: string; reusesBrowserSession: boolean }>(`/flow/link?id=${encodeURIComponent(id)}`)).data;
+  return (await api.get<{ url: string; processGroupId: string; reusesBrowserSession: boolean; directNode?: boolean }>(`/flow/link?id=${encodeURIComponent(id)}`)).data;
 }
 
 export interface ProbedColumn {

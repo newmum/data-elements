@@ -11,6 +11,10 @@ import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.when;
 
+import cn.dev33.satoken.SaManager;
+import cn.dev33.satoken.context.SaTokenContextForThreadLocal;
+import cn.dev33.satoken.context.SaTokenContextForThreadLocalStaff;
+import cn.dev33.satoken.servlet.util.SaTokenContextJakartaServletUtil;
 import cn.hutool.extra.spring.SpringUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.linewell.dataelement.dataassets.runtime.MetadataAssetPersistenceModule;
@@ -22,6 +26,8 @@ import com.linewell.dataelement.integration.metadata.TableInventoryProbe;
 import com.linewell.dataelement.magic.module.MetadataScanMagicModule;
 import com.linewell.dataelement.metautil.model.dto.TableInfo;
 import com.linewell.dataelement.model.common.CommonResponse;
+import com.linewell.dataelement.platform.audit.infrastructure.magic.AuditNamedTableInterceptor;
+import com.linewell.dataelement.platform.audit.infrastructure.magic.AuditTableRegistry;
 import com.linewell.dataelement.platform.magic.StructuredTableReadMagicModule.JsonArrayField;
 import com.linewell.dataelement.platform.tenant.api.TenantMagicModule;
 import com.linewell.dataelement.platform.tenant.domain.TenantContext;
@@ -63,6 +69,8 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockHttpServletResponse;
+import org.ssssssss.magicapi.modules.db.SQLModule;
 import org.ssssssss.script.MagicScript;
 import org.ssssssss.script.MagicScriptContext;
 import org.ssssssss.script.runtime.function.MagicScriptLambdaFunction;
@@ -376,6 +384,9 @@ class CollectionReadMagicTest {
     void collectionRunsAfterCommitReusesAnActiveJobAndRollsBackTheSnapshotBeforeRetry() throws Exception {
         database("MySQL");
         installCollectionWrites();
+        var db = (SQLModule) bindings.get("db");
+        var audit = new AuditNamedTableInterceptor(new AuditTableRegistry(jdbc.getDataSource()));
+        db.setNamedTableInterceptors(List.of(audit));
         source("allowed", TENANT, "team-a", "operator", 0);
         source("restricted", TENANT, "team-b", "someone", 0);
         table("already", "old", "原治理表", TENANT, "allowed", 1, 1, START, 0);
@@ -409,6 +420,8 @@ class CollectionReadMagicTest {
             return new TableInventoryProbe.Inventory(List.of(physicalTable("new_table")), "");
         });
 
+        var priorContext = SaManager.getSaTokenContext();
+        SaManager.setSaTokenContext(new SaTokenContextForThreadLocal());
         try {
             scope(Scope.OWNER);
             var preview = assertInstanceOf(Map.class, collectionRequest(Map.of("dbId", "allowed", "dryRun", true)));
@@ -453,6 +466,7 @@ class CollectionReadMagicTest {
         } finally {
             release.countDown();
             org.springframework.test.util.ReflectionTestUtils.invokeMethod(module, "stop");
+            SaManager.setSaTokenContext(priorContext);
         }
     }
 
@@ -587,6 +601,7 @@ class CollectionReadMagicTest {
     }
 
     private Object collectionRequest(Map<String, Object> body, String title, String id) {
+        SaTokenContextJakartaServletUtil.setContext(new MockHttpServletRequest(), new MockHttpServletResponse());
         try (var tenant = TenantContext.use(TENANT); var spring = mockStatic(SpringUtil.class)) {
             spring.when(() -> SpringUtil.getBean("globalExceptionHandler")).thenReturn(new GlobalExceptionHandler());
             spring.when(() -> SpringUtil.getBean(ObjectMapper.class)).thenReturn(new ObjectMapper());
@@ -596,6 +611,8 @@ class CollectionReadMagicTest {
             return assertInstanceOf(ResponseEntity.class, run(script, variables)).getBody();
         } catch (java.io.IOException exception) {
             throw new IllegalStateException(exception);
+        } finally {
+            SaTokenContextForThreadLocalStaff.clearModelBox();
         }
     }
 

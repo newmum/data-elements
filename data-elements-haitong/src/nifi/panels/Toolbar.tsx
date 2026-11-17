@@ -655,7 +655,7 @@ export default function Toolbar() {
       // this browser navigation against VITE_APP_API_URL: that variable is a
       // build-time Vite dev-server target and may point at localhost or a
       // development service after the bundle reaches production.
-      const nifiUiUrl = standaloneNifiUiUrl(target.processGroupId) ?? resolveNifiNativeUiUrl(
+      const nifiUiUrl = target.directNode ? target.url : standaloneNifiUiUrl(target.processGroupId) ?? resolveNifiNativeUiUrl(
         target.url,
         String(apiClient.defaults.baseURL ?? ''),
         window.location.origin,

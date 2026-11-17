@@ -20,13 +20,14 @@
 ================================
 import '@/common/nifiFindCanvas' as findCanvas
 import '@/common/nifiPipelineReadHttp' as withHttpResponse
+import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient as nifi
 import com.linewell.dataelement.platform.tenant.domain.TenantAccessException
 import com.linewell.dataelement.platform.tenant.domain.TenantContext
 import org.springframework.http.ResponseEntity
 import tenantRuntime
 
 // @/common/nifiPipelineUiLink 为 GET 和 HEAD 返回当前租户画布的原生 NiFi 链接。
-// 沿用后端认证的原生页面代理，只返回已保存的部署关联，不发起 NiFi 请求。
+// 已绑定节点返回该节点原生地址，历史画布沿用原有的原生页面代理。
 
 return withHttpResponse((parameterValues, textParameter, rootCause) => {
     // 请求只以当前可信行业租户及路径标识定位画布。
@@ -42,6 +43,11 @@ return withHttpResponse((parameterValues, textParameter, rootCause) => {
     var groupId = canvas.nifiProcessGroupId()
     if (groupId == null || groupId.isBlank()) {
         return ResponseEntity.badRequest().body({error: '当前任务尚未部署到 NiFi，请先部署流程'})
+    }
+    var nodeId = canvas.nodeMapping()?.runtimeNodeId()
+    if (nodeId != null && !nodeId.isBlank()) {
+        return ResponseEntity.ok({url: nifi.assignedNodeUiUrl(nodeId, groupId), processGroupId: groupId,
+            reusesBrowserSession: false, authenticatedByBackend: false, directNode: true})
     }
     return ResponseEntity.ok({url: '/nifi-ui/#/process-groups/' + groupId, processGroupId: groupId,
         reusesBrowserSession: true, authenticatedByBackend: true})

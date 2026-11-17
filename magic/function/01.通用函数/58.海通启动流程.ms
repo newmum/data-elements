@@ -113,7 +113,8 @@ return respond(rootCause => mutation.withMutationLock(() => {
     }
     var runtime = null
     try {
-        runtime = nifi.bindRuntimeNode()
+        var nodeId = canvas.nodeMapping()?.runtimeNodeId()
+        runtime = nodeId == null ? nifi.bindRuntimeNode() : nifi.bindAssignedNode(nodeId)
         var primary = canvas.nodeMapping()?.primaryProcessorIds()
         if (canvas.dsl() != null && primary != null) {
             var fullSources = new LinkedHashSet()

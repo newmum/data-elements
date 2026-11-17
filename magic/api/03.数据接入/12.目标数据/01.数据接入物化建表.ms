@@ -545,6 +545,7 @@ var targetDbIds = []
 var totalFields = 0
 var totalDdlSize = 0
 var totalPartitions = 0
+var requestedNodeIds = []
 for (target in submittedTargets) {
     var props = target?.propList
     var fields = target?.tableItems
@@ -580,10 +581,22 @@ for (target in submittedTargets) {
     properties.putAll(props)
     properties.dbId = dbId
     properties.tableName = name
+    var nodeId = text(props.nifiNodeId).trim()
+    if (nodeId.length() > 64) { exit 400, '数据接入节点标识不合法' }
+    if (!blank(nodeId) && !requestedNodeIds.contains(nodeId)) { requestedNodeIds.add(nodeId) }
+    properties.nifiNodeId = nodeId
     plans.add({inputIndex: plans.size(), propList: properties, tableItems: fields, ddl: ddl,
         partitionPlan: partitionPlan, confirmReuse: target?.reuseExistingTable == true,
         recreateMissing: target?.recreateMissingTable == true, validateReuseOnly: target?.validateReuseOnly == true,
         pendingCleanup: batch && dryRun && target?.pendingTargetCleanup == true})
+}
+if (requestedNodeIds.size() > 0) {
+    var availableNodes = db.table('nifi_node_t').columns('tid').where().eq('tenant_id', tenantId)
+        .eq('is_del', 0).eq('enabled', 1).in('tid', requestedNodeIds).select()
+    var availableNodeIds = availableNodes.map(node => text(node.tid))
+    for (requestedNodeId in requestedNodeIds) {
+        if (!availableNodeIds.contains(requestedNodeId)) { exit 400, '所选数据接入节点已停用或不属于当前租户，请重新选择' }
+    }
 }
 if (batch && (totalFields > 10000 || totalPartitions > 10000 || totalDdlSize > 4000000)) {
     exit 400, '物化批次最多10000个字段、10000个分区和400万个SQL字符，请缩小提交范围'
@@ -775,6 +788,7 @@ var runMaterialization = () => {
         candidates.where(tableRead.any(targetNames))
         duplicateRows = candidates.rows({tid:idColumn, datasourceId:datasourceColumn, tableName:nameColumn,
             sourceTableId:field('source_table_id','TEXT'), recordCount:field('record_count','NUMBER'),
+            fieldGovernanceConfig:field('field_governance_config','LOB'),
             storageSize:field('storage_size','TEXT'), totalSizeBytes:field('total_size_bytes','NUMBER'),
             totalSizeFormatted:field('total_size_formatted','TEXT')}, idColumn, 'asc', 401)
         if (duplicateRows.size() > 400) {
@@ -1097,6 +1111,11 @@ var runMaterialization = () => {
             partitionPlan: submittedPartitionPlan,
             fieldTransformBindings: buildFieldTransformBindings(sourceTable, sourceColumnMap, relations, targetTableId, tableItems, columns)
         }
+        var selectedNodeId = propList.nifiNodeId
+        if (blank(selectedNodeId) && duplicate != null) {
+            selectedNodeId = text(parseGovernanceConfig(first(duplicate, ['fieldGovernanceConfig', 'field_governance_config']))?.nifiNodeId)
+        }
+        if (!blank(selectedNodeId)) { targetGovernanceConfig.nifiNodeId = selectedNodeId }
         db.table('db_table_t').where().eq('tenant_id', tenantId).eq('tid', targetTableId).eq('is_del', 0)
             .update({ field_governance_config: jsons.toJSONStr(targetGovernanceConfig), updated_time: now })
 

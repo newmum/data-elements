@@ -141,7 +141,8 @@ return respond(() => mutation.withMutationLock(() => {
         // 从共享原生协议模块找回历史受管组。原生删除失败时 SQL 事务回滚，可重试缺失组。
         if (!nativeIds.isEmpty() || flow.lastDeployedAt() != null || flow.lastDeployedHash() != null || flow.nodeMapping() != null
             || !['SAVED','DRAFT'].contains(flow.status().name())) {
-            var runtime = nifi.bindRuntimeNode()
+            var nodeId = flow.nodeMapping()?.runtimeNodeId()
+            var runtime = nodeId == null ? nifi.bindRuntimeNode() : nifi.bindAssignedNode(nodeId)
             try {
                 var ids = organizer.existingIds(flow, nativeIds)
                 var targets = ids.map(id => ({id: id, linked: nativeIds.contains(id)}))

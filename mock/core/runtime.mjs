@@ -21,14 +21,23 @@ import {
 
 const clone = (value) => structuredClone(value);
 const now = () => new Date().toISOString().replace("T", " ").slice(0, 19);
-const collectionAliases = new Map([
-  ["GET /dst/database/metadata/tables/collection/status", "/dst/collect/status"],
-  ["GET /dst/database/metadata/tables/collection/changes", "/dst/collect/changes"],
-  ["GET /dst/database/metadata/tables/snapshot", "/dst/collect/snapshot"],
-  ["POST /dst/database/metadata/tables/review-order", "/dst/collect/order"],
-  ["POST /dst/database/metadata/tables/collection/start", "/dst/collect/start"],
-  ["POST /dst/database/metadata/tables/collection/rename-missing", "/dst/collect/rename"],
-]);
+function collectionOperation(key) {
+  switch (key) {
+    case "GET /dst/collect/status":
+    case "GET /dst/database/metadata/tables/collection/status": return "status";
+    case "GET /dst/collect/changes":
+    case "GET /dst/database/metadata/tables/collection/changes": return "changes";
+    case "GET /dst/collect/snapshot":
+    case "GET /dst/database/metadata/tables/snapshot": return "snapshot";
+    case "POST /dst/collect/order":
+    case "POST /dst/database/metadata/tables/review-order": return "order";
+    case "POST /dst/collect/start":
+    case "POST /dst/database/metadata/tables/collection/start": return "start";
+    case "POST /dst/collect/rename":
+    case "POST /dst/database/metadata/tables/collection/rename-missing": return "rename";
+    default: return null;
+  }
+}
 
 /** 应用层接口模拟。状态只存在于专用浏览器键，不读取数据库或执行 Magic/Java。 */
 export class ChengtianMockRuntime {
@@ -622,21 +631,20 @@ export class ChengtianMockRuntime {
     const portal = (/^(GET|HEAD) \/portal\/sso\/(options|settings|session|tenants)$/.test(key)
       || key === "POST /portal/sso/switch");
     const readVerb = verb === "HEAD" ? "GET" : verb;
-    const collectionPath = collectionAliases.get(`${readVerb} ${path}`) ?? path;
-    const collection = /^(GET|HEAD) \/dst\/collect\/(status|snapshot|changes)$/.test(`${verb} ${collectionPath}`)
-      || /^POST \/dst\/collect\/(order|start|rename)$/.test(`${verb} ${collectionPath}`);
+    const collection = collectionOperation(`${readVerb} ${path}`);
     const logBootstrap = /^(GET|HEAD) \/sym\/logs\/(capabilities|components)$/.test(key);
     const shortEvent = /^\/sym\/(logauth|logops|logreq|logsec)\/(page|stats|detail|items|batch)$/.exec(path);
     const canonicalEvent = shortEvent && (shortEvent[2] === "batch" ? verb === "POST" : readVerb === "GET");
     const legacyEvent = /^(GET|HEAD) \/sym\/logs\/(auth|operations|requests|security)(?:\/[^/]+(?:\/items)?)?$/.test(key)
       || /^POST \/sym\/logs\/(auth|operations|requests|security)\/batch$/.test(key);
     const logEvent = canonicalEvent || legacyEvent;
-    const logTask = /^(?:GET|HEAD) \/sym\/(?:logs\/(exports|archives)|(logexport|logarchive)\/page)$/.exec(key);
+    const logTask = /^(?:GET|HEAD) \/sym\/(?:logs\/(?:exports|archives)|(?:logexport|logarchive)\/page)$/.test(key);
     const exportCreate = /^POST \/sym\/(?:logs\/exports|logexport\/create)$/.test(key);
     const archiveCreate = key === "POST /sym/logarchive/create";
     const archiveAction = key === "POST /sym/logarchive/action";
     const logPolicy = /^(?:GET|HEAD) \/sym\/logpolicy\/list$/.test(key)
       || /^(?:PUT|POST) \/sym\/logpolicy\/save$/.test(key);
+    const logRoute = logBootstrap || logEvent || logTask || exportCreate || archiveCreate || archiveAction || logPolicy || path.startsWith("/sym/logs/");
     const head = (portal || collection || logBootstrap || logEvent || logTask) && verb === "HEAD";
     const headResponse = () => ({ raw: true, status: 200, body: null, headers: {
       "Content-Type": "application/json",
@@ -644,29 +652,7 @@ export class ChengtianMockRuntime {
     } });
     if (key === "HEAD /portal/main/index") return headResponse();
     try {
-      let route = collection ? `${readVerb} ${collectionPath}` : head ? `GET ${path}` : key;
-      if (logTask) {
-        const kind = logTask[1] || (logTask[2] === "logexport" ? "exports" : "archives");
-        route = `${verb} /sym/logs/${kind}`;
-      }
-      if (logPolicy) route = `${verb} /sym/logs/policies`;
-      if (exportCreate) route = "POST /sym/logs/exports";
-      if (archiveCreate) route = "POST /sym/logs/archives";
-      if (archiveAction) route = "POST /sym/logs/archives/action";
-      if (canonicalEvent) {
-        assert(this.session && token === this.session.token, 401, "本地场景会话无效，请重新登录");
-        const [, group, action] = shortEvent;
-        const kind = {logauth: "auth", logops: "operations", logreq: "requests", logsec: "security"}[group];
-        const oldUrl = `/sym/logs/${kind}`;
-        if (action === "detail" || action === "items") {
-          const id = String(query.id ?? "");
-          assert(id.trim() && id.length <= 64, 400, "一次最多查询100个不同事件");
-          route = `GET ${oldUrl}/${encodeURIComponent(id)}${action === "items" ? "/items" : ""}`;
-        } else {
-          route = `${readVerb} ${oldUrl}${action === "page" ? "" : action === "stats" ? "/statistics" : "/batch"}`;
-        }
-      }
-      const data = await this.dispatch(route, query, body || {}, token);
+      const data = await this.dispatch(key, query, body || {}, token, { logRoute, collection });
       if (head) return headResponse();
       if (portal) return { status: 200, body: { code: 0, msg: "success", success: true, data } };
       if (collection) return { status: 200, body: { code: 0, msg: "success", data } };
@@ -686,7 +672,7 @@ export class ChengtianMockRuntime {
         msg: error.status === 401 ? "user_no_login" : error.message,
         success: false, data: null,
       } };
-      if (logEvent || logTask || logPolicy || exportCreate || archiveCreate || archiveAction || path.startsWith("/sym/logs/")) return logErrorResponse(error);
+      if (logRoute) return logErrorResponse(error);
       return {
         status: error.status,
         body: {
@@ -698,10 +684,10 @@ export class ChengtianMockRuntime {
     }
   }
 
-  dispatch(key, query, body, token) {
+  dispatch(key, query, body, token, { logRoute, collection }) {
     if (key === "GET /portal/main/index") return clone(configuration.globalSettings);
-    if (key === "GET /portal/sso/options") return this.tenantOptions();
-    if (key === "GET /portal/sso/settings") {
+    if (key === "GET /portal/sso/options" || key === "HEAD /portal/sso/options") return this.tenantOptions();
+    if (key === "GET /portal/sso/settings" || key === "HEAD /portal/sso/settings") {
       const supplied = query.tenantId ?? query["tenantId[]"];
       assert(supplied != null, 20001, "缺少必要参数: tenantId");
       const code = scenarioForTenantId(Array.isArray(supplied) ? supplied.join(",") : supplied);
@@ -726,15 +712,15 @@ export class ChengtianMockRuntime {
       401,
       "本地场景会话无效，请重新登录",
     );
-    if (/^[A-Z]+ \/sym\/logs(?:\/|$)/.test(key))
+    if (logRoute)
       return this.logs.handle(key, query, body, this.database, clone(this.session), this.components);
     if (key === "POST /portal/sso/logout") {
       this.session = null;
       this.sessionStorage?.removeItem("data-elements:mock:session:v3");
       return "/login";
     }
-    if (key === "GET /portal/sso/session") return this.tenant();
-    if (key === "GET /portal/sso/tenants") return this.tenant().available;
+    if (key === "GET /portal/sso/session" || key === "HEAD /portal/sso/session") return this.tenant();
+    if (key === "GET /portal/sso/tenants" || key === "HEAD /portal/sso/tenants") return this.tenant().available;
     if (key === "POST /portal/sso/switch") {
       assert(String(body.tenantId ?? "").trim() === this.session.tenantId, 403,
         "本地账号只能访问所属租户，请切换系统后重新登录");
@@ -747,7 +733,7 @@ export class ChengtianMockRuntime {
       assert(body.mode === "count", 501, "首阶段仅提供导航购物车计数");
       return { total: 0 };
     }
-    if (key === "POST /sym/org/tree" || key === "POST /sym/org/getOrgTree")
+    if (key === "POST /sym/org/tree")
       return organizationTree(this.database.organizations, body.parentId || "ROOT");
     if (key === "POST /sym/component/manage") {
       assert(
@@ -833,18 +819,18 @@ export class ChengtianMockRuntime {
           : body,
       );
     }
-    if (key === "GET /dst/collect/snapshot" || key === "GET /dst/collect/changes") {
-      return collectionHistory(this.database, this.session, key.split("/").at(-1), query);
+    if (collection === "snapshot" || collection === "changes") {
+      return collectionHistory(this.database, this.session, collection, query);
     }
-    if (key === "POST /dst/collect/order") return collectionReviewOrder(this.database, this.session, body);
-    if (key === "POST /dst/collect/start") {
+    if (collection === "order") return collectionReviewOrder(this.database, this.session, body);
+    if (collection === "start") {
       const data = this.database;
       const result = collectionStart(data, this.session, body);
       if (!result.dryRun) this.persist(data);
       return result;
     }
-    if (key === "POST /dst/collect/rename") return collectionRename(this.database, this.session, body);
-    if (key === "GET /dst/collect/status") {
+    if (collection === "rename") return collectionRename(this.database, this.session, body);
+    if (collection === "status") {
       const ids = query.dbId ?? query["dbId[]"];
       assert(ids != null, 20001, "缺少必要参数: dbId");
       const id = String(ids).trim();

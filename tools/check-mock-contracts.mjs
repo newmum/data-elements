@@ -15,6 +15,22 @@ function metadata(source) {
   return JSON.parse(separator >= 0 ? source.slice(0, separator) : source);
 }
 
+async function magicRoute(filename, meta, type) {
+  const parts = [meta.path];
+  let id = meta.groupId, folder = path.dirname(filename);
+  const seen = new Set();
+  while (id && !["0", `${type}:0`].includes(id)) {
+    if (seen.has(id)) throw new Error(`Magic 分组循环：${id}`);
+    seen.add(id);
+    const group = metadata(await fs.readFile(path.join(folder, "group.json"), "utf8"));
+    if (group.id !== id) throw new Error(`Magic 分组身份不一致：${id}`);
+    parts.unshift(group.path || "");
+    id = group.parentId;
+    folder = path.dirname(folder);
+  }
+  return `/${parts.join("/").split("/").filter(Boolean).join("/")}`;
+}
+
 /** 非 HTTP 的共享函数依赖单独校验，不能伪造为接口或仅放在不执行的说明字段中。 */
 export async function checkFunctionDependency(root, dependency) {
   const errors = [], source = dependency.source;
@@ -26,17 +42,7 @@ export async function checkFunctionDependency(root, dependency) {
   try {
     const content = await fs.readFile(filename, "utf8"), meta = metadata(content);
     if (sourceDigest(content) !== source.reviewedSha256) errors.push(`共享函数已变化，须核对 Mock：${source.file}`);
-    const parts = [meta.path];
-    let id = meta.groupId, folder = path.dirname(filename);
-    const seen = new Set();
-    while (id && !["0", "function:0"].includes(id)) {
-      if (seen.has(id)) throw new Error("函数分组循环");
-      seen.add(id);
-      const group = metadata(await fs.readFile(path.join(folder, "group.json"), "utf8"));
-      if (group.id !== id) throw new Error("函数分组身份不一致");
-      parts.unshift(group.path || ""); id = group.parentId; folder = path.dirname(folder);
-    }
-    const route = `/${parts.join("/").split("/").filter(Boolean).join("/")}`;
+    const route = await magicRoute(filename, meta, "function");
     if (meta.id !== source.id || route !== source.path) errors.push(`共享函数身份或路径已变化：${source.file}`);
   } catch { errors.push(`共享函数或分组无法核验：${source.file}`); }
   return errors;
@@ -47,26 +53,6 @@ export async function checkContracts(root = repository) {
   const specification = JSON.parse(
     await fs.readFile(path.join(root, "mock/contracts/chengtian.json"), "utf8"),
   );
-  const index = JSON.parse(
-    await fs.readFile(path.join(root, "magic/.manifest.json"), "utf8"),
-  );
-  const groups = new Map();
-  for (const entry of index.resources.filter(
-    (row) => row.path.startsWith("api/") && row.path.endsWith("/group.json"),
-  )) {
-    const meta = metadata(
-      await fs.readFile(path.join(root, "magic", entry.path), "utf8"),
-    );
-    groups.set(meta.id, meta);
-  }
-  const prefix = (id, seen = new Set()) => {
-    if (!id || ["0", "api:0"].includes(id)) return "";
-    if (seen.has(id) || !groups.has(id))
-      throw new Error(`Magic 分组断链：${id}`);
-    seen.add(id);
-    const group = groups.get(id);
-    return `${prefix(group.parentId, seen)}/${String(group.path || "").replace(/^\/+|\/+$/g, "")}`;
-  };
   const errors = [],
     operations = new Set();
   for (const entry of specification.interfaces) {
@@ -91,13 +77,14 @@ export async function checkContracts(root = repository) {
         `真实实现已变化，须核对 mock 契约并更新审阅摘要及说明：${entry.operation}`,
       );
     if (entry.source.kind === "magic") {
-      const meta = metadata(source);
-      const route = `${prefix(meta.groupId)}/${meta.path || ""}`.replace(/\/{2,}/g, "/");
-      if (
-        meta.id !== entry.source.id ||
-        `${meta.method.toUpperCase()} ${route}` !== entry.operation
-      )
-        errors.push(`Magic 身份或路由已变化：${entry.operation}`);
+      try {
+        const meta = metadata(source);
+        const route = await magicRoute(filename, meta, "api");
+        if (meta.id !== entry.source.id || `${meta.method.toUpperCase()} ${route}` !== entry.operation)
+          errors.push(`Magic 身份或路由已变化：${entry.operation}`);
+      } catch {
+        errors.push(`Magic 源码或分组无法核验：${entry.operation}`);
+      }
     } else if (
       !["technical-retained", "pending-magic"].includes(entry.source.state) ||
       !entry.source.reason

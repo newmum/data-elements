@@ -75,9 +75,18 @@ return withHttpResponse((parameterValues, textParameter, rootCause) => {
         return ResponseEntity.notFound().build()
     }
     var groupId = canvas.nifiProcessGroupId()
-    var snapshot = groupId == null ? null : nifi.getProcessGroupStatus(groupId)
     if (page < 1 || size < 1 || size > 100) {
         throw new IllegalArgumentException('处理器分页参数无效')
+    }
+    var snapshot = null
+    if (groupId != null) {
+        var nodeId = canvas.nodeMapping()?.runtimeNodeId()
+        var runtime = nodeId == null ? null : nifi.bindAssignedNode(nodeId)
+        try {
+            snapshot = nifi.getProcessGroupStatus(groupId)
+        } finally {
+            if (runtime != null) { runtime.close() }
+        }
     }
 
     var display = (row, key) => row.hasNonNull(key) ? row.path(key).asText() : '—'

@@ -67,9 +67,10 @@ public class TaskRuntimeStatusService {
             });
         }
     }
-    private synchronized Entry current() {
+    private synchronized Entry current(String assignedNodeId) {
         TenantContext.requireTenantId();
-        RuntimeNode node = resolver.resolve();
+        RuntimeNode node = assignedNodeId == null || assignedNodeId.isBlank()
+                ? resolver.resolve() : resolver.resolveAssignedNode(assignedNodeId);
         entries.entrySet().removeIf(e -> e.getValue().subscribers.isEmpty() && System.currentTimeMillis() - e.getValue().lastAccess > 60000);
         if (!entries.containsKey(node.tokenCacheKey()) && entries.size() >= 16) throw new IllegalStateException("实时状态节点繁忙，请稍后重试");
         Entry entry = entries.computeIfAbsent(node.tokenCacheKey(), key -> new Entry(node));
@@ -120,7 +121,10 @@ public class TaskRuntimeStatusService {
     private String revision(Entry entry) { return (entry.index == null ? "unavailable" : entry.index.revision()) + (fresh(entry) ? ":ok" : ":unavailable"); }
     private boolean fresh(Entry entry) { return entry.index != null && entry.readyGeneration == entry.generation && entry.error.isEmpty() && System.currentTimeMillis() - entry.observedAt < 10000; }
     public Map<String, Object> snapshot() {
-        Entry entry = current(); refresh(entry);
+        return snapshotForNode(null);
+    }
+    public Map<String, Object> snapshotForNode(String assignedNodeId) {
+        Entry entry = current(assignedNodeId); refresh(entry);
         Map<String, Object> result = new HashMap<>(event(entry));
         result.put("index", entry.index); result.put("nodeId", entry.node.id());
         for (int status = 0; status <= 3; status++) {
@@ -135,7 +139,7 @@ public class TaskRuntimeStatusService {
         return result;
     }
     public SseEmitter subscribe() {
-        Entry entry = current();
+        Entry entry = current(null);
         if (!connections.tryAcquire()) throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE, "实时状态连接繁忙，请稍后重试");
         Subscriber subscriber = new Subscriber(entry); entry.subscribers.add(subscriber);
         // Finish normally before MVC's fallback timeout, then authenticate the renewal.

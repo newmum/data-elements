@@ -79,6 +79,28 @@ class MaterializationBatchSubmitMagicTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
+    void materializationPersistsTheSelectedNodeAndRejectsAnUnavailableNodeBeforeDdl() throws Exception {
+        var fixture = new Fixture(2);
+        fixture.jdbc.execute("create table nifi_node_t(tid varchar(64),tenant_id varchar(32),is_del int,enabled int)");
+        fixture.jdbc.update("insert into nifi_node_t values('secondary','police',0,1),('disabled','police',0,0)");
+        var targets = fixture.targets(2);
+        var firstTarget = (Map<String, Object>) targets.getFirst().get("propList");
+        var secondTarget = (Map<String, Object>) targets.getLast().get("propList");
+        firstTarget.put("nifiNodeId", "secondary");
+        secondTarget.put("nifiNodeId", "disabled");
+        assertStatus(400, fixture.batch(targets));
+        assertNoWrites(fixture);
+
+        secondTarget.put("nifiNodeId", "secondary");
+        assertThat(success(fixture.batch(targets)).get("complete")).isEqualTo(true);
+        var configs = fixture.jdbc.queryForList("select field_governance_config from db_table_t where datasource_id like 'db-%'",
+                String.class);
+        assertThat(configs).hasSize(2).allSatisfy(config ->
+                assertThat(cn.hutool.json.JSONUtil.parseObj(config).getStr("nifiNodeId")).isEqualTo("secondary"));
+    }
+
+    @Test
     void referencedTargetsCannotBeReusedAndCandidateReadsStayBounded() throws Exception {
         var readCounts = new ArrayList<Integer>();
         for (int size : List.of(1, 20)) {

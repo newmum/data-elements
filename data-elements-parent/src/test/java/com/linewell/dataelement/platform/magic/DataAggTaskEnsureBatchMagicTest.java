@@ -77,6 +77,29 @@ class DataAggTaskEnsureBatchMagicTest {
         System.out.println("Hive chain 20/100 targets: SQL reads="+reads);
     }
 
+    @Test void materializedNodesAreBoundWithOneBatchReadAndForeignNodesAreRejected() throws Exception {
+        var reads = new ArrayList<Integer>();
+        for (int count : List.of(20, 100)) {
+            var fixture = Fixture.forCreation(count);
+            fixture.jdbc.execute("create table nifi_node_t(tid varchar(64),tenant_id varchar(32),is_del int,enabled int)");
+            fixture.jdbc.update("insert into nifi_node_t values('secondary','police',0,1),('foreign','other-tenant',0,1)");
+            fixture.jdbc.update("update db_table_t set field_governance_config=? where tid like 'target-%'",
+                    "{\"nifiNodeId\":\"secondary\"}");
+            fixture.jdbc.update("update db_table_t set field_governance_config=? where tid='target-0'",
+                    "{\"nifiNodeId\":\"foreign\"}");
+            assertInstanceOf(ExitValue.class, fixture.run());
+            assertEquals(0, fixture.jdbc.queryForObject("select count(*) from nifi_pipeline_t", Integer.class));
+            fixture.jdbc.update("update db_table_t set field_governance_config=? where tid='target-0'",
+                    "{\"nifiNodeId\":\"secondary\"}");
+            assertInstanceOf(Map.class, fixture.run());
+            reads.add(fixture.counter.queries);
+            assertEquals(count, fixture.jdbc.queryForObject(
+                    "select count(*) from nifi_pipeline_t where node_mapping_json like '%secondary%'", Integer.class));
+        }
+        assertEquals(reads.getFirst(), reads.getLast());
+        System.out.println("Assigned NiFi node 20/100 targets: SQL reads=" + reads);
+    }
+
     @Test
     void creatingTaskAcceptsPendingApplicationButDryRunDoesNot() throws Exception {
         var f = Fixture.forCreation(1);
@@ -1178,7 +1201,7 @@ class DataAggTaskEnsureBatchMagicTest {
             jdbc.execute("""
                     create table nifi_pipeline_t(id varchar(64),tenant_id varchar(32),name varchar(200),
                         description varchar(300),status varchar(30),nifi_process_group_id varchar(64),dsl_json varchar(32000),dsl_version int,
-                        created_at bigint,updated_at bigint,is_del int)
+                        created_at bigint,updated_at bigint,is_del int,node_mapping_json varchar(10000))
                     """);
             jdbc.update("insert into db_table_t(tid,tenant_id,datasource_id,table_name,is_del) "
                     + "values('source-1','police','source-db','person',0)");

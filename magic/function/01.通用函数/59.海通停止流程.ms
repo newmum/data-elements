@@ -55,34 +55,40 @@ return respond(rootCause => mutation.withMutationLock(() => {
     if (groupId == null) {
         return ResponseEntity.badRequest().body({error: 'Pipeline has not been deployed yet'})
     }
+    var nodeId = canvas.nodeMapping()?.runtimeNodeId()
+    var runtime = nodeId == null ? null : nifi.bindAssignedNode(nodeId)
     try {
-        nifi.setProcessGroupState(groupId, 'STOPPED')
-    } catch (failure) {
-        var cause = rootCause(failure)
-        if (!(cause instanceof NifiException)) {
-            throw failure
+        try {
+            nifi.setProcessGroupState(groupId, 'STOPPED')
+        } catch (failure) {
+            var cause = rootCause(failure)
+            if (!(cause instanceof NifiException)) {
+                throw failure
+            }
+            var detail = FlowFailureDetails.describe(cause)
+            errorStore.add(pipelineId, new FlowError(null, ErrorLevel.ERROR, ErrorPhase.RUNTIME, null, null, null,
+                '停止流程组失败', detail, null, Instant.now()))
+            var status = cause.status() > 0 ? cause.status() : 502
+            return ResponseEntity.status(status).body({error: detail, status: status, body: FlowFailureDetails.safe(cause.body())})
         }
-        var detail = FlowFailureDetails.describe(cause)
-        errorStore.add(pipelineId, new FlowError(null, ErrorLevel.ERROR, ErrorPhase.RUNTIME, null, null, null,
-            '停止流程组失败', detail, null, Instant.now()))
-        var status = cause.status() > 0 ? cause.status() : 502
-        return ResponseEntity.status(status).body({error: detail, status: status, body: FlowFailureDetails.safe(cause.body())})
-    }
-    writeRuntime(pipelineId, tenantId, {status: PipelineStatus.STOPPING})
-    try {
-        nifi.waitForAllProcessorsStopped(groupId, 30000L)
-    } catch (failure) {
-        if (!(rootCause(failure) instanceof NifiException)) {
-            throw failure
+        writeRuntime(pipelineId, tenantId, {status: PipelineStatus.STOPPING})
+        try {
+            nifi.waitForAllProcessorsStopped(groupId, 30000L)
+        } catch (failure) {
+            if (!(rootCause(failure) instanceof NifiException)) {
+                throw failure
+            }
+            return ResponseEntity.accepted().body({processGroupId: groupId, state: 'STOPPING',
+                warning: 'NiFi 已接受停止请求，正在等待运行中的任务结束'})
         }
-        return ResponseEntity.accepted().body({processGroupId: groupId, state: 'STOPPING',
-            warning: 'NiFi 已接受停止请求，正在等待运行中的任务结束'})
+        // 停止时间和接入任务状态一起写入。写入失败可用原生组现状重试。
+        var stoppedAt = System.currentTimeMillis()
+        transactions.execute(transaction => {
+            writeRuntime(pipelineId, tenantId, {status: PipelineStatus.STOPPED, stoppedAt: stoppedAt})
+            return syncTask(pipelineId, 'stopped', null)
+        })
+        return ResponseEntity.ok({processGroupId: groupId, state: 'STOPPED', stoppedAt: stoppedAt})
+    } finally {
+        if (runtime != null) { runtime.close() }
     }
-    // 停止时间和接入任务状态一起写入。写入失败可用原生组现状重试。
-    var stoppedAt = System.currentTimeMillis()
-    transactions.execute(transaction => {
-        writeRuntime(pipelineId, tenantId, {status: PipelineStatus.STOPPED, stoppedAt: stoppedAt})
-        return syncTask(pipelineId, 'stopped', null)
-    })
-    return ResponseEntity.ok({processGroupId: groupId, state: 'STOPPED', stoppedAt: stoppedAt})
 }))

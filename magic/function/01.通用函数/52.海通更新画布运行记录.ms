@@ -27,6 +27,7 @@ import java.util.Objects
 import org.springframework.http.HttpStatus
 import org.springframework.transaction.support.TransactionTemplate as transactions
 import org.springframework.web.server.ResponseStatusException
+import com.linewell.dataelement.integration.nifi.canvas.pipeline.NifiNodeMapping
 import tableWrite
 
 // @/common/nifiWriteRuntime 为部署、候选切换和启停清理更新当前行业租户的画布运行记录。
@@ -56,10 +57,17 @@ return transactions.execute(transaction => {
     if (designChanged) {
         dsl = BatchSchedulePolicy.normalize(dsl, current.dsl(), tenantId, current.id())
     }
+    // 清理原生组、切换候选或重建映射时保留任务选定的运行节点。
+    var mapping = requested('mapping', current.nodeMapping())
+    var runtimeNodeId = current.nodeMapping()?.runtimeNodeId()
+    if (runtimeNodeId != null && changes.containsKey('mapping')) {
+        if (mapping == null) { mapping = new NifiNodeMapping(null, null, null) }
+        mapping = mapping.withRuntimeNode(runtimeNodeId)
+    }
     var updated = new Pipeline(current.id(), current.name(), current.description(), current.createdAt(), timestamp,
         dsl, requested('groupId', current.nifiProcessGroupId()), requested('status', current.status()),
         requested('deployedHash', current.lastDeployedHash()), requested('deployedAt', current.lastDeployedAt()),
-        requested('stoppedAt', current.lastStoppedAt()), requested('mapping', current.nodeMapping()),
+        requested('stoppedAt', current.lastStoppedAt()), mapping,
         requested('lastBulletinId', current.lastBulletinId()))
     var values = {updated_at: updated.updatedAt(), status: updated.status().name(),
         nifi_process_group_id: updated.nifiProcessGroupId(), last_deployed_hash: updated.lastDeployedHash(),

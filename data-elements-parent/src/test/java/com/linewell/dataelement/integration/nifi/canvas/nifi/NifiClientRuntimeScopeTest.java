@@ -71,6 +71,38 @@ class NifiClientRuntimeScopeTest {
         verify(resolver, times(2)).resolve();
     }
 
+    @Test void selectedNodeReceivesGroupRequestsAndSuppliesTheDriverAndNativeLink() {
+        var resolver = mock(NifiNodeRuntimeResolver.class);
+        var fallback = node("tenant-a");
+        var selected = new RuntimeNode("tenant-a", "node-secondary", "secondary",
+                "http://secondary-nifi.test", "", "", false, "root-secondary", "MYSQL=/opt/secondary/mysql.jar");
+        when(resolver.resolve()).thenReturn(fallback);
+        when(resolver.resolveAssignedNode("node-secondary")).thenReturn(selected);
+        var builder = RestClient.builder().baseUrl("http://secondary-nifi.test");
+        var server = MockRestServiceServer.bindTo(builder).build();
+        when(resolver.restClient(selected)).thenReturn(builder.build());
+        server.expect(requestTo("http://secondary-nifi.test/nifi-api/process-groups/root-secondary/process-groups"))
+                .andExpect(method(org.springframework.http.HttpMethod.POST))
+                .andRespond(withSuccess("{\"component\":{\"id\":\"group\"}}", MediaType.APPLICATION_JSON));
+        server.expect(requestTo("http://secondary-nifi.test/nifi-api/process-groups/group"))
+                .andRespond(withSuccess("{\"component\":{\"id\":\"group\"}}", MediaType.APPLICATION_JSON));
+        var client = new NifiClient(resolver, new ObjectMapper());
+        try (var tenant = TenantContext.use("tenant-a"); var outer = client.bindRuntimeNode()) {
+            try (var scope = client.bindAssignedNode("node-secondary"); var compiler = client.bindRuntimeNode()) {
+                assertThat(client.getRootProcessGroupId()).isEqualTo("root-secondary");
+                client.createProcessGroup("root-secondary", "validation", 0, 0);
+                assertThat(client.getProcessGroup("group").path("component").path("id").asText()).isEqualTo("group");
+                assertThat(client.jdbcDriverLocation("MYSQL")).isEqualTo("/opt/secondary/mysql.jar");
+            }
+            assertThat(client.getRootProcessGroupId()).isEqualTo("root-tenant-a");
+            assertThat(client.assignedNodeUiUrl("node-secondary", "group"))
+                    .isEqualTo("http://secondary-nifi.test/nifi/#/process-groups/group");
+        }
+        server.verify();
+        verify(resolver, times(1)).resolve();
+        verify(resolver, never()).restClient(fallback);
+    }
+
     private RuntimeNode node(String tenant) {
         return new RuntimeNode(tenant, "node-" + tenant, "test", "http://nifi.test", "test-user", "test-password", false, "root-" + tenant);
     }

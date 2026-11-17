@@ -1014,7 +1014,7 @@ public class DslCompiler {
         if (FtpsSourceCompiler.enabled(cfg)) {
             String libraries=configText(cfg,"ftpClientLibraries");
             if (libraries.isBlank() && nifiNodeRuntimeResolver != null)
-                libraries=nifiNodeRuntimeResolver.resolve().jdbcDriverLocation("FTP");
+                libraries=nifi.jdbcDriverLocation("FTP");
             if (!libraries.isBlank() && !libraries.toLowerCase(Locale.ROOT).endsWith(".jar"))
                 libraries=libraries.replaceAll("/+$", "")+"/commons-net.jar";
             cfg.put("_runtimeFtpsLibraries",libraries);
@@ -3776,13 +3776,12 @@ public class DslCompiler {
         if (nifiNodeRuntimeResolver == null) {
             return resolved;
         }
-        NifiNodeRuntimeResolver.RuntimeNode node = nifiNodeRuntimeResolver.resolve();
         String driverKey="HIVE".equalsIgnoreCase(dbType) && "open-source".equalsIgnoreCase(configText(config,"hiveConnectionMode"))
                 ? "HIVE_OPEN_SOURCE" : variant == null ? dbType : variant.nodeDriverKey();
-        String nodeConfiguredLocation = node.jdbcDriverLocation(driverKey);
-        if (nodeConfiguredLocation.isBlank() && variant != null) nodeConfiguredLocation = node.jdbcDriverLocation(dbType);
+        String nodeConfiguredLocation = nifi.jdbcDriverLocation(driverKey);
+        if (nodeConfiguredLocation.isBlank() && variant != null) nodeConfiguredLocation = nifi.jdbcDriverLocation(dbType);
         if (nodeConfiguredLocation.isBlank()) {
-            throw new IllegalStateException("NiFi 节点“" + node.code()
+            throw new IllegalStateException("NiFi 节点“" + nifi.runtimeNodeCode()
                     + "”未配置 JDBC 驱动目录；请在【节点管理】编辑该节点后补充实际目录路径。");
         }
         return new JdbcDriverSpec(resolved.driverClass(),

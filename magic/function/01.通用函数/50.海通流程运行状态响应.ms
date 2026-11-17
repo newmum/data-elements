@@ -58,7 +58,8 @@ return withHttpResponse((parameterValues, textParameter, rootCause) => {
     }
 
     // 只读一次租户运行快照。明确状态覆盖保存态，未知或缺失状态沿用保存态。
-    var snapshot = runtimeStatus.snapshot()
+    var nodeId = canvas.nodeMapping()?.runtimeNodeId()
+    var snapshot = nodeId == null || groupId == null ? runtimeStatus.snapshot() : runtimeStatus.snapshotForNode(nodeId)
     var runtime = runtimeStatus.describe(snapshot, groupId, storedStatus)
     result.putAll(runtime)
     result.runtimeRevision = snapshot.revision

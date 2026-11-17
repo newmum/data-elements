@@ -297,36 +297,47 @@ export class LogMockService {
   async handle(key, query, body, database, session, components) {
     assert(session.tenantId === database.tenantId && ["ALL", "ORG", "OWNER"].includes(session.scope), 401, "缺少有效的本地行业会话");
     assert(query.action == null && body.action == null, 501, "本批日志 Mock 不支持 action 动作，已阻止访问真实服务");
-    if (key === "GET /sym/logs/capabilities") return logCapabilities(session);
-    if (key === "GET /sym/logs/components") {
+    if (/^(GET|HEAD) \/sym\/logs\/capabilities$/.test(key)) return logCapabilities(session);
+    if (/^(GET|HEAD) \/sym\/logs\/components$/.test(key)) {
       assert(logCapabilities(session).length, 403, "当前会话没有日志权限");
       return components.filter((row) => row.name === "log-management").map((row) => ({ tid: row.componentId, name: row.name, compile_js: row.compileJs, compile_css: row.compileCss }));
     }
-    if (/ \/sym\/logs\/(archives|policies)(?:\/|$)/.test(key)) throw new MockError(501, "本批未实现日志归档或策略；不会虚构成功，已阻止访问真实服务");
-    if (["GET /sym/logs/exports", "HEAD /sym/logs/exports", "POST /sym/logs/exports"].includes(key)) {
+    if (/ \/sym\/(?:logs\/(?:archives|policies)|logarchive|logpolicy)(?:\/|$)/.test(key))
+      throw new MockError(501, "本批未实现日志归档或策略；不会虚构成功，已阻止访问真实服务");
+    if (["GET /sym/logexport/page", "HEAD /sym/logexport/page", "POST /sym/logexport/create",
+         "GET /sym/logs/exports", "HEAD /sym/logs/exports", "POST /sym/logs/exports"].includes(key)) {
       requireCapability(session, "exports");
       return this.withJobs(database, () => key.startsWith("POST")
         ? this.createExport(database, session, body) : this.exportPage(database, session, query, !key.startsWith("HEAD")));
     }
     const download = /^GET \/sym\/logs\/exports\/([a-f0-9]{32})\/download$/.exec(key);
     if (download) { requireCapability(session, "exports"); return this.withJobs(database, () => this.download(database, session, download[1])); }
-    const event = /^(GET|POST) \/sym\/logs\/(auth|operations|requests|security)(?:\/([^/]+))?(?:\/(items))?$/.exec(key);
-    if (event) {
-      const [, method, kind, id, items] = event;
+    const event = /^(GET|HEAD|POST) \/sym\/(logauth|logops|logreq|logsec)\/(page|stats|detail|items|batch)$/.exec(key);
+    const legacy = /^(GET|HEAD|POST) \/sym\/logs\/(auth|operations|requests|security)(?:\/([^/]+))?(?:\/(items))?$/.exec(key);
+    if (event || legacy) {
+      const [, method, group, segment, items] = event ?? legacy;
+      const kind = event ? {logauth: "auth", logops: "operations", logreq: "requests", logsec: "security"}[group] : group;
+      const read = method === "GET" || method === "HEAD";
+      const action = event ? segment : items ? "items" :
+        segment === "statistics" ? "stats" : segment === "batch" ? "batch" : segment ? "detail" : "page";
+      const id = event ? String(query.id ?? "") : segment;
+      if (event && (action === "detail" || action === "items")) {
+        assert(id.trim() && id.length <= 64, 400, "一次最多查询100个不同事件");
+      }
       requireCapability(session, kind);
-      if (method === "POST" && id === "batch" && !items) return this.authorized(database, session, kind, body).map(summary);
-      if (method === "GET" && !id) {
+      if (method === "POST" && action === "batch") return this.authorized(database, session, kind, body).map(summary);
+      if (read && action === "page") {
         const result = page(sorted(selectLogRows(this.rows(database), session, kind, query, this.clock()), query), query);
         // 投影一次携带所有列表展示字段，绝不由列表逐行读取详情。
         return { ...result, list: result.list.map(summary), timeZone: "Asia/Shanghai", appliedScopeSummary: session.scope };
       }
-      if (method === "GET" && id === "statistics" && !items) {
+      if (read && action === "stats") {
         const rows = selectLogRows(this.rows(database), session, kind, query, this.clock());
         return Object.fromEntries([["total", rows.length], ...[["success_count", "SUCCESS"], ["failure_count", "FAILED"], ["denied_count", "DENIED"], ["partial_count", "PARTIAL"]].map(([key, value]) => [key, rows.length ? rows.filter((row) => row.result === value).length : null])]);
       }
-      if (method === "GET" && id && !["batch", "summary", "statistics"].includes(id)) {
+      if (read && (action === "detail" || action === "items") && !["batch", "summary", "statistics"].includes(id)) {
         const [row] = this.authorized(database, session, kind, [id]);
-        return items ? page(row.items, query) : detail(row);
+        return action === "items" ? page(row.items, query) : detail(row);
       }
     }
     throw new MockError(501, `未实现日志接口：${key}，已阻止访问真实服务`);

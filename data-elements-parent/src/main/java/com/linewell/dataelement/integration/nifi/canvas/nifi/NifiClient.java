@@ -67,6 +67,36 @@ public class NifiClient {
         return new RuntimeScope(previous);
     }
 
+    public RuntimeScope bindAssignedNode(String nodeId) {
+        if (nodeId == null || nodeId.isBlank()) return bindRuntimeNode();
+        RuntimeBinding previous = runtimeBinding.get();
+        if (previous != null && nodeId.equals(selectedRuntimeNode().id())) return new RuntimeScope(previous);
+        RuntimeNode node = runtimeResolver.resolveAssignedNode(nodeId);
+        runtimeBinding.set(new RuntimeBinding(node, node.tenantId(), new java.util.HashMap<>()));
+        return new RuntimeScope(previous);
+    }
+
+    public String jdbcDriverLocation(String databaseType) {
+        return selectedRuntimeNode().jdbcDriverLocation(databaseType);
+    }
+
+    public String runtimeNodeCode() {
+        return selectedRuntimeNode().code();
+    }
+
+    /** Build a direct native link from the tenant's configured endpoint. No credentials are sent to the browser. */
+    public String assignedNodeUiUrl(String nodeId, String groupId) {
+        var node = runtimeResolver.resolveAssignedNode(nodeId);
+        var endpoint = java.net.URI.create(node.baseUrl());
+        if (endpoint.getHost() == null || endpoint.getUserInfo() != null || endpoint.getRawQuery() != null
+                || endpoint.getRawFragment() != null
+                || !("http".equalsIgnoreCase(endpoint.getScheme()) || "https".equalsIgnoreCase(endpoint.getScheme()))) {
+            throw new IllegalStateException("数据接入节点的 NiFi 地址无法用于浏览器访问，请检查节点发布地址");
+        }
+        return org.springframework.web.util.UriComponentsBuilder.fromUri(endpoint)
+                .path("/nifi/").fragment("/process-groups/{groupId}").buildAndExpand(groupId).encode().toUriString();
+    }
+
     private RuntimeNode selectedRuntimeNode() {
         RuntimeBinding binding = runtimeBinding.get();
         if (binding == null) return runtimeResolver.resolve();

@@ -1606,6 +1606,7 @@ const currentDdlInput = async () => {
   await jsonFormRef.value?.validate();
   await tableRef.value?.validate();
   const data = normalizeFormPayload(await jsonFormRef.value?.getFormData());
+  if (!data.nifiNodeId) throw new Error("请选择可用的数据接入节点");
   if (!data.targetDbIds.length) throw new Error("请至少选择一个目标数据源");
   if (data.targetDbIds.length > 20) throw new Error("一次最多选择 20 个目标数据源");
   syncOdsSystemTimeTypes(data.dbType);

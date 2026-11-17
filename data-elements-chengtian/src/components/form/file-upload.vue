@@ -312,11 +312,8 @@ function handleRemove(tid: string) {
 /**
  * 下载文件
  */
-function handleDownload(file: UploadUserFile) {
-  const { url, name } = file;
-  if (url) {
-    FileAPI.download(url, name);
-  }
+function handleDownload(file: UploadUserFile & Pick<FileInfo, "tid">) {
+  FileAPI.download(file);
 }
 
 /** 获取一个不重复的id */
