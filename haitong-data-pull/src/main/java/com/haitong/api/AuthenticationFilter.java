@@ -56,25 +56,26 @@ public final class AuthenticationFilter extends OncePerRequestFilter {
         var route = PushAccess.route(req.getMethod(), requestedPath);
         String path = route.path();
         HttpServletRequest mapped = path.equals(requestedPath) ? req : mapRequest(req, requestedPath, route);
+        if (mapped != req) req.setAttribute(ORIGINAL_PATH, requestedPath);
         // These are executable HTTP examples for the authenticated editor, not
         // public business endpoints. A business key must never grant access to
         // a server-side example that uses a separately configured test key.
         if (path.startsWith("/validation/")) {
-            if (!editorValidation(req)) {
+            if (!editorValidation(mapped)) {
                 error(res,401,"EDITOR_REQUIRED","请登录海通 Magic 编辑器运行验证示例，并启用私有配置 haitong.validation.enabled");
                 return;
             }
-            chain.doFilter(req,res);
+            chain.doFilter(mapped,res);
             return;
         }
         boolean internal=path.startsWith("/internal/") || path.startsWith("/actuator/");
         Secrets.Identity identity=secrets.admin(req.getHeader("X-Admin-Key"));
-        boolean platformCredentialIssue = "/internal/push-credentials/issue".equals(path);
+        boolean platformCredentialIssue = req.getMethod().equals("POST") && PushAccess.CREDENTIAL_ISSUE.equals(path);
         // The Magic operations endpoint is a controlled alias of the same
         // REGISTRY_SYNC service flow, so it accepts the same service-to-service
         // credential. It cannot use that credential to publish business data:
         // The Magic push function checks route/channel permissions after JSON parsing.
-        boolean standaloneRegistrySync = req.getMethod().equals("POST") && ("/api/v1/data-push".equals(path) || PushAccess.DEBUG_PUSH.equals(path))
+        boolean standaloneRegistrySync = req.getMethod().equals("POST") && (PushAccess.TABLE_PUSH.equals(path) || PushAccess.DEBUG_PUSH.equals(path))
                 && p.getStandaloneRegistry().isSyncEnabled();
         if (identity == null && platformCredentialIssue && p.getStandaloneRegistry().isSyncEnabled()) {
             // Compatibility for an optional inbound issuer key; no URL or platform lookup is used.
@@ -108,7 +109,6 @@ public final class AuthenticationFilter extends OncePerRequestFilter {
             if(w.count()>p.getSecurity().getRequestsPerMinute()) {res.setHeader("Retry-After","60");error(res,429,"RATE_LIMITED","请求过于频繁");return;}
         }
         req.setAttribute(IDENTITY,identity);
-        if (mapped != req) req.setAttribute(ORIGINAL_PATH, requestedPath);
         chain.doFilter(mapped, res);
     }
 

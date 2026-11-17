@@ -55,11 +55,45 @@ public class StructuredTableReadMagicModule {
 
     @Comment("从当前行业租户创建只读查询。源表和关联表均附加租户条件")
     public Query from(String table, String alias, String tenantId) {
+        requireReadTenant(tenantId);
+        return new Query(jdbc, name(table), name(alias), tenantId);
+    }
+
+    private static void requireReadTenant(String tenantId) {
         if (!TenantContext.requireTenantId().equals(tenantId) || TenantContext.usesControlDatabase()
                 || TenantContext.isIgnored()) {
             throw new IllegalArgumentException("结构化查询租户无效");
         }
-        return new Query(jdbc, name(table), name(alias), tenantId);
+    }
+
+    public record JsonArrayField(String column, String property, int textWidth) {
+        public JsonArrayField {
+            name(column);
+            name(property);
+            if (textWidth < 0 || textWidth > 4000 || "tenant_id".equalsIgnoreCase(column)) {
+                throw new IllegalArgumentException("结构化 JSON 投影列无效");
+            }
+        }
+    }
+
+    public JsonArrayField jsonStringField(String column, String property, int width) {
+        if (width < 1) throw new IllegalArgumentException("结构化 JSON 文本列需要长度");
+        return new JsonArrayField(column, property, width);
+    }
+
+    public JsonArrayField jsonLongField(String column, String property) {
+        return new JsonArrayField(column, property, 0);
+    }
+
+    @Comment("从绑定的 JSON 对象数组读取声明的标量列，支持数据库内过滤、排序和分页")
+    public Query fromJsonArray(String document, String alias, String tenantId, List<JsonArrayField> fields) {
+        requireReadTenant(tenantId);
+        if (fields.isEmpty() || fields.size() > 32 || fields.stream().map(field -> field.column().toLowerCase(Locale.ROOT))
+                .distinct().count() != fields.size()) {
+            throw new IllegalArgumentException("结构化 JSON 投影列数或列名无效");
+        }
+        return new Query(jdbc, null, name(alias), tenantId, null, null, null,
+                new JsonRows(document == null ? "[]" : document, List.copyOf(fields)));
     }
 
     public Expression column(String alias, String column, String type) {
@@ -76,6 +110,14 @@ public class StructuredTableReadMagicModule {
     public Expression boundedText(Expression term) {
         return expression(context -> context.oracle ? "CAST(" + term.sql(context) + " AS VARCHAR(4000))"
                 : term.sql(context));
+    }
+
+    @Comment("用当前连接的字符类型比较跨来源文本，显式保留历史定宽比较契约")
+    public Expression fixedWidthText(Expression term, int width) {
+        if (width < 1 || width > MAX_TEXT_PREFIX_LENGTH) {
+            throw new IllegalArgumentException("结构化字符长度无效");
+        }
+        return expression(context -> context.asText(term.sql(context), width));
     }
 
     public Expression coalesce(List<?> values) {
@@ -235,6 +277,25 @@ public class StructuredTableReadMagicModule {
                         + context.parameter(epoch) + " AS DATETIME(3)))";
             }
             throw new IllegalStateException("当前租户数据库缺少毫秒时间转换方言");
+        }, Kind.TIME);
+    }
+
+    @Comment("按整小时调整时间列，保留空值和原精度")
+    public Expression shiftHours(Expression term, int hours) {
+        if (term.kind != Kind.TIME || hours < -24 || hours > 24) {
+            throw new IllegalArgumentException("时间列或小时偏移无效");
+        }
+        return new Expression(context -> {
+            if (context.mysql) {
+                return "TIMESTAMPADD(HOUR, " + context.parameter(hours) + ", " + term.sql(context) + ")";
+            }
+            if (context.postgres) {
+                return "(" + term.sql(context) + " + " + context.parameter(hours) + " * INTERVAL '1 hour')";
+            }
+            if (context.oracle) {
+                return "(" + term.sql(context) + " + NUMTODSINTERVAL(" + context.parameter(hours) + ", 'HOUR'))";
+            }
+            throw new IllegalStateException("当前租户数据库缺少时间偏移方言");
         }, Kind.TIME);
     }
 
@@ -480,6 +541,14 @@ public class StructuredTableReadMagicModule {
         });
     }
 
+    @Comment("在长文本列完整查找字面片段。达梦按有重叠的分段读取，保留跨段命中")
+    public Condition containsFullText(Expression term, String value) {
+        if (term.kind != Kind.LOB) {
+            throw new IllegalArgumentException("完整长文本匹配必须使用长文本列");
+        }
+        return contains(new Expression(term::sql, Kind.LOB, true), value);
+    }
+
     @Comment("按数据库原生子串查找语义匹配字面值，保留大小写和重音规则")
     public Condition hasSubstring(Expression term, String value) {
         return new Condition(context -> substringMatch(context, term, value, false));
@@ -664,6 +733,7 @@ public class StructuredTableReadMagicModule {
         private final Ranked ranked;
         private final Ancestors ancestors;
         private final Projection derived;
+        private final JsonRows jsonRows;
         private final List<Join> joins = new ArrayList<>();
         private final List<JsonArrayJoin> jsonArrays = new ArrayList<>();
         private final List<Condition> filters = new ArrayList<>();
@@ -675,6 +745,11 @@ public class StructuredTableReadMagicModule {
 
         private Query(JdbcTemplate jdbc, String table, String alias, String tenantId,
                 Ranked ranked, Ancestors ancestors, Projection derived) {
+            this(jdbc, table, alias, tenantId, ranked, ancestors, derived, null);
+        }
+
+        private Query(JdbcTemplate jdbc, String table, String alias, String tenantId,
+                Ranked ranked, Ancestors ancestors, Projection derived, JsonRows jsonRows) {
             this.jdbc = jdbc;
             this.table = table;
             this.alias = alias;
@@ -682,6 +757,7 @@ public class StructuredTableReadMagicModule {
             this.ranked = ranked;
             this.ancestors = ancestors;
             this.derived = derived;
+            this.jsonRows = jsonRows;
         }
 
         public void leftJoin(String table, String joinAlias, String key, String rootKey, List<Condition> conditions) {
@@ -863,6 +939,18 @@ public class StructuredTableReadMagicModule {
             filters.add(condition);
         }
 
+        @Comment("按结构化关联条件排除存在匹配行的记录，内外查询使用同一可信租户")
+        public void whereNoMatch(Query child, Condition match) {
+            requireTenant();
+            child.requireTenant();
+            if (alias.equalsIgnoreCase(child.alias)) {
+                throw new IllegalArgumentException("结构化排除查询的别名须不同");
+            }
+            var nested = child.snapshot();
+            where(new Condition(context -> "NOT EXISTS (SELECT 1" + nested.from(context, true)
+                    + " AND " + match.sql(context) + ")"));
+        }
+
         public List<Map<String, Object>> grouped(Map<String, Expression> projection, List<Expression> groups) {
             return execute((connection, reader) -> {
                 Render context = new Render(connection);
@@ -925,6 +1013,20 @@ public class StructuredTableReadMagicModule {
         @Comment("按排序逐行交付结构化结果，回调应只处理当前行，适用于必须保留完整结果的兼容接口")
         public void forEachOrderedRow(Map<String, Expression> projection, List<Expression> sorts,
                 List<String> directions, boolean nativeNullOrder, Consumer<Map<String, Object>> consumer) {
+            streamOrderedRows(projection, sorts, directions, nativeNullOrder, 0, consumer);
+        }
+
+        @Comment("按排序读取最多指定行数，调用方可多取一行检测范围超限")
+        public void forEachOrderedRow(Map<String, Expression> projection, List<Expression> sorts,
+                List<String> directions, boolean nativeNullOrder, int maximumRows,
+                Consumer<Map<String, Object>> consumer) {
+            if (maximumRows < 1) throw new IllegalArgumentException("结构化查询读取窗口无效");
+            streamOrderedRows(projection, sorts, directions, nativeNullOrder, maximumRows, consumer);
+        }
+
+        private void streamOrderedRows(Map<String, Expression> projection, List<Expression> sorts,
+                List<String> directions, boolean nativeNullOrder, int maximumRows,
+                Consumer<Map<String, Object>> consumer) {
             if (!validSortOrder(sorts, directions)) {
                 throw new IllegalArgumentException("结构化查询排序无效");
             }
@@ -942,6 +1044,7 @@ public class StructuredTableReadMagicModule {
                     reader.query(current -> {
                         var statement = current.prepareStatement(sql, ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY);
                         try {
+                            if (maximumRows > 0) statement.setMaxRows(maximumRows);
                             statement.setFetchSize(fetchSize);
                             arguments.setValues(statement);
                             return statement;
@@ -967,10 +1070,19 @@ public class StructuredTableReadMagicModule {
 
         private List<Map<String, Object>> readRows(Map<String, Expression> projection, List<Expression> sorts,
                 List<String> directions, int limit, boolean nativeNullOrder) {
+            return rowsAtOffset(projection, sorts, directions, 0L, limit, nativeNullOrder);
+        }
+
+        @Comment("只读取明确的排序窗口，供已单独计算总数的接口使用")
+        public List<Map<String, Object>> rowsAtOffset(Map<String, Expression> projection, List<Expression> sorts,
+                List<String> directions, long offset, int limit, boolean nativeNullOrder) {
+            if (offset < 0 || limit < 1 || limit > MAX_MULTI_SORT_READ_ROWS || !validSortOrder(sorts, directions)) {
+                throw new IllegalArgumentException("结构化查询多键读取窗口无效");
+            }
             return execute((connection, reader) -> {
                 Render context = new Render(connection);
                 String sql = orderedRowsSql(context, projection, sorts, directions, nativeNullOrder);
-                return queryWindow(connection, reader, context, sql, 0, limit);
+                return queryWindow(connection, reader, context, sql, offset, limit);
             });
         }
 
@@ -1032,9 +1144,24 @@ public class StructuredTableReadMagicModule {
             return readPage(projection, sort, direction, tieBreaker, tieDirection, pageNum, pageSize, true, false, false, MAX_PAGE_SIZE);
         }
 
+        @Comment("按精确偏移读取兼容窗口，每次最多返回 1000 行")
+        public Map<String, Object> pageAtOffset(Map<String, Expression> projection, Expression sort,
+                String direction, String tieBreaker, long offset, int size) {
+            if (offset < 0) throw new IllegalArgumentException("结构化查询偏移无效");
+            return readWindow(projection, sort, direction, tieBreaker, "asc", 1, size,
+                    false, false, false, MAX_READ_ROWS, offset);
+        }
+
         private Map<String, Object> readPage(Map<String, Expression> projection, Expression sort, String direction,
                 String tieBreaker, String tieDirection, int pageNum, int pageSize, boolean clamp, boolean includeRoot,
                 boolean nativeNullOrder, int maximumPageSize) {
+            return readWindow(projection, sort, direction, tieBreaker, tieDirection, pageNum, pageSize, clamp,
+                    includeRoot, nativeNullOrder, maximumPageSize, null);
+        }
+
+        private Map<String, Object> readWindow(Map<String, Expression> projection, Expression sort, String direction,
+                String tieBreaker, String tieDirection, int pageNum, int pageSize, boolean clamp, boolean includeRoot,
+                boolean nativeNullOrder, int maximumPageSize, Long exactOffset) {
             if (pageNum < 1 || pageSize < 1 || pageSize > maximumPageSize || !validDirection(direction)
                     || !validDirection(tieDirection)) {
                 throw new IllegalArgumentException("结构化查询分页参数无效");
@@ -1046,7 +1173,7 @@ public class StructuredTableReadMagicModule {
                 long total = reader.queryForObject(countContext.statement(countSql),
                         Long.class, countContext.boundParameters().toArray());
                 int actualPage = clamp ? (int) Math.min(pageNum, total == 0 ? 1 : (total - 1) / pageSize + 1) : pageNum;
-                long offset = (long) (actualPage - 1) * pageSize;
+                long offset = exactOffset == null ? (long) (actualPage - 1) * pageSize : exactOffset;
                 var result = new LinkedHashMap<String, Object>();
                 result.put("total", total);
                 if (clamp) result.put("pageNum", actualPage);
@@ -1102,7 +1229,7 @@ public class StructuredTableReadMagicModule {
         }
 
         private Query snapshot() {
-            Query copy = new Query(jdbc, table, alias, tenantId, ranked, ancestors, derived);
+            Query copy = new Query(jdbc, table, alias, tenantId, ranked, ancestors, derived, jsonRows);
             copy.joins.addAll(joins);
             copy.jsonArrays.addAll(jsonArrays);
             copy.filters.addAll(filters);
@@ -1171,6 +1298,7 @@ public class StructuredTableReadMagicModule {
 
         private String source(Render context) {
             if (ancestors != null) return context.table(context.registerWalk(ancestors), alias);
+            if (jsonRows != null) return context.jsonRows(alias, tenantId, jsonRows);
             if (derived != null) {
                 Query child = derived.child();
                 return "(" + child.select(context, derived.columns()) + child.from(context, true) + ") " + alias;
@@ -1248,6 +1376,7 @@ public class StructuredTableReadMagicModule {
     private record Join(String table, String alias, String key, String rootKey, String parentAlias, List<Condition> conditions,
                         Latest latest, boolean projectionOnly, Grouped grouped) { }
     private record JsonArrayJoin(String documentColumn, String property, String alias) { }
+    private record JsonRows(String document, List<JsonArrayField> fields) { }
     private record Grouped(Query child, Map<String, Expression> projection, List<Expression> groups,
                            boolean compareKeysAsText, int fixedTextWidth) { }
     private record Ranked(Query child, Map<String, Expression> projection, List<Expression> partitions,
@@ -1358,6 +1487,42 @@ public class StructuredTableReadMagicModule {
 
         private String table(String name, String alias) {
             return quote(name) + " " + alias;
+        }
+
+        private String jsonRows(String alias, String tenantId, JsonRows rows) {
+            String scopedTenant = parameter(tenantId) + " AS " + quote("tenant_id");
+            String document = parameter(rows.document());
+            if (postgres && !kingbase) {
+                String fields = rows.fields().stream().map(this::postgresJsonField).collect(Collectors.joining(", "));
+                return "(SELECT " + scopedTenant + ", " + fields + " FROM JSONB_ARRAY_ELEMENTS(CAST(CASE WHEN CAST("
+                        + document + " AS TEXT) IS JSON ARRAY THEN " + parameter(rows.document())
+                        + " ELSE '[]' END AS JSONB)) json_entry(value)) " + alias;
+            }
+            if (mysql || kingbase || oracle) {
+                String valid = oracle && !dameng ? document + " IS JSON" : "JSON_VALID(" + document + ") = 1";
+                String fields = rows.fields().stream().map(field -> field.column() + " "
+                        + (field.textWidth() == 0 ? "BIGINT" : "VARCHAR(" + field.textWidth() + ")")
+                        + " PATH '$." + field.property() + "'").collect(Collectors.joining(", "));
+                return "(SELECT " + scopedTenant + ", json_entry.* FROM JSON_TABLE(CASE WHEN " + valid
+                        + " THEN " + parameter(rows.document()) + " ELSE '[]' END, '$[*]' COLUMNS("
+                        + fields + ")) json_entry) " + alias;
+            }
+            throw new IllegalStateException("当前租户数据库缺少 JSON 对象数组展开方言");
+        }
+
+        private String postgresJsonField(JsonArrayField field) {
+            String value = "(json_entry.value ->> '" + field.property() + "')";
+            String projection;
+            if (field.textWidth() > 0) {
+                projection = "LEFT(" + value + ", " + field.textWidth() + ")";
+            } else {
+                String numeric = "ROUND(CAST(" + value + " AS NUMERIC))";
+                projection = "CASE WHEN LENGTH(" + value + ") <= 64 AND " + value
+                        + " ~ '^[+-]?[0-9]+([.][0-9]+)?$' THEN CASE WHEN " + numeric
+                        + " BETWEEN -9223372036854775808 AND 9223372036854775807 THEN CAST(" + numeric
+                        + " AS BIGINT) END END";
+            }
+            return projection + " AS " + quote(field.column());
         }
 
         private String jsonArray(String sourceAlias, JsonArrayJoin array) {

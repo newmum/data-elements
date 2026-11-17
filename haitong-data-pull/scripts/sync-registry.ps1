@@ -24,4 +24,4 @@ $headers = @{
   "X-Standalone-Registry-Key" = $RegistryKey
   "Idempotency-Key" = $IdempotencyKey
 }
-Invoke-RestMethod -Uri ($BaseUrl.TrimEnd('/') + "/api/v1/data-push") -Method POST -Headers $headers -Body $body
+Invoke-RestMethod -Uri ($BaseUrl.TrimEnd('/') + "/api/v1/push") -Method POST -Headers $headers -Body $body

@@ -104,9 +104,16 @@ public class LogLifecycleService {
         row.put("owner_kind",scope.platform()?"OPERATOR":"TENANT_USER");row.put("owner_id",scope.actorId());row.put("query_json",json(normalized));row.put("scope_snapshot_json",json(scope));row.put("cutoff_time",LogTimes.utc(cutoff));row.put("status","PENDING");row.put("format_code",format);row.put("row_limit",limit);row.put("row_count",0);row.put("updated_time",row.get("created_time"));row.put("version",1);
         row.putAll(leases.fields());
         new TransactionTemplate(new DataSourceTransactionManager(store.dataSource(scope.tenantId()))).executeWithoutResult(tx->{store.insert(scope.tenantId(),"log_export_job_t",row);audit.record(Objects.requireNonNull(audit.current()),"OPERATION","LOG_EXPORT_SUBMITTED","ACCEPTED",null,"LOG_EXPORT",id,"日志导出",Map.of("format",format,"count",limit));});
-        leases.track(scope,"log_export_job_t",id);
-        try {workers.execute(()->export(scope,id,kind,normalized,format,limit));} catch(RejectedExecutionException full) {finish(scope,"log_export_job_t",id,"FAILED",Map.of("last_error_code","QUEUE_FULL"));}
+        enqueueExport(scope, id, kind, normalized, format, limit);
         return Map.of("id",id,"status","PENDING");
+    }
+    public Map<String, Object> leaseFields() {
+        return leases.fields();
+    }
+    /** Start the leased file job after its submitting transaction has committed. */
+    public void enqueueExport(LogScope scope, String id, String kind, Map<String, Object> input, String format, long limit) {
+        leases.track(scope,"log_export_job_t",id);
+        try {workers.execute(()->export(scope,id,kind,input,format,limit));} catch(RejectedExecutionException full) {finish(scope,"log_export_job_t",id,"FAILED",Map.of("last_error_code","QUEUE_FULL"));}
     }
     private void export(LogScope before,String id,String kind,Map<String,Object> input,String format,long limit) {
         Path path=directory.resolve(id+"."+format.toLowerCase(Locale.ROOT));
@@ -180,10 +187,14 @@ public class LogLifecycleService {
         row.put("event_store",kind);row.put("range_start",s.params().get("start"));row.put("range_end",s.params().get("end"));row.put("generation",generation==null?1:generation);row.put("status","PREPARING");row.put("record_count",0);row.put("byte_count",0);row.put("retention_until",LogTimes.utc(end.plus(Duration.ofDays(((Number)policy.get("total_retention_days")).longValue()))));row.put("hold_status","NONE");row.put("operator_id",scope.actorId());row.put("updated_time",row.get("created_time"));row.put("version",1);
         row.putAll(leases.fields());
         new TransactionTemplate(new DataSourceTransactionManager(store.dataSource(scope.tenantId()))).executeWithoutResult(tx->{store.insert(scope.tenantId(),"log_archive_batch_t",row);audit.record(Objects.requireNonNull(audit.current()),"OPERATION","LOG_ARCHIVE_SUBMITTED","ACCEPTED",null,"LOG_ARCHIVE",id,"日志归档",Map.of("category",category));});
-        leases.track(scope,"log_archive_batch_t",id);
         var frozen=new LinkedHashMap<>(input);frozen.put("receivedBefore",Instant.now().toString());
-        try {workers.execute(()->archive(scope,id,kind,frozen));}catch(RejectedExecutionException full) {finish(scope,"log_archive_batch_t",id,"FAILED",Map.of());}
+        enqueueArchive(scope, id, kind, frozen);
         return Map.of("id",id,"status","PREPARING");
+    }
+    /** Generate and verify the archive file for a committed lease. */
+    public void enqueueArchive(LogScope scope, String id, String kind, Map<String, Object> input) {
+        leases.track(scope,"log_archive_batch_t",id);
+        try {workers.execute(()->archive(scope,id,kind,input));}catch(RejectedExecutionException full) {finish(scope,"log_archive_batch_t",id,"FAILED",Map.of());}
     }
     private void archive(LogScope scope,String id,String kind,Map<String,Object> input) {
         Path path=directory.resolve(id+".archive.jsonl");

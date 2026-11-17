@@ -31,12 +31,8 @@ class PushOperationsMagicTest {
                     assertTrue(group.get("path").toString().matches("/[A-Za-z0-9_-]+"),path.toString());
                 }
                 String suffix=meta.get("path").toString();
-                assertTrue(suffix.matches("/[A-Za-z0-9_-]+"), path.toString());
-                if (path.toString().contains("零信任网关对接") || path.toString().contains("文件传输诊断")
-                        || path.toString().contains("数据推送调试")) {
-                    for (String segment : List.of(parent.get("path").toString(), leaf.get("path").toString(), suffix)) {
-                        assertTrue(segment.matches("/[a-z][a-z0-9]*"), path.toString());
-                    }
+                for (String segment : List.of(parent.get("path").toString(), leaf.get("path").toString(), suffix)) {
+                    assertTrue(segment.matches("/[a-z][a-z0-9]*"), path.toString());
                 }
                 String route=meta.get("method")+" "+parent.get("path")+leaf.get("path")+suffix;
                 assertTrue(routes.add(route),route);
@@ -49,7 +45,9 @@ class PushOperationsMagicTest {
         assertTrue(routes.containsAll(Set.of(
             "GET /gateway/config/check", "POST /gateway/token/status", "POST /gateway/data/push",
             "POST /ftp/connect/probe", "POST /push/debug/send", "POST /push/message/status", "POST /push/template/test",
-            "POST /api/v1/data-push", "POST /api/v1/ftp", "POST /api/v1/kafka", "POST /api/v1/log",
+            "POST /api/v1/push", "POST /api/v1/ftp", "POST /api/v1/kafka", "POST /api/v1/log",
+            "POST /internal/credentials/issue", "POST /validation/push/status", "POST /validation/push/org",
+            "POST /validation/push/eventlog",
             "POST /api/v1/ingest", "POST /api/v1/action", "GET /api/v1/message", "POST /api/v1/import", "GET /api/v1/file",
             "PUT /api/push/single", "POST /api/push/init", "PUT /api/push/part",
             "POST /api/push/complete", "GET /api/push/status", "GET /api/push/parts")));

@@ -17,6 +17,8 @@ public final class PushAccess {
     static final String DEBUG_PUSH = "/push/debug/send";
     static final String DEBUG_STATUS = "/push/message/status";
     static final String DEBUG_TEMPLATE = "/push/template/test";
+    static final String TABLE_PUSH = "/api/v1/push";
+    static final String CREDENTIAL_ISSUE = "/internal/credentials/issue";
     private static final String OPERATIONS = "/internal/v1";
     private static final String LEGACY_FILES = "/api/v1/file-uploads";
     private static final String FILES = "/api/file";
@@ -25,6 +27,11 @@ public final class PushAccess {
     private static final String FILE_PUSH = "/api/push";
     private static final String RECEPTION = "/api/v1";
     private static final Map<String, String> EXACT_ALIASES = Map.ofEntries(
+            entry("POST " + LEGACY_PUSH, TABLE_PUSH),
+            entry("POST /internal/push-credentials/issue", CREDENTIAL_ISSUE),
+            entry("POST /validation/push/status_dict", "/validation/push/status"),
+            entry("POST /validation/push/org_dict", "/validation/push/org"),
+            entry("POST /validation/push/event_log", "/validation/push/eventlog"),
             entry("GET /gateway/config-check", "/gateway/config/check"),
             entry("POST /gateway/token-status", "/gateway/token/status"),
             entry("POST /gateway/data-push", "/gateway/data/push"),
@@ -123,7 +130,7 @@ public final class PushAccess {
     }
     public static boolean endpoint(HttpServletRequest request, String path) {
         String method = request.getMethod();
-        if (method.equals("POST") && Set.of(LEGACY_PUSH, RECEPTION + "/ftp",
+        if (method.equals("POST") && Set.of(TABLE_PUSH, RECEPTION + "/ftp",
                 RECEPTION + "/kafka", RECEPTION + "/log", DEBUG_PUSH,
                 DEBUG_TEMPLATE, DEBUG_STATUS).contains(path)) return true;
         if (method.equals("GET") && path.equals(RECEPTION + "/message")) {

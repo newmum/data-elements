@@ -9,7 +9,7 @@
   "lock": null,
   "createBy": null,
   "updateBy": null,
-  "path": "/register-options",
+  "path": "/options",
   "method": "POST",
   "parameters": [],
   "options": [],
@@ -183,7 +183,7 @@
 import tenantRuntime
 import dataScope
 
-// POST /dst/application/register-options 返回数据源登记步骤的所属系统选择项。
+// POST /dst/application/options 返回数据源登记步骤的所属系统选择项。
 // 依据认证租户、当前角色和组织成员关系返回完整数组，字段为 label、value、orgid 和 createdby。
 // 页面根据名称或标识从结果中搜索。历史请求中的 keyword、limit 及身份字段不参与查询。
 var tenantId = tenantRuntime.id()

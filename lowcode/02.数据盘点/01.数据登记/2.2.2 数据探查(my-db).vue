@@ -1258,7 +1258,7 @@ onBeforeUnmount(stopCatalogCollectionPolling);
 const pollCatalogCollection = async (dbId, jobId, session) => {
   if (session !== catalogCollectionSession || !tableState.open || tableState.db?.tid !== dbId) return;
   try {
-    const result = await $common.get("/dst/database/metadata/tables/collection/status",
+    const result = await $common.get("/dst/collect/status",
       { dbId, jobId: jobId || undefined });
     if (session !== catalogCollectionSession) return;
     tableState.collectionProgress = Number(result.progressPercent || 0);
@@ -1296,7 +1296,7 @@ const refreshCollectedTables = async () => {
   tableState.collectionProgress = 0;
   tableState.error = "";
   try {
-    const result = await $common.post("/dst/database/metadata/tables/collection/start",
+    const result = await $common.post("/dst/collect/start",
       { dbId, mode: "REFRESH" });
     if (session !== catalogCollectionSession) return;
     $message.info("已提交数据表采集任务，完成后将自动刷新目录列表。");
@@ -1330,7 +1330,7 @@ const loadTables = async (dbId, options = {}) => {
   // 重新打开抽屉可继续观察已存在的后台任务，但不能重复启动采集。
   if (canCollectCatalogTables() && !tableState.collecting && tableState.open) {
     try {
-      const status = await $common.get("/dst/database/metadata/tables/collection/status", { dbId });
+      const status = await $common.get("/dst/collect/status", { dbId });
       if (status.status === "RUNNING") {
         tableState.collecting = true;
         pollCatalogCollection(dbId, status.jobId, catalogCollectionSession);

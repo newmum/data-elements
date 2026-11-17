@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.*;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.linewell.dataelement.integration.nifi.canvas.probe.NifiConnectionProbe;
 import com.linewell.dataelement.metautil.model.dto.*;
 import com.linewell.dataelement.metautil.model.enums.DatabaseType;
 import com.sun.net.httpserver.HttpServer;
@@ -96,6 +97,27 @@ class ElasticsearchMetadataExplorerTest {
         config.setJdbcUrl("http://127.0.0.1:"+server.getAddress().getPort());config.setDatabase("visible-*");
     }
     @AfterEach void stop(){server.stop(0);}
+
+    @ParameterizedTest @ValueSource(ints={6,8})
+    void canvasProbesTheConfiguredIndexThroughTheRegistrationMappingAdapter(int version) throws Exception {
+        major = version;
+        var canvas = new NifiConnectionProbe(null, null);
+        var canvasConfig = Map.<String, Object>of(
+                "nodes", "127.0.0.1:" + server.getAddress().getPort(), "protocol", "http",
+                "defaultIndex", "visible-001", "authMethod", "BASIC", "username", "reader", "password", "fixture");
+
+        var response = canvas.columns("source.elasticsearch", canvasConfig, "visible-001");
+
+        assertThat(response).containsEntry("success", true).containsEntry("table", "visible-001");
+        JsonNode canvasColumns = json.valueToTree(response.get("columns"));
+        JsonNode registeredColumns = json.valueToTree(explorer.getColumns(config, "visible-001"));
+        assertThat(canvasColumns).isEqualTo(registeredColumns);
+        assertThat(paths).containsExactly("/visible-001/_mapping", "/visible-001/_mapping");
+        assertThat(auth.getFirst()).isEqualTo("Basic " + Base64.getEncoder().encodeToString("reader:fixture".getBytes(StandardCharsets.UTF_8)));
+        assertThatThrownBy(() -> canvas.columns("source.elasticsearch", canvasConfig, "foreign-index"))
+                .hasMessageContaining("索引不在当前连接范围内");
+        assertThat(paths).hasSize(2);
+    }
 
     @ParameterizedTest @ValueSource(ints={6,8})
     void legacyAndModernClustersSupportConnectionCollectionMappingsAndPreview(int version) {

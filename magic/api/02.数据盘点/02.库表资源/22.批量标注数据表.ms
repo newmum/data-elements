@@ -29,7 +29,7 @@ import log
 import metadataAsset
 import tableRead
 import tenantRuntime
-import '@post:/dst/maintenance/batchRefresh' as refreshAssetIndex
+import '@post:/dst/maintenance/reindex' as refreshAssetIndex
 
 // POST /dst/db/mark 批量标注数据表。
 /**

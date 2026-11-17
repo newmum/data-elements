@@ -38,7 +38,11 @@ public class TenantAccountPolicy {
         }
         SymTenantT tenant = tenantMapper.selectActiveAccountConfig(tenantId);
         if (tenant == null) throw new TenantAccessException("TENANT-NOT-AVAILABLE", "租户不可用");
-        String config = tenant.getJsonConfig();
+        return isLocalConfiguration(tenantId, tenant.getJsonConfig());
+    }
+
+    /** Checks the runtime realm and binding using configuration already read by the caller. */
+    public boolean isLocalConfiguration(String tenantId, String config) {
         try {
             JsonNode root = config == null || config.isBlank() ? json.createObjectNode() : json.readTree(config);
             String source = root.path("accountSource").asText("CONTROL");

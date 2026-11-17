@@ -20,8 +20,6 @@ public interface RmUserTenantRelaTMapper extends BaseMapper<RmUserTenantRelaT> {
             @Param("tenantId") String tenantId
     );
 
-    List<TenantMembership> selectTenantOptions(@Param("userId") String userId);
-
     int clearDefault(
             @Param("userId") String userId,
             @Param("operator") String operator,

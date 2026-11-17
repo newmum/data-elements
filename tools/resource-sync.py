@@ -93,17 +93,23 @@ def metadata(content):
 
 
 def magic_access_policy(meta):
-    options = meta.get('options') or []
+    options = meta.get('options')
+    if options is None:
+        return None
+    if not isinstance(options, list) or any(option is not None and not isinstance(option, dict)
+                                            for option in options):
+        raise ValueError('Magic API options must be a list of option objects')
     declarations = [option.get('value') for option in options
                     if isinstance(option, dict) and option.get('name') == 'access']
     if not declarations:
         return None
     if (len(declarations) != 1 or not isinstance(declarations[0], str)
-            or declarations[0] not in {'PUBLIC', 'TENANT_SESSION', 'IDAAS_PLATFORM_SESSION'}):
+            or declarations[0] not in {'PUBLIC', 'TENANT_SESSION', 'IDAAS_PLATFORM_SESSION', 'HAITONG_RELAY'}):
         raise ValueError('Invalid or duplicate Magic API access declaration')
     method = meta.get('method')
     if (method not in ('GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS')
-            or declarations[0] == 'PUBLIC' and method not in ('GET', 'HEAD')):
+            or declarations[0] == 'PUBLIC' and method not in ('GET', 'HEAD')
+            or declarations[0] == 'HAITONG_RELAY' and method != 'POST'):
         raise ValueError('Magic API access does not match the HTTP method')
     return declarations[0]
 
@@ -495,12 +501,19 @@ def validate_identity(manifest, remote_data, entry, kind):
 
 
 def verify_runtime_magic(loaded, meta, script):
-    if not loaded or any(loaded.get(field) != meta.get(field) for field in ['id', 'groupId', 'path', 'method']):
+    if not isinstance(loaded, dict) or any(loaded.get(field) != meta.get(field)
+                                           for field in ['id', 'groupId', 'path', 'method']):
         raise ValueError('Runtime resource identity differs from control database; do not publish')
-    if digest(loaded.get('script', '').strip()) != digest(script):
+    loaded_script = loaded.get('script')
+    if not isinstance(loaded_script, str) or digest(loaded_script.strip()) != digest(script):
         raise ValueError('Runtime source differs from control database; do not publish')
     if meta.get('method') and magic_access_policy(loaded) != magic_access_policy(meta):
         raise ValueError('Runtime access policy differs from control database; inspect before publication')
+
+
+def readback_magic(config, meta, script):
+    route = '/api/web/resource/file/' + urllib.parse.quote(meta['id'], safe='')
+    verify_runtime_magic(runtime_call(config, route), meta, script)
 
 
 def registration_plan(manifest, remote, files):
@@ -525,6 +538,8 @@ def registration_plan(manifest, remote, files):
         root = relative.split('/')[0]
         if root not in {'api', 'function', 'task'} or not identity or not meta.get('name'):
             raise ValueError('Incomplete Magic resource identity: ' + file)
+        if not isinstance(identity, str) or len(identity) > 32:
+            raise ValueError('Magic metadata ID exceeds the api_file_t.api_id limit: ' + file)
         if (not group and not script) or (group and meta.get('type') != root):
             raise ValueError('Incomplete Magic script or wrong group type: ' + file)
         if not group and root == 'api':
@@ -605,7 +620,7 @@ def register_magic(connection, config, files, apply=False):
     for entry in entries:
         if entry['path'].endswith('.ms'):
             meta, script = metadata(entry['content'])
-            verify_runtime_magic(runtime_call(config, '/api/web/resource/file/' + meta['id']), meta, script)
+            readback_magic(config, meta, script)
     if access_changes:
         write_json(access_audit, {'database': remote['database'], 'access': access_changes,
                                   'state': 'published-and-runtime-verified'})
@@ -633,13 +648,17 @@ def publish(connection, config, file, compiled=None, backup=True):
         raise ValueError('Publication blocked for a private-resource projection; migrate credentials to runtime configuration first')
     remote = validate_identity(manifest, remote_data, entry, kind)
     if remote['baseSha256'] == digest(local):
+        # A saved row can still be ahead of the active Magic registry after a failed refresh.
+        if kind == 'magic' and rel.endswith('.ms'):
+            current_meta, current_script = metadata(remote['content'])
+            readback_magic(config, current_meta, current_script)
         return {'file': file, 'result': 'already-current'}
     if remote['baseSha256'] != entry['baseSha256']:
         raise ValueError('Concurrent remote change; inspect before publication')
     access_change = None
     if kind == 'magic':
         meta, script = metadata(local)
-        previous_meta, _ = metadata(remote['content'])
+        previous_meta, previous_script = metadata(remote['content'])
         if sum(e.get('metadataId') == meta.get('id') for e in manifest['resources']) != 1:
             raise ValueError('Duplicate Magic metadata identity; resolve before publication')
         if not file.endswith('.ms') or not script:
@@ -654,8 +673,7 @@ def publish(connection, config, file, compiled=None, backup=True):
                 access_change = {'id': meta['id'], 'groupId': meta['groupId'], 'method': meta['method'], 'path': meta['path'],
                                  'previous': previous_access, 'current': access}
         # Authenticate the target runtime and prove it points at this resource before DB writes.
-        loaded = runtime_call(config, '/api/web/resource/file/' + urllib.parse.quote(meta['id'], safe=''))
-        verify_runtime_magic(loaded, previous_meta, metadata(remote['content'])[1])
+        readback_magic(config, previous_meta, previous_script)
     else:
         if not compiled:
             raise ValueError('Low-code publication requires --compiled from tools/compile-lowcode.mjs')
@@ -720,8 +738,7 @@ def publish(connection, config, file, compiled=None, backup=True):
     try:
         if kind == 'magic':
             runtime_call(config, '/sym/node-config/magic-resource/refresh', {})
-            loaded = runtime_call(config, '/api/web/resource/file/' + urllib.parse.quote(meta['id'], safe=''))
-            verify_runtime_magic(loaded, meta, script)
+            readback_magic(config, meta, script)
         else:
             runtime_call(config, '/sym/component/cache/refresh', {})
             if digest(runtime_call(config, '/sym/component/manage?action=getSourceCode&tid=' + urllib.parse.quote(entry['id'], safe=''), {})) != digest(local):

@@ -18,7 +18,7 @@ import org.springframework.dao.DuplicateKeyException
 import org.springframework.http.ResponseEntity
 import request
 
-// POST /internal/push-credentials/issue 由平台服务或管理员签发或显式轮换推送密钥。
+// POST /internal/credentials/issue 由平台服务或管理员签发或显式轮换推送密钥。
 // 已有密钥重复获取仅返回标识。首次签发或轮换时返回一次明文，库中保存 SHA-256 摘要。
 
 var context = common()

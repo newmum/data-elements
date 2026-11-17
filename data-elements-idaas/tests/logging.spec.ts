@@ -36,10 +36,15 @@ for(const width of [1440,390])test(`@logging 单一低代码日志页面 ${width
  await page.screenshot({path:info.outputPath('logging.png'),fullPage:true});
 });
 test('@logging 20与100行只发一次列表请求',async({page})=>{
- let reads=0;await page.route('**/api/idaas/logs/query?*',async route=>{
-  const p=new URL(route.request().url()).searchParams;if(p.get('operation')!=='page')return route.fallback();
+ let reads=0;let componentReads=0;await page.route('**/api/idaas/logs/query?*',async route=>{
+  const p=new URL(route.request().url()).searchParams;
+  if(p.get('operation')==='components')componentReads++;
+  if(p.get('operation')!=='page')return route.fallback();
   reads++;const size=Number(p.get('size')||20);await route.fulfill({json:{code:0,data:{list:Array.from({length:size},(_,i)=>({tid:String(i),actor_name:'人员'+i,actor_account:'account'+i,event_time:new Date().toISOString(),menu_path:'后台管理 → 用户管理',operation_name:'保存用户',result:'SUCCESS'})),total:200,page:1,size}}});
  });
  await login(page);await page.goto('/#/console/workforce/audit/logs');await expect(page.locator('.log-page .el-table__body tbody tr')).toHaveCount(20);expect(reads).toBe(1);
+ expect(componentReads).toBe(1);
  await page.locator('.log-pager .el-select').click();await page.getByRole('option',{name:'100条/页',exact:true}).click();await expect(page.locator('.log-page .el-table__body tbody tr')).toHaveCount(100);expect(reads).toBe(2);
+ await page.reload();await expect(page.locator('.log-page .el-table__body tbody tr')).toHaveCount(20);
+ expect(componentReads).toBe(2);expect(reads).toBe(3);
 });

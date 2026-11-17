@@ -1,0 +1,11 @@
+{
+  "properties": {},
+  "id": "sys_logarchive_v1",
+  "name": "24.日志归档",
+  "type": "api",
+  "parentId": "9a18bf0b6a994f5aa56aa775f3de9f3d",
+  "path": "/logarchive",
+  "paths": [],
+  "options": []
+}
+================================

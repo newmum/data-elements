@@ -9,7 +9,7 @@
   "lock": null,
   "createBy": null,
   "updateBy": null,
-  "path": "/management-workbench",
+  "path": "/export",
   "method": "POST",
   "parameters": [],
   "options": [],
@@ -21,13 +21,14 @@
   "responseBodyDefinition": null
 }
 ================================
-// 原工作台导出沿用 POST /dst/statistics/management-workbench；按已授权数据源分页返回真实统计。
-// 联系人为数据源创建者；表标注与登记完成独立统计；只显示持久化任务状态。
-// 固定3次业务查询（总数、分页、汇总），20/100行不逐项读；全部关联带当前租户。
 import tenantRuntime
 import dataScope
 import tableSort
 import cn.hutool.json.JSONUtil
+
+// POST /dst/statistics/export 按当前会话授权的数据源分页计算导出统计。
+// 联系人为数据源创建者；表标注与登记完成独立统计；只显示持久化任务状态。
+// 固定3次业务查询（总数、分页、汇总），20/100行不逐项读；全部关联带当前租户。
 var tenantId=tenantRuntime.id()
 if(tenantId==null || (tenantId+'').trim()=='') {exit 401,'请先登录';}
 var text=v=>v==null?'':(v+'').trim()

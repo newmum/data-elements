@@ -6,6 +6,7 @@ import { createScenario, scenarios } from "../../mock/scenarios/index.mjs";
 import { paginate } from "../../mock/core/data.mjs";
 import { configuration, tenantConfiguration } from "../../mock/scenarios/configuration.mjs";
 import { tableRows } from "../../mock/core/metadata.mjs";
+import { mockResponse } from "../../mock/core/transport.mjs";
 import { checkContracts, validateShape } from "../check-mock-contracts.mjs";
 
 const memory = () => {
@@ -38,14 +39,88 @@ function setup(role = "admin", code = "police") {
   return { runtime, storage, sessionStorage };
 }
 
-test("56 项契约指向真实实现及当前审阅版本", async () => {
+test("71 项契约指向真实实现及当前审阅版本", async () => {
   const result = await checkContracts();
-  assert.equal(result.interfaces, 56);
+  assert.equal(result.interfaces, 71);
   assert.deepEqual(result.errors, []);
 });
 
+test("采集启动预检、旧 POST 地址、任务轮询和改名拒绝使用同一来源范围", async () => {
+  const { runtime } = setup("registrar");
+  const own = runtime.database.sources.find((row) => row.createdBy === runtime.session.userId);
+  const other = runtime.database.sources.find((row) => row.createdBy !== runtime.session.userId);
+  const current = "/dst/collect/start";
+  const legacy = "/dst/database/metadata/tables/collection/start";
+  const preview = { dbId: own.tid, mode: "REEXPLORE", dryRun: true };
+  assert.deepEqual(await request(runtime, legacy, preview), await request(runtime, current, preview));
+  assert.equal(runtime.database.collectionJobs, undefined);
+  assert.equal((await request(runtime, current, { dbId: other.tid })).body.code, 500);
+  const result = (await request(runtime, current, { dbId: own.tid, mode: "REFRESH" })).body.data;
+  assert.equal(result.phase, "QUEUED");
+  const status = (await request(runtime, "/dst/collect/status", {}, { dbId: own.tid, jobId: result.jobId }, "GET")).body.data;
+  assert.equal(status.status, "SUCCEEDED");
+  assert.equal(status.jobId, result.jobId);
+  const table = runtime.database.tables.find((row) => row.datasourceId === own.tid);
+  const rename = { dbId: own.tid, tableId: table.tid, tableName: "validation-retained" };
+  const expected = await request(runtime, "/dst/collect/rename", rename);
+  assert.equal(expected.body.msg, "该表不在当前变更列表中，请重新探查后再修改");
+  assert.deepEqual(await request(runtime, "/dst/database/metadata/tables/collection/rename-missing", rename), expected);
+  assert.equal((await request(runtime, "/dst/collect/rename", { ...rename, dbId: other.tid })).body.msg,
+    "登记表不存在或无访问权限");
+});
+
+test("采集快照和审查顺序使用同一来源，分页、越权与兼容方法遵守旧契约", async () => {
+  const { runtime } = setup("registrar");
+  const own = runtime.database.sources.find((row) => row.createdBy === runtime.session.userId && row.annotatedTableNum < 6);
+  const other = runtime.database.sources.find((row) => row.createdBy !== runtime.session.userId);
+  const get = (path, query) => request(runtime, path, {}, query, "GET");
+  const snapshot = await get("/dst/collect/snapshot", { dbId: own.tid, pageSize: "2", offset: "1" });
+  assert.equal(snapshot.body.code, 0);
+  assert.equal(snapshot.body.data.offset, 1);
+  assert.equal(snapshot.body.data.physicalTotal, 6);
+  assert.deepEqual(await get("/dst/database/metadata/tables/snapshot", { "dbId[]": own.tid, pageSize: "2", offset: "1" }), snapshot);
+  assert.equal((await get("/dst/collect/snapshot", { dbId: own.tid, offset: "n/a" })).body.code, 20002);
+  assert.equal((await get("/dst/collect/snapshot", { dbId: other.tid, "dbId[]": own.tid })).body.code, 500);
+  const changes = await get("/dst/collect/changes", { dbId: own.tid, pageSize: 100 });
+  assert.deepEqual(changes.body.data, { pageNo: 1, pageSize: 100, total: 0, rows: [], list: [] });
+  assert.equal((await request(runtime, "/dst/collect/changes", {}, { dbId: own.tid }, "HEAD")).body, null);
+
+  const full = await request(runtime, "/dst/collect/order", { dbId: own.tid, allTables: true });
+  assert.equal(full.body.data.total, 6);
+  const names = full.body.data.keys.slice(0, 2);
+  const only = { dbId: own.tid, names: names.toReversed() };
+  const ordered = await request(runtime, "/dst/collect/order", only);
+  assert.deepEqual(ordered.body.data, { total: 2, keys: names });
+  assert.deepEqual(await request(runtime, "/dst/database/metadata/tables/review-order", only), ordered);
+  const refused = await request(runtime, "/dst/collect/order", { dbId: own.tid, names: [names[0], "validation-missing"] });
+  assert.equal(refused.body.code, 500);
+  assert.equal((await request(runtime, "/dst/collect/order", { ...only, dbId: other.tid })).body.code, 500);
+});
+
+test("采集进度兼容原地址与 HEAD，并按当前数据源范围读取快照", async () => {
+  const { runtime } = setup("registrar");
+  const path = "/dst/collect/status";
+  const old = "/dst/database/metadata/tables/collection/status";
+  const own = runtime.database.sources.find((row) => row.createdBy === runtime.session.userId
+    && runtime.database.tables.some((table) => table.datasourceId === row.tid));
+  const other = runtime.database.sources.find((row) => row.createdBy !== runtime.session.userId);
+  const get = (url, query) => request(runtime, url, {}, query, "GET");
+  const result = await get(path, { dbId: own.tid, includeDeletedDetails: "on" });
+  assert.equal(result.body.data.status, "SUCCEEDED");
+  assert.equal(result.body.data.datasourceId, own.tid);
+  assert.deepEqual(result.body.data.deleted, []);
+  assert.deepEqual(await get(old, { "dbId[]": own.tid, includeDeletedDetails: "on" }), result);
+  assert.equal((await get(path, { dbId: other.tid, "dbId[]": own.tid })).body.data.status, "NOT_COLLECTED");
+  assert.equal((await get(path, { dbId: own.tid, jobId: "validation-unknown" })).body.data.status, "NOT_COLLECTED");
+  assert.equal((await get(path, {})).body.code, 20001);
+  assert.equal((await get(path, { dbId: own.tid, includeDeletedDetails: "wrong" })).body.code, 20002);
+  const head = await request(runtime, old, {}, { dbId: own.tid }, "HEAD");
+  assert.equal(head.status, 200);
+  assert.equal(head.body, null);
+});
+
 test("所属系统选择项一次返回完整租户角色范围，保留线上字段和浏览器搜索所需候选", async () => {
-  const route = "/dst/application/register-options";
+  const route = "/dst/application/options";
   const contract = JSON.parse(await fs.readFile(new URL("../../mock/contracts/chengtian.json", import.meta.url), "utf8"));
   const schema = contract.interfaces.find((item) => item.operation === `POST ${route}`).response;
   for (const role of ["admin", "department", "registrar"]) {
@@ -67,6 +142,7 @@ test("所属系统选择项一次返回完整租户角色范围，保留线上�
     const actual = (await request(runtime, route)).body.data;
     assert.equal(runtime.requests.length - before, 1);
     validateShape(actual, schema);
+    assert.deepEqual((await request(runtime, "/dst/application/register-options")).body.data, actual);
     assert.deepEqual(actual[0], { label: null, value: "validation-null", orgid: orgId, createdby: null });
     assert.deepEqual(actual.filter((item) => item.label === "同名应用"), [
       { label: "同名应用", value: "validation-a", orgid: orgId, createdby: "validation-other" },
@@ -486,17 +562,19 @@ test("未覆盖接口拒绝并且不发网络请求，不记录请求正文和�
   );
 });
 
-test("租户切换后旧租户对象不可访问，源数据不串场景", async () => {
+test("本地账号拒绝跨行业切换，重新登录后旧租户对象不可访问", async () => {
   const { runtime } = setup();
   const id = runtime.database.sources[0].tid;
-  assert.equal(
-    (
-      await request(runtime, "/portal/sso/switch", {
-        tenantId: tenantConfiguration("broadcasting").tenant.tid,
-      })
-    ).status,
-    200,
-  );
+  const tenantId = tenantConfiguration("broadcasting").tenant.tid;
+  const before = runtime.session.tenantId;
+  assert.equal((await request(runtime, "/portal/sso/switch", { tenantId })).body.code, 403);
+  assert.equal(runtime.session.tenantId, before);
+  assert.equal((await request(runtime, "/portal/sso/switch", { tenantId: before })).body.code, 0);
+  const session = (await request(runtime, "/portal/sso/session", {}, {}, "GET")).body.data;
+  assert.equal(session.accountSource, "LOCAL");
+  assert.deepEqual((await request(runtime, "/portal/sso/tenants", {}, {}, "GET")).body.data, session.available);
+  assert.deepEqual(session.available.map(item => item.tid), [before]);
+  assert.equal((await request(runtime, "/portal/sso/login", { account:"demo", password:"mock-password", tenantId })).body.code, 0);
   assert.equal(
     (await request(runtime, "/dst/db/srcdetail", { tid: id })).status,
     404,
@@ -508,13 +586,25 @@ test("登录选项、行业品牌及配置类型使用当前数据库公开配�
   const { runtime } = setup();
   assert.deepEqual(runtime.tenantOptions(), configuration.tenants.map((item) => item.tenant));
   assert.deepEqual((await request(runtime, "/portal/main/index", {}, {}, "GET")).body.data, configuration.globalSettings);
+  const head = mockResponse(await runtime.handle({ method: "HEAD", path: "/portal/main/index" }));
+  assert.equal(head.status, 200);
+  assert.equal(head.headers.get("content-type"), "application/json");
+  assert.match(head.headers.get("cache-control"), /no-store/);
+  assert.equal(await head.text(), "");
   for (const item of configuration.tenants) {
     const result = await request(runtime, "/portal/sso/settings", {}, { tenantId: item.tenant.tid }, "GET");
     assert.deepEqual(result.body.data, item.settings);
     assert.equal(typeof result.body.data.showShoppingCar, "boolean");
     assert.equal(result.body.data.logo.startsWith("data:image/"), true);
   }
-  assert.equal((await request(runtime, "/portal/sso/settings", {}, {tenantId:"demo-police"}, "GET")).status, 400);
+  assert.equal((await request(runtime, "/portal/sso/settings", {}, {tenantId:"demo-police"}, "GET")).body.code, 403);
+  assert.equal((await request(runtime, "/portal/sso/settings", {}, {}, "GET")).body.code, 20001);
+  for (const suffix of ["options", "settings", "session", "tenants"]) {
+    const head = mockResponse(await runtime.handle({ method: "HEAD", path: `/portal/sso/${suffix}` }));
+    assert.equal(head.status, 200);
+    assert.equal(head.headers.get("content-type"), "application/json");
+    assert.equal(await head.text(), "");
+  }
 });
 
 test("使用原行业选择接口登录其他行业后，刷新仍恢复该行业会话与数据", async () => {
@@ -536,7 +626,7 @@ test("退出返回原接口的登录路径并清理模拟会话", async () => {
   assert.equal(result.body.data, "/login");
   assert.equal(runtime.session, null);
   assert.equal(new ChengtianMockRuntime({sessionStorage}).session, null);
-  assert.equal((await request(runtime, "/portal/sso/session", {}, {}, "GET")).status, 401);
+  assert.equal((await request(runtime, "/portal/sso/session", {}, {}, "GET")).body.code, 100120);
 });
 
 test("菜单及组织树保持当前数据库层级，空租户不复制公安配置", async () => {

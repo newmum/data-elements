@@ -396,7 +396,7 @@ export async function testConnection(
   manifestKey: string,
   config: Record<string, unknown>,
 ): Promise<ConnectionTestResult> {
-  const { data } = await api.post<ConnectionTestResult>('/api/connection-test', { manifestKey, config }, { timeout: 45000 });
+  const { data } = await api.post<ConnectionTestResult>('/api/connect', { manifestKey, config }, { timeout: 45000 });
   return normalizeProbeResponse<ConnectionTestResult>(data, '连接测试');
 }
 
@@ -408,7 +408,7 @@ export async function probeColumns(
   const configError = hiveMetadataConfigError(manifestKey, config);
   if (configError) return { success: false, error: configError, columns: [] };
   const { data } = await api.post<ColumnsProbeResult>(
-    '/api/columns-probe',
+    '/api/columns',
     { manifestKey, config, table },
     { timeout: 45000 },
   );
@@ -424,7 +424,7 @@ export async function probeTables(
   const configError = hiveMetadataConfigError(manifestKey, config);
   if (configError) return { success: false, error: configError, tables: [] };
   const { data } = await api.post<TablesProbeResult>(
-    '/api/tables-probe',
+    '/api/tables',
     { manifestKey, config, keyword, limit },
     { timeout: 45000 },
   );

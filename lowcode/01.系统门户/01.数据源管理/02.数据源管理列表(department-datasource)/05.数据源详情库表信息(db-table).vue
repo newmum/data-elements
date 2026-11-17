@@ -525,7 +525,7 @@ function applyCollectionStatus(value: unknown) {
 async function readCollectionStatus(version: number, notify = false) {
   const dbId = props.dbId;
   try {
-    const value = await $common.get("/dst/database/metadata/tables/collection/status", {
+    const value = await $common.get("/dst/collect/status", {
       dbId,
       jobId: state.jobId || undefined,
     });
@@ -563,7 +563,7 @@ async function startCollection() {
       $message.info("该来源使用登记快照，请进入登记流程维护其数据表定义");
       return;
     }
-    const result = await $common.post("/dst/database/metadata/tables/collection/start", {
+    const result = await $common.post("/dst/collect/start", {
       dbId,
       mode: "REFRESH",
     });

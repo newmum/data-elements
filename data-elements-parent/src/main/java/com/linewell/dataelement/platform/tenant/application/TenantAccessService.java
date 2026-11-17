@@ -4,16 +4,13 @@ import com.linewell.dataelement.platform.persistence.id.NumericId;
 import com.linewell.dataelement.platform.tenant.config.TenantProperties;
 import com.linewell.dataelement.platform.tenant.domain.TenantAccessException;
 import com.linewell.dataelement.platform.tenant.domain.TenantContext;
-import com.linewell.dataelement.platform.tenant.infrastructure.persistence.entity.SymTenantT;
 import com.linewell.dataelement.platform.tenant.infrastructure.persistence.entity.RmUserTenantRelaT;
 import com.linewell.dataelement.platform.tenant.infrastructure.persistence.mapper.SymTenantTMapper;
 import com.linewell.dataelement.platform.tenant.infrastructure.persistence.mapper.RmUserTenantRelaTMapper;
 import com.linewell.dataelement.platform.tenant.infrastructure.persistence.model.TenantMembership;
 import com.linewell.dataelement.platform.tenant.infrastructure.datasource.UseControlDataSource;
 import java.time.LocalDateTime;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,7 +26,7 @@ public class TenantAccessService {
     @Value("${idaas.legacy-control-accounts.enabled:false}")
     private boolean legacyControlAccountsEnabled;
 
-    private void requireLegacyCompatibility() {
+    public void requireLegacyCompatibility() {
         if (!legacyControlAccountsEnabled) throw new TenantAccessException("TENANT-ACCOUNT-SOURCE-RETIRED", "共享成员关系已退役，请使用所属应用的本地账号登录");
     }
 
@@ -81,19 +78,6 @@ public class TenantAccessService {
         return new TenantIdentity(activeTenantId);
     }
 
-    public List<Map<String, Object>> availableTenants(String loginId) {
-        requireLegacyCompatibility();
-        return relationMapper.selectTenantOptions(loginId).stream()
-                .map(this::membershipMap)
-                .toList();
-    }
-
-    public List<Map<String, Object>> loginOptions() {
-        return tenantMapper.selectLoginOptions().stream()
-                .map(this::tenantMap)
-                .toList();
-    }
-
     /**
      * Assign a user only within the tenant carried by the authenticated request.
      * Keep this normal tenant-bound operation independent of role-based administrator gates.
@@ -137,15 +121,6 @@ public class TenantAccessService {
         }
     }
 
-    public Map<String, Object> currentTenant() {
-        String tenantId = TenantContext.requireTenantId();
-        SymTenantT tenant = tenantMapper.selectCurrent(tenantId);
-        Map<String, Object> result = tenant == null
-                ? new LinkedHashMap<>()
-                : tenantMap(tenant);
-        return result;
-    }
-
     private RmUserTenantRelaT assignment(
             String relationId,
             String userId,
@@ -163,34 +138,6 @@ public class TenantAccessService {
         relation.setUpdatedBy(operator);
         relation.setUpdatedTime(now);
         return relation;
-    }
-
-    private Map<String, Object> membershipMap(TenantMembership membership) {
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("tid", membership.getTenantId());
-        result.put("code", membership.getCode());
-        result.put("name", membership.getName());
-        result.put("status", membership.getStatus());
-        result.put("init_flag", membership.getInitFlag());
-        result.put("is_default", membership.getIsDefault());
-        return result;
-    }
-
-    private Map<String, Object> tenantMap(SymTenantT tenant) {
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("tid", tenant.getTid());
-        result.put("code", tenant.getCode());
-        result.put("name", tenant.getName());
-        if (tenant.getStatus() != null) {
-            result.put("status", tenant.getStatus());
-        }
-        if (tenant.getInitFlag() != null) {
-            result.put("init_flag", tenant.getInitFlag());
-        }
-        if (tenant.getIsolationMode() != null) {
-            result.put("isolation_mode", tenant.getIsolationMode());
-        }
-        return result;
     }
 
     public record TenantIdentity(String tenantId) {

@@ -1,0 +1,11 @@
+{
+  "properties": {},
+  "id": "sys_logops_v1",
+  "name": "20.操作日志",
+  "type": "api",
+  "parentId": "9a18bf0b6a994f5aa56aa775f3de9f3d",
+  "path": "/logops",
+  "paths": [],
+  "options": []
+}
+================================

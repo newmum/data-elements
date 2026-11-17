@@ -24,6 +24,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import javax.sql.DataSource;
@@ -100,6 +101,39 @@ public class StructuredTableWriteMagicModule {
                 identifier(orderColumn), maximumRows);
     }
 
+    @Comment("在当前租户事务中按唯一键顺序锁定与指定半开时间区间相交的记录")
+    public void forEachOverlappingLockedRow(String table, String tenantId, String orderColumn,
+            List<String> projection, Map<String, ?> conditions, String startColumn, String endColumn,
+            LocalDateTime start, LocalDateTime end, Consumer<Map<String, Object>> consumer) {
+        requireTenant(tenantId);
+        String target = identifier(table);
+        String order = identifier(orderColumn);
+        String lower = identifier(startColumn);
+        String upper = identifier(endColumn);
+        if (start == null || end == null || !start.isBefore(end) || lower.equalsIgnoreCase(upper)) {
+            throw new IllegalArgumentException("结构化行锁时间区间无效");
+        }
+        var fields = columns(projection);
+        var filters = tenantFilters(tenantId, conditions, Set.of(lower, upper));
+        validateJdbcFilters(filters);
+        inTransaction(tenantId, (connection, quote) -> {
+            var arguments = new ArrayList<Object>();
+            String columns = fields.stream().map(field -> quoted(quote, field)).collect(Collectors.joining(", "));
+            String sql = "SELECT " + columns + " FROM " + quoted(quote, target) + " WHERE "
+                    + where(quote, filters, arguments) + " AND " + quoted(quote, lower) + " < ? AND "
+                    + quoted(quote, upper) + " > ? ORDER BY " + quoted(quote, order) + " FOR UPDATE";
+            arguments.add(end);
+            arguments.add(start);
+            try (var statement = connection.prepareStatement(sql)) {
+                prepare(statement, arguments);
+                try (var rows = statement.executeQuery()) {
+                    while (rows.next()) consumer.accept(readLockedRow(fields, rows));
+                }
+            }
+            return null;
+        });
+    }
+
     private List<Map<String, Object>> lockMatchingRows(String target, String tenantId, List<String> projection,
             Map<String, Object> filters, String orderColumn, int maximumRows) {
         return inTransaction(tenantId, (connection, quote) -> {
@@ -118,16 +152,20 @@ public class StructuredTableWriteMagicModule {
                             throw new IllegalStateException(orderColumn == null ? "结构化行锁匹配多条记录"
                                     : "批量行锁匹配行数超过指定键数");
                         }
-                        var row = new LinkedHashMap<String, Object>();
-                        for (int index = 0; index < projection.size(); index++) {
-                            row.put(projection.get(index), JdbcValueNormalizer.normalize(rows.getObject(index + 1)));
-                        }
-                        result.add(row);
+                        result.add(readLockedRow(projection, rows));
                     }
                     return result;
                 }
             }
         });
+    }
+
+    private static Map<String, Object> readLockedRow(List<String> projection, java.sql.ResultSet rows) throws SQLException {
+        var row = new LinkedHashMap<String, Object>();
+        for (int index = 0; index < projection.size(); index++) {
+            row.put(projection.get(index), JdbcValueNormalizer.normalize(rows.getObject(index + 1)));
+        }
+        return row;
     }
 
     @Comment("在当前写事务中按各行键批量更新，返回成功条目数，由调用方处理未匹配记录")

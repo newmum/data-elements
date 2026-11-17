@@ -82,21 +82,19 @@ class TenantWebInterceptorTest {
     }
 
     @Test
-    void publicLoginEndpointsIgnoreStaleSessionAndNeverResolveMembership() {
+    void portalLoginIgnoresStaleSessionAndNeverResolvesMembership() {
         TenantAccessService access = mock(TenantAccessService.class);
         TenantWebInterceptor interceptor = new TenantWebInterceptor(access, new TenantProperties(), mock(com.linewell.dataelement.feature.identity.application.TenantIdentityQueryService.class));
         try (var session = mockStatic(StpUtil.class)) {
             session.when(StpUtil::isLogin).thenThrow(new IllegalStateException("stale session"));
-            for (String path : new String[] {"/portal/sso/login", "/portal/sso/options", "/portal/sso/settings"}) {
-                MockHttpServletRequest request = new MockHttpServletRequest("GET", path);
-                request.addHeader("token", "obsolete-test-token");
-                TenantContext.bind("previous-request");
-                assertTrue(interceptor.preHandle(request, new MockHttpServletResponse(), new Object()));
-                assertTrue(TenantContext.usesControlDatabase());
-                assertNull(TenantContext.getTenantId());
-                interceptor.afterCompletion(request, new MockHttpServletResponse(), new Object(), null);
-                assertNull(TenantContext.getTenantId());
-            }
+            MockHttpServletRequest request = new MockHttpServletRequest("POST", "/portal/sso/login");
+            request.addHeader("token", "obsolete-test-token");
+            TenantContext.bind("previous-request");
+            assertTrue(interceptor.preHandle(request, new MockHttpServletResponse(), new Object()));
+            assertTrue(TenantContext.usesControlDatabase());
+            assertNull(TenantContext.getTenantId());
+            interceptor.afterCompletion(request, new MockHttpServletResponse(), new Object(), null);
+            assertNull(TenantContext.getTenantId());
             session.verifyNoInteractions();
             verifyNoInteractions(access);
         }

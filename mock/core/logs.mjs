@@ -244,7 +244,7 @@ export class LogMockService {
     this.save(database, jobs);
     return { id, status: "PENDING" };
   }
-  async exportPage(database, session, input) {
+  async exportPage(database, session, input, advance = true) {
     const keyword = text(input.keyword), status = text(input.status, 24);
     assert(!status || ["PENDING", "RUNNING", "SUCCESS", "FAILED", "EXPIRED", "CANCELLED", "PREPARING", "WRITTEN", "VERIFIED", "PURGING", "COMPLETE"].includes(status), 400, "状态无效");
     // 先验证分页排序及过滤，再推进任务；非法请求没有状态副作用。
@@ -252,7 +252,7 @@ export class LogMockService {
     sorted([], input, ["created_time", "finished_at", "name", "row_count", "actor_name"], "created_time");
     const range = input.startTime != null && input.endTime != null ? timeRange(input, this.clock()) : null;
     const jobs = this.jobs(database);
-    for (const job of jobs) {
+    for (const job of advance ? jobs : []) {
       if (job.owner_id !== session.userId || job.tenant_id !== session.tenantId) continue;
       if (job.status === "SUCCESS" && Date.parse(job.expires_at) <= this.clock()) { job.status = "EXPIRED"; job.content = null; }
       else if (["PENDING", "RUNNING"].includes(job.status)) {
@@ -274,7 +274,7 @@ export class LogMockService {
         } catch { job.status = "FAILED"; job.last_error_code = "EXPORT_FAILED"; job.content = null; }
       }
     }
-    this.save(database, jobs);
+    if (advance) this.save(database, jobs);
     const visible = jobs.filter((job) => job.tenant_id === session.tenantId && job.owner_id === session.userId &&
       (!keyword || [job.tid, job.actor_name, job.format_code].some((v) => includes(v, keyword))) &&
       (!status || job.status === status) && (!range || instant(job.created_time, null) >= range.start && instant(job.created_time, null) < range.end));
@@ -303,9 +303,10 @@ export class LogMockService {
       return components.filter((row) => row.name === "log-management").map((row) => ({ tid: row.componentId, name: row.name, compile_js: row.compileJs, compile_css: row.compileCss }));
     }
     if (/ \/sym\/logs\/(archives|policies)(?:\/|$)/.test(key)) throw new MockError(501, "本批未实现日志归档或策略；不会虚构成功，已阻止访问真实服务");
-    if (["GET /sym/logs/exports", "POST /sym/logs/exports"].includes(key)) {
+    if (["GET /sym/logs/exports", "HEAD /sym/logs/exports", "POST /sym/logs/exports"].includes(key)) {
       requireCapability(session, "exports");
-      return this.withJobs(database, () => key.startsWith("POST") ? this.createExport(database, session, body) : this.exportPage(database, session, query));
+      return this.withJobs(database, () => key.startsWith("POST")
+        ? this.createExport(database, session, body) : this.exportPage(database, session, query, !key.startsWith("HEAD")));
     }
     const download = /^GET \/sym\/logs\/exports\/([a-f0-9]{32})\/download$/.exec(key);
     if (download) { requireCapability(session, "exports"); return this.withJobs(database, () => this.download(database, session, download[1])); }
@@ -321,7 +322,7 @@ export class LogMockService {
       }
       if (method === "GET" && id === "statistics" && !items) {
         const rows = selectLogRows(this.rows(database), session, kind, query, this.clock());
-        return Object.fromEntries([["total", rows.length], ...[["success_count", "SUCCESS"], ["failure_count", "FAILED"], ["denied_count", "DENIED"], ["partial_count", "PARTIAL"]].map(([key, value]) => [key, rows.filter((row) => row.result === value).length])]);
+        return Object.fromEntries([["total", rows.length], ...[["success_count", "SUCCESS"], ["failure_count", "FAILED"], ["denied_count", "DENIED"], ["partial_count", "PARTIAL"]].map(([key, value]) => [key, rows.length ? rows.filter((row) => row.result === value).length : null])]);
       }
       if (method === "GET" && id && !["batch", "summary", "statistics"].includes(id)) {
         const [row] = this.authorized(database, session, kind, [id]);

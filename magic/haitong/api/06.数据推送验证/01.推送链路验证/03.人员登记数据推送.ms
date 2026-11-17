@@ -41,7 +41,7 @@ import java.time.format.DateTimeFormatter
 
 // 1. Postman：选择 POST，输入下面的完整地址；18083 是本机独立海通端口。
 var method = 'POST'
-var url = 'http://127.0.0.1:18083/api/v1/data-push'
+var url = 'http://127.0.0.1:18083/api/v1/push'
 // 每次“运行”创建新批次。模拟网络重试时，把这个值改为同一个固定字符串，且正文保持相同。
 var batchId = 'validation-person-' + UUID.randomUUID().toString()
 var now = LocalDateTime.now(ZoneId.of('Asia/Shanghai')).format(DateTimeFormatter.ofPattern('yyyy-MM-dd HH:mm:ss'))

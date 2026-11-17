@@ -90,7 +90,7 @@ export function RegistrationEditor({ type, id, onClose, onSaved }: { type: Regis
       else if (type === 'databases') {
         const draft = props as SourceDraft; if (!draft.jdbcURL) draft.jdbcURL = makeJdbcUrl(draft);
         result = await datasourceRegistrationApi.save(draft, id);
-      } else if (type === 'catalogs') result = await platformApi('/dst/catalog/saveOrUpdate', { ...(id ? { tid: id } : {}), assetType: 'catalog', propList: props, catalogItems: items.map(({ clientKey: _key, ...item }, index) => ({ ...item, sortNo: index + 1 })) });
+      } else if (type === 'catalogs') result = await platformApi('/dst/catalog/save', { ...(id ? { tid: id } : {}), assetType: 'catalog', propList: props, catalogItems: items.map(({ clientKey: _key, ...item }, index) => ({ ...item, sortNo: index + 1 })) });
       else {
         const old = existing.current; const provider = old.providerConfig && typeof old.providerConfig === 'object' ? old.providerConfig as Draft : {};
         const publish = old.publishConfig && typeof old.publishConfig === 'object' ? old.publishConfig as Draft : {};

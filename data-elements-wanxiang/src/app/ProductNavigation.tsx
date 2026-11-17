@@ -1,12 +1,23 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { Tooltip } from 'antd';
-import { platformApi } from '../shared/platformApi';
 import { navigation } from './routes';
 import { ModuleIcon } from '../design/ModuleIcon';
 /** One real 44px button centered in the 64px rail. No invisible title or inline-indent. */
-export function ProductNavigation({ collapsed, selected, onNavigate }: { collapsed: boolean; selected: string; onNavigate: (key: string) => void }) {
+export function ProductNavigation({ collapsed, selected, onNavigate, readLogCapabilities }: {
+  collapsed: boolean;
+  selected: string;
+  onNavigate: (key: string) => void;
+  readLogCapabilities?: () => Promise<string[]>;
+}) {
   const [logCapabilities,setLogCapabilities]=useState<string[]>([]);
-  useEffect(()=>{let live=true;void platformApi<string[]>('/sym/logs/capabilities').then(value=>{if(live)setLogCapabilities(value);}).catch(()=>undefined);return()=>{live=false;};},[]);
+  useEffect(() => {
+    let live = true;
+    setLogCapabilities([]);
+    void readLogCapabilities?.().then(value => {
+      if (live) setLogCapabilities(value);
+    }).catch(() => undefined);
+    return () => { live = false; };
+  }, [readLogCapabilities]);
   const visible=navigation.map(group=>({...group,children:group.children.filter(item=>item.key!=='/governance/logs'||logCapabilities.length>0)})).filter(group=>group.children.length>0);
   const root = useRef<HTMLElement>(null);
   useEffect(() => { root.current?.querySelector('[aria-current="page"]')?.scrollIntoView({block:'nearest',inline:'nearest'}); }, [selected,collapsed]);

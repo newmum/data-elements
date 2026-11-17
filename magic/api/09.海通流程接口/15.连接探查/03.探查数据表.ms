@@ -4,7 +4,7 @@
   "script": null,
   "groupId": "nifi_connection_probe_group_v1",
   "name": "03.探查数据表",
-  "path": "/tables-probe",
+  "path": "/tables",
   "method": "POST",
   "description": "根据组件连接配置探查可读的表或数据集合，支持关键词和 1 到 500 项限制。登记的 Hive 配置限定当前租户。返回表、总数或原始诊断，不写业务记录。",
   "parameters": [],
@@ -24,7 +24,7 @@ import java.util.Map
 import nifiConnectionProbe
 import org.springframework.http.ResponseEntity
 
-// POST /nifi/api/tables-probe 按节点配置读取可选表和集合。接受关键词和最多 500 项限制。
+// POST /nifi/api/tables 按节点配置读取可选表和集合。接受关键词和最多 500 项限制。
 // 登记源限定当前租户，业务失败保留既有 HTTP 状态与空表数组。
 
 return withHttp(() => {

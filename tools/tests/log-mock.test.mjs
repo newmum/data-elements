@@ -128,7 +128,9 @@ test("无组织行业ORG不补权限；四行业切换、本人角色及模块�
   }
   const { runtime } = setup("registrar");
   const id = (await ok(runtime, "operations")).list[0].tid;
-  await call(runtime, "/portal/sso/switch", {}, { tenantId: tenantConfiguration("broadcasting").tenant.tid }, "POST");
+  await call(runtime, "/portal/sso/login", {}, {
+    account: "demo", password: "mock-password", tenantId: tenantConfiguration("broadcasting").tenant.tid,
+  }, "POST");
   await refused(runtime, `operations/${id}`, 403);
   const rows = (await ok(runtime, "operations")).list;
   assert(rows.every((row) => row.actor_id === "broadcasting-user-0"));
@@ -296,7 +298,9 @@ test("导出本人/租户/范围/权限/过期/摘要约束及失败状态不伪
   advance(25 * 3600000);
   await refused(runtime, `exports/${id}/download`, 500);
   assert.equal((await ok(runtime, "exports")).list.find((row) => row.tid === id).status, "EXPIRED");
-  await call(runtime, "/portal/sso/switch", {}, { tenantId: tenantConfiguration("chengtian").tenant.tid }, "POST");
+  await call(runtime, "/portal/sso/login", {}, {
+    account: "demo", password: "mock-password", tenantId: tenantConfiguration("chengtian").tenant.tid,
+  }, "POST");
   assert.equal((await ok(runtime, "exports")).total, 0);
   await refused(runtime, `exports/${id}/download`, 403);
 });
@@ -306,7 +310,7 @@ test("未知动作/归档/策略/平台路径拒绝、无真实网络访问、�
   const previous = globalThis.fetch;
   globalThis.fetch = () => { throw new Error("不允许真实网络"); };
   try {
-    for (const [route, method, body, query] of [["archives", "GET"], ["archives", "POST", { kind: "auth" }], ["archives/not-real", "POST", { action: "purge" }], ["policies", "PUT", {}], ["operations", "POST", {}], ["requests", "GET", {}, { action: "list" }], ["exports/invalid/download", "GET"], ["exports", "DELETE"], ["/idaas/logs/query", "GET"]]) {
+    for (const [route, method, body, query] of [["archives", "GET"], ["archives", "POST", { kind: "auth" }], ["/sym/logarchive/create", "POST", { kind: "auth" }], ["archives/not-real", "POST", { action: "purge" }], ["policies", "PUT", {}], ["/sym/logpolicy/list", "GET"], ["/sym/logpolicy/save", "PUT", {}], ["operations", "POST", {}], ["requests", "GET", {}, { action: "list" }], ["exports/invalid/download", "GET"], ["exports", "DELETE"], ["/idaas/logs/query", "GET"]]) {
       const response = await call(runtime, route, query, body, method);
       assert.equal(response.status, 501); assert.match(response.body.message, /阻止访问真实服务/);
     }
@@ -314,7 +318,28 @@ test("未知动作/归档/策略/平台路径拒绝、无真实网络访问、�
   } finally { globalThis.fetch = previous; }
   assert(runtime.requests.every((row) => !row.includes(runtime.session.token)));
   const unauthenticated = await runtime.handle({ path: "/sym/logs/auth", token: "not-current" });
-  assert.equal(unauthenticated.status, 401);
+  assert.equal(unauthenticated.status, 200);
+  assert.equal(unauthenticated.body.code, 100120);
+});
+
+test("行业日志短路径保留旧地址的分页、标识优先级和 HEAD 契约", async () => {
+  const { runtime } = setup();
+  const token = runtime.session.token;
+  const query = { size: 20 };
+  const legacy = await runtime.handle({ path: "/sym/logs/requests", query, token });
+  const official = await runtime.handle({ path: "/sym/logreq/page", query, token });
+  assert.deepEqual(official.body, legacy.body);
+  const ids = official.body.data.list.slice(0, 2).map(row => row.tid).reverse();
+  const selected = await runtime.handle({ path: "/sym/logreq/batch", method: "POST", body: ids, token });
+  assert.deepEqual(selected.body.data.map(row => row.tid), ids);
+  const oldDetail = await runtime.handle({ path: `/sym/logs/requests/${ids[0]}`, query: { id: ids[1] }, token });
+  const newDetail = await runtime.handle({ path: "/sym/logreq/detail", query: { id: ids[0] }, token });
+  assert.equal(oldDetail.body.data.tid, ids[0]);
+  assert.deepEqual(newDetail.body, oldDetail.body);
+  const head = await runtime.handle({ path: "/sym/logreq/detail", method: "HEAD", query: { id: ids[0] }, token });
+  assert.equal(head.status, 200);
+  assert.equal(head.body, null);
+  assert.equal((await runtime.handle({ path: "/sym/logreq/detail", token: "not-current" })).body.code, 100120);
 });
 
 test("根传输适配保留裸批量数组与日志响应，其他路由仍拒绝数组", async () => {
@@ -322,6 +347,7 @@ test("根传输适配保留裸批量数组与日志响应，其他路由仍拒�
   const id = (await ok(runtime, "auth")).list[0].tid;
   const body = parseMockBody("/dev-api/sym/logs/auth/batch", JSON.stringify([id]));
   assert.deepEqual(body, [id]);
+  assert.deepEqual(parseMockBody("/dev-api/sym/logauth/batch", JSON.stringify([id])), [id]);
   const result = await call(runtime, "auth/batch", {}, body, "POST");
   assert.equal((await mockResponse(result).json()).data[0].tid, id);
   assert.throws(() => parseMockBody("/sym/logs/exports", "[]"));
@@ -452,12 +478,12 @@ test("CSV防前导空白公式注入，控制字符清洗/引号转义与历史�
 test("共享Magic函数依赖由检查器实际校验摘要、身份和路径，不增加HTTP项", async () => {
   const spec = JSON.parse(await fs.readFile(new URL("../../mock/contracts/chengtian.json", import.meta.url), "utf8"));
   const dependency = spec.dependencies.find((entry) => entry.source.id === "log_parameter_condition_v1");
-  assert(dependency.operations.includes("GET /sym/logs/operations"));
-  assert(dependency.operations.includes("POST /sym/logs/exports"));
+  assert(dependency.operations.includes("GET /sym/logops/page"));
+  assert(dependency.operations.includes("POST /sym/logexport/create"));
   assert.deepEqual(await checkFunctionDependency(repository, dependency), []);
   for (const change of [{ reviewedSha256: "0".repeat(64) }, { id: "wrong-id" }, { path: "/wrong-path" }, { file: "magic/function/../../AGENTS.md" }])
     assert((await checkFunctionDependency(repository, { ...dependency, source: { ...dependency.source, ...change } })).length > 0);
-  assert.equal(spec.interfaces.length, 56);
+  assert(!spec.interfaces.some((entry) => entry.source.id === dependency.source.id));
 });
 
 test("含引号/反斜杠的完整字面在分页之前检索，脱敏占位与历史不伪造新搜索内容", async () => {
@@ -544,18 +570,39 @@ test("ORG/OWNER导出与列表一致，CSV历史时间及实际字段不丢失",
   }
 });
 
-test("日志25项HTTP契约按真实实现登记且列表/详情/统计/batch/文件形状可验证", async () => {
+test("日志44项HTTP契约覆盖能力、HEAD、列表、详情、统计、批量和文件", async () => {
   const spec = JSON.parse(await fs.readFile(new URL("../../mock/contracts/chengtian.json", import.meta.url), "utf8"));
-  const contracts = spec.interfaces.filter((row) => row.operation.includes("/sym/logs/"));
-  assert.equal(contracts.length, 25);
-  assert(contracts.every((row) => row.source.state === "pending-magic"));
+  const contracts = spec.interfaces.filter((row) => new RegExp(" /sym/(logs|logauth|logops|logreq|logsec|logexport)/").test(row.operation));
+  assert.equal(contracts.length, 44);
+  assert.equal(contracts.filter((row) => row.source.kind === "magic").length, 43);
+  assert.equal(contracts.filter((row) => row.source.state === "pending-magic").length, 1);
   const { runtime } = setup();
-  const fixtures = [["GET /sym/logs/capabilities", {}, await ok(runtime, "capabilities")]];
+  for (const route of ["capabilities", "components"]) {
+    const head = await call(runtime, route, {}, {}, "HEAD");
+    assert.equal(head.status, 200);
+    assert.equal(head.body, null);
+    assert.equal(head.headers["Content-Type"], "application/json");
+    assert.match(head.headers["Cache-Control"], /no-store/);
+    const anonymous = await runtime.handle({ path: `/sym/logs/${route}` });
+    assert.equal(anonymous.body.code, 100120);
+  }
+  const exportsUrl = "/sym/logexport/page";
+  const exportJob = await ok(runtime, "/sym/logexport/create", {}, { kind: "auth" }, "POST");
+  const exportHead = await call(runtime, exportsUrl, {}, {}, "HEAD");
+  assert.equal(exportHead.status, 200);
+  assert.equal(exportHead.body, null);
+  const exportList = await ok(runtime, exportsUrl);
+  assert.equal(exportList.list.find(({ tid }) => tid === exportJob.id).status, "RUNNING");
+  const fixtures = [["GET /sym/logs/capabilities", {}, await ok(runtime, "capabilities")],
+    ["GET " + exportsUrl, {}, exportList]];
+  const groups = {auth: "logauth", operations: "logops", requests: "logreq", security: "logsec"};
   for (const kind of logKinds) {
-    const listed = await ok(runtime, kind), id = listed.list[0].tid;
-    fixtures.push([`GET /sym/logs/${kind}`, {}, listed], [`GET /sym/logs/${kind}/statistics`, {}, await ok(runtime, `${kind}/statistics`)],
-      [`GET /sym/logs/${kind}/{id}`, { id }, await ok(runtime, `${kind}/${id}`)], [`POST /sym/logs/${kind}/batch`, [id], await ok(runtime, `${kind}/batch`, {}, [id], "POST")],
-      [`GET /sym/logs/${kind}/{id}/items`, { id }, await ok(runtime, `${kind}/${id}/items`)]);
+    const prefix = "/sym/" + groups[kind];
+    const listed = await ok(runtime, prefix + "/page"), id = listed.list[0].tid;
+    fixtures.push(["GET " + prefix + "/page", {}, listed], ["GET " + prefix + "/stats", {}, await ok(runtime, prefix + "/stats")],
+      ["GET " + prefix + "/detail", { id }, await ok(runtime, prefix + "/detail", { id })],
+      ["POST " + prefix + "/batch", [id], await ok(runtime, prefix + "/batch", {}, [id], "POST")],
+      ["GET " + prefix + "/items", { id }, await ok(runtime, prefix + "/items", { id })]);
   }
   for (const [operation, input, data] of fixtures) {
     const contract = contracts.find((row) => row.operation === operation);

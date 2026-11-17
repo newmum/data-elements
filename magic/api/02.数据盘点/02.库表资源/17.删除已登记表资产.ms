@@ -37,7 +37,7 @@ import identityRuntime
 import metadataAsset
 import jsons
 import log
-import '@post:/dst/maintenance/batchRefresh' as refreshAssetIndex
+import '@post:/dst/maintenance/reindex' as refreshAssetIndex
 
 // POST /dst/db/tbldel 删除已登记表资产。
 /**

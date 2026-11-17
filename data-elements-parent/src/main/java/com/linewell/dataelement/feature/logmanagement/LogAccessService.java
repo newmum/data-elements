@@ -1,70 +1,43 @@
 package com.linewell.dataelement.feature.logmanagement;
 
 import cn.dev33.satoken.stp.StpUtil;
-import com.linewell.dataelement.platform.audit.AuditStore;
 import com.linewell.dataelement.platform.tenant.domain.TenantContext;
-import java.util.*;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
+import org.ssssssss.magicapi.core.service.MagicAPIService;
 
-/** Permission and range are taken from the same active role assignment in the current application. */
+/** 为日志文件传输和后台任务绑定可信租户，读取 Magic 授权规则。 */
 @Service
 public class LogAccessService {
-    private final AuditStore store;
-    private final org.springframework.beans.factory.ObjectProvider<org.ssssssss.magicapi.core.service.MagicAPIService> magic;
-    public LogAccessService(AuditStore store,org.springframework.beans.factory.ObjectProvider<org.ssssssss.magicapi.core.service.MagicAPIService> magic) { this.store=store;this.magic=magic; }
+    private final ObjectProvider<MagicAPIService> magic;
+
+    public LogAccessService(ObjectProvider<MagicAPIService> magic) {
+        this.magic = magic;
+    }
     public LogScope current(String capability) {
         if(!StpUtil.isLogin()) throw new SecurityException("请重新登录");
         String tenant=TenantContext.requireTenantId();
         String app=Objects.toString(StpUtil.getTokenSession().get("appId"),"");
         return tenant(tenant,StpUtil.getLoginIdAsString(),app,capability);
     }
-    public List<String> capabilities() {
-        if(!StpUtil.isLogin())throw new SecurityException("请重新登录");
-        String tenant=TenantContext.requireTenantId(),app=Objects.toString(StpUtil.getTokenSession().get("appId"),"");
-        var rows=store.jdbc(tenant).queryForList("select distinct m.code,m.id menu_id,r.data_scope from rm_user_role_rela_t ur join rm_role_t r on r.tenant_id=ur.tenant_id and r.id=ur.role_id and r.app_id=? and r.deleted=0 and r.status=0 join rm_role_menu_rela_t rm on rm.tenant_id=r.tenant_id and rm.role_id=r.id join rm_menu_t m on m.tenant_id=rm.tenant_id and m.id=rm.app_resource_id and m.app_id=r.app_id and m.deleted=0 and m.status=0 where ur.tenant_id=? and ur.user_id=? and m.code like 'logs:%'",app,tenant,StpUtil.getLoginIdAsString());
-        var active=activeMenus(tenant,app);
-        return rows.stream().map(AuditStore::lower).filter(row->active.contains(String.valueOf(row.get("menu_id")))).filter(row->!Set.of("logs:archives","logs:policies").contains(String.valueOf(row.get("code")))||"ALL".equals(row.get("data_scope"))).map(row->String.valueOf(row.get("code")).substring(5)).filter(code->Set.of("auth","operations","requests","security","exports","archives","policies").contains(code)).distinct().toList();
-    }
     public LogScope tenant(String tenant,String user,String app,String capability) {
-        if(!Set.of("auth","operations","requests","security","exports","archives","policies").contains(capability)) throw new IllegalArgumentException("日志模块无效");
-        var rows=store.jdbc(tenant).queryForList("""
-            select distinct r.id,r.data_scope,m.id menu_id from rm_user_t u
-            join rm_user_role_rela_t ur on ur.tenant_id=u.tenant_id and ur.user_id=u.id
-            join rm_role_t r on r.tenant_id=ur.tenant_id and r.id=ur.role_id and r.app_id=? and r.deleted=0 and r.status=0
-            join rm_role_menu_rela_t rm on rm.tenant_id=r.tenant_id and rm.role_id=r.id
-            join rm_menu_t m on m.tenant_id=rm.tenant_id and m.id=rm.app_resource_id and m.app_id=r.app_id
-            where u.tenant_id=? and u.id=? and u.status=0 and u.deleted=0 and m.deleted=0 and m.status=0 and m.code=?
-            """,app,tenant,user,"logs:"+capability);
-        var active=activeMenus(tenant,app);
-        rows=rows.stream().filter(row->active.contains(String.valueOf(AuditStore.lower(row).get("menu_id")))).toList();
-        if(rows.isEmpty()) throw new SecurityException("没有此日志模块的访问权限");
-        String mode="OWNER";
-        for(var row:rows) {
-            String value=Objects.toString(AuditStore.lower(row).get("data_scope"),"OWNER");
-            if(value.equals("ALL")) { mode="ALL"; break; }
-            if(value.equals("ORG")) mode="ORG";
+        // 后台任务复核已冻结的主体。显式绑定任务租户，执行完恢复调用方上下文。
+        Object decision = TenantContext.call(tenant, () -> magic.getObject().invoke("/common/loggrants",
+                Map.of("actor", user, "appId", app, "capability", capability)));
+        if (!(decision instanceof Map<?, ?> result) || !(result.get("modes") instanceof Map<?, ?> modes)
+                || !(modes.get(capability) instanceof String mode)) {
+            throw new SecurityException("没有此日志模块的访问权限");
         }
-        List<String> orgs=mode.equals("ORG")?store.jdbc(tenant).queryForList("select distinct o.id from rm_user_org_rela_t r join rm_org_t o on o.tenant_id=r.tenant_id and o.id=r.org_id and o.deleted=0 where r.tenant_id=? and r.user_id=?",String.class,tenant,user):List.of();
-        return new LogScope(tenant,user,app,null,null,mode,orgs,capability);
-    }
-    @SuppressWarnings("unchecked")
-    private Set<String> activeMenus(String tenant,String app) {
-        var request=com.linewell.dataelement.platform.audit.AuditIdentityResolver.request();
-        String cacheKey="audit.logMenus:"+tenant+":"+app;
-        if(request!=null&&request.getAttribute(cacheKey) instanceof Set<?> cached)return (Set<String>)cached;
-        var rows=store.jdbc(tenant).queryForList("select id,parent_id,status,deleted from rm_menu_t where tenant_id=? and app_id=?",tenant,app);
-        Map<String,Map<String,Object>> byId=new HashMap<>();rows.forEach(row->{var value=AuditStore.lower(row);byId.put(String.valueOf(value.get("id")),value);});
-        Set<String> allowed=new HashSet<>();
-        for(String id:byId.keySet()) {
-            String current=id;Set<String> seen=new HashSet<>();boolean valid=true;
-            while(current!=null&&!current.isBlank()&&!Set.of("ROOT","0").contains(current)) {
-                var row=byId.get(current);
-                if(row==null||!seen.add(current)||seen.size()>50||!"0".equals(String.valueOf(row.get("status")))||!"0".equals(String.valueOf(row.get("deleted")))) {valid=false;break;}
-                current=row.get("parent_id")==null?null:String.valueOf(row.get("parent_id"));
-            }
-            if(valid)allowed.add(id);
+        if (!Set.of("ALL", "ORG", "OWNER").contains(mode) || !(result.get("orgIds") instanceof List<?> orgIds)
+                || !orgIds.stream().allMatch(String.class::isInstance)) {
+            throw new IllegalStateException("行业日志授权结果无效");
         }
-        if(request!=null)request.setAttribute(cacheKey,allowed);return allowed;
+        return new LogScope(tenant, user, app, null, null, mode,
+                orgIds.stream().map(String.class::cast).toList(), capability);
     }
     public LogScope platform(Map<String,Object> context,String capability) {
         if(context==null || !platformPermission(capability).equals(context.get("requiredPermission"))) throw new SecurityException("平台审计权限未校验");

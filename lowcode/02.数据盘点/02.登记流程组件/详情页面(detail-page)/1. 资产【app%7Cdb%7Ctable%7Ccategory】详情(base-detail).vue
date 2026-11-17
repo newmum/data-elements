@@ -115,8 +115,31 @@ const handleAction = (action: string) => {
 
 const titleActions = (rule: any) => {
   const actions = Array.isArray(rule?.props?.actions) ? [...rule.props.actions] : [];
-  if (detailClass.value === "table" && String(rule?.props?.name || "").includes("元数据")) {
-    if (!actions.some((action) => action.request?.url === "/dst/db/refresh")) {
+  const type = detailClass.value;
+  const metadataSection = String(rule?.props?.name || "").includes("元数据");
+  if ((type === "db" || type === "table") && metadataSection) {
+    // 租户表单可能保存迁移前的请求地址，显示时改用现行接口并保留表单配置。
+    let hasCurrentRefresh = actions.some((action) => action?.request?.url === "/dst/db/refresh");
+    for (let index = actions.length - 1; index >= 0; index--) {
+      const action = actions[index];
+      const url = action?.request?.url;
+      if (url !== "/dst/database/metadata/refreshDbInfo" && url !== "/db/schema/refresh") continue;
+      if (hasCurrentRefresh) {
+        actions.splice(index, 1);
+      } else {
+        actions[index] = {
+          ...action,
+          request: {
+            url: "/dst/db/refresh", method: "get",
+            payload: type === "table" ? { tid: "$datasourceId", tableId: "$tid" } : { tid: "$tid" },
+          },
+        };
+        hasCurrentRefresh = true;
+      }
+    }
+  }
+  if (type === "table" && metadataSection) {
+    if (!actions.some((action) => action?.request?.url === "/dst/db/refresh")) {
       actions.push({
         key: "refreshMetadata", label: "刷新元数据", icon: "Refresh", visibleWhen: "view",
         reloadDetail: true, successMessage: "元数据已刷新",
@@ -233,7 +256,7 @@ const saveApi = (data: Record<string, any>) => {
       ? "/dst/application/save"
       : detailClass.value === "db"
         ? "/dst/db/srcsave"
-        : "/dst/catalog/saveOrUpdate";
+        : "/dst/catalog/save";
   return $common.post(url, {
     tid: currentData.value.tid,
     assetType: detailClass.value,

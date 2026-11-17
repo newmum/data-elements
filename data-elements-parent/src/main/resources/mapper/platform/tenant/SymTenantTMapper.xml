@@ -38,14 +38,6 @@
          order by sort_no, created_time
     </select>
 
-    <select id="selectCurrent"
-            resultType="com.linewell.dataelement.platform.tenant.infrastructure.persistence.entity.SymTenantT">
-        select tid, code, name, status, init_flag, isolation_mode
-          from sym_tenant_t
-         where tid = #{tenantId}
-           and is_del = 0
-    </select>
-
     <update id="updateTenant"
             parameterType="com.linewell.dataelement.platform.tenant.infrastructure.persistence.entity.SymTenantT">
         update sym_tenant_t

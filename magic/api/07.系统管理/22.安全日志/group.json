@@ -1,0 +1,11 @@
+{
+  "properties": {},
+  "id": "sys_logsec_v1",
+  "name": "22.安全日志",
+  "type": "api",
+  "parentId": "9a18bf0b6a994f5aa56aa775f3de9f3d",
+  "path": "/logsec",
+  "paths": [],
+  "options": []
+}
+================================

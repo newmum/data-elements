@@ -17,6 +17,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
 import org.springframework.http.server.PathContainer;
 import org.springframework.web.util.pattern.PathPatternParser;
+import org.springframework.web.util.pattern.PathPattern;
 
 /** 在会话解析前注册现役旧地址的兼容改写。 */
 @Configuration
@@ -28,6 +29,22 @@ public class LegacyRouteConfiguration {
     @Bean
     FilterRegistrationBean<Filter> legacyResourceRoutes() {
         Map<String, String> legacyPostPaths = Map.ofEntries(
+            Map.entry("/dst/database/metadata/tables/collection/start", "/dst/collect/start"),
+            Map.entry("/dst/database/metadata/tables/collection/rename-missing", "/dst/collect/rename"),
+            Map.entry("/dst/database/metadata/tables/review-order", "/dst/collect/order"),
+            Map.entry("/dst/database/metadata/tables/collection/status/batch", "/dst/collect/statuses"),
+            Map.entry("/dws/push/schema/publish", "/dws/push/publish"),
+            Map.entry("/dws/push/credential/issue", "/dws/push/issue"),
+            Map.entry("/dws/push/credential/rotate", "/dws/push/rotate"),
+            Map.entry("/dws/push/internal/validate", "/dws/push/validate"),
+            Map.entry("/dws/push/internal/ftp-deliver", "/dws/push/deliver"),
+            Map.entry("/nifi/api/connection-test", "/nifi/api/connect"),
+            Map.entry("/nifi/api/columns-probe", "/nifi/api/columns"),
+            Map.entry("/nifi/api/tables-probe", "/nifi/api/tables"),
+            Map.entry("/dst/application/register-options", "/dst/application/options"),
+            Map.entry("/dst/catalog/saveOrUpdate", "/dst/catalog/save"),
+            Map.entry("/dst/catalog/treeStatistics", "/dst/catalog/treestats"),
+            Map.entry("/dst/maintenance/batchRefresh", "/dst/maintenance/reindex"),
             Map.entry("/dst/asset/module/page", "/dst/asset/page"),
             Map.entry("/dst/asset/module/save", "/dst/asset/save"),
             Map.entry("/dst/asset/module/delete", "/dst/asset/delete"),
@@ -184,6 +201,12 @@ public class LegacyRouteConfiguration {
             Map.entry("/dwm/metadata-governance/summary", "/dwm/meta/summary")
         );
         Map<String, String> legacyGetPaths = Map.ofEntries(
+            Map.entry("/dst/database/metadata/tables/collection/changes", "/dst/collect/changes"),
+            Map.entry("/dst/database/metadata/tables/snapshot", "/dst/collect/snapshot"),
+            Map.entry("/dst/database/metadata/tables/collection/status", "/dst/collect/status"),
+            Map.entry("/dst/database/metadata/tables/collection/additions", "/dst/collect/additions"),
+            Map.entry("/dst/database/metadata/tables/saved", "/dst/collect/saved"),
+            Map.entry("/dws/push/schema/contracts", "/dws/push/contracts"),
             Map.entry("/idaas/applications/directory-compare", "/idaas/applications/compare"),
             Map.entry("/idaas/applications/local-inventory", "/idaas/applications/inventory"),
             Map.entry("/idaas/auth-account/me", "/idaas/identity/me"),
@@ -240,6 +263,25 @@ public class LegacyRouteConfiguration {
                 "PUT", Map.of(
                         patterns.parse(oldLake + "/zones/{id}"), "/dws/lake/state",
                         zoneRules, "/dws/lakerule/rules"));
+        String oldLogs = "/sym/logs";
+        var logReads = new LinkedHashMap<PathPattern, String>();
+        var logPosts = new LinkedHashMap<String, String>();
+        Map.of("auth", "logauth", "operations", "logops", "requests", "logreq", "security", "logsec")
+                .forEach((kind, group) -> {
+                    String oldGroup = oldLogs + "/" + kind;
+                    String newGroup = "/sym/" + group;
+                    logReads.put(patterns.parse(oldGroup), newGroup + "/page");
+                    logReads.put(patterns.parse(oldGroup + "/statistics"), newGroup + "/stats");
+                    logReads.put(patterns.parse(oldGroup + "/{id}/items"), newGroup + "/items");
+                    logReads.put(patterns.parse(oldGroup + "/{id}"), newGroup + "/detail");
+                    logPosts.put(oldGroup + "/batch", newGroup + "/batch");
+                });
+        logReads.put(patterns.parse(oldLogs + "/exports"), "/sym/logexport/page");
+        logReads.put(patterns.parse(oldLogs + "/archives"), "/sym/logarchive/page");
+        logReads.put(patterns.parse(oldLogs + "/policies"), "/sym/logpolicy/list");
+        logPosts.put(oldLogs + "/exports", "/sym/logexport/create");
+        logPosts.put(oldLogs + "/archives", "/sym/logarchive/create");
+        PathPattern archiveAction = patterns.parse(oldLogs + "/archives/{id}");
         FilterRegistrationBean<Filter> registration = new FilterRegistrationBean<>((request, response, chain) -> {
             HttpServletRequest http = (HttpServletRequest) request;
             String oldPath = http.getRequestURI().substring(http.getContextPath().length());
@@ -269,6 +311,31 @@ public class LegacyRouteConfiguration {
                         target = route.getValue();
                         legacyId = match.getUriVariables().get("id");
                         break;
+                    }
+                }
+            }
+            if (target == null && oldPath.startsWith(oldLogs + "/")) {
+                if (oldPath.equals(oldLogs + "/policies")
+                        && ("PUT".equals(http.getMethod()) || "POST".equals(http.getMethod()))) {
+                    target = "/sym/logpolicy/save";
+                } else if ("POST".equals(http.getMethod())) {
+                    target = logPosts.get(oldPath);
+                    if (target == null) {
+                        var match = archiveAction.matchAndExtract(PathContainer.parsePath(oldPath));
+                        if (match != null) {
+                            target = "/sym/logarchive/action";
+                            legacyId = match.getUriVariables().get("id");
+                        }
+                    }
+                } else if ("GET".equals(http.getMethod()) || "HEAD".equals(http.getMethod())) {
+                    var path = PathContainer.parsePath(oldPath);
+                    for (var route : logReads.entrySet()) {
+                        var match = route.getKey().matchAndExtract(path);
+                        if (match != null) {
+                            target = route.getValue();
+                            legacyId = match.getUriVariables().get("id");
+                            break;
+                        }
                     }
                 }
             }
@@ -328,6 +395,7 @@ public class LegacyRouteConfiguration {
         registration.addUrlPatterns(oldDownload);
         registration.addUrlPatterns(oldFlows + "/*");
         registration.addUrlPatterns(oldLake + "/*");
+        registration.addUrlPatterns(oldLogs + "/*");
         registration.addUrlPatterns(legacyPostPaths.keySet().toArray(String[]::new));
         registration.addUrlPatterns(legacyGetPaths.keySet().toArray(String[]::new));
         registration.setOrder(Ordered.HIGHEST_PRECEDENCE + 30);

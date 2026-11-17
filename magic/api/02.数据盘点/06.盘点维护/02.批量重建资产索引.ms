@@ -9,7 +9,7 @@
   "lock": null,
   "createBy": null,
   "updateBy": null,
-  "path": "/batchRefresh",
+  "path": "/reindex",
   "method": "POST",
   "parameters": [],
   "options": [],
@@ -177,7 +177,7 @@ import java.util.Map
 import jsons
 import tenantRuntime
 
-// POST /dst/maintenance/batchRefresh：按当前租户重建应用、数据源、数据表和目录的检索投影。
+// POST /dst/maintenance/reindex：按当前租户重建应用、数据源、数据表和目录的检索投影。
 // assetType 选择资源类型；tids 指定最多 200 个 ID，主表、关联和属性按集合预取。
 // 返回刷新、移除及请求数量。未指定 tids 时执行全量重建，purgeStale 默认允许清理陈旧投影。
 // 仅写当前租户索引，不修改业务主表；本批保持既有定向重建和全量重建行为。
@@ -351,7 +351,7 @@ var docs = []
 var active = {}
 
 // When a caller passes specific tids, rebuild only those documents. This keeps save/delete flows fast:
-// /dst/db/srcsave -> /dst/maintenance/refresh -> /dst/maintenance/batchRefresh.
+// 数据源保存通过 /dst/maintenance/refresh 调用 /dst/maintenance/reindex 更新索引。
 var hasTargetTids = tids != null && tids.size() > 0
 if (hasTargetTids) {
     var targetIds = []

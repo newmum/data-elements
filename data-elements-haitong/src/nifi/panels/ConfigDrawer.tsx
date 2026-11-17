@@ -1536,9 +1536,11 @@ export default function ConfigDrawer() {
 
   const handleProbeColumns = async () => {
     if (!node || !manifest) return;
-    const tables = tableListFromConfig(node.config, manifest.category);
+    const isElasticsearch = manifest.key === 'source.elasticsearch';
+    const index = isElasticsearch ? String(node.config.defaultIndex || node.config.table || node.config.tableName || '').trim() : '';
+    const tables = isElasticsearch ? (index ? [index] : []) : tableListFromConfig(node.config, manifest.category);
     if (tables.length === 0) {
-      message.error(manifest.category === 'sink' ? '请先填写目标表名' : '请先填写来源表名');
+      message.error(isElasticsearch ? '请先填写 Elasticsearch 索引名' : manifest.category === 'sink' ? '请先填写目标表名' : '请先填写来源表名');
       return;
     }
     const selectionSequence = databaseSelectionSequence.current;

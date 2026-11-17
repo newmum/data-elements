@@ -3,6 +3,8 @@ package com.linewell.dataelement.integration.nifi.canvas.probe;
 import com.jcraft.jsch.ChannelSftp;
 import com.jcraft.jsch.JSch;
 import com.jcraft.jsch.Session;
+import com.linewell.dataelement.integration.nifi.canvas.compile.RegisteredDatasourceType;
+import com.linewell.dataelement.metautil.explorer.impl.ElasticsearchMetadataExplorer;
 import com.linewell.dataelement.metautil.explorer.impl.MongoDbMetadataExplorer;
 import com.linewell.dataelement.metautil.model.dto.ColumnInfo;
 import com.linewell.dataelement.metautil.model.dto.DataSourceConfig;
@@ -10,7 +12,7 @@ import com.linewell.dataelement.metautil.model.enums.DatabaseType;
 import com.linewell.dataelement.metautil.jdbc.JdbcDriverPropertyResolver;
 import com.linewell.dataelement.metautil.jdbc.JdbcMetadataScope;
 import com.linewell.dataelement.metautil.structured.StructuredSourceProbeService;
-import com.linewell.dataelement.metautil.structured.FtpsClientFactory;
+import com.linewell.dataelement.integration.transfer.FtpsClientFactory;
 import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.admin.AdminClientConfig;
 import org.apache.kafka.clients.admin.DescribeClusterOptions;
@@ -68,6 +70,7 @@ public class NifiConnectionProbe {
     private static final ObjectMapper MAGIC_RESPONSE_MAPPER = new ObjectMapper();
     private static final int JDBC_CONNECT_TIMEOUT_SECONDS = 30;
     private final Map<String, Driver> driverCache = new ConcurrentHashMap<>();
+    private final ElasticsearchMetadataExplorer elasticsearch = new ElasticsearchMetadataExplorer();
     private final StructuredSourceProbeService structuredSourceProbeService;
     private final MagicAPIService magicApiService;
 
@@ -130,6 +133,11 @@ public class NifiConnectionProbe {
     }
 
     public Map<String, Object> columns(String manifestKey, Map<String, Object> config, String table) throws Exception {
+        if ("source.elasticsearch".equals(manifestKey)) {
+            var columns = elasticsearch.getColumns(elasticsearchConfig(config), table);
+            return Map.of("success", !columns.isEmpty(), "table", table, "columns", columns,
+                    "error", columns.isEmpty() ? "索引 mapping 未定义字段" : "");
+        }
         if (isMongo(manifestKey)) {
             var columns = new MongoDbMetadataExplorer().getColumns(mongoConfig(config), table);
             return Map.of("success", !columns.isEmpty(), "table", table, "columns", columns,
@@ -551,6 +559,22 @@ public class NifiConnectionProbe {
         }
     }
 
+    private static DataSourceConfig elasticsearchConfig(Map<String, Object> config) {
+        var source = new DataSourceConfig();
+        source.setDatabaseType(DatabaseType.ELASTICSEARCH);
+        source.setDatabase(str(config.get("defaultIndex")));
+        source.setUsername(str(config.get("username")));
+        source.setPassword(str(config.get("password")));
+        Map<String, Object> options = new LinkedHashMap<>();
+        options.put("nodes", req(config, "nodes"));
+        for (String key : List.of("protocol", "authMethod", "apiKey", "token")) {
+            String value = str(config.get(key));
+            if (value != null && !value.isBlank()) options.put(key, value);
+        }
+        source.setConnectorProperties(options);
+        return source;
+    }
+
     private Map<String, Object> testElasticsearch(Map<String, Object> config) throws Exception {
         String nodes = req(config, "nodes");
         String firstNode = nodes.split(",")[0].trim();
@@ -883,7 +907,14 @@ public class NifiConnectionProbe {
         // are resolved from the service classpath or deploy/nifi/drivers instead.
         r.driverPath = null;
 
-        switch (manifestKey == null ? "" : manifestKey) {
+        String jdbcManifest = manifestKey == null ? "" : manifestKey;
+        if (("source.oceanbase".equals(jdbcManifest) || "source.mysql".equals(jdbcManifest))
+                && RegisteredDatasourceType.isOceanBaseMysqlSource(jdbcManifest, c)) {
+            r.url = RegisteredDatasourceType.oceanBaseMysqlSourceUrl(c);
+            r.driverClass = driverClassForDbType("OCEANBASE_MYSQL", r.url);
+            return r;
+        }
+        switch (jdbcManifest) {
             case "source.hive", "sink.hive" -> {
                 r.url = firstNonBlank(str(c.get("jdbcUrl")), str(c.get("jdbcURL")));
                 if (r.url == null) r.url = buildHiveJdbcUrl(c);
@@ -1043,7 +1074,7 @@ public class NifiConnectionProbe {
                     String db = req(c, "database");
                     r.url = ("OCEANBASE_ORACLE".equals(dbType) || "OCEANBASEORACLE".equals(dbType))
                             ? "jdbc:oceanbase:oracle://" + host + ":" + port + "/" + db
-                            : "jdbc:mysql://" + host + ":" + port + "/" + db;
+                            : RegisteredDatasourceType.oceanBaseMysqlSourceUrl(c);
                 }
                 r.driverClass = driverClassForDbType(dbType, r.url);
             }

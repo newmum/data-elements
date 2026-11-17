@@ -644,7 +644,7 @@ const scenes: Record<AccessMode, LineageScene> = {
         footer: "接收预警数据",
         details: [
           row("所属网络", "互联网"),
-          row("服务地址", "/api/v1/data-push", true),
+          row("服务地址", "/api/v1/push", true),
           row("服务用途", "接收、校验并落地电信预警数据"),
           row("落地目标", "互联网 FTP"),
         ],

@@ -5,7 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.linewell.dataelement.platform.magic.result.MagicApiResultProvider;
+import com.linewell.dataelement.magic.runtime.result.MagicApiResultProvider;
 import com.linewell.dataelement.platform.tenant.api.TenantMagicModule;
 import com.linewell.dataelement.platform.tenant.domain.TenantContext;
 import com.linewell.dataelement.utils.StructuredValues;

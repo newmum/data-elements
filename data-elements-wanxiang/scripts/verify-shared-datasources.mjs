@@ -26,7 +26,7 @@ const list=await call('/dst/db/srcpage',{pageNum:1,pageSize:1000,includeMetadata
 const real=list.list[0];assert.ok(real?.tid);
 const detail=await call('/dst/db/srcdetail',{tid:real.tid});assert.equal(detail.tid,real.tid);
 const tables=await call('/dst/db/tables?dbId='+encodeURIComponent(real.tid)+'&includeGovernance=false');assert.ok(Array.isArray(tables));
-const status=await call('/dst/database/metadata/tables/collection/status?dbId='+encodeURIComponent(real.tid));assert.equal(typeof status.status,'string');
+const status=await call('/dst/collect/status?dbId='+encodeURIComponent(real.tid));assert.equal(typeof status.status,'string');
 const report={tenant:context.name,sourceCount:list.list.length,objectCount:tables.length,fieldCount:real.fieldCount,checks:['login','tenant','source-list','source-detail','snapshot-table-list','real-collection-status']};
 async function waitProjection(id,expected){let last=[];for(let n=0;n<12;n++){const page=await call('/dst/db/srcpage',{pageNum:1,pageSize:20,conditions:[{field:'tid',type:'eq',value:id}],includeMetadataCounts:true});last=page.list;if(page.list.some(row=>String(row.tid||row.id)===String(id))===expected)return;await new Promise(resolve=>setTimeout(resolve,500));}console.log({projectionFixture:id,returned:last.map(row=>({tid:row.tid,id:row.id,status:row.assetStatus,keys:Object.keys(row)}))});throw new Error('Search projection did not become consistent');}
 let fixture='';

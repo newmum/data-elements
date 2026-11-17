@@ -7,7 +7,7 @@ relay:
     base-url: ""
     shared-key: ""
 
-  # 数据源平台以 POST /api/v1/data-push + deliveryType=REGISTRY_SYNC 同步独立登记镜像。
+  # 数据源平台以 POST /api/v1/push + deliveryType=REGISTRY_SYNC 同步独立登记镜像。
   # 请使用独立服务间密钥，不要复用业务 X-Api-Key；填写后设为 true 并重启。
   standalone-registry:
     sync-enabled: false

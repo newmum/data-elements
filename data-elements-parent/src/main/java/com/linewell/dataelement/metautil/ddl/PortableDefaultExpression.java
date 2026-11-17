@@ -7,11 +7,19 @@ import com.alibaba.druid.sql.ast.expr.*;
 import com.linewell.dataelement.metautil.model.enums.DatabaseType;
 import java.util.Locale;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /** AST-based defaults. Unresolved expressions remain editable; preview never rejects a complete table. */
 public final class PortableDefaultExpression {
+    private static final Pattern POSTGRES_SEQUENCE_DEFAULT = Pattern.compile(
+            "(?i)\\s*(?:pg_catalog\\.)?nextval\\s*\\(\\s*'(?:''|[^'])*'\\s*::\\s*(?:pg_catalog\\.)?regclass\\s*\\)\\s*");
+
     private PortableDefaultExpression() { }
     public record Converted(String value, String warning, boolean unresolved) { }
+
+    public static boolean isPostgresSequenceDefault(String value) {
+        return value != null && POSTGRES_SEQUENCE_DEFAULT.matcher(value).matches();
+    }
 
     public static Converted convert(String raw, String sourceCode, DatabaseType target) {
         if (raw == null || raw.isBlank()) return new Converted(null, null, false);

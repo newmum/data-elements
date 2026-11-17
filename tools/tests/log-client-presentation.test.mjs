@@ -29,7 +29,9 @@ function fixture(kindValue = 'operations', options = {}) {
   const send = async (method, path, data) => {
     calls.push({method, path, data: plain(data)});
     if (options.respond) return options.respond(method, path, data);
-    if (path === '/capabilities') return options.capabilities ?? allCapabilities;
+    if (path === '/sym/logs/capabilities' || (path === '/idaas/logs/query' && data.operation === 'capabilities')) {
+      return options.capabilities ?? allCapabilities;
+    }
     return {list: Array.from({length: data.size ?? 20}, (_, index) => ({tid: String(index)})), total: 200};
   };
   const ctx = vm.createContext({
@@ -38,10 +40,10 @@ function fixture(kindValue = 'operations', options = {}) {
     onMounted: () => {}, onBeforeUnmount: () => {}, ElTable: 'ElTable', ElMessageBox: {},
     ElMessage: Object.fromEntries(['success', 'warning', 'error'].map(level => [level, text => messages.push({level, text})])),
     navigator: options.navigator,
-    __logClient: options.common ? undefined : {request: send},
+    __logClient: options.common ? undefined : {request: send, domain: options.platform ? 'workforce' : undefined},
     $common: {
-      get: async (url, data) => ({data: await send('GET', url.replace('/sym/logs', ''), data)}),
-      post: async (url, data) => ({data: await send('POST', url.replace('/sym/logs', ''), data)}),
+      get: async (url, data) => ({data: await send('GET', url, data)}),
+      post: async (url, data) => ({data: await send('POST', url, data)}),
     },
   });
   vm.runInContext(executable, ctx);
@@ -121,7 +123,7 @@ test('Drafts never request; submit sends one complete literal parameterKeyword A
   assert.ok(!Object.hasOwn(f.filters(), 'parameterKeyword'));
   await f.searchNow();
   assert.equal(f.calls.length, 1);
-  assert.equal(f.calls[0].path, '/operations');
+  assert.equal(f.calls[0].path, '/sym/logops/page');
   assert.equal(f.calls[0].data.keyword, '保存任务');
   assert.equal(f.calls[0].data.parameterKeyword, literal);
   assert.equal(f.calls[0].data.page, 1);
@@ -133,7 +135,7 @@ test('Drafts never request; submit sends one complete literal parameterKeyword A
   f.size.value = 100;
   await f.reloadFirstPage();
   await f.exportLogs();
-  assert.deepEqual(f.calls.at(-1), {method: 'POST', path: '/exports', data: {
+  assert.deepEqual(f.calls.at(-1), {method: 'POST', path: '/sym/logexport/create', data: {
     ...f.calls.at(-2).data, kind: 'operations', format: 'CSV',
   }});
   assert.equal(f.calls.at(-1).data.parameterKeyword, literal);
@@ -207,16 +209,36 @@ test('Pagination, dates and result changes do not implicitly submit either draft
   assert.equal(f.calls.at(-1).data.result, 'FAILED');
 });
 
+test('IDAAS exports send the command and its payload directly', async () => {
+  const f = fixture('auth', {platform: true});
+  await f.exportLogs();
+  assert.deepEqual(f.calls[0], {method: 'POST', path: '/idaas/logs/command', data: {
+    domain: 'workforce', module: 'exports', operation: 'export',
+    payload: {...plain(f.filters()), kind: 'auth', format: 'CSV'},
+  }});
+});
+
 for (const host of ['shared', 'element', 'platform']) for (const count of [20, 100]) {
   test(`${host}: ${count} rows use fixed capability/list requests, no row enrichment or tenant override`, async () => {
     const f = fixture('auth', {
       common: host === 'element',
+      platform: host === 'platform',
       components: host === 'shared' ? {DataTable: 'SharedTable', Pagination: 'SharedPager'} : {},
       capabilities: host === 'platform' ? allCapabilities.filter(value => value !== 'requestParameters') : allCapabilities,
     });
     f.size.value = count;
     await f.loadCapabilities();
     assert.equal(f.calls.length, 2); assert.equal(f.rows.value.length, count);
+    if (host === 'platform') {
+      assert.deepEqual(f.calls[0], {method: 'GET', path: '/idaas/logs/query', data: {
+        domain: 'workforce', kind: 'auth', operation: 'capabilities',
+      }});
+      assert.equal(f.calls[1].path, '/idaas/logs/query');
+      assert.equal(f.calls[1].data.operation, 'page');
+      assert.equal(f.calls[1].data.kind, 'auth');
+    } else {
+      assert.deepEqual(f.calls.map(call => call.path), ['/sym/logs/capabilities', '/sym/logauth/page']);
+    }
     assert.equal(f.tableComponent, host === 'shared' ? 'SharedTable' : 'ElTable');
     if (host === 'shared') assert.equal(f.tablePresentation.value.showPage, false);
     await switchTab(f, 'operations');
@@ -398,8 +420,11 @@ test('Real compiled SFC in three host modes preserves 1440/390 layout, explicit 
           globalThis.logCalls = [];
           const send = async (method, path, data) => {
             globalThis.logCalls.push({method, path, data: JSON.parse(JSON.stringify(data))});
-            if (path === '/capabilities') return ['operations', 'requests', 'exports', ...(host === 'platform' ? [] : ['requestParameters'])];
-            if (path === '/operations/row-0') return {
+            const platformQuery = path === '/idaas/logs/query';
+            if (path === '/sym/logs/capabilities' || (platformQuery && data.operation === 'capabilities')) {
+              return ['operations', 'requests', 'exports', ...(host === 'platform' ? [] : ['requestParameters'])];
+            }
+            if (data.id === 'row-0' && (path === '/sym/logops/detail' || (platformQuery && data.operation === 'detail'))) return {
               tid: 'row-0', result: 'FAILED', operation_name: '删除请求',
               parameter_capture_status: 'PARTIAL',
               parameter_snapshot: {version: 1, status: 'PARTIAL', path: {id: 'task.*%_[]'}, query: {enabled: false, offset: 0},
@@ -408,10 +433,10 @@ test('Real compiled SFC in three host modes preserves 1440/390 layout, explicit 
             };
             return {list: Array.from({length: Number(data.size ?? 20)}, (_, index) => ({tid: `row-${index}`, actor_name: '人员', result: 'FAILED'})), total: 200};
           };
-          if (host !== 'element') globalThis.__logClient = {request: send};
+          if (host !== 'element') globalThis.__logClient = {request: send, domain: host === 'platform' ? 'workforce' : undefined};
           else globalThis.$common = {
-            get: async (url, data) => ({data: await send('GET', url.replace('/sym/logs', ''), data)}),
-            post: async (url, data) => ({data: await send('POST', url.replace('/sym/logs', ''), data)}),
+            get: async (url, data) => ({data: await send('GET', url, data)}),
+            post: async (url, data) => ({data: await send('POST', url, data)}),
           };
           const component = new Function('___magic__import__', code)((module, name) => (module === 'vue' ? Vue : Element)[name]);
           const app = Vue.createApp(component);

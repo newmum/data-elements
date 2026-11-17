@@ -17,7 +17,5 @@ public interface SymTenantTMapper extends BaseMapper<SymTenantT> {
 
     List<SymTenantT> selectTenantList();
 
-    SymTenantT selectCurrent(@Param("tenantId") String tenantId);
-
     int updateTenant(SymTenantT tenant);
 }

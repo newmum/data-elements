@@ -16,6 +16,9 @@ import org.ssssssss.magicapi.core.annotation.MagicModule;
 @Component
 @MagicModule("portableDdl")
 public class PortableDdlConverter {
+    private static final Set<PortableColumnType.Kind> NUMERIC_TYPES = Set.of(
+            PortableColumnType.Kind.SMALLINT, PortableColumnType.Kind.INTEGER, PortableColumnType.Kind.BIGINT,
+            PortableColumnType.Kind.DECIMAL, PortableColumnType.Kind.FLOAT, PortableColumnType.Kind.DOUBLE);
     public Map<String,Object> read(String ddl, String sourceCode) {
         DatabaseType source = DatabaseType.fromCode(sourceCode);
         var statements = PortableSqlParser.parse(ddl, source);
@@ -76,6 +79,7 @@ public class PortableDdlConverter {
 
     public Map<String,Object> prepare(List<ColumnInfo> original, DataSourceConfig config) {
         DatabaseType target=config.getEffectiveDatabaseType();
+        boolean oracleFamily = DdlDialect.family(target) == DdlDialect.Family.ORACLE;
         List<ColumnInfo> columns = new ArrayList<>();
         List<Map<String,Object>> warnings = new ArrayList<>();
         for (ColumnInfo source : original) {
@@ -98,7 +102,17 @@ public class PortableDdlConverter {
                     &&!Set.of("AL32UTF8","UTF8","UTF8MB4","UTF16","UTF16LE","AL16UTF16").contains(PortableStringCapacity.charset(config.getCharset()))
                     &&(source.getCharset()==null||!PortableStringCapacity.charset(source.getCharset()).equals(PortableStringCapacity.charset(config.getCharset()))))
                 warnings.add(Map.of("field",source.getColumnName(),"message","目标字符集 "+config.getCharset()+" 不能保证表示来源的全部字符；扩展长度不能解决字符集不兼容，请确认目标字符集","requiresEdit",true));
-            var value = PortableDefaultExpression.convert(source.getDefaultValue(), source.getSourceDatabaseType(), target);
+            String defaultValue = source.getDefaultValue();
+            if (oracleFamily && Boolean.TRUE.equals(column.getAutoIncrement())) {
+                if (!NUMERIC_TYPES.contains(kind) || !NUMERIC_TYPES.contains(PortableColumnType.kind(rendered))) {
+                    column.setAutoIncrement(false);
+                    warnings.add(Map.of("field", source.getColumnName(), "message", "目标字段类型不支持自增，已保留字段类型及键约束", "requiresEdit", false));
+                } else if (PortableDefaultExpression.isPostgresSequenceDefault(defaultValue)) {
+                    // 目标 IDENTITY 已生成自增值，不能再引用来源 PostgreSQL 序列。
+                    defaultValue = null;
+                }
+            }
+            var value = PortableDefaultExpression.convert(defaultValue, source.getSourceDatabaseType(), target);
             column.setDefaultValue(value.value());
             if (value.warning() != null) warnings.add(Map.of("field", source.getColumnName(), "message", value.warning(), "requiresEdit", value.unresolved()));
             if(target==DatabaseType.MYSQL&&PortableColumnType.kind(rendered)==PortableColumnType.Kind.TEXT

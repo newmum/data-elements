@@ -152,6 +152,8 @@ python tools/resource-sync.py publish --apply --file 'magic/api/真实目录/接
 
 `publish` 要求明确的 `--apply`，每次只接受一个已登记的文件。当前实现支持现有非空 `.ms` 内容更新，保留 ID、所属分组、公共路径和方法；重复 ID、远端身份变化或并发修改会阻止发布。发布先保存受限回退内容，再在控制库执行带并发校验的事务更新，刷新 Magic 资源并重新读取运行脚本。
 
+当本地 Magic 脚本与数据库摘要一致时，`publish` 仍读取运行编辑器，并核对资源身份、分组、HTTP 方法、路径、脚本和访问策略。两处均一致才返回 `already-current`。运行资源有差异时报告错误，按当前已保存版本处理刷新或并发修改。API 的 `options` 应为选项对象数组，缺省及 `null` 沿用现行默认策略。
+
 仅当用户明确要求不保存备份时，可在共享资源 `publish` 命令中追加 `--no-backup`，跳过本地回退材料；默认仍保存。该选项不改变并发核验、事务和运行回读要求，也不改变编辑器自身的历史记录机制。
 
 新增资源、分组创建/移动、删除或路由变化需单独审查完整目录元数据和调用方。新增共享 Magic 资源可使用 `register --kind magic --file <规范文件>`，多文件重复传入 `--file`，默认只生成计划；审阅后追加 `--apply`。单批最多50个新脚本或分组，校验路径、父级和全局资源ID，自动补齐新分组的物理目录记录；已有路径或ID、断链、目录名称不一致及并发修改均拒绝。登记在事务中只插入所选新记录，刷新完整运行资源树、回读脚本后更新本地索引。该命令不移动、删除或覆盖已有资源，不支持独立海通资源。分组移动、删除及已有路由变化仍需另行审查，不得另建本地缓存副本绕过限制。
@@ -544,9 +546,14 @@ Common metadata interfaces:
   - 先校验当前租户的有效数据源，再在数据库中按表名的小写值去重。优先选择标注状态更高、字段更多、更新时间更新的记录，同值按表 ID 降序。业务类型与标注统计取筛选前的去重结果，关键词和业务类型只筛选当前列表及其总数。
   - `paged=true` 的列表排序空值末尾，同值按表 ID 降序。接口读取平台登记快照，采用批量读取并在数据库中分页。
   - 登记目录抽屉使用 `catalogPaged=true`。仅识别当前租户未删除的目录关联，先以关联、标注、更新时间、字段数和表 ID 选定同名代表行，再按登记状态、业务类型或名称筛选。`pendingTotal` 和 `registeredTotal` 取名称及类型筛选前的统计，列表仍按表名、表 ID 升序分页。采集报告中的缺失表仅在未标注且无有效目录关联时排除。分类优先级、筛选和字段映射在 MagicScript 中维护，查询组件处理关联、排序和数据库方言。
-- `POST /dst/database/metadata/tables/collection/start` and `GET /dst/database/metadata/tables/collection/status`
-  - 登记页和数据源详情共用后台采集。用户主动探查时启动采集，打开详情时可只读取现有任务状态。
-  - 当前采集差异由 `GET /dst/database/metadata/tables/collection/changes` 分页读取，新增候选由 `GET /dst/database/metadata/tables/collection/additions` 分页读取。保存后的表快照供登记页和数据源详情查询。
+- 登记页、数据源详情和万象共用后台采集。用户主动探查时调用 `POST /dst/collect/start`，详情用 `GET /dst/collect/status` 读取最近或指定任务，万象执行记录用 `POST /dst/collect/statuses` 批量读取。
+  - 启动采集先校验当前行业和数据源角色范围。同一来源并发提交复用仍有执行权的任务。受理事务提交后启动物理探查，任务结果、新增快照和来源计数同事务保存。`dryRun=true` 可检查来源授权和所选探查模式，无任务写入或物理探查。
+  - `POST /dst/collect/rename` 校验来源、缺失登记表及最近成功任务后，将新名称关联到原登记表 ID。新旧表记录及历史差异同事务修改，保留原登记信息。回滚后允许重新提交。
+  - 采集状态根据行业会话和数据源角色范围读取。批量按输入顺序返回，每批最多 500 个来源，任一 ID 不可见时整批拒绝，先校验来源再读任务。单项不可见、来源缺失或指定任务不匹配统一返回 `NOT_COLLECTED`。
+  - `GET /dst/collect/saved` 读取去重后的已保存表，`GET /dst/collect/additions` 读取最近一次成功采集时间窗内的新增表。两个入口使用结构化分页，默认 15 行、最多 100 行。各 GET 入口与对应 HEAD 共用实现。
+  - `GET /dst/collect/changes` 按最近一次任务保存的历史差异查询缺失表，默认 20 行、最多 100 行。`GET /dst/collect/snapshot` 分页读取当前来源的待标注快照，并排除最近成功任务确认缺失的名称，沿用精确偏移和旧客户端的千行上限。两者在数据库内展开或排除历史 JSON，按当前租户和角色校验来源后才读取任务。
+  - `POST /dst/collect/order` 按持久化排序返回登记审查表名。`allTables=true` 用数据库计数后分页，精确 `names` 用单次有界游标校验完整名单，只返回当前页，任一表名在当前来源无有效记录时拒绝整次请求。
+  - 旧启动采集、缺失表改名、状态、批量状态、已保存表、新增表、差异、快照和审查排序地址按原方法兼容。兼容层记录改写前的请求路径，参数、身份和审计使用同一入口。
 - `POST /dst/db/tbldel`
   - Explicitly remove a selected table asset snapshot and related platform registration metadata.
   - Deletes metadata snapshots only, not the physical database table.
@@ -783,7 +790,7 @@ Use the released `my-db` page at `/register/register-sjkb/list` as the default v
 - 网关路由、策略、网络区域和接入应用归入 `/dws/gateway`，实例、灰度、日志、指标和调用归入 `/dws/gaterun`，订阅、反馈和合集归入 `/dws/servicemarket`。原 `/dws/service/gateway/` 的 POST 入口继续转发。实例批量保存先预取请求中的完整业务键并验明显式 ID，心跳按状态批量更新。混入外租户或已删除实例时整批拒绝。
 - 定时任务配置分页、管理和历史日志分别使用 `GET /dws/timer/page`、`POST /dws/timer/manage` 和 `GET /dws/timer/logs`。原定时器地址按 HTTP 方法转发。配置保存支持 `dryRun=true`，兼容五段、六段 Cron。启停在当前租户内锁定配置，对停用任务清空下次触发时间。当前定时配置尚未绑定执行端，已有任务的立即执行返回业务码 501。
 - 共享海通流程的 Magic 业务 API 位于 `09.海通流程接口`，根路径为 `/nifi`。流程设计与模板使用 `/flow`、`/canvas`，接入链路使用 `/chain`，运行状态、部署、流程组、节点及错误公告分别使用 `/run`、`/life`、`/group`、`/node`、`/event`。组件清单用 `/catalog`，字段映射按计划 `/plan`、模板 `/template`、字典 `/dict`、编辑规则 `/map`、运行版本 `/maprun` 组织。流程、组件或节点标识以查询参数传递，例如 `GET /nifi/flow/detail?id=<流程ID>`。
-- `15.连接探查` 下的连接测试、字段探查和表探查沿用海通画布的 `/nifi/api/connection-test`、`/nifi/api/columns-probe`、`/nifi/api/tables-probe`。Magic 负责校验和当前租户的 Hive 登记配置，Java 负责协议连接与诊断。数据源登记的 `/dst/db/srctest` 复用其中的连接探查能力。
+- `15.连接探查` 下的连接测试、字段探查和表探查使用 `POST /nifi/api/connect`、`POST /nifi/api/columns`、`POST /nifi/api/tables`，现役画布的旧 POST 地址继续兼容。Magic 负责校验和当前租户的 Hive 登记配置，Java 负责协议连接与诊断。数据源登记的 `/dst/db/srctest` 复用其中的连接探查能力。
 - Data-application Magic resources belong under `06.数据应用` and use `/das` as the public root. Do not retain `/workshop` calls in low-code source/compiled JS or any frontend project.
 - 应用仓库按应用管理 `/das/app`、应用图标 `/das/icon` 和应用页签 `/das/tab` 归类。应用和页签分页使用 `POST /das/app/page`、`POST /das/tab/page`。取应用详情使用 `POST /das/app/detail`，澄天编辑器向 `POST /das/tab/bind` 绑定页面，通过 `POST /das/tab/thumb` 保存缩略图。
 
@@ -863,13 +870,14 @@ Use the released `my-db` page at `/register/register-sjkb/list` as the default v
 - 数据抽取节点的 JDBC 驱动位置兼容 Linux 绝对目录以及 `DEFAULT=/默认目录;KINGBASE=/实际驱动.jar` 等按数据库类型的绝对路径映射，最多32项、4096字符。可通过 NiFi 参数上下文的资产上传能力部署已有官方驱动，并使用其返回的节点实际路径；这不改变其他数据库的默认目录，也不要求放宽服务器登录或证书配置。NiFi 2.9 的 ES/Kafka 组件按实际描述符设置客户端服务、认证、主题、输出格式及各自支持的超时单位。Kafka 消费节点使用持续轮询的 `0 sec` 调度周期，以完成分区分配、消息消费与心跳；缺失驱动、组件无效或投递失败都不能计为落库成功。
 - 库详情旧表单的 `procCount` 显示字段映射到现行 `procedureCount`；旧 `totalData` 概览项显示现行 `totalSize`，标题为“总占用空间”，不能加“条”后缀或把字节容量当作全库记录总数。展示适配不改写租户原始动态表单。
 - 数据表与数据源详情共用 `detail-page` / `base-detail`，分别使用当前租户 `sym_form` 的“表详情”与“库详情”。`GET /dst/db/refresh` 的 `tid` 为数据源 ID，按数据源管理的 ALL/ORG/OWNER 范围授权。可选 `tableId` 必须是当前租户、归属该数据源的有效登记表。刷新与 `dryRun=true` 都在外部探查前校验权限，预检仅返回探查结果。独立 `/dst/db/info` 仍按当前租户的有效来源和关联提供只读探查。正式刷新在短事务内锁定父源并复核权限、归属和已探查版本，资产已变化时返回冲突。主表提交后才更新搜索索引，索引失败可重试。
+- 详情渲染会将旧表单动作 `/dst/database/metadata/refreshDbInfo` 和 `/db/schema/refresh` 映射到 `GET /dst/db/refresh`。库详情使用当前数据源 ID，表详情同时传所属数据源 ID 与表 ID。已有现行按钮时只显示现行按钮，租户表单 JSON 原样保留。Mock 继续使用同一现行接口。
 - 表统计写入 `db_table_t.record_count/field_count/storage_size/total_size_bytes/total_size_formatted/ddl_create_time/ddl_update_time`，保留 `db_table_column_t` 字段治理设置。空值和零值按来源返回保留。刷新使用数据库时钟更新资产 `updated_time`，保留原更新人。详情所显示的“元数据更新时间”来自资产主表；重新读取详情以业务主表为准。页面展示刷新接口返回的拒绝原因。
 - OceanBase Oracle 的单表概览优先沿用明确的 schema 或物理表所有者；未设置时只从 `用户名@租户#集群` 中提取逻辑用户名作为所有者，登录后缀不属于 schema。探查结果可以返回 `所有者.表名`，只按当前指定所有者匹配，不能因去掉前缀而选中其他所有者的同名表。
 - 数据表详情预览表头固定为两行：中文名与英文名各自单行省略，悬停展示完整名称；没有中文名时首行显示 `—`。托管 MRS Hive 每页固定执行字段描述、总数统计和当前页查询，不逐行补查；空登记字段快照仍可由一次 `DESCRIBE` 获取物理字段。分页使用首屏 `LIMIT`、后续页 `ROW_NUMBER()`，空值用 `CASE` 排后，兼容不支持偏移 `LIMIT` 或 `NULLS LAST` 的旧版 Hive；相关版本边界见 [Hive SELECT 文档](https://hive.apache.org/docs/latest/language/languagemanual-select/) 和 [Hive ORDER BY 文档](https://hive.apache.org/docs/latest/language/languagemanual-sortby/)。错误提示区分字段读取、总数统计、字典分组与分页查询阶段，服务日志只记录表标识、阶段及异常类型，不输出连接凭据、过滤值或完整 SQL。
 - Hive 预览 SQL 的内部聚合别名使用字母开头的名称，如 `preview_total`；不生成未引用的 `__preview_total` 等下划线开头别名。Hive 会将其识别为字符集标记而非 `Identifier`，造成计数 SQL 在 `AS` 后解析失败，规则见 [Hive 3.1 词法定义](https://github.com/apache/hive/blob/rel/release-3.1.3/ql/src/java/org/apache/hadoop/hive/ql/parse/HiveLexer.g)。SQL 结果执行测试同时覆盖该方言边界，不能仅凭 H2 执行成功认定 Hive 语法正确。
 - 登记与数据探查的“同步字段”读取该授权来源表的全部字段，将最新非空物理注释同步为字段中文名，来源无注释时保留已填写中文名；加入新增字段并更新结构。按字段名忽略大小写匹配并保留已有字段 ID、字典翻译、统一格式和时间属性等治理设置；同步成功使旧预览失效。字段读取、同步及保存不得以 200 等固定字段数量截断，预览数据行的采样/分页上限与字段数无关；多表请求可按表 ID 有界分批，但每张表的字段必须完整返回，整批逐 ID 校验租户和角色范围。
 - Application systems and data sources keep `sym_application_t` and `db_datasource_t` as their authoritative master tables. Their high-frequency list/search interfaces read the denormalized Elasticsearch index for speed; in this environment the configured physical index is `elements_dataassets` (`configData().es_dataassets`), while `EsCommonService` receives the logical name `dataassets` and adds the `elements_` prefix. Detail interfaces may fall back to MySQL when an index document is absent.
-- Ordinary application-system and data-source save/delete interfaces update MySQL first and then update or remove the matching Elasticsearch document. Dynamic-detail saves that explicitly request `deferIndexRefresh` follow the validated best-effort asynchronous projection contract above and return `indexRefreshPending: true`; do not make a completed authoritative save appear failed because indexing is slow. Use `POST /dst/maintenance/refresh` for one asset and `POST /dst/maintenance/batchRefresh` for reconciliation or full index rebuilds.
+- Ordinary application-system and data-source save/delete interfaces update MySQL first and then update or remove the matching Elasticsearch document. Dynamic-detail saves that explicitly request `deferIndexRefresh` follow the validated best-effort asynchronous projection contract above and return `indexRefreshPending: true`; do not make a completed authoritative save appear failed because indexing is slow. Use `POST /dst/maintenance/refresh` for one asset and `POST /dst/maintenance/reindex` for reconciliation or full index rebuilds.
 - 索引维护归入 `/dst/maintenance`。旧的资产索引刷新和批量刷新别名已退役。服务构建使用 `POST /dws/flowserve/services` 查询当前授权服务。
 - Never treat Elasticsearch as the source of truth for application systems or data sources. Index refresh must rebuild app documents from `sym_application_t`, db documents from `db_datasource_t` plus `pool_cfg`, and remove stale app/db documents that no longer exist in the master tables.
 - Elasticsearch documents are search projections, not storage for full configuration. Keep datasource credentials and complex `pool_cfg` objects out of ES, convert Hutool `JSONNull` values to real nulls or strings before indexing, and exclude large governance payloads such as `fieldGovernanceConfig`, dictionary profiles, and column arrays. Full values remain in MySQL.
@@ -904,6 +912,7 @@ Use the released `my-db` page at `/register/register-sjkb/list` as the default v
 - 时间分区统一按自然年或自然月生成。探查到来源时间分区时，仅用于推荐字段、粒度和起始周期，不复制来源实际边界。非规则时间默认推荐按年，识别为按月的来源推荐按月。按年选择起始年份和结束年份，按月选择起始月份和结束月份，均包含结束周期，每个目标最多 240 个周期。目标分区名表示实际覆盖周期，OceanBase Oracle 的排他上界使用下一周期起点。历史数据保留起始周期之前的分区，未来数据保留 MAXVALUE 兜底。Hive 注册连续的 YYYY 或 YYYYMM 分区，最后注册显式 `ods_partition='default'` 作为未来兜底，目录写入仍由操作员在 NiFi 中配置。数值范围及区域/枚举保留已有规则，区域代码默认采用福建地市编码。历史已保存计划和已有物理分区沿用原定义。
 - 自动生成的Oracle家族DDL使用命名主键和命名唯一约束；来源真实U约束必须纠正同字段旧登记主键标记，并保留其他单列/复合唯一约束，不能因PRIMARY KEY先生成后按字段去重而漏掉UNIQUE。OceanBase Oracle分区物化目标的逻辑主键按UNIQUE生成，即使来源探查不可用也不沿用旧标记生成物理PRIMARY KEY；字段分组和用户选择的逻辑键范围不扩大，其他数据库及非分区目标不套用此规则。本地解析器不能理解的生成表达式只提示确认并保留可编辑SQL，不增加手工DDL执行拦截，手工编辑文本仍原样提交给目标库。
 - 物化建表模板使用 db_table_column_t 登记字段快照和统一目标方言族转换，保留来源字段ID、原始类型、长度、精度及治理设置。历史快照缺少名称、原生类型或只有含义不确定的展示类型时，返回可编辑字段和逐字段提示，允许在登记流程确认字段或在建表模板中手工调整，不以409/422关闭整个抽屉；完整但尚未识别的扩展类型采用可见的长文本转换提示，不能偷偷猜成varchar(255)。转换器本身不查询租户、连接或业务数据；资源读取由现有认证路由与数据范围统一限定。
+- 「查看DDL语句」的建表提示超过显示高度时可独立滚动。窗口高度不足以同时显示分区配置和 SQL 时，页签内容也可滚动，编辑器保留最小阅读高度。
 - 模板读取支持全部已登记来源字段快照，来源是否具有SQL方言不作为打开抽屉的前置条件。来源类型缺失、历史别名或新增非SQL来源按中性列型模型返回，并提示日期、时间戳等需确认的来源语义；Oracle DATE/FLOAT和SQL Server原生TIMESTAMP等已知语义仍按真实方言处理。含义明确的历史字段标签（如“字符串(64)”）在统一列型模型中归一，并保留原始标签、长度和主键；“数字”“数值”等含义不确定的标签仍返回可编辑提示，不猜测精度。类型别名在Java统一登记，不能在字段遍历中重复查询来源连接，也不能把未知来源默认为MySQL进行物理探查。真正连接、DDL解析与执行仍要求明确的协议/目标类型。
 - FTP/SFTP 物化字段只读取当前租户、角色可见来源的 db_table_column_t 快照；打开和提交抽屉不采集文件、不调用 collectColumns，也不提供来源DDL导入或重新采集入口。登记字段采集时同时在既有 field_governance_config.sourceFile 保存无凭据的文件名、目录、格式、编码、分隔符及工作表/JSON路径，字段本身不在此重复存储；后续治理保存保留该服务端描述，客户端不能覆盖它。任务创建优先使用该描述，旧登记缺失时仅列一次目录定位唯一文件，不采样字段或按目标重复探查；文件内容由NiFi任务读取，保留来源文件。同名歧义或缺少数据集定位时在登记流程确认，不猜文件扩展名或扩大成整个目录采集。CSV/分隔TXT、JSON/JSON TXT、XLS/XLSX按登记解析器配置处理。普通FTP/SFTP始终按真实文件表头映射，不能因CSV/Excel格式或字段中文说明而改用展示名称；仅明确声明fileHeaderMode=registered-chinese的中文上报模板使用登记说明作表头。治理保存后的字段匹配按当前租户和表一次预取，再按ID/物理名称解析，不逐项读库。旧画布只在明确确认后重建。
 - FTP 抽取暂不提供连接时，下载与导入使用同一份资源目录模板。按相同资源目录标识关联“资源目录信息”和“资源数据项”，填写文件格式和来源路径。旧版表结构模板需将已填信息转入新版模板并补齐这些信息。
@@ -1201,6 +1210,8 @@ SFTP 验证来源为演示服务器端口 22 下的独立模拟文件目录 `/ho
 <a id="logging-design"></a>
 
 ## 系统日志管理详细设计说明书
+
+共享日志页面直接调用当前身份域的 Magic 接口。行业端的 `/sym/logs` 分组提供 `GET /sym/logs/capabilities` 和 `GET /sym/logs/components`，用于加载列表前的能力和组件。登录、操作、接口及安全日志列表分别读取 `/sym/logauth/page`、`/sym/logops/page`、`/sym/logreq/page`、`/sym/logsec/page`。统一身份管理端查询直接调用 `GET /idaas/logs/query`，通过 `domain`、`kind`、`operation` 指定查询，管理操作调用 `POST /idaas/logs/command`。共享组件发送完整地址，前端宿主负责认证与请求传输。行业旧地址的兼容依据实际调用另行核查。启用新列表请求前先核对对应 Magic 方法与路径已注册，再配套发布共享组件和 React 宿主。
 
 适用范围为共享 Java 后端、统一身份管理平台、公安广电海渔澄天四行业租户，以及澄天海通万象前端。独立海通数据推送服务保留自身交换日志，通过明确映射关联业务链路。
 
@@ -1766,6 +1777,8 @@ Magic 的 db.normal().transaction 与 Spring 事务不能只凭线程相同就�
 #### 10.1 菜单与入口
 
 行业系统在现有系统管理下增加“日志管理”，包含登录日志、操作日志、接口日志、安全日志。具有相应权限时显示导出日志、归档日志页签，以及页签栏右侧的日志策略配置按钮。任务执行、审批流转、数据交换保持已有主入口，日志详情提供授权后的跳转。
+
+`GET/HEAD /sym/logs/capabilities` 和 `GET/HEAD /sym/logs/components` 使用行业会话。能力只来自当前租户和应用中的有效角色与菜单，归档、策略要求同一角色的全量范围。`GET /idaas/logs/query` 使用平台操作员会话及所选身份域，两类入口通过各自权限检查后读取同一共享日志编译组件。
 
 澄天使用现有 Vue 和 Element Plus 风格；海通、万象、统一身份平台沿用各自现有 React 与 Ant Design 风格。复用后端契约和业务语义，不强制引入跨应用前端构建依赖。低代码页面若采用共享实现，仍只在根 lowcode 维护一个真实组件资源。
 

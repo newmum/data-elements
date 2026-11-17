@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import {once} from 'node:events';
 import {createRequire} from 'node:module';
 import {Worker as NodeWorker} from 'node:worker_threads';
 import {magicResource,magicScript} from './helpers/magic-resources.mjs';
@@ -50,36 +51,44 @@ test('field binding whitelists IDs and expected reference without registration s
 test('encoding create compiles segments into the same pending data-element record',async()=>withTransport(async(path,body)=>{assert.equal(path,'/dwm/standard/save');assert.equal(body.formatPattern,'^WX-[0-9]{6}$');assert.equal(body.fieldLength,9);assert.equal(body.publishStatus,0);assert.equal(body.bizDef,'编码说明');assert.equal('segments' in body,false);return {...body,tid:'encoding'};},async()=>standards.saveEncoding({name:'编码规范',code:'WX_RULE',standardEncode:'WX001',description:'编码说明',definition:{segments:[{type:'LITERAL',value:'WX-'},{type:'DIGITS',length:6}]}},[])));
 test('published code set preflight blocks editing and referenced code set blocks deletion',async()=>{const code={tid:'dictionary',dictName:'代码',dictCode:'C',dictItemValue:'[]',status:1};await withTransport(async path=>{assert.ok(path.endsWith('/detail'));return code;},async()=>assert.rejects(standards.saveCode({name:'代码'},[],{id:'dictionary'}),/先下线/));await withTransport(async path=>path.endsWith('/detail')?{...code,status:0}:{list:[raw],total:1},async()=>assert.rejects(standards.deleteCode({id:'dictionary'}),/仍被 1 个数据元引用/));});
 
-async function withWorker(work) {
+async function withWorker(workerCount, work) {
   const prior = globalThis.Worker;
   const code = fs.readFileSync('.test-build/src/services/encodingValidation.worker.js', 'utf8');
-  const workers = new Set();
-  globalThis.Worker = class {
-    constructor() {
-      this.worker = new NodeWorker(`const {parentPort}=require('node:worker_threads'); const self={postMessage:value=>parentPort.postMessage(value)}; ${code}; parentPort.on('message',data=>self.onmessage({data}));`, {eval:true});
-      workers.add(this);
-      this.worker.on('message', data => this.onmessage?.({data}));
-      this.worker.on('error', error => this.onerror?.(error));
-    }
-
-    postMessage(value) {
-      this.worker.postMessage(value);
-    }
-
-    terminate() {
-      this.terminated ??= this.worker.terminate();
-      return this.terminated;
-    }
-  };
+  const workers = [];
   try {
+    const ready = Array.from({length:workerCount}, () => {
+      const worker = new NodeWorker(`const {parentPort}=require('node:worker_threads'); const self={postMessage:value=>parentPort.postMessage(value)}; ${code}; parentPort.on('message',data=>self.onmessage({data})); parentPort.postMessage('ready');`, {eval:true});
+      const entry = {worker};
+      workers.push(entry);
+      return once(worker, 'message');
+    });
+    // Wait for the Node fixture to load the real worker before testing the validation deadline.
+    await Promise.all(ready);
+    let next = 0;
+    globalThis.Worker = class {
+      constructor() {
+        this.entry = workers[next++];
+        this.entry.worker.on('message', data => this.onmessage?.({data}));
+        this.entry.worker.on('error', error => this.onerror?.(error));
+      }
+
+      postMessage(value) {
+        this.entry.worker.postMessage(value);
+      }
+
+      terminate() {
+        this.entry.terminated ??= this.entry.worker.terminate();
+        return this.entry.terminated;
+      }
+    };
     return await work();
   } finally {
     globalThis.Worker = prior;
-    await Promise.all(Array.from(workers, worker => worker.terminate()));
+    await Promise.all(workers.map(entry => entry.terminated ?? entry.worker.terminate()));
   }
 }
-test('actual format worker checks a full match, rejects invalid format and bad regex',async()=>withWorker(async()=>{assert.equal((await standards.testEncoding('^WX-[0-9]{6}$','WX-000001')).valid,true);assert.equal((await standards.testEncoding('[0-9]{2}','x12')).valid,false);await assert.rejects(standards.testEncoding('[','x'),/不是有效的正则表达式/);}));
-test('legacy pathological encoding cannot hang the UI thread',async()=>withWorker(async()=>{await assert.rejects(standards.testEncoding('^(a+)+$','a'.repeat(80)+'!'),/执行超时/);}));
+test('actual format worker checks a full match, rejects invalid format and bad regex',async()=>withWorker(3,async()=>{assert.equal((await standards.testEncoding('^WX-[0-9]{6}$','WX-000001')).valid,true);assert.equal((await standards.testEncoding('[0-9]{2}','x12')).valid,false);await assert.rejects(standards.testEncoding('[','x'),/不是有效的正则表达式/);}));
+test('legacy pathological encoding cannot hang the UI thread',async()=>withWorker(1,async()=>{await assert.rejects(standards.testEncoding('^(a+)+$','a'.repeat(80)+'!'),/执行超时/);}));
 test('canonical field-binding scripts retain their resource IDs and public routes', () => {
   for (const [id, route] of [
     ['dwm_standard_landing_list_01', '/dwm/binding/page'],

@@ -127,7 +127,7 @@ public class DslCompiler {
 
     private boolean usesSqlSourceRecordWriter(Pipeline pipeline) {
         return pipeline.dsl().nodes().stream().anyMatch(node -> {
-            ComponentManifest manifest = registry.get(node.manifestKey());
+            ComponentManifest manifest = registry.get(effectiveManifestKey(node));
             if (manifest == null || manifest.compile() == null) return false;
             Map<String, Object> config = manifestConfig(manifest, node.config());
             if (isExternalTransformSqlNode(manifest, config)) return true;
@@ -183,7 +183,7 @@ public class DslCompiler {
     private boolean validateDateFetchConfigurations(Pipeline pipeline) {
         boolean dateFetchRequired = false;
         for (Pipeline.Node node : pipeline.dsl().nodes()) {
-            if (!supportsSyncSettings(node.manifestKey())) continue;
+            if (!supportsSyncSettings(effectiveManifestKey(node))) continue;
             for (String key : List.of("batchSize", "maxRowsPerRun")) {
                 try { sourceRowCount(node.config(), key); }
                 catch (IllegalStateException ex) {
@@ -348,7 +348,7 @@ public class DslCompiler {
         // ---- PHASE 1：创建所有 Controller Service（初始为 DISABLED）。----
         for (Pipeline.Node n : pipeline.dsl().nodes()) {
             Map<String,String> sharedCs = sharedJsonForNode(sharedGlobalCs,globalJson,n.id());
-            ComponentManifest m = registry.get(n.manifestKey());
+            ComponentManifest m = registry.get(effectiveManifestKey(n));
             if (m == null) {
                 throw new IllegalStateException("Unknown manifest: " + n.manifestKey());
             }
@@ -382,7 +382,7 @@ public class DslCompiler {
             if ("source".equals(m.category())) {
                 inferDbTypeFromSourceManifest(n.manifestKey(), m.key()).ifPresent(dbType ->
                         cfg.putIfAbsent("dbType", dbType));
-                normalizeJdbcSourceConfig(cfg);
+                normalizeJdbcSourceConfig(cfg, m.key());
             }
             if (Set.of("GAUSSDB", "OPENGAUSS").contains(configText(cfg, "dbType").toUpperCase(Locale.ROOT))
                     && com.linewell.dataelement.metautil.jdbc.GaussDbVariant.from(cfg)
@@ -798,6 +798,13 @@ public class DslCompiler {
         return new CompileResult(rootPgId, sharedGlobalCs, compiled, edgeConnectionIds,planVersionIds);
     }
 
+    private static String effectiveManifestKey(Pipeline.Node node) {
+        // Older canvases may use the MySQL template while keeping the vendor in dbType.
+        return "source.mysql".equals(node.manifestKey())
+                && RegisteredDatasourceType.isOceanBaseMysqlSource(node.manifestKey(), node.config())
+                ? "source.oceanbase" : node.manifestKey();
+    }
+
     private static Map<String, Object> manifestConfig(ComponentManifest manifest, Map<String, Object> saved) {
         Map<String, Object> config = new LinkedHashMap<>();
         if (manifest.fields() != null) {
@@ -816,13 +823,13 @@ public class DslCompiler {
     }
 
     public boolean usesStandardJdbcFullFetch(Pipeline.Node node) {
-        return "source".equals(node.category()) && supportsSyncSettings(node.manifestKey())
+        return "source".equals(node.category()) && supportsSyncSettings(effectiveManifestKey(node))
                 && !HiveTemporalJsonPolicy.isHive(node.manifestKey(), node.config())
                 && useNativeFullFetch(node.manifestKey(), node.config());
     }
 
     private void validatePeriodicPolicy(Pipeline pipeline, Pipeline.Node source) {
-        if (!supportsSyncSettings(source.manifestKey())) {
+        if (!supportsSyncSettings(effectiveManifestKey(source))) {
             throw new IllegalStateException("定时全量仅支持可探查的数据库表来源");
         }
         String strategy = SyncPolicy.fullStrategy(source.config());
@@ -840,7 +847,7 @@ public class DslCompiler {
         } while (expanded);
         for (Pipeline.Node node : pipeline.dsl().nodes()) {
             if (!reachable.contains(node.id())) throw new IllegalStateException("定时全量不能包含未连接到来源的节点：" + node.label());
-            ComponentManifest nodeManifest = registry.get(node.manifestKey());
+            ComponentManifest nodeManifest = registry.get(effectiveManifestKey(node));
             if (isExternalTransformSqlNode(nodeManifest, node.config()) || isSourceDbFieldEnrichmentNode(nodeManifest, node.config())) {
                 throw new IllegalStateException("定时全量暂不支持自行查询来源库的 SQL 节点，请使用流内转换：" + node.label());
             }
@@ -1642,11 +1649,21 @@ public class DslCompiler {
     }
 
     static void normalizeJdbcSourceConfig(Map<String, Object> cfg) {
+        normalizeJdbcSourceConfig(cfg, null);
+    }
+
+    private static void normalizeJdbcSourceConfig(Map<String, Object> cfg, String manifestKey) {
         if (cfg == null) return;
         // The shared OceanBase source manifest represents both compatibility modes.
         // Promote Oracle mode before normalizing identifiers so it receives the
         // Oracle owner/table rules, JDBC URL, driver dialect and fetch SQL syntax.
-        if (isOceanBaseOracleMode(cfg)) {
+        if (RegisteredDatasourceType.isOceanBaseMysqlSource(manifestKey, cfg)) {
+            String url = RegisteredDatasourceType.oceanBaseMysqlSourceUrl(cfg);
+            cfg.put("dbType", "OCEANBASE_MYSQL");
+            cfg.remove("jdbcURL");
+            cfg.remove("jdbc_url");
+            cfg.put("jdbcUrl", url);
+        } else if (isOceanBaseOracleMode(cfg)) {
             cfg.put("dbType", "OCEANBASE_ORACLE");
             if (configText(cfg, "jdbcUrl").isBlank()) {
                 String host = configText(cfg, "host");

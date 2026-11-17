@@ -225,9 +225,9 @@ test("review reads persisted registration, collection totals and changes indepen
       get: async (url, params) => {
         calls.push({ url, params: { ...params } });
         if (url === "/dst/db/tables") return { list: savedRows };
-        if (url === "/dst/database/metadata/tables/snapshot")
+        if (url === "/dst/collect/snapshot")
           return { physicalTotal: 7177, total: 17 };
-        if (url === "/dst/database/metadata/tables/collection/status") return statusResponse;
+        if (url === "/dst/collect/status") return statusResponse;
         assert.fail("unexpected read " + url);
       },
     },
@@ -244,10 +244,10 @@ test("review reads persisted registration, collection totals and changes indepen
     { url: "/dst/db/srcdetail", params: { tid: "source-a" } },
     { url: "/dst/db/tables", params: { dbId: "source-a", includeGovernance: true } },
     {
-      url: "/dst/database/metadata/tables/snapshot",
+      url: "/dst/collect/snapshot",
       params: { dbId: "source-a", pageNo: 1, pageSize: 1 },
     },
-    { url: "/dst/database/metadata/tables/collection/status", params: { dbId: "source-a" } },
+    { url: "/dst/collect/status", params: { dbId: "source-a" } },
   ]);
   assert.equal(scope.physicalTableCount.value, 7177);
   assert.equal(scope.realtimeTables.value.length, 2);

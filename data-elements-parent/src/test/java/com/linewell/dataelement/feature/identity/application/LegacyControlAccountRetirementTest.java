@@ -23,7 +23,7 @@ class LegacyControlAccountRetirementTest {
  @Test void sharedMembershipOperationsCannotReviveControlLoginOrAutoBinding() {
   var mapper=mock(SymTenantTMapper.class);var relations=mock(RmUserTenantRelaTMapper.class);var access=new TenantAccessService(mapper,relations,new TenantProperties());
   assertRetired(()->access.resolve("old-user"));assertRetired(()->access.requireMembership("old-user","ga"));
-  assertRetired(()->access.availableTenants("old-user"));assertRetired(()->access.assignUserInCurrentTenant("old-user","ga","operator"));
+  assertRetired(access::requireLegacyCompatibility);assertRetired(()->access.assignUserInCurrentTenant("old-user","ga","operator"));
   verifyNoInteractions(mapper,relations);
  }
  @Test void retiredJavaBusinessAdapterCannotWriteSharedAccountMapper() {

@@ -13,9 +13,10 @@ import org.springframework.mock.web.MockHttpServletResponse;
 class IdaasLegacyRoutesTest {
     @Test
     void identityAliasesReachTheSameMethodAndAccessBoundary() throws Exception {
-        record Route(String method, String previous, String canonical, boolean publicAtFramework) {}
+        record Route(String method, String previous, String canonical, boolean inLegacyWhitelist) {}
         var routes = List.of(
-                new Route("GET", "/idaas/auth/public-settings", "/idaas/auth/settings", true),
+                new Route("GET", "/idaas/auth/public-settings", "/idaas/auth/settings", false),
+                new Route("HEAD", "/idaas/auth/public-settings", "/idaas/auth/settings", false),
                 new Route("GET", "/idaas/applications/local-inventory", "/idaas/applications/inventory", false),
                 new Route("GET", "/idaas/platform-roles/list", "/idaas/adminrole/list", false),
                 new Route("POST", "/idaas/operators/reset-password", "/idaas/operators/reset", false),
@@ -33,7 +34,7 @@ class IdaasLegacyRoutesTest {
                 assertEquals(route.method(), rewritten.getMethod());
                 assertEquals(route.canonical(), rewritten.getRequestURI());
                 assertEquals("public", rewritten.getParameter("domain"));
-                assertEquals(route.publicAtFramework(), whitelist.isWhiteListed(rewritten.getRequestURI()));
+                assertEquals(route.inLegacyWhitelist(), whitelist.isWhiteListed(rewritten.getRequestURI()));
             });
         }
         var wrongMethod = new MockHttpServletRequest("GET", "/idaas/auth-account/login");

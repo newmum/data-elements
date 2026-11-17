@@ -111,7 +111,7 @@ test('20/100 file definitions default to two single endpoints and switch to boun
  for(const count of [20,100]) {
   const f=fixture({count,status:2});await f.api.loadPushContract();
   assert.equal(f.api.pushInterfaceType.value,'dataPush');
-  assert.deepEqual(f.api.pushContractEndpointItems.value.map(e=>e.path),['/api/v1/data-push']);
+  assert.deepEqual(f.api.pushContractEndpointItems.value.map(e=>e.path),['/api/v1/push']);
   f.state.source.value.pushDataType='UNSTRUCTURED';
   assert.equal(f.api.pushInterfaceType.value,'fileSingle');assert.equal(f.api.pushRequestContentType.value,'multipart/form-data');
   let stages=Object.fromEntries(f.api.pushFileWorkflow.value.map(s=>[s.key,s]));
@@ -169,7 +169,7 @@ test('first fifth-step entry prepares one credential regardless of 20/100 table 
   const f=fixture({count,status:2});
   f.api.ensurePushCredential();f.api.ensurePushCredential();
   await new Promise(resolve=>setImmediate(resolve));
-  assert.equal(f.writes.length,1);assert.equal(f.writes[0].url,'/dws/push/credential/issue');
+  assert.equal(f.writes.length,1);assert.equal(f.writes[0].url,'/dws/push/issue');
   f.api.ensurePushCredential();await new Promise(resolve=>setImmediate(resolve));assert.equal(f.writes.length,1);
  }
  const loading=fixture({loading:true});loading.api.ensurePushCredential();assert.equal(loading.writes.length,0);

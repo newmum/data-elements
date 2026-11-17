@@ -9,7 +9,7 @@
         "kind": "magic",
         "id": "f5c231f2eb04431e8ff2a7ecbb7d07c2",
         "file": "magic/api/01.系统门户/01.门户首页/01.门户首页.ms",
-        "reviewedSha256": "407c77eed47d3b88c9ba2ee57c4977126ea3b64e576320fbe9b735ce4a750929"
+        "reviewedSha256": "a97442e26ded63cabd978459f7f894f9b9771a8f9ccd897ef78e0f9afa2b63b3"
       },
       "request": {
         "type": "object"
@@ -17,7 +17,23 @@
       "response": {
         "type": "any"
       },
-      "review": "返回当前数据库生效的公开配置镜像，保留真实行业标识、名称、编码、品牌字段和值类型；只读导出工具为 tools/export-mock-config.py。 第 77 批迁移至两层目录，方法、地址、认证与脚本正文保持原契约。 第 83 批切换到系统入口的新路径，当前会话、鉴权和业务响应契约保持原语义。"
+      "review": "返回当前数据库生效的公开配置镜像，保留真实行业标识、名称、编码、品牌字段和值类型；只读导出工具为 tools/export-mock-config.py。 第 77 批迁移至两层目录，方法、地址、认证与脚本正文保持原契约。 第 83 批切换到系统入口的新路径，当前会话、鉴权和业务响应契约保持原语义。第 131 批由资源声明 PUBLIC，匿名 GET 的品牌数据及响应契约保持原语义。"
+    },
+    {
+      "operation": "HEAD /portal/main/index",
+      "source": {
+        "kind": "magic",
+        "id": "portal_public_index_head_v1",
+        "file": "magic/api/01.系统门户/01.门户首页/02.读取门户首页响应头.ms",
+        "reviewedSha256": "adadc0120d9a48b8255389f3ac14729b33426ac729c23e9988841d2869379088"
+      },
+      "request": {
+        "type": "object"
+      },
+      "response": {
+        "type": "null"
+      },
+      "review": "公开首页 HEAD 返回 HTTP 200、JSON 内容类型和空响应体，沿用正式 GET 的公开访问规则。"
     },
     {
       "operation": "POST /portal/sso/login",
@@ -324,7 +340,7 @@
         "kind": "magic",
         "id": "datapd_asset_refresh_01",
         "file": "magic/api/02.数据盘点/06.盘点维护/01.刷新单个资产索引.ms",
-        "reviewedSha256": "909134a7ae378b8ea32f8eea2d82aaaac9e298472d445812cfe6964cd23cd003"
+        "reviewedSha256": "f7330de7f24ecef30804e055f5c86453c6736ad823a09da8588cb1fed2b1f907"
       },
       "request": {
         "type": "object"
@@ -332,7 +348,7 @@
       "response": {
         "type": "any"
       },
-      "review": "首阶段按现行澄天调用方与真实实现核对；仅覆盖数据源闭环。内部重构且契约不变时，可保留模拟实现，完成回归后更新本项审阅摘要和说明。 第 83 批切换到系统入口的新路径，当前会话、鉴权和业务响应契约保持原语义。"
+      "review": "首阶段按现行澄天调用方与真实实现核对；仅覆盖数据源闭环。内部重构且契约不变时，可保留模拟实现，完成回归后更新本项审阅摘要和说明。 第 83 批切换到系统入口的新路径，当前会话、鉴权和业务响应契约保持原语义。第 127 批仅将内部批量索引调用切换到短地址。"
     },
     {
       "operation": "GET /dst/db/info",
@@ -383,12 +399,12 @@
       "review": "登记目录分页及历史 annotatedOnly 数组使用结构化数据库查询。现用澄天和风驰调用的默认数组及快照分页契约保持一致，模拟继续覆盖数据源闭环。真实目录关联、分类、两类计数及历史数组的排序、去重和租户隔离由真实接口与脚本回归覆盖。 第 79 批调整目录，保留原地址和方法。 第 89 批切换到数据盘点短路径，参数、响应及数据范围沿用原契约。"
     },
     {
-      "operation": "POST /dst/application/register-options",
+      "operation": "POST /dst/application/options",
       "source": {
         "kind": "magic",
         "id": "application_register_options_01",
         "file": "magic/api/02.数据盘点/01.应用系统/08.登记所属系统选择项.ms",
-        "reviewedSha256": "68dcc310df00ee0f65dc5b94a89b0d4556c8f841d557e78879215211d556374b"
+        "reviewedSha256": "9bd6732448ab9ee7685520e471c8d83a6c3c95f3b36ce553c9b9c4243ab8eded"
       },
       "request": {
         "type": "object"
@@ -397,13 +413,20 @@
         "type": "array",
         "items": {
           "type": "object",
-          "required": ["label", "value", "orgid", "createdby"],
+          "required": [
+            "label",
+            "value",
+            "orgid",
+            "createdby"
+          ],
           "properties": {
-            "value": { "type": "string" }
+            "value": {
+              "type": "string"
+            }
           }
         }
       },
-      "review": "登记选择项返回当前租户完整数组，保留 label、value、orgid、createdby，按应用名称和标识升序。历史空删除标记仍有效。ALL 查看租户有效系统，ORG 和 OWNER 查看所属有效组织的系统。keyword、limit 和客户端身份字段不影响服务范围，页面从数组按名称或标识查找。Mock 同步返回四个字段及现有组织范围，模拟场景用中文排序规则。 第 79 批调整目录，保留原地址和方法。"
+      "review": "登记选择项返回当前租户完整数组，保留 label、value、orgid、createdby，按应用名称和标识升序。历史空删除标记仍有效。ALL 查看租户有效系统，ORG 和 OWNER 查看所属有效组织的系统。keyword、limit 和客户端身份字段不影响服务范围，页面从数组按名称或标识查找。Mock 同步返回四个字段及现有组织范围，模拟场景用中文排序规则。第 127 批切换到短地址。旧 POST 地址在真实后端及 Mock 保留，沿用同一角色范围及响应契约。"
     },
     {
       "operation": "POST /dst/application/detail",
@@ -424,11 +447,10 @@
     {
       "operation": "GET /portal/sso/options",
       "source": {
-        "kind": "java",
-        "file": "data-elements-parent/src/main/java/com/linewell/dataelement/platform/tenant/api/TenantController.java",
-        "state": "technical-retained",
-        "reason": "租户认证入口与会话绑定的安全框架；保留真实成员校验和令牌会话，不在本地模拟接入中重写。",
-        "reviewedSha256": "7c6c3b40a0eeb2bcc2fab6e4303f8c08891da8c7b9d21ec8b81a573e408b111f"
+        "kind": "magic",
+        "id": "portal_options_v1",
+        "file": "magic/api/01.系统门户/02.登录与会话/05.查询登录行业.ms",
+        "reviewedSha256": "53f364ae1e484d0fdc3f916b4be8fc82aca528b31d9267c11e3a0cf677501fe2"
       },
       "request": {
         "type": "object"
@@ -436,16 +458,31 @@
       "response": {
         "type": "any"
       },
-      "review": "返回当前数据库生效的公开配置镜像，保留真实行业标识、名称、编码、品牌字段和值类型；只读导出工具为 tools/export-mock-config.py。 第 83 批切换到系统入口的新路径，当前会话、鉴权和业务响应契约保持原语义。"
+      "review": "返回当前数据库生效的公开配置镜像，保留真实行业标识、名称、编码、品牌字段和值类型；只读导出工具为 tools/export-mock-config.py。 第 83 批切换到系统入口的新路径，当前会话、鉴权和业务响应契约保持原语义。 第 132 批迁入 Magic。公开返回启用行业的标识、名称和编码。"
+    },
+    {
+      "operation": "HEAD /portal/sso/options",
+      "source": {
+        "kind": "magic",
+        "id": "portal_options_head_v1",
+        "file": "magic/api/01.系统门户/02.登录与会话/06.查询登录行业响应头.ms",
+        "reviewedSha256": "e8bf9d9370039d1d2f8610c648290a632d5072b7184a485ff2ecb22b100e0645"
+      },
+      "request": {
+        "type": "object"
+      },
+      "response": {
+        "type": "null"
+      },
+      "review": "HEAD 沿用同址 GET 的权限与参数约束，返回 JSON 内容类型与空响应体。"
     },
     {
       "operation": "GET /portal/sso/settings",
       "source": {
-        "kind": "java",
-        "file": "data-elements-parent/src/main/java/com/linewell/dataelement/platform/tenant/api/TenantController.java",
-        "state": "technical-retained",
-        "reason": "租户认证入口与会话绑定的安全框架；保留真实成员校验和令牌会话，不在本地模拟接入中重写。",
-        "reviewedSha256": "7c6c3b40a0eeb2bcc2fab6e4303f8c08891da8c7b9d21ec8b81a573e408b111f"
+        "kind": "magic",
+        "id": "portal_settings_v1",
+        "file": "magic/api/01.系统门户/02.登录与会话/07.查询行业登录设置.ms",
+        "reviewedSha256": "2be2e2e5e7d4f3e8f4079c04ef78e8b9f4f711cc121a3276368aff54cd90461b"
       },
       "request": {
         "type": "object"
@@ -453,16 +490,31 @@
       "response": {
         "type": "any"
       },
-      "review": "返回当前数据库生效的公开配置镜像，保留真实行业标识、名称、编码、品牌字段和值类型；只读导出工具为 tools/export-mock-config.py。 第 83 批切换到系统入口的新路径，当前会话、鉴权和业务响应契约保持原语义。"
+      "review": "返回当前数据库生效的公开配置镜像，保留真实行业标识、名称、编码、品牌字段和值类型；只读导出工具为 tools/export-mock-config.py。 第 83 批切换到系统入口的新路径，当前会话、鉴权和业务响应契约保持原语义。 第 132 批迁入 Magic。按参数选择已启用行业，保留原公开字段及缺参、无效行业业务码。"
+    },
+    {
+      "operation": "HEAD /portal/sso/settings",
+      "source": {
+        "kind": "magic",
+        "id": "portal_settings_head_v1",
+        "file": "magic/api/01.系统门户/02.登录与会话/08.查询行业登录设置响应头.ms",
+        "reviewedSha256": "4da70e9d21fa63c8997e794c9b50206cd57c3b55894ebfb17f3a0ce214ca8baa"
+      },
+      "request": {
+        "type": "object"
+      },
+      "response": {
+        "type": "null"
+      },
+      "review": "HEAD 沿用同址 GET 的权限与参数约束，返回 JSON 内容类型与空响应体。"
     },
     {
       "operation": "GET /portal/sso/session",
       "source": {
-        "kind": "java",
-        "file": "data-elements-parent/src/main/java/com/linewell/dataelement/platform/tenant/api/TenantController.java",
-        "state": "technical-retained",
-        "reason": "租户认证入口与会话绑定的安全框架；保留真实成员校验和令牌会话，不在本地模拟接入中重写。",
-        "reviewedSha256": "7c6c3b40a0eeb2bcc2fab6e4303f8c08891da8c7b9d21ec8b81a573e408b111f"
+        "kind": "magic",
+        "id": "portal_session_v1",
+        "file": "magic/api/01.系统门户/02.登录与会话/09.读取当前行业会话.ms",
+        "reviewedSha256": "1117c3b72757db4d0262847e4bdaff6cafd603ec772bee5160c089c291965f4e"
       },
       "request": {
         "type": "object"
@@ -470,16 +522,31 @@
       "response": {
         "type": "any"
       },
-      "review": "首阶段按现行澄天调用方与真实实现核对；仅覆盖数据源闭环。内部重构且契约不变时，可保留模拟实现，完成回归后更新本项审阅摘要和说明。 第 83 批切换到系统入口的新路径，当前会话、鉴权和业务响应契约保持原语义。"
+      "review": "首阶段按现行澄天调用方与真实实现核对；仅覆盖数据源闭环。内部重构且契约不变时，可保留模拟实现，完成回归后更新本项审阅摘要和说明。 第 83 批切换到系统入口的新路径，当前会话、鉴权和业务响应契约保持原语义。 第 132 批迁入 Magic。使用当前行业会话，LOCAL 仅返回本租户及可信账号来源。"
+    },
+    {
+      "operation": "HEAD /portal/sso/session",
+      "source": {
+        "kind": "magic",
+        "id": "portal_session_head_v1",
+        "file": "magic/api/01.系统门户/02.登录与会话/10.读取当前行业会话响应头.ms",
+        "reviewedSha256": "7d2769a74004195f80a04408dcf1c4d32540972129638e429ee52478a74052cf"
+      },
+      "request": {
+        "type": "object"
+      },
+      "response": {
+        "type": "null"
+      },
+      "review": "HEAD 沿用同址 GET 的权限与参数约束，返回 JSON 内容类型与空响应体。"
     },
     {
       "operation": "GET /portal/sso/tenants",
       "source": {
-        "kind": "java",
-        "file": "data-elements-parent/src/main/java/com/linewell/dataelement/platform/tenant/api/TenantController.java",
-        "state": "technical-retained",
-        "reason": "租户认证入口与会话绑定的安全框架；保留真实成员校验和令牌会话，不在本地模拟接入中重写。",
-        "reviewedSha256": "7c6c3b40a0eeb2bcc2fab6e4303f8c08891da8c7b9d21ec8b81a573e408b111f"
+        "kind": "magic",
+        "id": "portal_tenants_v1",
+        "file": "magic/api/01.系统门户/02.登录与会话/11.查询会话可用行业.ms",
+        "reviewedSha256": "4511ab66eef7544325e13cdc30c61d53157dacd85de07608270c0040559623c9"
       },
       "request": {
         "type": "object"
@@ -487,16 +554,31 @@
       "response": {
         "type": "any"
       },
-      "review": "首阶段按现行澄天调用方与真实实现核对；仅覆盖数据源闭环。内部重构且契约不变时，可保留模拟实现，完成回归后更新本项审阅摘要和说明。"
+      "review": "首阶段按现行澄天调用方与真实实现核对；仅覆盖数据源闭环。内部重构且契约不变时，可保留模拟实现，完成回归后更新本项审阅摘要和说明。 第 132 批迁入 Magic。LOCAL 仅返回同会话行业的可用列表。"
+    },
+    {
+      "operation": "HEAD /portal/sso/tenants",
+      "source": {
+        "kind": "magic",
+        "id": "portal_tenants_head_v1",
+        "file": "magic/api/01.系统门户/02.登录与会话/12.查询会话可用行业响应头.ms",
+        "reviewedSha256": "58154a8477303538c7b9e5a42d63210dafb74920be4456746cbaca4d17c1f181"
+      },
+      "request": {
+        "type": "object"
+      },
+      "response": {
+        "type": "null"
+      },
+      "review": "HEAD 沿用同址 GET 的权限与参数约束，返回 JSON 内容类型与空响应体。"
     },
     {
       "operation": "POST /portal/sso/switch",
       "source": {
-        "kind": "java",
-        "file": "data-elements-parent/src/main/java/com/linewell/dataelement/platform/tenant/api/TenantController.java",
-        "state": "technical-retained",
-        "reason": "租户认证入口与会话绑定的安全框架；保留真实成员校验和令牌会话，不在本地模拟接入中重写。",
-        "reviewedSha256": "7c6c3b40a0eeb2bcc2fab6e4303f8c08891da8c7b9d21ec8b81a573e408b111f"
+        "kind": "magic",
+        "id": "portal_switch_v1",
+        "file": "magic/api/01.系统门户/02.登录与会话/13.切换当前行业.ms",
+        "reviewedSha256": "f4f330f73e58b1980dfb555cb1c0079605a10d5ee4f8aa5053362ac2004fe170"
       },
       "request": {
         "type": "object"
@@ -504,16 +586,15 @@
       "response": {
         "type": "any"
       },
-      "review": "首阶段按现行澄天调用方与真实实现核对；仅覆盖数据源闭环。内部重构且契约不变时，可保留模拟实现，完成回归后更新本项审阅摘要和说明。"
+      "review": "首阶段按现行澄天调用方与真实实现核对；仅覆盖数据源闭环。内部重构且契约不变时，可保留模拟实现，完成回归后更新本项审阅摘要和说明。 第 132 批迁入 Magic。LOCAL 仅允许原行业。使用原行业入口重新登录可切换 Mock 场景。"
     },
     {
-      "operation": "GET /dst/database/metadata/tables/collection/status",
+      "operation": "GET /dst/collect/status",
       "source": {
-        "kind": "java",
-        "file": "data-elements-parent/src/main/java/com/linewell/dataelement/metautil/controller/TableMetadataCollectionController.java",
-        "state": "pending-magic",
-        "reason": "现用异步采集状态入口。首阶段只演示已保存快照，不迁移启动、后台执行及补偿；后续按业务链路迁入 Magic 后删除对应 Java 业务实现。",
-        "reviewedSha256": "b047c4d8328cf057d9fba0bba7cf9d6fcc731061e8ba71c891703564c43d72cb"
+        "kind": "magic",
+        "id": "collect_status_v1",
+        "file": "magic/api/02.数据盘点/09.表采集/01.查询数据源采集状态.ms",
+        "reviewedSha256": "9f9be32279467a56c3ee2c0bdd866606233b80f0f25ba6bc88587206cabe12ab"
       },
       "request": {
         "type": "object"
@@ -521,7 +602,135 @@
       "response": {
         "type": "any"
       },
-      "review": "首阶段按现行澄天调用方与真实实现核对；仅覆盖数据源闭环。内部重构且契约不变时，可保留模拟实现，完成回归后更新本项审阅摘要和说明。"
+      "review": "第 133 批登记状态入口。Mock 从当前场景的现有表快照生成状态，区分未采集、角色不可见与参数错误，旧地址按原方法兼容。"
+    },
+    {
+      "operation": "HEAD /dst/collect/status",
+      "source": {
+        "kind": "magic",
+        "id": "collect_status_head_v1",
+        "file": "magic/api/02.数据盘点/09.表采集/02.查询数据源采集状态响应头.ms",
+        "reviewedSha256": "09892054c72cc331416ebbf04cd3e48c7f5729498f199fd67acb160f263ab8c8"
+      },
+      "request": {
+        "type": "object"
+      },
+      "response": {
+        "type": "any"
+      },
+      "review": "第 133 批登记状态入口。Mock 从当前场景的现有表快照生成状态，区分未采集、角色不可见与参数错误，旧地址按原方法兼容。"
+    },
+    {
+      "operation": "GET /dst/collect/changes",
+      "source": {
+        "kind": "magic",
+        "id": "collect_changes_v1",
+        "file": "magic/api/02.数据盘点/09.表采集/08.查询采集缺失表.ms",
+        "reviewedSha256": "9d784c9cf135e70e7e0547386a857336d90f0a646a0310af94907d5daa3d526f"
+      },
+      "request": {
+        "type": "object"
+      },
+      "response": {
+        "type": "any"
+      },
+      "review": "第 134 批核对登记场景的来源范围、页窗、差异空集及精确审查排序，沿用真实兼容方法。"
+    },
+    {
+      "operation": "HEAD /dst/collect/changes",
+      "source": {
+        "kind": "magic",
+        "id": "collect_changes_head_v1",
+        "file": "magic/api/02.数据盘点/09.表采集/09.查询采集缺失表响应头.ms",
+        "reviewedSha256": "9be3f6601f5a5f95bea6af4aacc9219dce3c5927d39f3f140b74ec6482a92ee9"
+      },
+      "request": {
+        "type": "object"
+      },
+      "response": {
+        "type": "any"
+      },
+      "review": "第 134 批核对登记场景的来源范围、页窗、差异空集及精确审查排序，沿用真实兼容方法。"
+    },
+    {
+      "operation": "GET /dst/collect/snapshot",
+      "source": {
+        "kind": "magic",
+        "id": "collect_snapshot_v1",
+        "file": "magic/api/02.数据盘点/09.表采集/10.查询待标注表快照.ms",
+        "reviewedSha256": "0ef4d5d0d4a924d3d16dce4b8bbde717f5631c94b3303d6d76f650a3e7109c5d"
+      },
+      "request": {
+        "type": "object"
+      },
+      "response": {
+        "type": "any"
+      },
+      "review": "第 134 批核对登记场景的来源范围、页窗、差异空集及精确审查排序，沿用真实兼容方法。"
+    },
+    {
+      "operation": "HEAD /dst/collect/snapshot",
+      "source": {
+        "kind": "magic",
+        "id": "collect_snapshot_head_v1",
+        "file": "magic/api/02.数据盘点/09.表采集/11.查询待标注表快照响应头.ms",
+        "reviewedSha256": "3e6e900cce43529e3350bc7ba2b410e6d76ffc38934cfe003d2504d27588ef7b"
+      },
+      "request": {
+        "type": "object"
+      },
+      "response": {
+        "type": "any"
+      },
+      "review": "第 134 批核对登记场景的来源范围、页窗、差异空集及精确审查排序，沿用真实兼容方法。"
+    },
+    {
+      "operation": "POST /dst/collect/order",
+      "source": {
+        "kind": "magic",
+        "id": "collect_order_v1",
+        "file": "magic/api/02.数据盘点/09.表采集/12.查询登记审查顺序.ms",
+        "reviewedSha256": "02b60be133d84cbd70dfa12baa2e31d4196668c82eddb08da652dcacc009060c"
+      },
+      "request": {
+        "type": "object"
+      },
+      "response": {
+        "type": "any"
+      },
+      "review": "第 134 批核对登记场景的来源范围、页窗、差异空集及精确审查排序，沿用真实兼容方法。"
+    },
+    {
+      "operation": "POST /dst/collect/start",
+      "source": {
+        "kind": "magic",
+        "id": "collect_start_v1",
+        "file": "magic/api/02.数据盘点/09.表采集/13.启动数据源表采集.ms",
+        "reviewedSha256": "bdcdadd3f8f2f417e98a4d0cc3a5a419f1afb1cb2dbbeee6e96de4a470d11d2c"
+      },
+      "request": {
+        "type": "object"
+      },
+      "response": {
+        "type": "any"
+      },
+      "review": "第 135 批核对来源范围、预检、任务状态和旧方法。场景采集复用已有快照，真实并发、失败补偿和改名事务由后端回归覆盖。"
+    },
+    {
+      "operation": "POST /dst/collect/rename",
+      "source": {
+        "kind": "magic",
+        "id": "collect_rename_v1",
+        "file": "magic/api/02.数据盘点/09.表采集/14.关联缺失登记表新名称.ms",
+        "reviewedSha256": "9b20d1193e6e8a5e44603b3b7c27a83774be757828592e3803122720cab630b0"
+      },
+      "request": {
+        "type": "object"
+      },
+      "response": {
+        "type": "any"
+      },
+      "review": "第 135 批核对来源范围、预检、任务状态和旧方法。场景采集复用已有快照，真实并发、失败补偿和改名事务由后端回归覆盖。"
     },
     {
       "operation": "POST /dws/cart/page",
@@ -600,134 +809,288 @@
     },
     {
       "operation": "GET /sym/logs/capabilities",
-      "source": { "kind": "java", "file": "data-elements-parent/src/main/java/com/linewell/dataelement/feature/logmanagement/LogController.java", "state": "pending-magic", "reason": "行业日志能力编排属业务，后续按完整链迁Magic；不以必要采集技术保留扩大业务Java范围。", "reviewedSha256": "3006aa447bc11a912771e98dc755527b9aa440fc84d413920da7c354deb6c268" },
+      "source": {"kind": "magic", "id": "tenant_log_capabilities_get_v1", "file": "magic/api/07.系统管理/18.日志管理/01.读取行业日志能力.ms", "reviewedSha256": "b9e7fa22440c11f48f401b3d348cc3e6e8c2c1e6401c23ec9f7d2ff376e8376e"},
       "request": { "type": "object" }, "response": { "type": "array", "items": { "type": "string" } },
-      "review": "行业auth/operations/requests/security/exports复用当前session范围；具备operations或requests才追加requestParameters。Java可按授权advertise archives/policies，Mock未实现而不advertise，相关请求返回501，保留此差异；不模拟IDAAS。详见implementationNotes.logs。"
+      "review": "行业auth/operations/requests/security/exports复用当前session范围；具备operations或requests才追加requestParameters。实际按同一角色的全量范围返回 archives/policies，Mock未实现而不advertise，相关请求返回501，保留此差异；不模拟IDAAS。详见implementationNotes.logs。"
     },
+    {"operation": "HEAD /sym/logs/capabilities", "source": {"kind": "magic", "id": "tenant_log_capabilities_head_v1", "file": "magic/api/07.系统管理/18.日志管理/02.读取行业日志能力响应头.ms", "reviewedSha256": "a177c2f5e209418520619bdb2e314675ac4789522514422c7053fb90a607f3b6"}, "request": {"type": "object"}, "response": {"type": "any"}, "review": "用行业会话与 GET 共用权限，HTTP 200、JSON 响应头与空正文。"},
     {
       "operation": "GET /sym/logs/components",
-      "source": { "kind": "java", "file": "data-elements-parent/src/main/java/com/linewell/dataelement/feature/logmanagement/LogComponentService.java", "state": "pending-magic", "reason": "组件读取业务待迁Magic；Mock只消费唯一lowcode当前编译包。", "reviewedSha256": "91a70ebd9d5e400cd115976f270317217872045ee4dac88b0fbd5b7720f1d68b" },
+      "source": {"kind": "magic", "id": "tenant_log_components_get_v1", "file": "magic/api/07.系统管理/18.日志管理/03.读取行业日志组件.ms", "reviewedSha256": "5f16860c61bbdd8a1b17f87cc93487a66cb4b8c962e933f3580aa20cd346246b"},
       "request": { "type": "object" }, "response": { "type": "array", "items": { "type": "object", "required": ["tid", "name", "compile_js", "compile_css"] } },
       "review": "只映射唯一lowcode源码的已编译log-management组件，不复制低代码、不添加菜单；本任务未编译或发布日志组件，额外导航Node回归仅调用既有编译器生成忽略目录临时产物。宿主传输接入不代表页面已验收。"
     },
+    {"operation": "HEAD /sym/logs/components", "source": {"kind": "magic", "id": "tenant_log_components_head_v1", "file": "magic/api/07.系统管理/18.日志管理/04.读取行业日志组件响应头.ms", "reviewedSha256": "20be3b54101f63c653f6f8b30948c57a0101826316140f5453d8db4f71527a11"}, "request": {"type": "object"}, "response": {"type": "any"}, "review": "用行业会话与 GET 共用权限，HTTP 200、JSON 响应头与空正文。"},
     {
-      "operation": "GET /sym/logs/auth",
-      "source": { "kind": "java", "file": "data-elements-parent/src/main/java/com/linewell/dataelement/feature/logmanagement/LogQueryService.java", "state": "pending-magic", "reason": "日志查询业务待按链迁Magic。", "reviewedSha256": "7ed9b6514fa4a35b27f27f89db831bf3b6cd6ee16544dd6d10e29e4da73e4002" },
+      "operation": "GET /sym/logauth/page",
+      "source": {"kind": "magic", "id": "tenant_logauth_page_get_v1", "file": "magic/api/07.系统管理/19.登录日志/01.分页读取事件.ms", "reviewedSha256": "f5ba864925d126a6c8611e567c78f52e2a368bba85022371d36b358d285d2163"},
       "request": { "type": "object" }, "response": { "type": "object", "required": ["list", "total", "page", "size", "timeZone", "appliedScopeSummary"], "properties": { "list": { "type": "array" }, "total": { "type": "number" } } },
-      "review": "selection先施加当前租户与ALL/ORG/OWNER范围，再调用共享Magic函数并排序分页；默认7天、最多90天、size<=100。parameterKeyword缺失/null/空字符串无条件，其余非空参数筛选不支持auth；auth表不含参数列，列表不返回参数对象、摘要或状态。时间边界与每SQL 15s限制见implementationNotes.logs。"
+      "review": "先施加当前租户与ALL/ORG/OWNER范围，再调用共享Magic函数并排序分页；默认7天、最多90天、size<=100。parameterKeyword缺失/null/空字符串无条件，其余非空参数筛选不支持auth；auth表不含参数列，列表不返回参数对象、摘要或状态。时间边界与每SQL 15s限制见implementationNotes.logs。"
     },
     {
-      "operation": "GET /sym/logs/auth/statistics",
-      "source": { "kind": "java", "file": "data-elements-parent/src/main/java/com/linewell/dataelement/feature/logmanagement/LogQueryService.java", "state": "pending-magic", "reason": "日志统计业务待迁Magic。", "reviewedSha256": "7ed9b6514fa4a35b27f27f89db831bf3b6cd6ee16544dd6d10e29e4da73e4002" },
-      "request": { "type": "object" }, "response": { "type": "object", "required": ["total", "success_count", "failure_count", "denied_count", "partial_count"] }, "review": "与auth列表及导出复用selection，先租户角色范围再调用共享函数；不支持auth非空参数筛选，统计全部匹配记录而非当前页。15s为单条SQL超时，不是总HTTP期限。"
+      "operation": "GET /sym/logauth/stats",
+      "source": {"kind": "magic", "id": "tenant_logauth_stats_get_v1", "file": "magic/api/07.系统管理/19.登录日志/03.统计筛选结果.ms", "reviewedSha256": "b306f82ce5aa15a8d9d9fa752d82248cf7064588ca1ae436b18a373a80c9b708"},
+      "request": { "type": "object" }, "response": { "type": "object", "required": ["total", "success_count", "failure_count", "denied_count", "partial_count"] }, "review": "与auth列表及导出复用对应的筛选条件，先租户角色范围再调用共享函数；不支持auth非空参数筛选，统计全部匹配记录而非当前页。15s为单条SQL超时，不是总HTTP期限。"
     },
     {
-      "operation": "GET /sym/logs/auth/{id}",
-      "source": { "kind": "java", "file": "data-elements-parent/src/main/java/com/linewell/dataelement/feature/logmanagement/LogQueryService.java", "state": "pending-magic", "reason": "日志详情业务待迁Magic。", "reviewedSha256": "7ed9b6514fa4a35b27f27f89db831bf3b6cd6ee16544dd6d10e29e4da73e4002" },
+      "operation": "GET /sym/logauth/detail",
+      "source": {"kind": "magic", "id": "tenant_logauth_detail_get_v1", "file": "magic/api/07.系统管理/19.登录日志/05.查询事件详情.ms", "reviewedSha256": "72a57992e7f44e470dc52f9c091cdc6aa465fbc00b6a77d4e89369efb1a2e64b"},
       "request": { "type": "object", "required": ["id"] }, "response": { "type": "object", "required": ["tid", "details"] }, "review": "逐ID校验当前租户与角色范围，无默认7天限制；auth表不含参数列，详情不要求也不返回parameter_snapshot、parameter_capture_status或request_parameters，不伪造OMITTED参数对象。"
     },
     {
-      "operation": "POST /sym/logs/auth/batch",
-      "source": { "kind": "java", "file": "data-elements-parent/src/main/java/com/linewell/dataelement/feature/logmanagement/LogQueryService.java", "state": "pending-magic", "reason": "日志批量读取业务待迁Magic。", "reviewedSha256": "7ed9b6514fa4a35b27f27f89db831bf3b6cd6ee16544dd6d10e29e4da73e4002" },
-      "request": { "type": "array", "items": { "type": "string" } }, "response": { "type": "array", "items": { "type": "object" } }, "review": "裸数组1..100不同ID，一次批量查询后逐ID校验租户及角色范围并按输入ID顺序返回；混入越权/跨租户/不存在ID整批403，不返回部分；auth摘要不含任何参数字段。Java已拒null/isBlank/超长/重复ID；Mock拒空串并保输入序，纯空白ID的错误分类差异仍见implementationNotes.logs。"
+      "operation": "POST /sym/logauth/batch",
+      "source": {"kind": "magic", "id": "tenant_logauth_batch_post_v1", "file": "magic/api/07.系统管理/19.登录日志/09.批量读取事件.ms", "reviewedSha256": "9fe0a4512ed483b699fb3963e16943b55909df973ff236d6fd6f2d5e1bf96112"},
+      "request": { "type": "array", "items": { "type": "string" } }, "response": { "type": "array", "items": { "type": "object" } }, "review": "裸数组1..100不同ID，一次批量查询后逐ID校验租户及角色范围并按输入ID顺序返回；混入越权/跨租户/不存在ID整批403，不返回部分；auth摘要不含任何参数字段。Magic 已拒 null/isBlank/超长/重复 ID；Mock拒空串并保输入序，纯空白ID的错误分类差异仍见implementationNotes.logs。"
     },
     {
-      "operation": "GET /sym/logs/auth/{id}/items",
-      "source": { "kind": "java", "file": "data-elements-parent/src/main/java/com/linewell/dataelement/feature/logmanagement/LogQueryService.java", "state": "pending-magic", "reason": "批次明细读取业务待迁Magic。", "reviewedSha256": "7ed9b6514fa4a35b27f27f89db831bf3b6cd6ee16544dd6d10e29e4da73e4002" },
+      "operation": "GET /sym/logauth/items",
+      "source": {"kind": "magic", "id": "tenant_logauth_items_get_v1", "file": "magic/api/07.系统管理/19.登录日志/07.分页读取批次明细.ms", "reviewedSha256": "89d975c778238e5170e5e3bbe3dde6839b4a537c3f81598b7196c56c534c1666"},
       "request": { "type": "object", "required": ["id"] }, "response": { "type": "object", "required": ["list", "total", "page", "size"] }, "review": "先按当前租户与角色范围校验父事件，再按item_no asc分页取明细；父事件不套默认7天，不按明细行补查，不引入auth参数列。"
     },
     {
-      "operation": "GET /sym/logs/operations",
-      "source": { "kind": "java", "file": "data-elements-parent/src/main/java/com/linewell/dataelement/feature/logmanagement/LogQueryService.java", "state": "pending-magic", "reason": "操作日志查询业务待迁Magic。", "reviewedSha256": "7ed9b6514fa4a35b27f27f89db831bf3b6cd6ee16544dd6d10e29e4da73e4002" },
-      "request": { "type": "object", "properties": { "parameterKeyword": { "type": "any" }, "parameterName": { "type": "string" }, "parameterValue": { "type": "string" } } }, "response": { "type": "object", "required": ["list", "total", "page", "size", "timeZone", "appliedScopeSummary"] }, "review": "selection先租户角色范围再调用共享Magic函数；parameterKeyword缺失/null/空字符串无条件，其余仅string且<=200 UTF-16单位，原样不trim，纯空格也作完整字面。contains大小写不敏感，与keyword/result/time及旧白名单精确条件AND，计数/分页前过滤CAPTURED/PARTIAL路径=叶值投影。列表只有parameter_capture_status，不含parameter_summary/parameter_snapshot/request_parameters；每条SQL超时15s非HTTP总时限。"
+      "operation": "GET /sym/logops/page",
+      "source": {"kind": "magic", "id": "tenant_logops_page_get_v1", "file": "magic/api/07.系统管理/20.操作日志/01.分页读取事件.ms", "reviewedSha256": "4aceae3afed13c9756786ac63983b359e3342e5fa6922cf1800f48e41a4f6912"},
+      "request": { "type": "object", "properties": { "parameterKeyword": { "type": "any" }, "parameterName": { "type": "string" }, "parameterValue": { "type": "string" } } }, "response": { "type": "object", "required": ["list", "total", "page", "size", "timeZone", "appliedScopeSummary"] }, "review": "先租户角色范围再调用共享Magic函数；parameterKeyword缺失/null/空字符串无条件，其余仅string且<=200 UTF-16单位，原样不trim，纯空格也作完整字面。contains大小写不敏感，与keyword/result/time及旧白名单精确条件AND，计数/分页前过滤CAPTURED/PARTIAL路径=叶值投影。列表只有parameter_capture_status，不含parameter_summary/parameter_snapshot/request_parameters；每条SQL超时15s非HTTP总时限。"
     },
     {
-      "operation": "GET /sym/logs/operations/statistics",
-      "source": { "kind": "java", "file": "data-elements-parent/src/main/java/com/linewell/dataelement/feature/logmanagement/LogQueryService.java", "state": "pending-magic", "reason": "操作日志统计业务待迁Magic。", "reviewedSha256": "7ed9b6514fa4a35b27f27f89db831bf3b6cd6ee16544dd6d10e29e4da73e4002" },
-      "request": { "type": "object" }, "response": { "type": "object", "required": ["total", "success_count", "failure_count", "denied_count", "partial_count"] }, "review": "与operations列表和导出复用selection；先租户角色范围，再共享函数的大小写不敏感字面contains与其他条件AND。parameterKeyword不trim、空白不等于空字符串；统计完整匹配集，每SQL 15s不等于总HTTP超时。"
+      "operation": "GET /sym/logops/stats",
+      "source": {"kind": "magic", "id": "tenant_logops_stats_get_v1", "file": "magic/api/07.系统管理/20.操作日志/03.统计筛选结果.ms", "reviewedSha256": "70a79b727157d7085adaf6c954110352ce2532c233c6e0f6354c65f733f851b5"},
+      "request": { "type": "object" }, "response": { "type": "object", "required": ["total", "success_count", "failure_count", "denied_count", "partial_count"] }, "review": "与operations列表和导出复用对应的筛选条件；先租户角色范围，再共享函数的大小写不敏感字面contains与其他条件AND。parameterKeyword不trim、空白不等于空字符串；统计完整匹配集，每SQL 15s不等于总HTTP超时。"
     },
     {
-      "operation": "GET /sym/logs/operations/{id}",
-      "source": { "kind": "java", "file": "data-elements-parent/src/main/java/com/linewell/dataelement/feature/logmanagement/LogQueryService.java", "state": "pending-magic", "reason": "操作日志详情业务待迁Magic。", "reviewedSha256": "7ed9b6514fa4a35b27f27f89db831bf3b6cd6ee16544dd6d10e29e4da73e4002" },
+      "operation": "GET /sym/logops/detail",
+      "source": {"kind": "magic", "id": "tenant_logops_detail_get_v1", "file": "magic/api/07.系统管理/20.操作日志/05.查询事件详情.ms", "reviewedSha256": "2be9ec2ea589c378fd6d6eca5a1e56291611615fa41b7f7c969d92a022ad88f5"},
       "request": { "type": "object", "required": ["id"] }, "response": { "type": "object", "required": ["tid", "details", "parameter_snapshot", "parameter_capture_status"], "properties": { "parameter_snapshot": { "type": "object", "required": ["version", "status", "path", "query", "body", "verified", "notices"], "properties": { "version": { "type": "number" }, "status": { "type": "string" }, "path": { "type": "object" }, "query": { "type": "object" }, "body": { "type": "any" }, "verified": { "type": "object" }, "notices": { "type": "array", "items": { "type": "string" } } } }, "parameter_capture_status": { "type": "string" }, "request_parameters": { "type": "object" } } }, "review": "逐ID授权、不套默认7天；新列已读取解析，parameter_snapshot为六态对象，body可为任意安全JSON值，parameter_capture_status与对象status一致。旧request_parameters仅非空时返回，不是required；请求意图不等于已执行事实，不返回parameter_summary。"
     },
     {
-      "operation": "POST /sym/logs/operations/batch",
-      "source": { "kind": "java", "file": "data-elements-parent/src/main/java/com/linewell/dataelement/feature/logmanagement/LogQueryService.java", "state": "pending-magic", "reason": "操作日志批量读取业务待迁Magic。", "reviewedSha256": "7ed9b6514fa4a35b27f27f89db831bf3b6cd6ee16544dd6d10e29e4da73e4002" },
-      "request": { "type": "array", "items": { "type": "string" } }, "response": { "type": "array", "items": { "type": "object" } }, "review": "裸数组1..100不同ID，一次批量读取后逐对象ALL/ORG/OWNER与租户校验，整批拒绝越权，按输入ID顺序返回；参数字段仅parameter_capture_status，无parameter_summary/parameter_snapshot/request_parameters。Java已拒null/isBlank/超长/重复ID；Mock拒空串并保输入序，纯空白ID的错误分类差异仍见implementationNotes.logs。"
+      "operation": "POST /sym/logops/batch",
+      "source": {"kind": "magic", "id": "tenant_logops_batch_post_v1", "file": "magic/api/07.系统管理/20.操作日志/09.批量读取事件.ms", "reviewedSha256": "3451b48d9852e2cced8858f8e92c5a6d70929d79b181df6e4dff74ce6bcc6487"},
+      "request": { "type": "array", "items": { "type": "string" } }, "response": { "type": "array", "items": { "type": "object" } }, "review": "裸数组1..100不同ID，一次批量读取后逐对象ALL/ORG/OWNER与租户校验，整批拒绝越权，按输入ID顺序返回；参数字段仅parameter_capture_status，无parameter_summary/parameter_snapshot/request_parameters。Magic 已拒 null/isBlank/超长/重复 ID；Mock拒空串并保输入序，纯空白ID的错误分类差异仍见implementationNotes.logs。"
     },
     {
-      "operation": "GET /sym/logs/operations/{id}/items",
-      "source": { "kind": "java", "file": "data-elements-parent/src/main/java/com/linewell/dataelement/feature/logmanagement/LogQueryService.java", "state": "pending-magic", "reason": "操作批次明细业务待迁Magic。", "reviewedSha256": "7ed9b6514fa4a35b27f27f89db831bf3b6cd6ee16544dd6d10e29e4da73e4002" },
+      "operation": "GET /sym/logops/items",
+      "source": {"kind": "magic", "id": "tenant_logops_items_get_v1", "file": "magic/api/07.系统管理/20.操作日志/07.分页读取批次明细.ms", "reviewedSha256": "60fd93352b21ae4d60eb5eb47436ce93f034cc20c908f434e862f829d0df2b35"},
       "request": { "type": "object", "required": ["id"] }, "response": { "type": "object", "required": ["list", "total", "page", "size"] }, "review": "先校验父事件租户与角色范围，不套默认7天，再按item_no asc分页读取虚构已记载事实；预检不标为已删除，不按明细行补查。"
     },
     {
-      "operation": "GET /sym/logs/requests",
-      "source": { "kind": "java", "file": "data-elements-parent/src/main/java/com/linewell/dataelement/feature/logmanagement/LogQueryService.java", "state": "pending-magic", "reason": "接口日志查询业务待迁Magic。", "reviewedSha256": "7ed9b6514fa4a35b27f27f89db831bf3b6cd6ee16544dd6d10e29e4da73e4002" },
-      "request": { "type": "object", "properties": { "parameterKeyword": { "type": "any" } } }, "response": { "type": "object", "required": ["list", "total", "page", "size", "timeZone", "appliedScopeSummary"] }, "review": "同operations复用selection，先租户角色范围再共享函数；parameterKeyword缺失/null/空字符串无条件，其余仅string<=200 UTF-16单位、原样不trim，纯空格也是字面过滤。CAPTURED/PARTIAL路径=叶值投影按大小写不敏感contains与其他条件AND；列表参数字段仅状态，无parameter_summary/parameter_snapshot/request_parameters。HTTP200仍可能业务FAILED，duration_ms历史缺失不伪造0；每SQL 15s非总HTTP期限。"
+      "operation": "GET /sym/logreq/page",
+      "source": {"kind": "magic", "id": "tenant_logreq_page_get_v1", "file": "magic/api/07.系统管理/21.接口日志/01.分页读取事件.ms", "reviewedSha256": "1153d472805ebfa6657d17851495d7baf32d8c9d7e11c75fc9188c866a135aef"},
+      "request": { "type": "object", "properties": { "parameterKeyword": { "type": "any" } } }, "response": { "type": "object", "required": ["list", "total", "page", "size", "timeZone", "appliedScopeSummary"] }, "review": "同operations复用对应的筛选条件，先租户角色范围再共享函数；parameterKeyword缺失/null/空字符串无条件，其余仅string<=200 UTF-16单位、原样不trim，纯空格也是字面过滤。CAPTURED/PARTIAL路径=叶值投影按大小写不敏感contains与其他条件AND；列表参数字段仅状态，无parameter_summary/parameter_snapshot/request_parameters。HTTP200仍可能业务FAILED，duration_ms历史缺失不伪造0；每SQL 15s非总HTTP期限。"
     },
     {
-      "operation": "GET /sym/logs/requests/statistics",
-      "source": { "kind": "java", "file": "data-elements-parent/src/main/java/com/linewell/dataelement/feature/logmanagement/LogQueryService.java", "state": "pending-magic", "reason": "接口日志统计业务待迁Magic。", "reviewedSha256": "7ed9b6514fa4a35b27f27f89db831bf3b6cd6ee16544dd6d10e29e4da73e4002" },
-      "request": { "type": "object" }, "response": { "type": "object", "required": ["total", "success_count", "failure_count", "denied_count", "partial_count"] }, "review": "与requests列表及导出复用selection，租户角色范围后调用共享函数；参数关键词原样字面contains与其他条件AND，统计所有匹配记录而非当前页，每SQL 15s并非总HTTP时限。"
+      "operation": "GET /sym/logreq/stats",
+      "source": {"kind": "magic", "id": "tenant_logreq_stats_get_v1", "file": "magic/api/07.系统管理/21.接口日志/03.统计筛选结果.ms", "reviewedSha256": "83ecb83c44429e53a1185802ea097006a8ec4dfd62145cdb06df74ff35294f61"},
+      "request": { "type": "object" }, "response": { "type": "object", "required": ["total", "success_count", "failure_count", "denied_count", "partial_count"] }, "review": "与requests列表及导出复用对应的筛选条件，租户角色范围后调用共享函数；参数关键词原样字面contains与其他条件AND，统计所有匹配记录而非当前页，每SQL 15s并非总HTTP时限。"
     },
     {
-      "operation": "GET /sym/logs/requests/{id}",
-      "source": { "kind": "java", "file": "data-elements-parent/src/main/java/com/linewell/dataelement/feature/logmanagement/LogQueryService.java", "state": "pending-magic", "reason": "接口日志详情业务待迁Magic。", "reviewedSha256": "7ed9b6514fa4a35b27f27f89db831bf3b6cd6ee16544dd6d10e29e4da73e4002" },
+      "operation": "GET /sym/logreq/detail",
+      "source": {"kind": "magic", "id": "tenant_logreq_detail_get_v1", "file": "magic/api/07.系统管理/21.接口日志/05.查询事件详情.ms", "reviewedSha256": "a85bbad66ee26a85c3b12fe7b06951c6fc6c7a24d5e071f7540a545767bf12ef"},
       "request": { "type": "object", "required": ["id"] }, "response": { "type": "object", "required": ["tid", "details", "parameter_snapshot", "parameter_capture_status"], "properties": { "parameter_snapshot": { "type": "object", "required": ["version", "status", "path", "query", "body", "verified", "notices"], "properties": { "version": { "type": "number" }, "status": { "type": "string" }, "path": { "type": "object" }, "query": { "type": "object" }, "body": { "type": "any" }, "verified": { "type": "object" }, "notices": { "type": "array", "items": { "type": "string" } } } }, "parameter_capture_status": { "type": "string" }, "request_parameters": { "type": "object" } } }, "review": "逐ID授权后读取解析新列；parameter_snapshot为六态对象而非JSON字符串，body允许中文嵌套、数组、false/0/null，状态与对象一致。request_parameters仅安全白名单非空时返回，已从required移出；不返回parameter_summary或敏感原值。"
     },
     {
-      "operation": "POST /sym/logs/requests/batch",
-      "source": { "kind": "java", "file": "data-elements-parent/src/main/java/com/linewell/dataelement/feature/logmanagement/LogQueryService.java", "state": "pending-magic", "reason": "接口日志批量读取业务待迁Magic。", "reviewedSha256": "7ed9b6514fa4a35b27f27f89db831bf3b6cd6ee16544dd6d10e29e4da73e4002" },
-      "request": { "type": "array", "items": { "type": "string" } }, "response": { "type": "array", "items": { "type": "object" } }, "review": "裸数组1..100不同ID，一次批量读取后逐ID授权，混入越权整批403，按输入ID顺序返回；参数字段仅状态，无parameter_summary/parameter_snapshot/request_parameters。Java已拒null/isBlank/超长/重复ID；Mock拒空串并保输入序，纯空白ID的错误分类差异仍见implementationNotes.logs。"
+      "operation": "POST /sym/logreq/batch",
+      "source": {"kind": "magic", "id": "tenant_logreq_batch_post_v1", "file": "magic/api/07.系统管理/21.接口日志/09.批量读取事件.ms", "reviewedSha256": "f20452fc76baafdf2417c8c8b133e96dffd5006b64f14523844846588dc679d8"},
+      "request": { "type": "array", "items": { "type": "string" } }, "response": { "type": "array", "items": { "type": "object" } }, "review": "裸数组1..100不同ID，一次批量读取后逐ID授权，混入越权整批403，按输入ID顺序返回；参数字段仅状态，无parameter_summary/parameter_snapshot/request_parameters。Magic 已拒 null/isBlank/超长/重复 ID；Mock拒空串并保输入序，纯空白ID的错误分类差异仍见implementationNotes.logs。"
     },
     {
-      "operation": "GET /sym/logs/requests/{id}/items",
-      "source": { "kind": "java", "file": "data-elements-parent/src/main/java/com/linewell/dataelement/feature/logmanagement/LogQueryService.java", "state": "pending-magic", "reason": "接口批次明细业务待迁Magic。", "reviewedSha256": "7ed9b6514fa4a35b27f27f89db831bf3b6cd6ee16544dd6d10e29e4da73e4002" },
+      "operation": "GET /sym/logreq/items",
+      "source": {"kind": "magic", "id": "tenant_logreq_items_get_v1", "file": "magic/api/07.系统管理/21.接口日志/07.分页读取批次明细.ms", "reviewedSha256": "99babcf426d0c863ecb1274cd5775ef57556af7b0a1626327830563ea90c945e"},
       "request": { "type": "object", "required": ["id"] }, "response": { "type": "object", "required": ["list", "total", "page", "size"] }, "review": "父事件按租户与角色范围授权后分页读取，item_no asc，page/size沿用事件分页上限；不套默认7天，不按明细行补查。"
     },
     {
-      "operation": "GET /sym/logs/security",
-      "source": { "kind": "java", "file": "data-elements-parent/src/main/java/com/linewell/dataelement/feature/logmanagement/LogQueryService.java", "state": "pending-magic", "reason": "安全事件查询业务待迁Magic。", "reviewedSha256": "7ed9b6514fa4a35b27f27f89db831bf3b6cd6ee16544dd6d10e29e4da73e4002" },
-      "request": { "type": "object" }, "response": { "type": "object", "required": ["list", "total", "page", "size", "timeZone", "appliedScopeSummary"] }, "review": "selection先当前租户角色范围及SECURITY类别再调用共享函数；非空参数关键词拒绝，缺失/null/空字符串无条件。列表参数字段仅parameter_capture_status，无parameter_summary/parameter_snapshot/request_parameters；状态不授予参数检索能力，每SQL 15s非总HTTP超时。"
+      "operation": "GET /sym/logsec/page",
+      "source": {"kind": "magic", "id": "tenant_logsec_page_get_v1", "file": "magic/api/07.系统管理/22.安全日志/01.分页读取事件.ms", "reviewedSha256": "5821a8990db78fb37ba404e1400e586d596ffba64e06b2c0efe05938095d0ffd"},
+      "request": { "type": "object" }, "response": { "type": "object", "required": ["list", "total", "page", "size", "timeZone", "appliedScopeSummary"] }, "review": "先当前租户角色范围及SECURITY类别再调用共享函数；非空参数关键词拒绝，缺失/null/空字符串无条件。列表参数字段仅parameter_capture_status，无parameter_summary/parameter_snapshot/request_parameters；状态不授予参数检索能力，每SQL 15s非总HTTP超时。"
     },
     {
-      "operation": "GET /sym/logs/security/statistics",
-      "source": { "kind": "java", "file": "data-elements-parent/src/main/java/com/linewell/dataelement/feature/logmanagement/LogQueryService.java", "state": "pending-magic", "reason": "安全事件统计业务待迁Magic。", "reviewedSha256": "7ed9b6514fa4a35b27f27f89db831bf3b6cd6ee16544dd6d10e29e4da73e4002" },
-      "request": { "type": "object" }, "response": { "type": "object", "required": ["total", "success_count", "failure_count", "denied_count", "partial_count"] }, "review": "与security列表及导出复用selection，先租户角色范围及类别，再共享函数；不开放非空参数筛选，统计完整匹配集而非当前页，每SQL超时15s。"
+      "operation": "GET /sym/logsec/stats",
+      "source": {"kind": "magic", "id": "tenant_logsec_stats_get_v1", "file": "magic/api/07.系统管理/22.安全日志/03.统计筛选结果.ms", "reviewedSha256": "d82c2244261b1375ce07c7afe766660573b605614b8a2085398e1be1efd5150f"},
+      "request": { "type": "object" }, "response": { "type": "object", "required": ["total", "success_count", "failure_count", "denied_count", "partial_count"] }, "review": "与security列表及导出复用对应的筛选条件，先租户角色范围及类别，再共享函数；不开放非空参数筛选，统计完整匹配集而非当前页，每SQL超时15s。"
     },
     {
-      "operation": "GET /sym/logs/security/{id}",
-      "source": { "kind": "java", "file": "data-elements-parent/src/main/java/com/linewell/dataelement/feature/logmanagement/LogQueryService.java", "state": "pending-magic", "reason": "安全事件详情业务待迁Magic。", "reviewedSha256": "7ed9b6514fa4a35b27f27f89db831bf3b6cd6ee16544dd6d10e29e4da73e4002" },
+      "operation": "GET /sym/logsec/detail",
+      "source": {"kind": "magic", "id": "tenant_logsec_detail_get_v1", "file": "magic/api/07.系统管理/22.安全日志/05.查询事件详情.ms", "reviewedSha256": "6dc365c84aa2d64007adfd4b4331bc249d50b7c43d39073149ad5a0dc0975a4c"},
       "request": { "type": "object", "required": ["id"] }, "response": { "type": "object", "required": ["tid", "details", "parameter_snapshot", "parameter_capture_status"], "properties": { "parameter_snapshot": { "type": "object", "required": ["version", "status", "path", "query", "body", "verified", "notices"], "properties": { "version": { "type": "number" }, "status": { "type": "string" }, "path": { "type": "object" }, "query": { "type": "object" }, "body": { "type": "any" }, "verified": { "type": "object" }, "notices": { "type": "array", "items": { "type": "string" } } } }, "parameter_capture_status": { "type": "string" }, "request_parameters": { "type": "object" } } }, "review": "逐ID授权后读取解析log_system_t新列，parameter_snapshot为六态对象且与parameter_capture_status一致；Mock安全事件使用OMITTED，不扩大IDAAS或安全正文采集。request_parameters仅旧安全白名单非空时返回，非required；不返回parameter_summary。"
     },
     {
-      "operation": "POST /sym/logs/security/batch",
-      "source": { "kind": "java", "file": "data-elements-parent/src/main/java/com/linewell/dataelement/feature/logmanagement/LogQueryService.java", "state": "pending-magic", "reason": "安全事件批量读取业务待迁Magic。", "reviewedSha256": "7ed9b6514fa4a35b27f27f89db831bf3b6cd6ee16544dd6d10e29e4da73e4002" },
-      "request": { "type": "array", "items": { "type": "string" } }, "response": { "type": "array", "items": { "type": "object" } }, "review": "裸数组1..100不同ID，一次批量查询后逐ID校验当前session租户、角色与SECURITY范围，混ID整批拒绝，按输入ID顺序返回；参数字段仅状态，不带parameter_summary/parameter_snapshot/request_parameters。Java已拒null/isBlank/超长/重复ID；Mock拒空串并保输入序，纯空白ID的错误分类差异仍见implementationNotes.logs。"
+      "operation": "POST /sym/logsec/batch",
+      "source": {"kind": "magic", "id": "tenant_logsec_batch_post_v1", "file": "magic/api/07.系统管理/22.安全日志/09.批量读取事件.ms", "reviewedSha256": "d33dd2a07916d1f8ee6090be68f2f0057acf4a072ca3292fca07cc75bff2a7b9"},
+      "request": { "type": "array", "items": { "type": "string" } }, "response": { "type": "array", "items": { "type": "object" } }, "review": "裸数组1..100不同ID，一次批量查询后逐ID校验当前session租户、角色与SECURITY范围，混ID整批拒绝，按输入ID顺序返回；参数字段仅状态，不带parameter_summary/parameter_snapshot/request_parameters。Magic 已拒 null/isBlank/超长/重复 ID；Mock拒空串并保输入序，纯空白ID的错误分类差异仍见implementationNotes.logs。"
     },
     {
-      "operation": "GET /sym/logs/security/{id}/items",
-      "source": { "kind": "java", "file": "data-elements-parent/src/main/java/com/linewell/dataelement/feature/logmanagement/LogQueryService.java", "state": "pending-magic", "reason": "安全事件批次明细业务待迁Magic。", "reviewedSha256": "7ed9b6514fa4a35b27f27f89db831bf3b6cd6ee16544dd6d10e29e4da73e4002" },
+      "operation": "GET /sym/logsec/items",
+      "source": {"kind": "magic", "id": "tenant_logsec_items_get_v1", "file": "magic/api/07.系统管理/22.安全日志/07.分页读取批次明细.ms", "reviewedSha256": "608973abf609bafc5c21fe7737114ab4a76ec37c065ad0ffd9c5015c16bd8983"},
       "request": { "type": "object", "required": ["id"] }, "response": { "type": "object", "required": ["list", "total", "page", "size"] }, "review": "父事件按当前租户、角色及SECURITY范围授权，不套默认7天；再按item_no asc分页读取虚构明细，不按行补查，不造可见菜单或组织。"
     },
+    {"operation": "GET /sym/logexport/page", "source": {"kind": "magic", "id": "tenant_logexport_page_get_v1", "file": "magic/api/07.系统管理/23.日志导出/01.分页读取任务.ms", "reviewedSha256": "228b9452f99d02380cd8e367f08e45a3d6c171c4503297f4e190d0062edbe657"}, "request": {"type": "object"}, "response": {"type": "object", "required": ["list", "total", "page", "size"]}, "review": "仅列当前租户本人任务。原 GET /sym/logs/exports 同方法兼容。Mock 两次有效列表读取推进虚构任务，真实任务由后台处理。"},
+    {"operation": "HEAD /sym/logexport/page", "source": {"kind": "magic", "id": "tenant_logexport_page_head_v1", "file": "magic/api/07.系统管理/23.日志导出/02.分页读取任务响应头.ms", "reviewedSha256": "afd0bb5453cca81a92f12727906f19dc5068c30c70e82125e570e274f3eb48fe"}, "request": {"type": "object"}, "response": {"type": "any"}, "review": "复用 GET 的行业会话和本人范围，HTTP 200、JSON 响应头及空正文。Mock 不推进任务状态。"},
     {
-      "operation": "GET /sym/logs/exports",
-      "source": { "kind": "java", "file": "data-elements-parent/src/main/java/com/linewell/dataelement/feature/logmanagement/LogLifecycleService.java", "state": "pending-magic", "reason": "导出任务列表与生命周期业务待迁Magic。", "reviewedSha256": "de820300d7841f20d2af9b202623eb518be9c89798ff1838a3d0cd434f7fe72d" },
-      "request": { "type": "object" }, "response": { "type": "object", "required": ["list", "total", "page", "size"] }, "review": "只列当前租户本人任务，不按ALL扩大所有人；Mock两次合法列表读取推进RUNNING/SUCCESS，生成文件时复用冻结条件与参数投影筛选，故也关联共享函数依赖。真实GET不驱动后台任务；Mock一次筛选后每500行编码，Java每500行offset重读，都不是ID或事务一致性快照。"
-    },
-    {
-      "operation": "POST /sym/logs/exports",
-      "source": { "kind": "java", "file": "data-elements-parent/src/main/java/com/linewell/dataelement/feature/logmanagement/LogLifecycleService.java", "state": "pending-magic", "reason": "在线导出筛选、提交及编排业务待迁Magic。", "reviewedSha256": "de820300d7841f20d2af9b202623eb518be9c89798ff1838a3d0cd434f7fe72d" },
-      "request": { "type": "object", "required": ["kind"], "properties": { "kind": { "type": "string" }, "format": { "type": "string" }, "parameterKeyword": { "type": "any" } } }, "response": { "type": "object", "required": ["id", "status"] }, "review": "返回PENDING；CSV/JSONL、rowLimit<=100000，真实导出复用列表统计selection及共享参数函数。冻结end=min(userEnd,submitCutoff)，事件<end、received_time<=cutoff或null；缺省start从冻结end减7天，不存在默认起点漂移。不是ID/事务快照，提交后迟可见但满足截止条件的记录仍可入选；默认列表end=now+1s与导出end=submitNow不完全同窗。本地Java已补CSV前导空白公式防护及已normalize的created_time回退；JSONL安全快照与旧归档不改，尚未发布本次新源码。"
+      "operation": "POST /sym/logexport/create",
+      "source": {"kind": "magic", "id": "tenant_logexport_create_post_v1", "file": "magic/api/07.系统管理/23.日志导出/03.提交日志导出.ms", "reviewedSha256": "c9f39c29501bee78974ea59ca7be652225f8500932721b4de3e75ef2c1c175cc"},
+      "request": { "type": "object", "required": ["kind"], "properties": { "kind": { "type": "string" }, "format": { "type": "string" }, "parameterKeyword": { "type": "any" } } }, "response": { "type": "object", "required": ["id", "status"] }, "review": "返回PENDING；CSV/JSONL、rowLimit<=100000，行业提交与列表统计共用 Magic 事件条件，后台工作器沿用冻结条件。冻结end=min(userEnd,submitCutoff)，事件<end、received_time<=cutoff或null；缺省start从冻结end减7天，不存在默认起点漂移。不是ID/事务快照，提交后迟可见但满足截止条件的记录仍可入选；默认列表end=now+1s与导出end=submitNow不完全同窗。本地Java已补CSV前导空白公式防护及已normalize的created_time回退；JSONL安全快照与旧归档不改，尚未发布本次新源码。"
     },
     {
       "operation": "GET /sym/logs/exports/{id}/download",
-      "source": { "kind": "java", "file": "data-elements-parent/src/main/java/com/linewell/dataelement/feature/logmanagement/LogLifecycleService.java", "state": "pending-magic", "reason": "下载前本人及范围再校验、有效期与文件完整性业务待迁Magic；二进制传输本身为必要技术适配。", "reviewedSha256": "de820300d7841f20d2af9b202623eb518be9c89798ff1838a3d0cd434f7fe72d" },
+      "source": { "kind": "java", "file": "data-elements-parent/src/main/java/com/linewell/dataelement/feature/logmanagement/LogLifecycleService.java", "state": "pending-magic", "reason": "下载前本人及范围再校验、有效期与文件完整性业务待迁Magic；二进制传输本身为必要技术适配。", "reviewedSha256": "dc939387d70dda68f9dcc320d50684beac13b12e7162c81f3f2b6385d614410b" },
       "request": { "type": "object", "required": ["id"] }, "response": { "type": "string" }, "review": "原始CSV(BOM)或JSONL文件，非JSON成功信封；Content-Type、attachment及no-store；本人同租户、源模块和exports授权、范围未缩窄、24小时及SHA256校验。公共宿主已接parseMockBody/mockResponse，待浏览器验证；本地Java与Mock均在控制符清洗后检查前导空白后的=+@-并加单引号，保留普通文本、逗号和双引号转义；历史时间回退已归一created_time，不用当前时间补造。本次未发布新类，不改已有导出文件或旧归档。"
-    }
+    },
+    {"operation": "HEAD /sym/logauth/page", "source": {"kind": "magic", "id": "tenant_logauth_page_head_v1", "file": "magic/api/07.系统管理/19.登录日志/02.分页读取事件响应头.ms", "reviewedSha256": "4eee25e82ab3551e80bfd505e208c00dec668c0ced20c118e28fb7b9f36e3fc5"}, "request": {"type": "object"}, "response": {"type": "any"}, "review": "与 GET 共用行业会话、授权及查询，HTTP 200、JSON 响应头和空正文。"},
+    {"operation": "HEAD /sym/logauth/stats", "source": {"kind": "magic", "id": "tenant_logauth_stats_head_v1", "file": "magic/api/07.系统管理/19.登录日志/04.统计筛选结果响应头.ms", "reviewedSha256": "7665286be3150945822c5ffe9aaf31dd21758662bfc21b4bdfc75836882d7d6f"}, "request": {"type": "object"}, "response": {"type": "any"}, "review": "与 GET 共用行业会话、授权及查询，HTTP 200、JSON 响应头和空正文。"},
+    {"operation": "HEAD /sym/logauth/detail", "source": {"kind": "magic", "id": "tenant_logauth_detail_head_v1", "file": "magic/api/07.系统管理/19.登录日志/06.查询事件详情响应头.ms", "reviewedSha256": "c87337d19c77cb9e170d7f72cc79107549ea96e52defa0781a255399db6ae18c"}, "request": {"type": "object"}, "response": {"type": "any"}, "review": "与 GET 共用行业会话、授权及查询，HTTP 200、JSON 响应头和空正文。"},
+    {"operation": "HEAD /sym/logauth/items", "source": {"kind": "magic", "id": "tenant_logauth_items_head_v1", "file": "magic/api/07.系统管理/19.登录日志/08.分页读取批次明细响应头.ms", "reviewedSha256": "d9978f08be2be51d807d29d875e11ff7de0f41438088e56d5d0dddffdc459aa6"}, "request": {"type": "object"}, "response": {"type": "any"}, "review": "与 GET 共用行业会话、授权及查询，HTTP 200、JSON 响应头和空正文。"},
+    {"operation": "HEAD /sym/logops/page", "source": {"kind": "magic", "id": "tenant_logops_page_head_v1", "file": "magic/api/07.系统管理/20.操作日志/02.分页读取事件响应头.ms", "reviewedSha256": "03a4202be54e5152b34c1e248e3813771b670db7d97058babc81c526f88f1b51"}, "request": {"type": "object"}, "response": {"type": "any"}, "review": "与 GET 共用行业会话、授权及查询，HTTP 200、JSON 响应头和空正文。"},
+    {"operation": "HEAD /sym/logops/stats", "source": {"kind": "magic", "id": "tenant_logops_stats_head_v1", "file": "magic/api/07.系统管理/20.操作日志/04.统计筛选结果响应头.ms", "reviewedSha256": "6ed72aa3e6cce9cf8c24524d97bd0e08306ec62c05fc89d720736700a688a339"}, "request": {"type": "object"}, "response": {"type": "any"}, "review": "与 GET 共用行业会话、授权及查询，HTTP 200、JSON 响应头和空正文。"},
+    {"operation": "HEAD /sym/logops/detail", "source": {"kind": "magic", "id": "tenant_logops_detail_head_v1", "file": "magic/api/07.系统管理/20.操作日志/06.查询事件详情响应头.ms", "reviewedSha256": "7a6fda208e7bfe253f67e7ac57e4de674b911496aeff726e36378940f4390de6"}, "request": {"type": "object"}, "response": {"type": "any"}, "review": "与 GET 共用行业会话、授权及查询，HTTP 200、JSON 响应头和空正文。"},
+    {"operation": "HEAD /sym/logops/items", "source": {"kind": "magic", "id": "tenant_logops_items_head_v1", "file": "magic/api/07.系统管理/20.操作日志/08.分页读取批次明细响应头.ms", "reviewedSha256": "86b40cc74217b4b9e5c4fbbbf45480e621727b8a1d9ea72a17bd2d0a45df583e"}, "request": {"type": "object"}, "response": {"type": "any"}, "review": "与 GET 共用行业会话、授权及查询，HTTP 200、JSON 响应头和空正文。"},
+    {"operation": "HEAD /sym/logreq/page", "source": {"kind": "magic", "id": "tenant_logreq_page_head_v1", "file": "magic/api/07.系统管理/21.接口日志/02.分页读取事件响应头.ms", "reviewedSha256": "c681441d7a4580ee1d17e475d435d2c6e60bf0de834f03e184eebb6835473262"}, "request": {"type": "object"}, "response": {"type": "any"}, "review": "与 GET 共用行业会话、授权及查询，HTTP 200、JSON 响应头和空正文。"},
+    {"operation": "HEAD /sym/logreq/stats", "source": {"kind": "magic", "id": "tenant_logreq_stats_head_v1", "file": "magic/api/07.系统管理/21.接口日志/04.统计筛选结果响应头.ms", "reviewedSha256": "3478f3c7040f5fc39a5528a7925fc6d6d16f3013879769ddb0e2756717e0aa16"}, "request": {"type": "object"}, "response": {"type": "any"}, "review": "与 GET 共用行业会话、授权及查询，HTTP 200、JSON 响应头和空正文。"},
+    {"operation": "HEAD /sym/logreq/detail", "source": {"kind": "magic", "id": "tenant_logreq_detail_head_v1", "file": "magic/api/07.系统管理/21.接口日志/06.查询事件详情响应头.ms", "reviewedSha256": "f91c1539cf0b9e3870c49bc92a825bc156d94ce96c4d3c613cd640fb261aebf9"}, "request": {"type": "object"}, "response": {"type": "any"}, "review": "与 GET 共用行业会话、授权及查询，HTTP 200、JSON 响应头和空正文。"},
+    {"operation": "HEAD /sym/logreq/items", "source": {"kind": "magic", "id": "tenant_logreq_items_head_v1", "file": "magic/api/07.系统管理/21.接口日志/08.分页读取批次明细响应头.ms", "reviewedSha256": "1a01f19828ffeff0f917ea3ab0f7b788980ff076fcacb54f4428538391533d16"}, "request": {"type": "object"}, "response": {"type": "any"}, "review": "与 GET 共用行业会话、授权及查询，HTTP 200、JSON 响应头和空正文。"},
+    {"operation": "HEAD /sym/logsec/page", "source": {"kind": "magic", "id": "tenant_logsec_page_head_v1", "file": "magic/api/07.系统管理/22.安全日志/02.分页读取事件响应头.ms", "reviewedSha256": "36d54e65734ad2b960973793f9f26c513b4b29625e41f7011b519e09396b7ce4"}, "request": {"type": "object"}, "response": {"type": "any"}, "review": "与 GET 共用行业会话、授权及查询，HTTP 200、JSON 响应头和空正文。"},
+    {"operation": "HEAD /sym/logsec/stats", "source": {"kind": "magic", "id": "tenant_logsec_stats_head_v1", "file": "magic/api/07.系统管理/22.安全日志/04.统计筛选结果响应头.ms", "reviewedSha256": "247288c4e94387cc33233112abde0f4e354e83d103fc1db3cccdd6fa8f4ab918"}, "request": {"type": "object"}, "response": {"type": "any"}, "review": "与 GET 共用行业会话、授权及查询，HTTP 200、JSON 响应头和空正文。"},
+    {"operation": "HEAD /sym/logsec/detail", "source": {"kind": "magic", "id": "tenant_logsec_detail_head_v1", "file": "magic/api/07.系统管理/22.安全日志/06.查询事件详情响应头.ms", "reviewedSha256": "143e769309a321cb18f23cfb9abbcf97af578812703eacf9bb0499261c537bd1"}, "request": {"type": "object"}, "response": {"type": "any"}, "review": "与 GET 共用行业会话、授权及查询，HTTP 200、JSON 响应头和空正文。"},
+    {"operation": "HEAD /sym/logsec/items", "source": {"kind": "magic", "id": "tenant_logsec_items_head_v1", "file": "magic/api/07.系统管理/22.安全日志/08.分页读取批次明细响应头.ms", "reviewedSha256": "3b6ea61fa19d42216367f48bfb15ad095d14818ec5915654ff0225b3d61f118a"}, "request": {"type": "object"}, "response": {"type": "any"}, "review": "与 GET 共用行业会话、授权及查询，HTTP 200、JSON 响应头和空正文。"}
   ],
   "dependencies": [
+    {"operations": ["GET /sym/logauth/page", "GET /sym/logauth/stats", "GET /sym/logops/page", "GET /sym/logops/stats", "GET /sym/logreq/page", "GET /sym/logreq/stats", "GET /sym/logsec/page", "GET /sym/logsec/stats", "HEAD /sym/logauth/page", "HEAD /sym/logauth/stats", "HEAD /sym/logops/page", "HEAD /sym/logops/stats", "HEAD /sym/logreq/page", "HEAD /sym/logreq/stats", "HEAD /sym/logsec/page", "HEAD /sym/logsec/stats", "POST /sym/logexport/create"], "source": {"kind": "magic-function", "id": "log_tenant_event_criteria_v1", "path": "/common/logeventcriteria", "file": "magic/function/01.通用函数/96.解析行业日志事件条件.ms", "reviewedSha256": "9a2d63e5aa3384533eac7318be171d475b3d324b855f20389ef185111ebde2ae"}, "review": "统一校验行业事件检索与导出提交的条件和时间窗口。"},
+    {"operations": ["GET /sym/logexport/page", "HEAD /sym/logexport/page"], "source": {"kind": "magic-function", "id": "log_tenant_lifecycle_page_v1", "file": "magic/function/01.通用函数/93.分页读取行业日志任务.ms", "reviewedSha256": "bbf9f65cd0457bbef2644503a5f8ed4c1560065d6dcbca5034337f9acd2bae55", "path": "/common/logtaskpage"}, "review": "共用行业任务范围与结构化分页。"},
+    {"operations": ["POST /sym/logexport/create", "GET /sym/logexport/page", "HEAD /sym/logexport/page", "GET /sym/logauth/detail", "GET /sym/logauth/items", "GET /sym/logauth/page", "GET /sym/logauth/stats", "GET /sym/logops/detail", "GET /sym/logops/items", "GET /sym/logops/page", "GET /sym/logops/stats", "GET /sym/logreq/detail", "GET /sym/logreq/items", "GET /sym/logreq/page", "GET /sym/logreq/stats", "GET /sym/logsec/detail", "GET /sym/logsec/items", "GET /sym/logsec/page", "GET /sym/logsec/stats", "HEAD /sym/logauth/detail", "HEAD /sym/logauth/items", "HEAD /sym/logauth/page", "HEAD /sym/logauth/stats", "HEAD /sym/logops/detail", "HEAD /sym/logops/items", "HEAD /sym/logops/page", "HEAD /sym/logops/stats", "HEAD /sym/logreq/detail", "HEAD /sym/logreq/items", "HEAD /sym/logreq/page", "HEAD /sym/logreq/stats", "HEAD /sym/logsec/detail", "HEAD /sym/logsec/items", "HEAD /sym/logsec/page", "HEAD /sym/logsec/stats", "POST /sym/logauth/batch", "POST /sym/logops/batch", "POST /sym/logreq/batch", "POST /sym/logsec/batch"], "source": {"kind": "magic-function", "id": "log_tenant_legacy_response_v1", "path": "/common/logresponse", "file": "magic/function/01.通用函数/92.行业日志原响应.ms", "reviewedSha256": "dbf5f2a1537928c53bfecb173e7ba93621255ab62acaa461229c7be0143d63db"}, "review": "行业日志入口共用原 HTTP 成功、校验失败和权限拒绝响应。"},
+    {"operations": ["GET /sym/logauth/detail", "GET /sym/logauth/items", "GET /sym/logops/detail", "GET /sym/logops/items", "GET /sym/logreq/detail", "GET /sym/logreq/items", "GET /sym/logsec/detail", "GET /sym/logsec/items", "HEAD /sym/logauth/detail", "HEAD /sym/logauth/items", "HEAD /sym/logops/detail", "HEAD /sym/logops/items", "HEAD /sym/logreq/detail", "HEAD /sym/logreq/items", "HEAD /sym/logsec/detail", "HEAD /sym/logsec/items", "POST /sym/logauth/batch", "POST /sym/logops/batch", "POST /sym/logreq/batch", "POST /sym/logsec/batch"], "source": {"kind": "magic-function", "id": "log_tenant_event_objects_v1", "path": "/common/logeventobjects", "file": "magic/function/01.通用函数/91.按标识读取行业日志事件.ms", "reviewedSha256": "26805f861805f3f20f67ad2d4796c0725f700af7e1c2865d80f82d70cf512236"}, "review": "四类行业日志共用详情、批读及父事件范围内的批次明细读取。验证逐 ID 可见性并保持输入顺序。"},
+    {"operations": ["GET /sym/logauth/page", "GET /sym/logauth/stats", "GET /sym/logops/page", "GET /sym/logops/stats", "GET /sym/logreq/page", "GET /sym/logreq/stats", "GET /sym/logsec/page", "GET /sym/logsec/stats", "HEAD /sym/logauth/page", "HEAD /sym/logauth/stats", "HEAD /sym/logops/page", "HEAD /sym/logops/stats", "HEAD /sym/logreq/page", "HEAD /sym/logreq/stats", "HEAD /sym/logsec/page", "HEAD /sym/logsec/stats"], "source": {"kind": "magic-function", "id": "log_tenant_event_search_v1", "path": "/common/logeventsearch", "file": "magic/function/01.通用函数/90.分页统计行业日志事件.ms", "reviewedSha256": "e619cb1ddbd7e8d54b6e4b130be69b72fb1e3030123bdb4fe94341b0b1bf8c89"}, "review": "四类行业日志分页和统计共用授权、日期、关键词和精确筛选，兼容历史上海时间与无事件统计。"},
+    {"operations": ["GET /sym/logauth/detail", "GET /sym/logauth/items", "GET /sym/logauth/page", "GET /sym/logauth/stats", "GET /sym/logops/detail", "GET /sym/logops/items", "GET /sym/logops/page", "GET /sym/logops/stats", "GET /sym/logreq/detail", "GET /sym/logreq/items", "GET /sym/logreq/page", "GET /sym/logreq/stats", "GET /sym/logsec/detail", "GET /sym/logsec/items", "GET /sym/logsec/page", "GET /sym/logsec/stats", "HEAD /sym/logauth/detail", "HEAD /sym/logauth/items", "HEAD /sym/logauth/page", "HEAD /sym/logauth/stats", "HEAD /sym/logops/detail", "HEAD /sym/logops/items", "HEAD /sym/logops/page", "HEAD /sym/logops/stats", "HEAD /sym/logreq/detail", "HEAD /sym/logreq/items", "HEAD /sym/logreq/page", "HEAD /sym/logreq/stats", "HEAD /sym/logsec/detail", "HEAD /sym/logsec/items", "HEAD /sym/logsec/page", "HEAD /sym/logsec/stats", "POST /sym/logauth/batch", "POST /sym/logops/batch", "POST /sym/logreq/batch", "POST /sym/logsec/batch"], "source": {"kind": "magic-function", "id": "log_tenant_event_query_v1", "path": "/common/logeventquery", "file": "magic/function/01.通用函数/89.构造行业日志事件查询.ms", "reviewedSha256": "000c8bae6c7c12ab3152557d6e81eda3bcdbecbccf0d3fa0c5bd712decf08389"}, "review": "为行业日志分页、统计、详情和批读构造受信任会话范围限定的查询及公开列，详情才投影安全快照。"},
+    {"operations": ["POST /sym/logexport/create", "GET /sym/logexport/page", "HEAD /sym/logexport/page", "GET /sym/logs/capabilities", "HEAD /sym/logs/capabilities", "GET /sym/logs/components", "HEAD /sym/logs/components", "GET /sym/logauth/detail", "GET /sym/logauth/items", "GET /sym/logauth/page", "GET /sym/logauth/stats", "GET /sym/logops/detail", "GET /sym/logops/items", "GET /sym/logops/page", "GET /sym/logops/stats", "GET /sym/logreq/detail", "GET /sym/logreq/items", "GET /sym/logreq/page", "GET /sym/logreq/stats", "GET /sym/logsec/detail", "GET /sym/logsec/items", "GET /sym/logsec/page", "GET /sym/logsec/stats", "HEAD /sym/logauth/detail", "HEAD /sym/logauth/items", "HEAD /sym/logauth/page", "HEAD /sym/logauth/stats", "HEAD /sym/logops/detail", "HEAD /sym/logops/items", "HEAD /sym/logops/page", "HEAD /sym/logops/stats", "HEAD /sym/logreq/detail", "HEAD /sym/logreq/items", "HEAD /sym/logreq/page", "HEAD /sym/logreq/stats", "HEAD /sym/logsec/detail", "HEAD /sym/logsec/items", "HEAD /sym/logsec/page", "HEAD /sym/logsec/stats", "POST /sym/logauth/batch", "POST /sym/logops/batch", "POST /sym/logreq/batch", "POST /sym/logsec/batch"], "source": {"kind": "magic-function", "id": "log_tenant_grants_v1", "path": "/common/loggrants", "file": "magic/function/01.通用函数/88.读取行业日志授权.ms", "reviewedSha256": "f74721f95dfc1ee26eecec33af185b4dcc92440094a0ca55a355d0039b0974d0"}, "review": "行业日志导航、下载和后台任务共用当前有效账号、角色、菜单授权及数据范围。调用方提供可信会话或任务主体和应用。"},
+    {"operations": ["GET /sym/logs/components", "HEAD /sym/logs/components"], "source": {"kind": "magic-function", "id": "log_component_bundle_v1", "path": "/common/logComponentBundle", "file": "magic/function/01.通用函数/86.读取现役日志组件.ms", "reviewedSha256": "2747b56a98595117d80d1d4a5a017ad65d61746c62db8c2aec3ee9ca0713d329"}, "review": "共享行业和平台的单条已授权组件读取，使用实际组件的编译字段。"},
+    {"operations": ["GET /sym/logs/capabilities", "HEAD /sym/logs/capabilities", "GET /sym/logs/components", "HEAD /sym/logs/components"], "source": {"kind": "magic-function", "id": "log_tenant_capabilities_v1", "path": "/common/logTenantCapabilities", "file": "magic/function/01.通用函数/87.计算当前行业日志能力.ms", "reviewedSha256": "6161d8bfc4cd4e14a934e274c0972b233602306348e6d6ab275b5b049161eba2"}, "review": "现用行业会话、角色和有效祖先，归档及策略限同一角色全量权限。"},
+    {
+      "operations": [
+        "GET /dst/collect/changes",
+        "HEAD /dst/collect/changes",
+        "GET /dst/collect/snapshot",
+        "HEAD /dst/collect/snapshot"
+      ],
+      "source": {
+        "kind": "magic-function",
+        "id": "collect_fn_historyargs_v1",
+        "path": "/collect/historyargs",
+        "file": "magic/function/16.表采集/11.读取采集历史分页参数.ms",
+        "reviewedSha256": "deebb7cd2b69b33db7fa384524121e544ce96835604af0e48f4afe22dd3bb933"
+      },
+      "review": "登记查询的热刷新与编排契约同批核对。"
+    },
+    {
+      "operations": [
+        "GET /dst/collect/changes",
+        "HEAD /dst/collect/changes",
+        "GET /dst/collect/snapshot",
+        "HEAD /dst/collect/snapshot"
+      ],
+      "source": {
+        "kind": "magic-function",
+        "id": "collect_fn_deleted_v1",
+        "path": "/collect/deleted",
+        "file": "magic/function/16.表采集/12.读取采集任务差异原文.ms",
+        "reviewedSha256": "f99a30769015369be7e0228d217b68f3527c0a031828078a506e5670d0a1eeb0"
+      },
+      "review": "登记查询的热刷新与编排契约同批核对。"
+    },
+    {
+      "operations": [
+        "GET /dst/collect/changes",
+        "HEAD /dst/collect/changes"
+      ],
+      "source": {
+        "kind": "magic-function",
+        "id": "collect_fn_changes_v1",
+        "path": "/collect/changes",
+        "file": "magic/function/16.表采集/13.分页读取采集差异.ms",
+        "reviewedSha256": "5fe82c9e2f1d08eaf3f71ca6c4aed402df043af3316327354497701850584c05"
+      },
+      "review": "登记查询的热刷新与编排契约同批核对。"
+    },
+    {
+      "operations": [
+        "GET /dst/collect/snapshot",
+        "HEAD /dst/collect/snapshot"
+      ],
+      "source": {
+        "kind": "magic-function",
+        "id": "collect_fn_snapshot_v1",
+        "path": "/collect/snapshot",
+        "file": "magic/function/16.表采集/14.分页读取待标注表快照.ms",
+        "reviewedSha256": "4106799602207fbbc29b6b93ef4b7162d06c214fa2efed014dff87c4ba7b9c6d"
+      },
+      "review": "登记查询的热刷新与编排契约同批核对。"
+    },
+    {
+      "operations": [
+        "GET /dst/collect/status",
+        "HEAD /dst/collect/status"
+      ],
+      "source": {
+        "kind": "magic-function",
+        "id": "collect_fn_scope_v1",
+        "path": "/collect/scope",
+        "file": "magic/function/16.表采集/01.核对采集数据源范围.ms",
+        "reviewedSha256": "00b068c145e40650d96c769206097b1b67338ed16ff2ea994d25ecc462efb9ad"
+      },
+      "review": "登记状态 GET 与 HEAD 共用采集范围、最近任务和旧响应。"
+    },
+    {
+      "operations": [
+        "GET /dst/collect/status",
+        "HEAD /dst/collect/status"
+      ],
+      "source": {
+        "kind": "magic-function",
+        "id": "collect_fn_response_v1",
+        "path": "/collect/response",
+        "file": "magic/function/16.表采集/02.采集接口响应.ms",
+        "reviewedSha256": "27c2fcb8739ff7282f30fb1e6f982005ad4db47848c573645d1b4a57e51b2867"
+      },
+      "review": "登记状态 GET 与 HEAD 共用采集范围、最近任务和旧响应。"
+    },
+    {
+      "operations": [
+        "GET /dst/collect/status",
+        "HEAD /dst/collect/status"
+      ],
+      "source": {
+        "kind": "magic-function",
+        "id": "collect_fn_job_v1",
+        "path": "/collect/job",
+        "file": "magic/function/16.表采集/03.装配采集任务状态.ms",
+        "reviewedSha256": "90da44c9334b2e7a7bb608089db6176b22477ca21a896ccad264d6e22f103fcb"
+      },
+      "review": "登记状态 GET 与 HEAD 共用采集范围、最近任务和旧响应。"
+    },
+    {
+      "operations": [
+        "GET /dst/collect/status",
+        "HEAD /dst/collect/status"
+      ],
+      "source": {
+        "kind": "magic-function",
+        "id": "collect_fn_jobs_v1",
+        "path": "/collect/jobs",
+        "file": "magic/function/16.表采集/04.定义采集任务读取列.ms",
+        "reviewedSha256": "037cdb4dcc72be4ce27353f8e929692aa93594aec4f7a990e28f313b70e2b6b0"
+      },
+      "review": "登记状态 GET 与 HEAD 共用采集范围、最近任务和旧响应。"
+    },
+    {
+      "operations": [
+        "GET /dst/collect/status",
+        "HEAD /dst/collect/status"
+      ],
+      "source": {
+        "kind": "magic-function",
+        "id": "collect_fn_status_v1",
+        "path": "/collect/status",
+        "file": "magic/function/16.表采集/05.读取单个采集状态.ms",
+        "reviewedSha256": "b6b6205e1eba472b1e96effbcea06d4b24cdb35d7663082640ee4b826fef853e"
+      },
+      "review": "登记状态 GET 与 HEAD 共用采集范围、最近任务和旧响应。"
+    },
     {
       "operations": ["POST /dst/db/srcsave"],
       "source": {
@@ -741,37 +1104,147 @@
     },
     {
       "operations": [
-        "GET /sym/logs/auth",
-        "GET /sym/logs/auth/statistics",
-        "GET /sym/logs/auth/{id}",
-        "POST /sym/logs/auth/batch",
-        "GET /sym/logs/auth/{id}/items",
-        "GET /sym/logs/operations",
-        "GET /sym/logs/operations/statistics",
-        "GET /sym/logs/operations/{id}",
-        "POST /sym/logs/operations/batch",
-        "GET /sym/logs/operations/{id}/items",
-        "GET /sym/logs/requests",
-        "GET /sym/logs/requests/statistics",
-        "GET /sym/logs/requests/{id}",
-        "POST /sym/logs/requests/batch",
-        "GET /sym/logs/requests/{id}/items",
-        "GET /sym/logs/security",
-        "GET /sym/logs/security/statistics",
-        "GET /sym/logs/security/{id}",
-        "POST /sym/logs/security/batch",
-        "GET /sym/logs/security/{id}/items",
-        "POST /sym/logs/exports",
-        "GET /sym/logs/exports"
+        "GET /sym/logauth/page",
+        "GET /sym/logauth/stats",
+        "GET /sym/logauth/detail",
+        "POST /sym/logauth/batch",
+        "GET /sym/logauth/items",
+        "GET /sym/logops/page",
+        "GET /sym/logops/stats",
+        "GET /sym/logops/detail",
+        "POST /sym/logops/batch",
+        "GET /sym/logops/items",
+        "GET /sym/logreq/page",
+        "GET /sym/logreq/stats",
+        "GET /sym/logreq/detail",
+        "POST /sym/logreq/batch",
+        "GET /sym/logreq/items",
+        "GET /sym/logsec/page",
+        "GET /sym/logsec/stats",
+        "GET /sym/logsec/detail",
+        "POST /sym/logsec/batch",
+        "GET /sym/logsec/items",
+        "POST /sym/logexport/create",
+        "GET /sym/logexport/page"
       ],
       "source": {
         "kind": "magic-function",
         "file": "magic/function/01.通用函数/19.日志参数关键词条件.ms",
         "id": "log_parameter_condition_v1",
         "path": "/common/log-parameter-keyword-condition",
-        "reviewedSha256": "90baf0114b4f75c65bea53092ef299abf52345d24adca204262413a6250998ba"
+        "reviewedSha256": "f38699261edc1aa4e07594ec21eb48133ca377e9b2d26145760b30f05ea0a9ed"
       },
-      "review": "非HTTP共享函数依赖，不增加56项HTTP接口数；关联全部20项LogQueryService来源operation及导出提交、Mock任务列表驱动生成。Java selection先施加可信租户与角色范围，再调用函数取得结构化contains谓词并按AND编译为大小写不敏感的字面包含；函数不查库、不接受客户端权限范围。缺失/null/空字符串无条件，其余仅string<=200 UTF-16单位、原样不trim；纯空格也是过滤。checkFunctionDependency实际读取源码摘要与function group.json链，校验元数据ID和完整函数路径；此校验不代替语义、SQL执行或浏览器验收。"
+      "review": "非HTTP共享函数依赖，不增加56项HTTP接口数；关联全部20项LogQueryService来源operation及导出提交、Mock任务列表驱动生成。Java selection先施加可信租户与角色范围，再调用函数取得结构化contains谓词并按AND编译为大小写不敏感的字面包含；函数不查库、不接受客户端权限范围。缺失/null/空字符串无条件，其余仅string<=200 UTF-16单位、原样不trim；纯空格也是过滤。checkFunctionDependency实际读取源码摘要与function group.json链，校验元数据ID和完整函数路径；此校验不代替语义、SQL执行或浏览器验收。已用 86 与 8088 编辑器回读核对函数，当前摘要更新仅对应存储序列化差异。"
+    },
+    {
+      "source": {
+        "kind": "magic-function",
+        "id": "portal_fn_response_v1",
+        "file": "magic/function/09.租户账号/03.门户旧响应信封.ms",
+        "reviewedSha256": "214f54613c268e518d97c1399c1341848c56629c3b4f402f7b3d961c151ee736",
+        "path": "/tenant-account/response"
+      },
+      "operations": [
+        "GET /portal/sso/options",
+        "HEAD /portal/sso/options",
+        "GET /portal/sso/settings",
+        "HEAD /portal/sso/settings",
+        "GET /portal/sso/session",
+        "HEAD /portal/sso/session",
+        "GET /portal/sso/tenants",
+        "HEAD /portal/sso/tenants",
+        "POST /portal/sso/switch"
+      ],
+      "review": "门户选项、配置、会话、可用租户和切换共用原 Java HTTP 响应及异常格式。"
+    },
+    {
+      "source": {
+        "kind": "magic-function",
+        "id": "portal_fn_profile_v1",
+        "file": "magic/function/09.租户账号/04.读取门户租户资料.ms",
+        "reviewedSha256": "ac798c875e114accc8e82a5b0851b172898d0885a60f2da9a087ee05c306f296",
+        "path": "/tenant-account/profile"
+      },
+      "operations": [
+        "GET /portal/sso/session",
+        "HEAD /portal/sso/session",
+        "GET /portal/sso/tenants",
+        "HEAD /portal/sso/tenants",
+        "POST /portal/sso/switch"
+      ],
+      "review": "当前会话、可用租户和切换共用控制库租户投影。按可信租户主键查询，复用原字段及空对象契约。"
+    },
+    {
+      "source": {
+        "kind": "magic-function",
+        "id": "portal_fn_available_v1",
+        "file": "magic/function/09.租户账号/05.读取会话可用租户.ms",
+        "reviewedSha256": "6e07ef38895f868e016b291943997b87d8e2a9d6ede289ff7fa60585a638d770",
+        "path": "/tenant-account/available"
+      },
+      "operations": [
+        "GET /portal/sso/session",
+        "HEAD /portal/sso/session",
+        "GET /portal/sso/tenants",
+        "HEAD /portal/sso/tenants"
+      ],
+      "review": "会话详情和可用租户共用。LOCAL 仅返回本租户。旧共享会话保留开启条件、成员检查和账号来源配置校验。"
+    },
+    {
+      "source": {
+        "kind": "magic-function",
+        "id": "portal_fn_options_v1",
+        "file": "magic/function/09.租户账号/06.读取登录行业选项.ms",
+        "reviewedSha256": "635bd882c710b3119b6652d75b21f238c9159ff1019cc0606103634e6145d3c5",
+        "path": "/tenant-account/options"
+      },
+      "operations": [
+        "GET /portal/sso/options",
+        "HEAD /portal/sso/options"
+      ],
+      "review": "GET 和 HEAD 登录行业选项共用，从控制库读取启用租户的公开标识、编码和名称。"
+    },
+    {
+      "source": {
+        "kind": "magic-function",
+        "id": "portal_fn_settings_v1",
+        "file": "magic/function/09.租户账号/07.读取行业登录设置.ms",
+        "reviewedSha256": "11db4fb84e9ac1adc839f222a2006c2a75ba8a54603549dfb45e82a84252a91c",
+        "path": "/tenant-account/settings"
+      },
+      "operations": [
+        "GET /portal/sso/settings",
+        "HEAD /portal/sso/settings"
+      ],
+      "review": "GET 和 HEAD 行业登录设置共用，核验启用租户后通过现有缓存读取其公开字段，不创建会话。"
+    },
+    {
+      "source": {
+        "kind": "magic-function",
+        "id": "portal_fn_session_v1",
+        "file": "magic/function/09.租户账号/08.读取门户当前会话.ms",
+        "reviewedSha256": "93b3ce0517c098d3f408fb843ee8e38a1b41f45d33e7a8993437604e639bd833",
+        "path": "/tenant-account/session"
+      },
+      "operations": [
+        "GET /portal/sso/session",
+        "HEAD /portal/sso/session"
+      ],
+      "review": "GET 和 HEAD 当前会话共用，使用可信租户与当前令牌账号源返回租户资料和可用租户。"
+    },
+    {
+      "source": {
+        "kind": "magic-function",
+        "id": "portal_fn_tenants_v1",
+        "file": "magic/function/09.租户账号/09.读取门户可切换租户.ms",
+        "reviewedSha256": "43042324abc5eddda81bb4b7918ca281a027f67e4da37a311a463db673bf838a",
+        "path": "/tenant-account/tenants"
+      },
+      "operations": [
+        "GET /portal/sso/tenants",
+        "HEAD /portal/sso/tenants"
+      ],
+      "review": "GET 和 HEAD 可用租户共用，按行业会话的账号来源和成员资格读取。"
     }
   ],
   "implementationNotes": {
@@ -782,7 +1255,7 @@
     },
     "logs": {
       "reviewDate": "2026-11-13",
-      "scope": "共56项HTTP契约，其中25项日志：四类事件各5项，加能力、组件和3项导出。日志的非HTTP共享函数依赖关联20项查询来源operation及2项导出operation。查询、组件读取及导出业务仍为pending-magic，不因采集技术保留而扩大Java业务保留范围。发布与行为状态以本说明为准。",
+      "scope": "日志有27项HTTP契约：四类事件各5项，加能力及组件的 GET、HEAD 和3项导出。日志的非HTTP共享函数依赖关联20项查询来源operation及2项导出operation。查询及导出业务仍为pending-magic，日志能力和组件读取已迁到 Magic，不因采集技术保留而扩大Java业务保留范围。发布与行为状态以本说明为准。",
       "schemaCompatibility": "request描述归一后的query/path参数或原始JSON请求体，GET分页数字在HTTP中以十进制query字符串传递；response描述成功信封的data，下载例外为原始文件正文。只使用validateShape支持的object/array/string/number/boolean/any及required/properties/items，不使用未支持的$ref、类型数组、oneOf或假装生效的enum/maxLength等字段。parameterKeyword用any兼容null，但仅null或string的约束、200 UTF-16单位、六态、范围及唯一性仍须行为测试验证；any不是允许任意参数类型。checkContracts只校验HTTP来源身份/摘要及dependencies的operation关联、函数摘要、元数据ID与分组完整路径，不自动验证本说明、禁止响应字段或SQL执行语义。",
       "envelope": {
         "success": "HTTP 200，{code:0,success:true,data:业务结果}；契约response是data，不是二次包裹的信封。",
@@ -794,11 +1267,35 @@
       "summaryProjection": "列表与batch仅返回展示摘要：tid、event_time/created_time、legacy、category、actor_kind/actor_id/actor_account/actor_name/actor_org_id/actor_org_name、menu_id/menu_path/page_route/operation_name/function_code、action_code、target_type/target_id/target_name、result/reason_code、ip/user_agent/duration_ms、trace_id/request_id/session_ref/http_status/business_code、total_count/success_count/failure_count、source_app/batch_id/task_id/route_path。operations/requests/security参数字段只有parameter_capture_status；auth表不含任何参数列，摘要也无参数状态。所有列表/batch均无parameter_summary/parameter_snapshot/request_parameters/details/items/parameter_search_text或租户内部字段；Mock已删除种子parameter_summary并对齐此投影，不逐行请求详情。",
       "parameterContract": {
         "state": "local-86-published-verified-with-boundaries",
-        "capability": "requestParameters仅在当前行业会话具备operations或requests时追加；不是独立日志模块，不授予auth/security参数检索，也不扩展IDAAS平台身份域。LogController当前已具备此能力追加条件。",
+        "capability": "requestParameters仅在当前行业会话具备operations或requests时追加；不是独立日志模块，不授予auth/security参数检索，也不扩展IDAAS平台身份域。行业日志能力的共享 Magic 函数追加此项。",
         "parameterKeyword": "missing/null/空字符串返回无条件；其余必须string且<=200 UTF-16单位，原样不trim，纯空格也作一个完整字面过滤。非空仅支持行业operations/requests及对应导出；不拆词，contains大小写不敏感，中文、引号、反斜杠、空格、%、_、!不解释为SQL通配符或正则。Java selection先施加租户角色范围再调用顶层dependencies登记的Magic函数，将结构化contains谓词与keyword/result/时间及旧精确条件AND组合，在count/statistics/排序/分页及导出截断前筛选。CAPTURED/PARTIAL按安全path/query/body/verified的路径=叶值换行投影，不搜JSON.stringify；排除[REDACTED]/[OMITTED]、notices/状态/摘要及未采集的顶层null。LEGACY不伪造新搜索内容，仍支持旧参数精确白名单。",
         "legacyExactMatch": {
-          "names": ["id", "tid", "taskId", "sourceTableId", "targetTableId", "targetDbId", "tableId", "datasourceId", "pipelineId", "dryRun", "batchDryRun", "deleteTargetTable", "confirmUnlinkedTarget", "checkPhysicalExistence", "taskName", "deletedTaskId", "deletedTaskName"],
-          "booleans": ["dryRun", "batchDryRun", "deleteTargetTable", "confirmUnlinkedTarget", "checkPhysicalExistence"],
+          "names": [
+            "id",
+            "tid",
+            "taskId",
+            "sourceTableId",
+            "targetTableId",
+            "targetDbId",
+            "tableId",
+            "datasourceId",
+            "pipelineId",
+            "dryRun",
+            "batchDryRun",
+            "deleteTargetTable",
+            "confirmUnlinkedTarget",
+            "checkPhysicalExistence",
+            "taskName",
+            "deletedTaskId",
+            "deletedTaskName"
+          ],
+          "booleans": [
+            "dryRun",
+            "batchDryRun",
+            "deleteTargetTable",
+            "confirmUnlinkedTarget",
+            "checkPhysicalExistence"
+          ],
           "semantics": "旧parameterName+parameterValue成对保留，精确匹配白名单，不改为模糊。名称<=64；值读取上限510个UTF-16单位且有效值<=255个Unicode码点；标识类必须[a-zA-Z0-9_-]{1,64}，布尔值只接受小写true/false；taskName/deletedTaskName为安全文本。敏感原文在检索前拒绝，不能先掩码再命中安全旧索引；已脱敏合法值仍可按旧契约匹配，该旁路修正已有断言并部署本机86。与新parameterKeyword及普通筛选同时使用时仍为AND。taskName/deletedTaskId/deletedTaskName属于服务端核实事实，删除结果不能由请求中的ID或dryRun推断；预检不声称删除已执行。"
         },
         "snapshot": "operations/requests/security详情已读取解析新列，parameter_snapshot必须为对象而非JSON字符串：version=1、status六态EMPTY/CAPTURED/PARTIAL/OMITTED/FAILED/LEGACY、path/query/verified对象、body任意合法JSON（含数组、中文嵌套、false、0、null）、notices字符串数组。EMPTY无参数，CAPTURED已采集，PARTIAL仅保留安全部分，OMITTED策略省略，FAILED采集失败，LEGACY历史未采集；不伪造未采集正文，采集失败不等于业务失败。Mock security使用OMITTED且不开放参数检索；auth表无参数列，详情不要求也不返回参数对象或状态，不伪造OMITTED对象。",
@@ -839,43 +1336,50 @@
   },
   "technicalRetention": [
     {
-      "kind": "java", "state": "technical-retained",
+      "kind": "java",
+      "state": "technical-retained",
       "file": "data-elements-parent/src/main/java/com/linewell/dataelement/platform/audit/AuditMagicRequestInterceptor.java",
       "reviewedSha256": "73c1aafe8b3e805efc770de9119cb35d0433ff0747df72d55579bdb58b700afe",
       "reason": "Magic请求生命周期元数据和已解析path/query/body的技术采集入口，跳过编辑器测试/调试，不重读请求流；不是查询/导出业务HTTP条目。"
     },
     {
-      "kind": "java", "state": "technical-retained",
+      "kind": "java",
+      "state": "technical-retained",
       "file": "data-elements-parent/src/main/java/com/linewell/dataelement/platform/audit/AuditWebInterceptor.java",
       "reviewedSha256": "198ac943cb7dedf67439fc67a2a7e2d9e7956521034d890f42564555e7e36909",
       "reason": "MVC前后置生命周期采集、耗时/HTTP结果及失败不覆盖业务错误的技术兜底；不据此保留日志筛选、权限决策或导出编排。"
     },
     {
-      "kind": "java", "state": "technical-retained",
+      "kind": "java",
+      "state": "technical-retained",
       "file": "data-elements-parent/src/main/java/com/linewell/dataelement/platform/audit/AuditRecorder.java",
       "reviewedSha256": "be1b100b8b8572ef66a9ef605c1c9e38c8bc3ac75ed58987f4b487b2d314d463",
-      "reason": "可信主体事件封装、脱敏快照写入、追加审计及有界异步采集/异常补偿为必要技术原语；当前请求因既有策略排除参数时记OMITTED，不误记为历史LEGACY，仍不采集正文或扩大IDAAS范围。该状态修正补充录制器回归和只读运行验证，不改变既有Mock六态模型。仅保留这些技术职责，查询、统计、组件读取、导出提交/状态业务仍pending-magic。"
+      "reason": "可信主体事件封装、脱敏快照写入、追加审计及有界异步采集/异常补偿为必要技术原语；当前请求因既有策略排除参数时记OMITTED，不误记为历史LEGACY，仍不采集正文或扩大IDAAS范围。该状态修正补充录制器回归和只读运行验证，不改变既有Mock六态模型。仅保留这些技术职责，查询、统计、导出提交及状态业务仍待迁移。"
     },
     {
-      "kind": "java", "state": "technical-retained",
+      "kind": "java",
+      "state": "technical-retained",
       "file": "data-elements-parent/src/main/java/com/linewell/dataelement/platform/audit/AuditParameterSnapshot.java",
       "reviewedSha256": "559f5125d7e89ef34f399841cbf5b1305db59c5892e8d6ac1d731635f582e37b",
       "reason": "不可变安全JSON与同源搜索投影、六态及不可信持久化内容再脱敏的技术值对象；其存在不等于LogQueryService已返回该对象。"
     },
     {
-      "kind": "java", "state": "technical-retained",
+      "kind": "java",
+      "state": "technical-retained",
       "file": "data-elements-parent/src/main/java/com/linewell/dataelement/platform/audit/AuditRequestParameters.java",
       "reviewedSha256": "a596577a8e5d284fcec9eecfbe059f97ba864fba955db4a410b40cdd286ced56",
       "reason": "请求线程内安全采集、旧精确白名单兼容及仅服务端可补充的verified事实；不读取/消费原始请求流，不把请求意图当执行结果，不承担日志查询业务。"
     },
     {
-      "kind": "java", "state": "technical-retained",
+      "kind": "java",
+      "state": "technical-retained",
       "file": "data-elements-parent/src/main/java/com/linewell/dataelement/platform/audit/AuditRequestBodyAdvice.java",
       "reviewedSha256": "1fe85fb790eedc32b752520af64214b2aa1539f94ecf2efbe1e83094ae268225",
       "reason": "观察Spring已完成转换的正文、空正文及失败状态，文件只取元数据；不包装/缓存/重读流，不替换业务参数或原业务异常。"
     },
     {
-      "kind": "java", "state": "technical-retained",
+      "kind": "java",
+      "state": "technical-retained",
       "file": "data-elements-parent/src/main/java/com/linewell/dataelement/platform/audit/AuditParameterSanitizer.java",
       "reviewedSha256": "56d17702d6c865835b11e8defad48f98e9f9bfcfc8ff72c0632be48e775c5a41",
       "reason": "有界安全遍历和凭据/个人信息脱敏，限制深度、节点、集合及UTF-8字节，拒绝流/任意序列化副作用；属采集安全适配，不是业务保留理由。"

@@ -9,6 +9,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jcraft.jsch.ChannelSftp;
 import com.jcraft.jsch.JSch;
 import com.jcraft.jsch.Session;
+import com.linewell.dataelement.integration.transfer.FtpsClientFactory;
 import io.minio.GetObjectArgs;
 import io.minio.MinioClient;
 import io.minio.Result;

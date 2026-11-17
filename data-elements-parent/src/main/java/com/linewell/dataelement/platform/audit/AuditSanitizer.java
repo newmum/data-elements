@@ -1,6 +1,7 @@
 package com.linewell.dataelement.platform.audit;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.linewell.dataelement.platform.persistence.jdbc.JdbcValueNormalizer;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.regex.Pattern;
@@ -36,6 +37,45 @@ public class AuditSanitizer {
         if (value instanceof Collection<?> values) return values.stream().limit(100).map(v->clean(v,depth+1)).toList();
         if (value instanceof Number || value instanceof Boolean) return value;
         return text(value,512);
+    }
+    /** 规范化存量事件时间与详情，兼容历史快照并过滤未脱敏内容。 */
+    public Map<String,Object> formatStoredEvent(Map<String,Object> input,boolean detail) {
+        Map<String,Object> row=AuditStore.lower(JdbcValueNormalizer.map(input));
+        row.remove("parameter_search_text");
+        if (detail && (row.containsKey("parameter_snapshot") || row.containsKey("parameter_capture_status"))) {
+            var snapshot = AuditParameterSnapshot.parse(row.get("parameter_snapshot"));
+            row.put("parameter_snapshot", snapshot);
+            row.put("parameter_capture_status", snapshot.get("status"));
+        } else if (row.containsKey("parameter_capture_status")) {
+            Object status = row.get("parameter_capture_status");
+            row.put("parameter_capture_status", status != null
+                    && Set.of("EMPTY","CAPTURED","PARTIAL","OMITTED","FAILED","LEGACY").contains(status)
+                    ? status : "LEGACY");
+        }
+        row.put("legacy",row.get("event_time")==null);
+        Object time=row.get("event_time");if(time!=null)row.put("event_time",LogTimes.instant(time).toString());
+        if(row.get("created_time")!=null) {
+            Object created=row.get("created_time");
+            if(time==null && created instanceof java.sql.Timestamp stamp)row.put("created_time",stamp.toLocalDateTime().atZone(java.time.ZoneId.of("Asia/Shanghai")).toInstant().toString());
+            else if(time==null && created instanceof java.time.LocalDateTime date)row.put("created_time",date.atZone(java.time.ZoneId.of("Asia/Shanghai")).toInstant().toString());
+            else row.put("created_time",LogTimes.instant(created).toString());
+        }
+        if(detail && row.get("details")!=null) {
+            try {
+                Object details = new com.fasterxml.jackson.databind.ObjectMapper()
+                        .readValue(String.valueOf(row.get("details")), Object.class);
+                if (details instanceof Map<?, ?> values) {
+                    var parameters = AuditRequestParameters.display(values.get(AuditRequestParameters.DETAILS_KEY));
+                    if (!parameters.isEmpty()) row.put("request_parameters", parameters);
+                    row.put("details", clean(details));
+                } else {
+                    // A historical JSON string/array may be raw request content, not an allowlisted event summary.
+                    row.put("details", Map.of("phase","LEGACY_DETAIL_NOT_EXPOSED"));
+                }
+            }
+            catch(Exception ignored) { row.put("details",Map.of("phase","LEGACY_DETAIL_NOT_EXPOSED")); }
+        }
+        return row;
     }
     public String json(Object details) {
         return json(details, Map.of());

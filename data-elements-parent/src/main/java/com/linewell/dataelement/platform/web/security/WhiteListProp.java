@@ -17,14 +17,12 @@ import org.springframework.context.annotation.Configuration;
 public class WhiteListProp {
     private static final AntPathMatcher PATH_MATCHER = new AntPathMatcher();
     private static final Set<String> FRAMEWORK_PUBLIC_PATHS = Set.of(
-            "/portal/main/index",
             "/portal/sso/login",
             "/portal/sso/logout",
             "/portal/sso/redeem",
             "/portal/sso/ticket",
             "/portal/profile/password",
             "/idaas/auth/login",
-            "/idaas/auth/settings",
             "/idaas/recovery/request",
             "/idaas/identity/login",
             "/idaas/identity/register",
@@ -45,9 +43,7 @@ public class WhiteListProp {
             "/idaas/verifications/mine",
             "/idaas/verifications/submit",
             "/idaas/receiver/v2",
-            "/idaas/receiver/admin",
-            "/portal/sso/options",
-            "/portal/sso/settings"
+            "/idaas/receiver/admin"
     );
 
     private List<String> whiteList;

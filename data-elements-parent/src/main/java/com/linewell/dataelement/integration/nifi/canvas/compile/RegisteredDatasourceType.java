@@ -51,6 +51,35 @@ public final class RegisteredDatasourceType {
         return databaseType(raw, config).name();
     }
 
+    /** Only NiFi source connections need to replace the MySQL driver used by older registrations. */
+    public static boolean isOceanBaseMysqlSource(String manifest, Map<String, Object> config) {
+        String type = first(config, "dbType");
+        String product = type == null ? "" : key(type);
+        if ("oceanbasemysql".equals(product) || "oceanbasecompatiblemysql".equals(product)) return true;
+        if (!"source.oceanbase".equals(manifest) && !"oceanbase".equals(product)) return false;
+        String url = first(config, "jdbcURL", "jdbcUrl", "jdbc_url", "url");
+        String endpoint = url == null ? "" : url.toLowerCase(Locale.ROOT);
+        return !"oceanbaseoracle".equals(product) && !"oceanbasecompatibleoracle".equals(product)
+                && !"ORACLE".equalsIgnoreCase(first(config, "compatibleMode", "compatible_mode"))
+                && !endpoint.startsWith("jdbc:oceanbase:oracle:")
+                && !endpoint.startsWith("jdbc:oceanbaseoracle:")
+                && !endpoint.startsWith("jdbc:oracle:");
+    }
+
+    public static String oceanBaseMysqlSourceUrl(Map<String, Object> config) {
+        String url = jdbcUrl("oceanbasemysql", config, Map.of());
+        for (String prefix : new String[]{"jdbc:mysql://", "jdbc:oceanbasemysql://", "jdbc:oceanbase:mysql://"}) {
+            if (url.regionMatches(true, 0, prefix, 0, prefix.length())) {
+                return "jdbc:oceanbase://" + url.substring(prefix.length());
+            }
+        }
+        if (url.regionMatches(true, 0, "jdbc:oceanbase:", 0, "jdbc:oceanbase:".length())
+                && !url.regionMatches(true, 0, "jdbc:oceanbase:oracle:", 0, "jdbc:oceanbase:oracle:".length())) {
+            return url;
+        }
+        throw new IllegalArgumentException("OceanBase MySQL 来源的 JDBC 连接地址须使用 jdbc:oceanbase://");
+    }
+
     public static String sinkType(String raw, Map<String, Object> config) {
         DatabaseType type = databaseType(raw, config);
         if (type == DatabaseType.MONGODB) return type.name();

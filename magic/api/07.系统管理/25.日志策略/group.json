@@ -1,0 +1,11 @@
+{
+  "properties": {},
+  "id": "sys_logpolicy_v1",
+  "name": "25.日志策略",
+  "type": "api",
+  "parentId": "9a18bf0b6a994f5aa56aa775f3de9f3d",
+  "path": "/logpolicy",
+  "paths": [],
+  "options": []
+}
+================================

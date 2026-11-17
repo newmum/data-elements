@@ -1254,7 +1254,7 @@ const loadMissingTableDialogRows = async (pageNo = state.missingTablePageNo) => 
   state.missingTableLoadNotice = "";
   state.missingTableSelectedRows = [];
   try {
-    const result = await $common.get("/dst/database/metadata/tables/collection/changes", {
+    const result = await $common.get("/dst/collect/changes", {
       dbId,
       pageNo: Math.max(1, Number(pageNo || 1)),
       pageSize: state.missingTablePageSize,
@@ -1695,7 +1695,7 @@ const fetchPreviewTables = async ({
     // “采集/重新探查”时通过服务端托管连接池读取物理 Hive 表。
     const previewRequest = isOfflineSnapshot.value
       ? $common.get("/dst/db/tables", { dbId, pageNo, pageSize, offset })
-      : $common.get("/dst/database/metadata/tables/snapshot", {
+      : $common.get("/dst/collect/snapshot", {
           dbId,
           pageNo,
           pageSize,
@@ -1835,7 +1835,7 @@ const applyCollectionStatus = (result) => {
 const readTableCollectionStatus = async (jobId = state.collectionJobId) => {
   const dbId = db.value?.tid || db.value?.id;
   if (!dbId || !canCollectTables.value) return { status: "NOT_COLLECTED" };
-  const result = await $common.get("/dst/database/metadata/tables/collection/status", {
+  const result = await $common.get("/dst/collect/status", {
     dbId,
     jobId: jobId || undefined,
   });
@@ -1867,7 +1867,7 @@ const startTableCollection = async (refresh = false) => {
   state.collectionStarting = true;
   state.refreshLoading = Boolean(refresh);
   try {
-    const result = await $common.post("/dst/database/metadata/tables/collection/start", {
+    const result = await $common.post("/dst/collect/start", {
       dbId,
       mode: refresh ? "REFRESH" : "INITIAL",
     });
@@ -2739,7 +2739,7 @@ const saveMissingTableName = async (row) => {
   }
   row._renameLoading = true;
   try {
-    await $common.post("/dst/database/metadata/tables/collection/rename-missing", {
+    await $common.post("/dst/collect/rename", {
       dbId,
       tableId,
       tableName: newTableName,

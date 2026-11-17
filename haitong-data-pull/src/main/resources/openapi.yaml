@@ -59,8 +59,8 @@ paths:
         content:
           application/json:
             schema: *id001
-  /api/v1/data-push:
-    post:
+  /api/v1/push:
+    post: &tablePush
       summary: 统一表批次数据推送
       description: 请求体 deliveryType 选择 FTP、KAFKA、LOG 或 REGISTRY_SYNC。push-validation-enabled=true 时校验业务密钥和海通本地登记镜像（无镜像才兼容 YAML standalone.datasources）；false 时业务推送无需密钥、不查询登记镜像，仍必填 datasourceId/tableName/records 及 Idempotency-Key。REGISTRY_SYNC 始终需要专用同步凭据。投递连接、FTP 根目录和 Kafka Topic 始终只由本机 YAML 决定。
       operationId: post_api_v1_data_push
@@ -117,11 +117,17 @@ paths:
         '200':
           description: 同幂等键且请求体一致的重复提交
         default: *id002
+  /api/v1/data-push:
+    post:
+      <<: *tablePush
+      operationId: post_api_v1_data_push_legacy
+      deprecated: true
+      description: 旧 POST 地址，参数、认证和原始正文幂等行为与 /api/v1/push 一致。
   /api/v1/ftp:
     post: &id005
       summary: 表批次写入 FTP/FTPS
       deprecated: true
-      description: 兼容旧调用方；新接入使用 POST /api/v1/data-push 和 deliveryType=FTP。推送校验开关控制业务密钥及本地登记校验，FTP 根目录来自本机 YAML，业务 records 写入“output-dir/datasourceId/tableName/messageId.json”并生成 .done 清单，不回调元数据平台。
+      description: 兼容旧调用方；新接入使用 POST /api/v1/push 和 deliveryType=FTP。推送校验开关控制业务密钥及本地登记校验，FTP 根目录来自本机 YAML，业务 records 写入“output-dir/datasourceId/tableName/messageId.json”并生成 .done 清单，不回调元数据平台。
       operationId: post_api_v1_simple_ftp
       parameters:
       - name: Idempotency-Key
@@ -164,14 +170,14 @@ paths:
       <<: *id005
       summary: 表批次写入 Kafka
       deprecated: true
-      description: 兼容旧调用方；新接入使用 POST /api/v1/data-push 和 deliveryType=KAFKA。推送校验开关控制业务密钥及本地登记校验，Kafka Topic 仅由本机 YAML 确定，调用方不能传入或覆盖。
+      description: 兼容旧调用方；新接入使用 POST /api/v1/push 和 deliveryType=KAFKA。推送校验开关控制业务密钥及本地登记校验，Kafka Topic 仅由本机 YAML 确定，调用方不能传入或覆盖。
       operationId: post_api_v1_simple_kafka
   /api/v1/log:
     post:
       <<: *id005
       summary: 表批次打印运行日志
       deprecated: true
-      description: 兼容旧调用方；新接入请改用 POST /api/v1/data-push，并在请求体设置 deliveryType=LOG。只记录表名、批次、条数和摘要，不打印原始业务数据。
+      description: 兼容旧调用方；新接入请改用 POST /api/v1/push，并在请求体设置 deliveryType=LOG。只记录表名、批次、条数和摘要，不打印原始业务数据。
       operationId: post_api_v1_simple_log
       requestBody:
         required: true

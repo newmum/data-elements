@@ -155,7 +155,7 @@ const detailApi = (tid: string) => {
 
 const saveApi = (data: Record<string, any>) => {
   const { catalogItems, ...props } = data;
-  return $common.post("/dst/catalog/saveOrUpdate", {
+  return $common.post("/dst/catalog/save", {
     tid: currentData.value.tid,
     assetType: "fileCatalog",
     propList: props,

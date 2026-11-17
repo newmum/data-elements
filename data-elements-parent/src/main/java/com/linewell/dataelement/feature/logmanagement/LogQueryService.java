@@ -119,50 +119,12 @@ public class LogQueryService {
         else {String column=order.split(" ",2)[0];if(column.equals("actor_name"))column=s.view().name();else if(column.equals("action_code"))column=s.view().action();order="case when "+column+" is null then 1 else 0 end,"+order;}
         String sql="select "+projection(s.view(),detail)+" from "+s.view().table()+s.where()+" order by "+order+" limit :size offset :offset";
         var rows=reader(scope).queryForList(sql,params);
-        return rows.stream().map(row->normalize(row,detail)).toList();
+        return rows.stream().map(row->sanitizer.formatStoredEvent(row,detail)).toList();
     }
     private String projection(View v,boolean detail) {
         boolean platform=v.table().equals("iam_audit_event_t");
         boolean parameters=Set.of("log_system_t","log_request_t").contains(v.table());
         return "tid,event_time,created_time,category,actor_kind,menu_id,menu_path,page_route,operation_name,function_code,"+v.actor()+" actor_id,"+v.account()+" actor_account,"+v.name()+" actor_name,"+v.org()+" actor_org_id,"+v.orgName()+" actor_org_name,"+v.action()+" action_code,"+(platform?"object_type target_type,object_id target_id,":"target_type,target_id,")+"target_name,result,reason_code,ip,user_agent,duration_ms,trace_id,request_id,session_ref,http_status,business_code,total_count,success_count,failure_count,source_app,batch_id,task_id,"+v.path()+" route_path"+(parameters?",parameter_capture_status"+(detail?",parameter_snapshot":""):"")+(detail?","+v.detail()+" details":"");
-    }
-    private Map<String,Object> normalize(Map<String,Object> input,boolean detail) {
-        Map<String,Object> row=AuditStore.lower(JdbcValueNormalizer.map(input));
-        row.remove("parameter_search_text");
-        if (detail && (row.containsKey("parameter_snapshot") || row.containsKey("parameter_capture_status"))) {
-            var snapshot = AuditParameterSnapshot.parse(row.get("parameter_snapshot"));
-            row.put("parameter_snapshot", snapshot);
-            row.put("parameter_capture_status", snapshot.get("status"));
-        } else if (row.containsKey("parameter_capture_status")) {
-            Object status = row.get("parameter_capture_status");
-            row.put("parameter_capture_status", status != null
-                    && Set.of("EMPTY","CAPTURED","PARTIAL","OMITTED","FAILED","LEGACY").contains(status)
-                    ? status : "LEGACY");
-        }
-        row.put("legacy",row.get("event_time")==null);
-        Object time=row.get("event_time");if(time!=null)row.put("event_time",LogTimes.instant(time).toString());
-        if(row.get("created_time")!=null) {
-            Object created=row.get("created_time");
-            if(time==null && created instanceof java.sql.Timestamp stamp)row.put("created_time",stamp.toLocalDateTime().atZone(java.time.ZoneId.of("Asia/Shanghai")).toInstant().toString());
-            else if(time==null && created instanceof java.time.LocalDateTime date)row.put("created_time",date.atZone(java.time.ZoneId.of("Asia/Shanghai")).toInstant().toString());
-            else row.put("created_time",LogTimes.instant(created).toString());
-        }
-        if(detail && row.get("details")!=null) {
-            try {
-                Object details = new com.fasterxml.jackson.databind.ObjectMapper()
-                        .readValue(String.valueOf(row.get("details")), Object.class);
-                if (details instanceof Map<?, ?> values) {
-                    var parameters = AuditRequestParameters.display(values.get(AuditRequestParameters.DETAILS_KEY));
-                    if (!parameters.isEmpty()) row.put("request_parameters", parameters);
-                    row.put("details", sanitizer.clean(details));
-                } else {
-                    // A historical JSON string/array may be raw request content, not an allowlisted event summary.
-                    row.put("details", Map.of("phase","LEGACY_DETAIL_NOT_EXPOSED"));
-                }
-            }
-            catch(Exception ignored) { row.put("details",Map.of("phase","LEGACY_DETAIL_NOT_EXPOSED")); }
-        }
-        return row;
     }
     public Map<String,Object> statistics(LogScope scope,String kind,Map<String,Object> input) {
         var s=selection(scope,kind,input);
@@ -193,7 +155,7 @@ public class LogQueryService {
         if(rows.size()!=ids.size()) throw new SecurityException("事件不存在或超出当前授权范围");
         var byId=new HashMap<String,Map<String,Object>>();
         for(var row:rows) {
-            var event=normalize(row,detail);byId.put((String)event.get("tid"),event);
+            var event=sanitizer.formatStoredEvent(row,detail);byId.put((String)event.get("tid"),event);
         }
         // 一次范围内批量查询后逐 ID 完整校验，在内存恢复输入序，不补查或静默丢弃缺项。
         if(!byId.keySet().equals(new HashSet<>(ids)))throw new SecurityException("事件不存在或超出当前授权范围");

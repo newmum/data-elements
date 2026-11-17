@@ -4,24 +4,41 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import cn.dev33.satoken.session.SaSession;
 import cn.dev33.satoken.stp.StpUtil;
+import cn.hutool.extra.spring.SpringUtil;
+import com.linewell.dataelement.config.DataPushRegistryProperties;
+import com.linewell.dataelement.feature.identity.application.TenantIdentityQueryService;
+import com.linewell.dataelement.integration.transfer.haitong.RelayRequestAuthentication;
+import com.linewell.dataelement.magic.runtime.result.CustomJsonValueProvider;
 import com.linewell.dataelement.magic.runtime.security.MagicAccessPolicy;
 import com.linewell.dataelement.magic.runtime.security.PolicyAwareApiResourceStorage;
 import com.linewell.dataelement.model.common.BizException;
 import com.linewell.dataelement.model.common.CommonResponse;
 import com.linewell.dataelement.platform.tenant.api.PlatformSessionMagicModule;
+import com.linewell.dataelement.platform.tenant.application.TenantAccessService;
+import com.linewell.dataelement.platform.tenant.config.TenantProperties;
+import com.linewell.dataelement.platform.tenant.domain.TenantContext;
+import com.linewell.dataelement.platform.tenant.web.TenantWebInterceptor;
 import com.linewell.dataelement.platform.web.error.GlobalExceptionHandler;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.support.DefaultListableBeanFactory;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.method.HandlerMethod;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.HandlerMapping;
 import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
 import org.ssssssss.magicapi.core.config.MagicConfiguration;
@@ -41,6 +58,7 @@ class MagicAccessPolicyTest {
     private RequestMagicDynamicRegistry registry;
     private HandlerMethod magicHandler;
     private PlatformSessionMagicModule platformSession;
+    private DataPushRegistryProperties relayProperties;
     private GlobalInterceptor access;
 
     @BeforeEach
@@ -48,6 +66,8 @@ class MagicAccessPolicyTest {
         storage = new PolicyAwareApiResourceStorage("");
         var resources = mock(MagicResourceService.class);
         when(resources.getGroupPath("validation")).thenReturn("/validation");
+        when(resources.getGroupPath("idaas")).thenReturn("/idaas");
+        when(resources.getGroupPath("published")).thenReturn("/dws/flowserve/published");
         storage.setMagicResourceService(resources);
         registry = new RequestMagicDynamicRegistry(storage, Mapping.create(new RequestMappingHandlerMapping()), false, "");
         var handler = new RequestHandler(new MagicConfiguration(), registry);
@@ -57,21 +77,24 @@ class MagicAccessPolicyTest {
         var whiteList = new WhiteListProp();
         whiteList.setWhiteList(List.of("/validation/legacy/**"));
         platformSession = mock(PlatformSessionMagicModule.class);
+        relayProperties = new DataPushRegistryProperties();
         var beans = new DefaultListableBeanFactory();
         beans.registerSingleton("registry", registry);
         access = new GlobalInterceptor(whiteList, platformSession, beans.getBeanProvider(RequestMagicDynamicRegistry.class),
-                new GlobalExceptionHandler());
+                new GlobalExceptionHandler(), relayProperties);
     }
 
     @Test
     void readsTheMethodSpecificPolicyAndRequiresTheDeclaredRealm() {
         register("read", "GET", "/resource", "PUBLIC");
+        register("head", "HEAD", "/resource", "PUBLIC");
         register("write", "POST", "/resource", "TENANT_SESSION");
         register("operator", "GET", "/legacy/operator", "IDAAS_PLATFORM_SESSION");
         register("default", "GET", "/business", null);
 
         try (var tenant = mockStatic(StpUtil.class)) {
             assertThat(preHandle("GET", "/validation/resource")).isTrue();
+            assertThat(preHandle("HEAD", "/validation/resource")).isTrue();
             assertDenied(() -> preHandle("POST", "/validation/resource"));
             assertDenied(() -> preHandle("GET", "/validation/business"));
 
@@ -109,6 +132,210 @@ class MagicAccessPolicyTest {
         assertFailureEnvelope(access.preHandle(execution), 403);
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"PUBLIC", "IDAAS_PLATFORM_SESSION", "TENANT_SESSION"})
+    void declaredPolicyCannotExecuteWithoutMvcVerification(String policy) {
+        var resource = register("without-mvc", "GET", "/withoutmvc", policy);
+        var request = new MagicJakartaHttpServletRequest(request("GET", "/validation/withoutmvc"), null);
+        var execution = RequestEntity.create().info(resource).request(request);
+        when(platformSession.isLogin()).thenReturn(true);
+        try (var tenant = mockStatic(StpUtil.class)) {
+            tenant.when(StpUtil::isLogin).thenReturn(true);
+            assertFailureEnvelope(access.preHandle(execution), 403);
+            assertThat(GlobalInterceptor.hasVerifiedMagicPolicy(execution)).isFalse();
+        }
+    }
+
+    @Test
+    void platformPolicyOutsideIdaasUsesControlScopeEvenWithAnIndustrySession() {
+        register("operator-scope", "GET", "/operator", "IDAAS_PLATFORM_SESSION");
+        var request = request("GET", "/validation/operator");
+        var response = new MockHttpServletResponse();
+        var accounts = mock(TenantIdentityQueryService.class);
+        var routing = new TenantWebInterceptor(mock(TenantAccessService.class), new TenantProperties(), accounts);
+        when(platformSession.isLogin()).thenReturn(true);
+        try (var tenant = mockStatic(StpUtil.class)) {
+            tenant.when(StpUtil::isLogin).thenReturn(true);
+            assertThat(access.preHandle(request, response, magicHandler)).isTrue();
+            try {
+                assertThat(routing.preHandle(request, response, magicHandler)).isTrue();
+                assertThat(TenantContext.usesControlDatabase()).isTrue();
+                assertThat(TenantContext.getTenantId()).isNull();
+                verifyNoInteractions(accounts);
+                tenant.verifyNoInteractions();
+            } finally {
+                routing.afterCompletion(request, response, magicHandler, null);
+            }
+        }
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "idaas, /idaas, /industry",
+            "published, /dws/flowserve/published, /__tenant/other-tenant/industry"
+    })
+    void industryPolicyUsesTheAuthenticatedTenantDespiteLegacyRouteRules(String group, String prefix, String path) {
+        var api = api("industry-scope", "GET", path, "TENANT_SESSION");
+        api.setGroupId(group);
+        assertThat(registry.register(storage.read(storage.write(api)))).isTrue();
+        var request = request("GET", prefix + path);
+        var response = new MockHttpServletResponse();
+        var tenantAccess = mock(TenantAccessService.class);
+        var accounts = mock(TenantIdentityQueryService.class);
+        var routing = new TenantWebInterceptor(tenantAccess, new TenantProperties(), accounts);
+        var token = new SaSession("validation-token");
+        token.set("authRealm", "tenant-local-v1").set("tenantId", "session-tenant");
+        when(accounts.isLocal("session-tenant")).thenReturn(true);
+        when(accounts.find("session-tenant", "validation-user")).thenReturn(Map.of("status", 0));
+        try (var tenant = mockStatic(StpUtil.class)) {
+            tenant.when(StpUtil::isLogin).thenReturn(true);
+            tenant.when(StpUtil::getTokenSession).thenReturn(token);
+            tenant.when(StpUtil::getLoginId).thenReturn("validation-user");
+            assertThat(access.preHandle(request, response, magicHandler)).isTrue();
+            try {
+                assertThat(routing.preHandle(request, response, magicHandler)).isTrue();
+                assertThat(TenantContext.usesControlDatabase()).isFalse();
+                assertThat(TenantContext.getTenantId()).isEqualTo("session-tenant");
+                verifyNoInteractions(tenantAccess, platformSession);
+            } finally {
+                routing.afterCompletion(request, response, magicHandler, null);
+            }
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"IDAAS_PLATFORM_SESSION", "TENANT_SESSION"})
+    void changingTheSessionRealmDuringReloadRequiresANewRequest(String originalPolicy) {
+        String replacementPolicy = "TENANT_SESSION".equals(originalPolicy) ? "IDAAS_PLATFORM_SESSION" : "TENANT_SESSION";
+        register("session-scope", "GET", "/session", originalPolicy);
+        var request = request("GET", "/validation/session");
+        var response = new MockHttpServletResponse();
+        when(platformSession.isLogin()).thenReturn(true);
+        try (var tenant = mockStatic(StpUtil.class)) {
+            tenant.when(StpUtil::isLogin).thenReturn(true);
+            assertThat(access.preHandle(request, response, magicHandler)).isTrue();
+            var replacement = register("session-scope", "GET", "/session", replacementPolicy);
+            var servlet = new MagicJakartaHttpServletRequest(request, null);
+            var execution = RequestEntity.create().info(replacement).request(servlet);
+            assertFailureEnvelope(access.preHandle(execution), 403);
+            assertThat(GlobalInterceptor.hasVerifiedMagicPolicy(execution)).isFalse();
+
+            var nextRequest = request("GET", "/validation/session");
+            assertThat(access.preHandle(nextRequest, response, magicHandler)).isTrue();
+            var nextServlet = new MagicJakartaHttpServletRequest(nextRequest, null);
+            assertThat(access.preHandle(RequestEntity.create().info(replacement).request(nextServlet))).isNull();
+        }
+    }
+
+    @Test
+    void verifiedPublicResourceUsesControlScopeAndCannotExecuteAProtectedReplacementInThatScope() {
+        String path = "/validation/public";
+        var resource = register("public-scope", "GET", "/public", "PUBLIC");
+        var request = request("GET", path);
+        var response = new MockHttpServletResponse();
+        var accounts = mock(TenantIdentityQueryService.class);
+        var routing = new TenantWebInterceptor(mock(TenantAccessService.class), new TenantProperties(), accounts);
+        try (var tenant = mockStatic(StpUtil.class)) {
+            tenant.when(StpUtil::isLogin).thenThrow(new IllegalStateException("stale session"));
+            assertThat(access.preHandle(request, response, magicHandler)).isTrue();
+            assertThat(routing.preHandle(request, response, magicHandler)).isTrue();
+            try {
+                assertThat(TenantContext.usesControlDatabase()).isTrue();
+                assertThat(TenantContext.getTenantId()).isNull();
+                verifyNoInteractions(accounts);
+                tenant.verifyNoInteractions();
+                tenant.reset();
+                tenant.when(StpUtil::isLogin).thenReturn(true);
+                var servlet = new MagicJakartaHttpServletRequest(request, null);
+                var execution = RequestEntity.create().info(resource).request(servlet);
+                assertThat(access.preHandle(execution)).isNull();
+                var protectedEntry = register("public-scope", "GET", "/public", "TENANT_SESSION");
+                assertFailureEnvelope(access.preHandle(execution.info(protectedEntry)), 403);
+            } finally {
+                routing.afterCompletion(request, response, magicHandler, null);
+            }
+        }
+    }
+
+    @Test
+    void resultProviderUsesVerifiedExecutionWhileLegacyTokenCheckIsEnabled() {
+        var resource = register("brand", "GET", "/brand", "PUBLIC");
+        var request = request("GET", "/validation/brand");
+        var magicRequest = new MagicJakartaHttpServletRequest(request, null);
+        var execution = RequestEntity.create().info(resource).request(magicRequest);
+        var otherExecution = RequestEntity.create().info(resource).request(magicRequest);
+        var provider = new CustomJsonValueProvider();
+        ReflectionTestUtils.setField(provider, "whiteListProp", new WhiteListProp());
+        var payload = Map.of("title", "测试品牌");
+
+        try (var spring = mockStatic(SpringUtil.class); var tenant = mockStatic(StpUtil.class)) {
+            spring.when(() -> SpringUtil.getProperty("data-trading-parent.config.checkToken")).thenReturn("true");
+            assertThat(access.preHandle(request, new MockHttpServletResponse(), magicHandler)).isTrue();
+            assertThat(GlobalInterceptor.hasVerifiedMagicPolicy(execution)).isFalse();
+            assertThat(provider.buildResult(execution, 0, "success", payload)).isInstanceOfSatisfying(
+                    CommonResponse.class, result -> assertThat(result.getCode()).isEqualTo(100120));
+
+            assertThat(access.preHandle(execution)).isNull();
+            assertThat(GlobalInterceptor.hasVerifiedMagicPolicy(otherExecution)).isFalse();
+            assertThat(provider.buildResult(execution, 0, "success", payload)).isInstanceOfSatisfying(
+                    Map.class, result -> {
+                        assertThat(result.get("code")).isEqualTo(0);
+                        assertThat(result.get("data")).isEqualTo(payload);
+                    });
+
+            var replacement = register("brand", "GET", "/brand", "TENANT_SESSION");
+            assertFailureEnvelope(access.preHandle(execution.info(replacement)), 100120);
+            assertThat(GlobalInterceptor.hasVerifiedMagicPolicy(execution)).isFalse();
+        }
+    }
+
+    @Test
+    void relayPolicyChecksOnlyTheRelayCredentialBeforeMagicExecutes() {
+        String route = "/validation/legacy/callback";
+        var resource = register("callback", "POST", "/legacy/callback", "HAITONG_RELAY");
+        var request = request("POST", route);
+        var response = new MockHttpServletResponse();
+
+        assertRelayError(() -> access.preHandle(request, response, magicHandler), HttpStatus.SERVICE_UNAVAILABLE);
+        relayProperties.setSharedKey("validation-key");
+        try (var tenant = mockStatic(StpUtil.class)) {
+            tenant.when(StpUtil::isLogin).thenReturn(true);
+            when(platformSession.isLogin()).thenReturn(true);
+            assertRelayError(() -> access.preHandle(request, response, magicHandler), HttpStatus.UNAUTHORIZED);
+            assertThat(GlobalInterceptor.verifiedMagicAccess(request)).isNull();
+        }
+
+        request.addHeader(RelayRequestAuthentication.KEY_HEADER, "validation-key");
+        assertThat(access.preHandle(request, response, magicHandler)).isTrue();
+        assertThat(GlobalInterceptor.verifiedMagicAccess(request)).isEqualTo(MagicAccessPolicy.HAITONG_RELAY);
+        var magicRequest = new MagicJakartaHttpServletRequest(request, null);
+        var execution = RequestEntity.create().info(resource).request(magicRequest);
+        assertThat(access.preHandle(execution)).isNull();
+
+        var tenantAccess = mock(TenantAccessService.class);
+        var accounts = mock(TenantIdentityQueryService.class);
+        var routing = new TenantWebInterceptor(tenantAccess, new TenantProperties(), accounts);
+        try (var tenant = mockStatic(StpUtil.class)) {
+            tenant.when(StpUtil::isLogin).thenReturn(true);
+            TenantContext.bind("unrelated-tenant");
+            try {
+                assertThat(routing.preHandle(request, response, magicHandler)).isTrue();
+                assertThat(TenantContext.usesControlDatabase()).isTrue();
+                assertThat(TenantContext.getTenantId()).isNull();
+                verifyNoInteractions(tenantAccess, accounts);
+            } finally {
+                routing.afterCompletion(request, response, magicHandler, null);
+            }
+            assertThat(TenantContext.usesControlDatabase()).isFalse();
+        }
+
+        var replacement = register("callback", "POST", "/legacy/callback", "TENANT_SESSION");
+        assertFailureEnvelope(access.preHandle(execution.info(replacement)), 403);
+
+        var unverifiedRequest = new MagicJakartaHttpServletRequest(request("POST", route), null);
+        assertFailureEnvelope(access.preHandle(RequestEntity.create().info(resource).request(unverifiedRequest)), 403);
+    }
+
     @Test
     void resourceStorageRejectsDuplicateOrUnsafeDeclarationsAndReadsValidOnesBack() {
         var api = api("brand", "GET", "/brand", "PUBLIC");
@@ -119,6 +346,11 @@ class MagicAccessPolicyTest {
         api.setMethod("GET");
         api.setOption(List.of(new Option("access", "PUBLIC"), new Option("access", "TENANT_SESSION")));
         assertThatThrownBy(() -> storage.write(api)).isInstanceOf(IllegalArgumentException.class);
+
+        var relay = api("callback", "POST", "/callback", "HAITONG_RELAY");
+        assertThat(MagicAccessPolicy.declared(storage.read(storage.write(relay)))).isEqualTo(MagicAccessPolicy.HAITONG_RELAY);
+        relay.setMethod("GET");
+        assertThatThrownBy(() -> storage.write(relay)).isInstanceOf(IllegalArgumentException.class);
     }
 
     private ApiInfo register(String id, String method, String path, String policy) {
@@ -162,5 +394,10 @@ class MagicAccessPolicyTest {
                 assertThat(body.getData()).isNull();
             });
         });
+    }
+
+    private static void assertRelayError(org.assertj.core.api.ThrowableAssert.ThrowingCallable call, HttpStatus status) {
+        assertThatThrownBy(call).isInstanceOfSatisfying(ResponseStatusException.class,
+                error -> assertThat(error.getStatusCode()).isEqualTo(status));
     }
 }

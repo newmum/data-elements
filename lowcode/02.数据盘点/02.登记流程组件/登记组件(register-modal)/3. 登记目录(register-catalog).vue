@@ -388,7 +388,7 @@ const handleFillDefaults = () => {
 
 const saveApi = (data: Record<string, any>) => {
   const { catalogItems, ...props } = data;
-  return $common.post("/dst/catalog/saveOrUpdate", {
+  return $common.post("/dst/catalog/save", {
     tid: currentCatalog.value.tid,
     assetType: "catalog",
     propList: props,

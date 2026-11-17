@@ -6,7 +6,13 @@
   "method": "GET",
   "parameters": [],
   "requestBody": "{}",
-  "description": "按真实平台会话权限查询当前身份域日志及生命周期记录。"
+  "description": "按真实平台会话权限查询当前身份域日志及生命周期记录。",
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ]
 }
 ================================
 import request;
@@ -14,6 +20,9 @@ import identityRuntime;
 import logManagement;
 import '@/idaas/log-guard' as logGuard;
 import '@/idaas/context' as platformContext;
+import '@/common/logComponentBundle' as logComponentBundle;
+
+// GET /idaas/logs/query 按平台会话与身份域查询日志。共享组件仅在权限通过后读取。
 return identityRuntime.control(()=>{
  var query=(name,fallback)=>{var values=request.getValues(name);return values==null||values.size()==0?fallback:values[0];};
  var kind=query('kind','auth');var operation=query('operation','page');
@@ -26,11 +35,11 @@ return identityRuntime.control(()=>{
   var available=[];
   for(name in definitions.keySet()) {if(ctx.pairs.filter(pair=>pair.codes.contains(definitions[name])&&pair.scopes.filter(s=>s.identity_domain==domain&&s.scope_kind=='ALL').size()>0).size()>0){available.add(name);}}
   if(available.size()==0){exit 403,'当前账号没有日志访问权限';}
-  var checked=logGuard(available[0],domain);
-  if(operation=='components'){return logManagement.query(checked,available[0],'components',{});}
+  logGuard(available[0],domain);
+  if(operation=='components'){return logComponentBundle();}
   return available;
  }
  ctx=logGuard(kind,query('domain','workforce'));
- if(!['page','statistics','summary','detail','items','components','lifecycle'].contains(operation)){exit 400,'日志查询操作无效';}
+ if(!['page','statistics','summary','detail','items','lifecycle'].contains(operation)){exit 400,'日志查询操作无效';}
  return logManagement.query(ctx,kind,operation,input);
 });

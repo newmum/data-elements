@@ -468,7 +468,7 @@ class DatasourceManagementPermissionsMagicTest {
             String canonical = CanonicalMagicSources.byId("metadata_tables_delete_asset_01");
             MagicScript.create(canonical, null).compile();
             script = MagicScript.create(canonical.replaceAll("(?m)^import (?:" + MODULES + "|log)\\h*\\R", "")
-                    .replaceAll("(?m)^import '@post:/dst/maintenance/(?:batchRefresh|refresh)' as refreshAssetIndex\\h*\\R", ""), null);
+                    .replaceAll("(?m)^import '@post:/dst/maintenance/(?:reindex|refresh)' as refreshAssetIndex\\h*\\R", ""), null);
 
             var dynamic = new MagicDynamicDataSource();
             dynamic.setDefault(source);

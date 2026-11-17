@@ -5,6 +5,8 @@ import com.haitong.config.Secrets;
 import com.haitong.core.Json;
 import com.haitong.security.PushCredentialStore;
 import jakarta.servlet.FilterChain;
+import jakarta.servlet.http.HttpServletRequest;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.mock.env.MockEnvironment;
@@ -39,7 +41,7 @@ class EditorValidationAuthenticationTest {
         var api = new ApiInfo();
         api.setId("validation-example");
         api.setGroupId("examples");
-        api.setPath("/push/status_dict");
+        api.setPath("/push/status");
         api.setMethod("POST");
         when(resources.file("validation-example")).thenReturn(api);
         when(resources.getGroupPath("examples")).thenReturn("/validation");
@@ -47,12 +49,23 @@ class EditorValidationAuthenticationTest {
         try (var magic = mockStatic(MagicConfiguration.class)) {
             magic.when(MagicConfiguration::getMagicResourceService).thenReturn(resources);
             var chain = mock(FilterChain.class);
-            var valid = request("/validation/push/status_dict", "valid-editor-session", "validation-example");
+            var valid = request("/validation/push/status", "valid-editor-session", "validation-example");
             var success = new MockHttpServletResponse();
             filter.doFilter(valid, success, chain);
             verify(chain).doFilter(valid, success);
             assertEquals("magic-editor:admin", AuthenticationFilter.identity(valid).id());
             assertFalse(AuthenticationFilter.identity(valid).admin());
+
+            var legacy = request("/validation/push/status_dict", "valid-editor-session", "validation-example");
+            var remapped = new AtomicBoolean();
+            filter.doFilter(legacy, new MockHttpServletResponse(), (incoming, reply) -> {
+                var mapped = (HttpServletRequest) incoming;
+                assertEquals("/validation/push/status", mapped.getRequestURI());
+                assertEquals("/validation/push/status_dict", mapped.getAttribute(AuthenticationFilter.ORIGINAL_PATH));
+                assertEquals("magic-editor:admin", AuthenticationFilter.identity(mapped).id());
+                remapped.set(true);
+            });
+            assertTrue(remapped.get());
 
             for (var rejected : new MockHttpServletRequest[]{
                     request("/validation/push/status_dict", "forged-editor-session", "validation-example"),

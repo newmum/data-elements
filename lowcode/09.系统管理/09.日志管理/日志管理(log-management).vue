@@ -895,11 +895,8 @@ interface SortChange {
   order: "ascending" | "descending" | null;
 }
 interface LogClient {
-  request(
-    method: string,
-    path: string,
-    data: Record<string, unknown>,
-  ): Promise<unknown>;
+  domain?: string;
+  request(method: "GET" | "POST", url: string, data: Record<string, unknown>): Promise<unknown>;
   download(id: string): Promise<void>;
 }
 declare const $common: {
@@ -1375,24 +1372,52 @@ let revision = 0,
   policyRevision = 0;
 const client = () =>
   (globalThis as typeof globalThis & { __logClient?: LogClient }).__logClient;
+const eventGroups: Record<string, string> = {
+  auth: "/sym/logauth",
+  operations: "/sym/logops",
+  requests: "/sym/logreq",
+  security: "/sym/logsec",
+};
 const request = async <T = void,>(
-  method: string,
-  path: string,
+  method: "GET" | "POST",
+  url: string,
   data: Record<string, unknown>,
 ): Promise<T> => {
   const bridge = client();
-  if (bridge) return (await bridge.request(method, path, data)) as T;
-  const url = "/sym/logs" + path;
-  const response =
-    method === "GET"
-      ? await $common.get(url, data)
-      : await $common.post(url, data);
+  if (bridge) return (await bridge.request(method, url, data)) as T;
+  const response = method === "GET" ? await $common.get(url, data) : await $common.post(url, data);
   return (
     response && typeof response === "object" && "data" in response
       ? response.data
       : response
   ) as T;
 };
+function readLog<T>(url: string, kind: string, operation: string, data: Record<string, unknown> = {}) {
+  const domain = client()?.domain;
+  return domain
+    ? request<T>("GET", "/idaas/logs/query", { ...data, domain, kind, operation })
+    : request<T>("GET", url, data);
+}
+function writeLog<T = void>(
+  url: string,
+  module: "exports" | "archives" | "policies",
+  operation: "export" | "archive" | "archive-action" | "policy",
+  payload: Record<string, unknown>,
+) {
+  const domain = client()?.domain;
+  return domain
+    ? request<T>("POST", "/idaas/logs/command", { domain, module, operation, payload })
+    : request<T>("POST", url, payload);
+}
+function readPage(data: Record<string, unknown>) {
+  const selected = kind.value;
+  if (selected === "exports") return readLog<PageData>("/sym/logexport/page", selected, "lifecycle", data);
+  if (selected === "archives") return readLog<PageData>("/sym/logarchive/page", selected, "lifecycle", data);
+  return readLog<PageData>(eventGroups[selected] + "/page", selected, "page", data);
+}
+function archiveAction<T = void>(id: string, payload: Record<string, unknown>) {
+  return writeLog<T>("/sym/logarchive/action", "archives", "archive-action", { ...payload, id });
+}
 const filters = () => ({
   page: page.value,
   size: size.value,
@@ -1424,7 +1449,7 @@ async function load() {
         Date.parse(input.endTime) - Date.parse(input.startTime) > 90 * 86400000)
     )
       throw new Error("请选择开始时间早于结束时间、且不超过 90 天的区间");
-    const data = await request<PageData>("GET", "/" + kind.value, input);
+    const data = await readPage(input);
     if (current !== revision) return;
     rows.value = data.list || [];
     total.value = Number(data.total ?? 0);
@@ -1472,11 +1497,7 @@ async function showDetail(row: LogRow) {
   parameterCopyFailure.value = "";
   detailLoading.value = true;
   try {
-    detail.value = await request<LogRow>(
-      "GET",
-      "/" + kind.value + "/" + row.tid,
-      {},
-    );
+    detail.value = await readLog<LogRow>(eventGroups[kind.value] + "/detail", kind.value, "detail", { id: row.tid });
     batchRows.value = [];
     batchPage.value = 1;
     if (detail.value.batch_id) await loadBatch();
@@ -1490,11 +1511,9 @@ async function showDetail(row: LogRow) {
 async function loadBatch() {
   try {
     if (!detail.value) return;
-    const data = await request<PageData>(
-      "GET",
-      "/" + kind.value + "/" + detail.value.tid + "/items",
-      { page: batchPage.value, size: 20 },
-    );
+    const data = await readLog<PageData>(eventGroups[kind.value] + "/items", kind.value, "items", {
+      id: detail.value.tid, page: batchPage.value, size: 20,
+    });
     batchRows.value = data.list || [];
     batchTotal.value = data.total || 0;
   } catch (error) {
@@ -1505,7 +1524,7 @@ async function exportLogs() {
   if (exporting.value) return;
   exporting.value = true;
   try {
-    await request("POST", "/exports", {
+    await writeLog("/sym/logexport/create", "exports", "export", {
       ...filters(),
       kind: kind.value,
       format: "CSV",
@@ -1548,7 +1567,7 @@ async function loadPolicies() {
   policyLoading.value = true;
   policyFailure.value = "";
   try {
-    const data = await request<PolicyRow[]>("GET", "/policies", {});
+    const data = await readLog<PolicyRow[]>("/sym/logpolicy/list", "policies", "lifecycle");
     if (current !== policyRevision) return;
     policyRows.value = data;
     const category = (
@@ -1608,7 +1627,7 @@ async function savePolicy() {
   if (Object.values(policyErrors.value).some(Boolean)) return;
   saving.value = true;
   try {
-    await request("PUT", "/policies", { ...policy.value });
+    await writeLog("/sym/logpolicy/save", "policies", "policy", { ...policy.value });
     policyBaseline.value = JSON.stringify(policy.value);
     policyOpen.value = false;
     ElMessage.success("日志策略已保存");
@@ -1625,7 +1644,7 @@ async function createArchive() {
   }
   saving.value = true;
   try {
-    await request("POST", "/archives", {
+    await writeLog("/sym/logarchive/create", "archives", "archive", {
       kind: archive.value.kind,
       startTime: new Date(archive.value.dates[0]).toISOString(),
       endTime: new Date(archive.value.dates[1]).toISOString(),
@@ -1647,7 +1666,7 @@ async function holdArchive(row: LogRow) {
       "保留冻结",
       { inputValidator: (value) => Boolean(value?.trim()) || "请填写原因" },
     );
-    await request("POST", "/archives/" + row.tid, { action, reason: value });
+    await archiveAction(row.tid, { action, reason: value });
     ElMessage.success("保留状态已更新");
     await load();
   } catch (error) {
@@ -1656,11 +1675,7 @@ async function holdArchive(row: LogRow) {
 }
 async function purgeArchive(row: LogRow) {
   try {
-    const plan = await request<{ count: number; version: number }>(
-      "POST",
-      "/archives/" + row.tid,
-      { action: "purge-plan" },
-    );
+    const plan = await archiveAction<{ count: number; version: number }>(row.tid, { action: "purge-plan" });
     await ElMessageBox.confirm(
       "已校验归档文件，本次将清理在线日志 " +
         plan.count +
@@ -1672,7 +1687,7 @@ async function purgeArchive(row: LogRow) {
         type: "warning",
       },
     );
-    await request("POST", "/archives/" + row.tid, {
+    await archiveAction(row.tid, {
       action: "purge",
       version: plan.version,
       confirmationId: row.tid,
@@ -1693,16 +1708,12 @@ async function browseArchive(row: LogRow) {
 }
 async function loadArchive() {
   try {
-    const data = await request<PageData>(
-      "POST",
-      "/archives/" + archiveId.value,
-      {
-        action: "browse",
-        page: archivePage.value,
-        size: 20,
-        ...archiveSorting.value,
-      },
-    );
+    const data = await archiveAction<PageData>(archiveId.value, {
+      action: "browse",
+      page: archivePage.value,
+      size: 20,
+      ...archiveSorting.value,
+    });
     archivedRows.value = data.list || [];
     archiveTotal.value = data.total || 0;
   } catch (error) {
@@ -1776,7 +1787,7 @@ async function loadCapabilities() {
   initialFailure.value = "";
   initialized.value = false;
   try {
-    capabilities.value = await request<string[]>("GET", "/capabilities", {});
+    capabilities.value = await readLog<string[]>("/sym/logs/capabilities", "auth", "capabilities");
     if (tabs.value.length) {
       kind.value = tabs.value[0].key;
       previousKind = kind.value;

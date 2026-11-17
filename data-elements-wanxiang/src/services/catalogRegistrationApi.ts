@@ -101,6 +101,6 @@ export const catalogRegistrationApi = {
     return { detail, items: items.map(item => ({ ...item, colName: text(item.colName), colEn: text(item.colEn), colType: text(item.colType), isPk: text(item.isPk || '0'), isNullable: text(item.isNullable ?? '1') })) };
   },
   columns: (tableId: string) => catalogTableColumns(tableId),
-  save: (values: Record<string, unknown>, items: CatalogItem[], table: CatalogTableRow, tid?: string) => platformApi<{ tid: string; catalogName?: string }>('/dst/catalog/saveOrUpdate', catalogSaveBody(values, items, table, tid)),
+  save: (values: Record<string, unknown>, items: CatalogItem[], table: CatalogTableRow, tid?: string) => platformApi<{ tid: string; catalogName?: string }>('/dst/catalog/save', catalogSaveBody(values, items, table, tid)),
   remove: (tid: string) => platformApi<{ tid: string; deleted: boolean; indexRefreshPending?: boolean }>('/dst/catalog/delete', { tid }),
 };

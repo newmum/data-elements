@@ -22,7 +22,9 @@ export function upstreamTableSources(targetId: string, nodes: Record<string, Can
       const node = nodes[edge.source];
       if (!node) continue;
       if (node.category === 'source') {
-        const tables = node.config.table || node.config.tableName || node.config.tables || node.config.sourceTables;
+        const tables = node.manifestKey === 'source.elasticsearch' && node.config.defaultIndex
+          ? [node.config.defaultIndex]
+          : node.config.table || node.config.tableName || node.config.tables || node.config.sourceTables;
         const names = Array.isArray(tables) ? tables : String(tables ?? '').split(/[,;\n]/);
         for (const name of names) {
           const table = String(name).trim();

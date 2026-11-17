@@ -145,7 +145,13 @@ python tools/export-mock-config.py --with-structure --check
 - 必要认证、会话或框架能力可标为 `technical-retained`，须写具体原因，不能扩大日常 Java 业务保留范围。
 - 不创建只转发 Java 的空壳 Magic 来声称完成迁移。
 
-当前 56 项 HTTP 契约中，25 项指向 Magic，31 项指向 Java。其中租户登录选项、登录配置、当前租户、可用租户、租户切换这 5 项属于 `TenantController.java` 的认证／会话技术能力，记录为 `technical-retained`；表元数据采集状态与新增 25 项日志查询／导出业务均为 `pending-magic`。日志路由关联 `LogController`，查询／统计／详情关联 `LogQueryService`，组件读取关联 `LogComponentService`，任务／下载关联 `LogLifecycleService`。契约另以非 HTTP 条目的 `technicalRetention` 说明请求生命周期、脱敏、安全快照及可靠写入等必要采集技术保留，不将查询或导出编排算作技术保留。没有创建真实 Magic 样例或转发空壳，也没有迁移真实采集启动、后台执行及补偿链路。
+当前 71 项 HTTP 契约中，48 项指向 Magic，23 项指向 Java。门户首页、登录行业选项和行业登录配置的 GET 与 HEAD 均公开。行业会话及可用租户的 GET、HEAD 和 POST 切换使用行业会话。HEAD 返回 JSON 内容类型与空响应体。本地账户只能访问所属行业，切换 Mock 场景沿用登录页的行业选择和重新登录。
+
+表元数据采集状态 GET 和 HEAD 已迁入 Magic。澄天 Mock 从当前场景已有表快照和数据源角色范围生成任务状态，覆盖新旧路径、不可见来源、参数错误与 HEAD 空响应体。日志能力和共享日志组件的 GET、HEAD 已迁入 Magic，Mock 沿用真实授权和组件字段，匿名 GET 返回 `100120`。其余 23 项日志查询与导出标记为 `pending-magic`，查询、统计及详情关联 `LogQueryService`，任务、下载关联 `LogLifecycleService`。契约以 `technicalRetention` 条目记录请求生命周期、脱敏、安全快照及可靠写入。
+
+第 134 批登记待标注快照、历史差异和审查排序 5 项 HTTP 契约。澄天登记页从同一份模拟数据源及表快照读取，按现有角色范围处理页窗、已标注总数和逐名称审查，已有场景的差异报告为空。新旧路径保持原请求方法，实际历史 JSON 与多方言分页由后端验证覆盖。
+
+第 135 批登记启动采集及缺失表改名两个 POST 契约。模拟启动复用场景表快照，返回受理状态，执行记录可读到当前模拟任务。`dryRun` 校验来源授权且不写入模拟状态。现有场景没有待关联的历史缺失表，改名入口按实际数据范围校验并返回对应错误。并发受理、真实脚本的改名成功与回滚由后端隔离回归覆盖。
 
 用户曾要求本窗口承担遇到的 Java 业务迁移，但随后缩小为先看一批效果。接手时保留这个迁移方向，同时明确当前交付没有完成迁移；不把整套异步采集系统混入已验收的只读范围。与其他窗口协作时核对实际代码和任务范围，不假设已读取或同步了名为“肖烨辉”的窗口。
 
@@ -161,7 +167,7 @@ python tools/export-mock-config.py --with-structure --check
 | `mock/core/data.mjs` | 数据范围、逐 ID 校验、筛选与分页 |
 | `mock/core/metadata.mjs` | 表／视图、字段、预览与抽样公共行为 |
 | `mock/scenarios/` | 配置镜像、四行业业务种子与动态表单样例 |
-| `mock/contracts/chengtian.json` | 56 项 HTTP 契约、2 项共享函数依赖、已审阅真实实现及明确未同步差异 |
+| `mock/contracts/chengtian.json` | 71 项 HTTP 契约、20 项共享函数依赖、已审阅真实实现及明确未同步差异 |
 | `data-elements-chengtian/src/main.ts`、`src/bootstrap.ts` | 先 Mock 后应用初始化 |
 | `data-elements-chengtian/src/mock/` | 环境入口、存储隔离、MSW、跨应用只读桥 |
 | `data-elements-chengtian/src/utils/capabilityCenters.ts` | 风驰导航地址，保持真实认证信任边界 |
@@ -193,7 +199,7 @@ python tools/export-mock-config.py --with-structure --check
 
 尚未完成：
 
-- 全部前端或全部业务接口的 Mock；当前覆盖以 56 项清单和分批验证为限，日志浏览器完整链路尚未验收。
+- 全部前端或全部业务接口的 Mock。当前覆盖以 71 项清单和分批验证为限，日志 Mock 浏览器完整链路尚未验收。
 - 完整登记后续步骤、真实采集执行、NiFi、治理、服务、审批等未覆盖流程。
 - 海通上报原件上传、解析和下载属于真实工作台流程。澄天 Mock 接口清单未登记这些入口，真实工作台使用 `upload-report` 上传原件。
 - 风驰真实后端接入、统一真实认证、SQL 执行、结构与记录写入、DDL 编辑。

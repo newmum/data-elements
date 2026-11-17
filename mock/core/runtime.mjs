@@ -1,6 +1,7 @@
 import { createScenario, scenarios } from "../scenarios/index.mjs";
 import { organizationTree, menuRoutes } from "./configuration.mjs";
-import { requireTable, tableColumns, previewTable } from "./metadata.mjs";
+import { requireTable, tableColumns, previewTable, collectionHistory, collectionReviewOrder,
+  collectionStart, collectionRename } from "./metadata.mjs";
 import { detailForms } from "../scenarios/forms.mjs";
 import { LogMockService, logErrorResponse } from "./logs.mjs";
 import {
@@ -20,6 +21,14 @@ import {
 
 const clone = (value) => structuredClone(value);
 const now = () => new Date().toISOString().replace("T", " ").slice(0, 19);
+const collectionAliases = new Map([
+  ["GET /dst/database/metadata/tables/collection/status", "/dst/collect/status"],
+  ["GET /dst/database/metadata/tables/collection/changes", "/dst/collect/changes"],
+  ["GET /dst/database/metadata/tables/snapshot", "/dst/collect/snapshot"],
+  ["POST /dst/database/metadata/tables/review-order", "/dst/collect/order"],
+  ["POST /dst/database/metadata/tables/collection/start", "/dst/collect/start"],
+  ["POST /dst/database/metadata/tables/collection/rename-missing", "/dst/collect/rename"],
+]);
 
 /** 应用层接口模拟。状态只存在于专用浏览器键，不读取数据库或执行 Magic/Java。 */
 export class ChengtianMockRuntime {
@@ -158,9 +167,11 @@ export class ChengtianMockRuntime {
   }
 
   tenant() {
+    const profile = clone(tenantConfiguration(this.session.code).tenant);
     return {
-      ...this.tenantOptions().find((row) => row.tid === this.session.tenantId),
-      available: this.tenantOptions(),
+      ...profile,
+      available: [profile],
+      accountSource: "LOCAL",
     };
   }
 
@@ -603,17 +614,79 @@ export class ChengtianMockRuntime {
   async handle({ method = "GET", path, query = {}, body = {}, token = "" }) {
     // 主页面与风驰的同源桥每次请求回读同一份场景状态，避免跨窗口缓存分叉。
     this.databases.clear();
-    const key = `${method.toUpperCase()} ${path}`;
+    const verb = method.toUpperCase();
+    const key = `${verb} ${path}`;
     // 只记录方法与路由，绝不记录密码、令牌或请求正文。
     this.requests.push(key);
     if (this.requests.length > 500) this.requests.shift();
+    const portal = (/^(GET|HEAD) \/portal\/sso\/(options|settings|session|tenants)$/.test(key)
+      || key === "POST /portal/sso/switch");
+    const readVerb = verb === "HEAD" ? "GET" : verb;
+    const collectionPath = collectionAliases.get(`${readVerb} ${path}`) ?? path;
+    const collection = /^(GET|HEAD) \/dst\/collect\/(status|snapshot|changes)$/.test(`${verb} ${collectionPath}`)
+      || /^POST \/dst\/collect\/(order|start|rename)$/.test(`${verb} ${collectionPath}`);
+    const logBootstrap = /^(GET|HEAD) \/sym\/logs\/(capabilities|components)$/.test(key);
+    const shortEvent = /^\/sym\/(logauth|logops|logreq|logsec)\/(page|stats|detail|items|batch)$/.exec(path);
+    const canonicalEvent = shortEvent && (shortEvent[2] === "batch" ? verb === "POST" : readVerb === "GET");
+    const legacyEvent = /^(GET|HEAD) \/sym\/logs\/(auth|operations|requests|security)(?:\/[^/]+(?:\/items)?)?$/.test(key)
+      || /^POST \/sym\/logs\/(auth|operations|requests|security)\/batch$/.test(key);
+    const logEvent = canonicalEvent || legacyEvent;
+    const logTask = /^(?:GET|HEAD) \/sym\/(?:logs\/(exports|archives)|(logexport|logarchive)\/page)$/.exec(key);
+    const exportCreate = /^POST \/sym\/(?:logs\/exports|logexport\/create)$/.test(key);
+    const archiveCreate = key === "POST /sym/logarchive/create";
+    const archiveAction = key === "POST /sym/logarchive/action";
+    const logPolicy = /^(?:GET|HEAD) \/sym\/logpolicy\/list$/.test(key)
+      || /^(?:PUT|POST) \/sym\/logpolicy\/save$/.test(key);
+    const head = (portal || collection || logBootstrap || logEvent || logTask) && verb === "HEAD";
+    const headResponse = () => ({ raw: true, status: 200, body: null, headers: {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-cache, no-store, max-age=0, must-revalidate",
+    } });
+    if (key === "HEAD /portal/main/index") return headResponse();
     try {
-      const data = await this.dispatch(key, query, body || {}, token);
+      let route = collection ? `${readVerb} ${collectionPath}` : head ? `GET ${path}` : key;
+      if (logTask) {
+        const kind = logTask[1] || (logTask[2] === "logexport" ? "exports" : "archives");
+        route = `${verb} /sym/logs/${kind}`;
+      }
+      if (logPolicy) route = `${verb} /sym/logs/policies`;
+      if (exportCreate) route = "POST /sym/logs/exports";
+      if (archiveCreate) route = "POST /sym/logs/archives";
+      if (archiveAction) route = "POST /sym/logs/archives/action";
+      if (canonicalEvent) {
+        assert(this.session && token === this.session.token, 401, "本地场景会话无效，请重新登录");
+        const [, group, action] = shortEvent;
+        const kind = {logauth: "auth", logops: "operations", logreq: "requests", logsec: "security"}[group];
+        const oldUrl = `/sym/logs/${kind}`;
+        if (action === "detail" || action === "items") {
+          const id = String(query.id ?? "");
+          assert(id.trim() && id.length <= 64, 400, "一次最多查询100个不同事件");
+          route = `GET ${oldUrl}/${encodeURIComponent(id)}${action === "items" ? "/items" : ""}`;
+        } else {
+          route = `${readVerb} ${oldUrl}${action === "page" ? "" : action === "stats" ? "/statistics" : "/batch"}`;
+        }
+      }
+      const data = await this.dispatch(route, query, body || {}, token);
+      if (head) return headResponse();
+      if (portal) return { status: 200, body: { code: 0, msg: "success", success: true, data } };
+      if (collection) return { status: 200, body: { code: 0, msg: "success", data } };
+      if (logBootstrap || logEvent || logTask || exportCreate) return { status: 200, body: { code: 0, success: true, data } };
       if (path.startsWith("/sym/logs/") && data?.raw === true) return data;
       return { status: 200, body: { code: 0, message: "操作成功", ...(path.startsWith("/sym/logs/") ? { success: true } : {}), data } };
     } catch (error) {
       if (!(error instanceof MockError)) throw error;
-      if (path.startsWith("/sym/logs/")) return logErrorResponse(error);
+      if (head) return headResponse();
+      if (portal || (logBootstrap || logEvent || logTask || exportCreate) && error.status === 401) return { status: 200, body: {
+        code: error.status === 401 ? 100120 : error.status,
+        msg: error.status === 401 ? "user_no_login" : error.message,
+        success: false, data: null,
+      } };
+      if (collection) return { status: 200, body: {
+        code: error.status === 401 ? 100120 : error.status,
+        msg: error.status === 401 ? "user_no_login" : error.message,
+        success: false, data: null,
+      } };
+      if (logEvent || logTask || logPolicy || exportCreate || archiveCreate || archiveAction || path.startsWith("/sym/logs/")) return logErrorResponse(error);
       return {
         status: error.status,
         body: {
@@ -629,8 +702,10 @@ export class ChengtianMockRuntime {
     if (key === "GET /portal/main/index") return clone(configuration.globalSettings);
     if (key === "GET /portal/sso/options") return this.tenantOptions();
     if (key === "GET /portal/sso/settings") {
-      const code = scenarioForTenantId(query.tenantId);
-      assert(code, 400, "行业租户不存在");
+      const supplied = query.tenantId ?? query["tenantId[]"];
+      assert(supplied != null, 20001, "缺少必要参数: tenantId");
+      const code = scenarioForTenantId(Array.isArray(supplied) ? supplied.join(",") : supplied);
+      assert(code, 403, "Requested tenant is not available");
       return this.settings(code);
     }
     if (key === "POST /portal/sso/login") {
@@ -658,22 +733,12 @@ export class ChengtianMockRuntime {
       this.sessionStorage?.removeItem("data-elements:mock:session:v3");
       return "/login";
     }
-    if (["GET /portal/sso/session", "GET /portal/sso/tenants"].includes(key))
-      return key.endsWith("/available") ? this.tenantOptions() : this.tenant();
+    if (key === "GET /portal/sso/session") return this.tenant();
+    if (key === "GET /portal/sso/tenants") return this.tenant().available;
     if (key === "POST /portal/sso/switch") {
-      const code = scenarioForTenantId(body.tenantId);
-      assert(Object.hasOwn(scenarios, code), 403, "不能进入未定义的行业场景");
-      Object.assign(this.session, {
-        code,
-        tenantId: tenantConfiguration(code).tenant.tid,
-        orgId: createScenario(code).applications[0]?.orgId || "",
-        userId: `${code}-user-0`,
-      });
-      this.sessionStorage?.setItem(
-        "data-elements:mock:session:v3",
-        JSON.stringify(this.session),
-      );
-      return this.tenant();
+      assert(String(body.tenantId ?? "").trim() === this.session.tenantId, 403,
+        "本地账号只能访问所属租户，请切换系统后重新登录");
+      return this.tenant().available[0];
     }
     if (key === "POST /sym/user/me") return this.user();
     if (key === "GET /sym/menu/routes") return this.routes();
@@ -768,16 +833,44 @@ export class ChengtianMockRuntime {
           : body,
       );
     }
-    if (key === "GET /dst/database/metadata/tables/collection/status") {
-      requireSources(this.database, this.session, query.dbId);
+    if (key === "GET /dst/collect/snapshot" || key === "GET /dst/collect/changes") {
+      return collectionHistory(this.database, this.session, key.split("/").at(-1), query);
+    }
+    if (key === "POST /dst/collect/order") return collectionReviewOrder(this.database, this.session, body);
+    if (key === "POST /dst/collect/start") {
+      const data = this.database;
+      const result = collectionStart(data, this.session, body);
+      if (!result.dryRun) this.persist(data);
+      return result;
+    }
+    if (key === "POST /dst/collect/rename") return collectionRename(this.database, this.session, body);
+    if (key === "GET /dst/collect/status") {
+      const ids = query.dbId ?? query["dbId[]"];
+      assert(ids != null, 20001, "缺少必要参数: dbId");
+      const id = String(ids).trim();
+      assert(/^[A-Za-z0-9_-]{1,64}$/.test(id), 500, "dbId 格式不正确");
+      const rawFlag = query.includeDeletedDetails ?? query["includeDeletedDetails[]"];
+      const flag = String(Array.isArray(rawFlag) ? rawFlag[0] : rawFlag ?? "").trim().toLowerCase();
+      const details = ["true", "on", "yes", "1"].includes(flag);
+      assert(details || ["", "false", "off", "no", "0"].includes(flag), 20002,
+        "参数[includeDeletedDetails]类型错误，期望类型: boolean");
+      const jobId = String(query.jobId ?? query["jobId[]"] ?? "").trim();
+      const fixtureJob = `demo-collection-${id}`;
+      const visible = visibleSources(this.database, this.session).some((source) => source.tid === id);
+      const job = visible && Object.hasOwn(this.database.collectionJobs ?? {}, id) ? this.database.collectionJobs[id] : null;
+      if (job && (!jobId || jobId === job.jobId)) return { ...job, ...(details ? { deleted: [] } : {}) };
+      const count = visible ? this.tables({ dbId: id }).tableCount : 0;
+      if (!count || (jobId && jobId !== fixtureJob)) {
+        return { exists: false, status: "NOT_COLLECTED", phase: "NOT_COLLECTED", datasourceId: id, progressPercent: 0 };
+      }
       return {
-        status: "SUCCEEDED",
-        progressPercent: 100,
-        totalTables: 6,
-        completedTables: 6,
+        exists: true, jobId: fixtureJob, datasourceId: id, mode: "INITIAL", status: "SUCCEEDED", phase: "COMPLETED",
+        scannedCount: count, persistedCount: count, totalCount: count, addedCount: count,
+        unchangedCount: 0, deletedCount: 0, startedAt: null, finishedAt: null, savedBeforeCount: 0,
+        previousSuccessfulAt: null, error: "", progressPercent: 100, ...(details ? { deleted: [] } : {}),
       };
     }
-    if (key === "POST /dst/application/register-options") {
+    if (key === "POST /dst/application/options" || key === "POST /dst/application/register-options") {
       // 登记选择器读取当前租户完整候选，页面再对名称和 ID 搜索。
       return this.database.applications
         .filter((row) =>

@@ -6,30 +6,40 @@ import zhCn from 'element-plus/es/locale/lang/zh-cn';
 import type { Component } from 'vue';
 import { platformApi } from '../shared/platformApi';
 import { requirePlatformSessionToken } from '../shared/platformSession';
+import type { LogBootstrap } from '../services/logBootstrap';
 const apiBase=(import.meta.env.VITE_DATA_ELEMENTS_API_BASE_URL || (import.meta.env.DEV?'/dev-api':'/prod-api')).replace(/\/$/,'');
-async function requestLog(method:string,path:string,data:Row,_domain?:string,_activeKind?:string):Promise<unknown> {
- if(method==='GET') {const query=new URLSearchParams(Object.entries(data).filter(([,value])=>value!==undefined&&value!==null).map(([key,value])=>[key,String(value)]));return platformApi('/sym/logs'+path+'?'+query);}
- return platformApi('/sym/logs'+path,data,{method:method as 'POST'|'PUT'});
+async function requestLog(method: 'GET' | 'POST',url:string,data:Row):Promise<unknown> {
+ if(method==='GET') {const query=new URLSearchParams(Object.entries(data).filter(([,value])=>value!==undefined&&value!==null).map(([key,value])=>[key,String(value)]));return platformApi(url+'?'+query);}
+ return platformApi(url,data,{method});
 }
 async function downloadLog(id:string,_domain:string) {const token=await requirePlatformSessionToken();await saveBlob(await fetch(apiBase+'/sym/logs/exports/'+encodeURIComponent(id)+'/download',{headers:{token},cache:'no-store'}),id);}
 
 
 type Row = Record<string, unknown>;
-type LogClient = { request:(method:string,path:string,data?:Row)=>Promise<unknown>;download:(id:string)=>Promise<void> };
+type LogClient = { request:(method:'GET'|'POST',url:string,data:Row)=>Promise<unknown>;download:(id:string)=>Promise<void> };
 declare global { interface Window { __logClient?:LogClient; ___magic__import__?:(library:string,name:string)=>unknown; } }
 const titles:Record<string,string>={management:'日志管理'};
 
 /** Host only. The single tabbed log page is a published low-code resource. */
-export default function LowcodeLogs({kind='management',domain='workforce'}:{kind?:string;domain?:string}) {
- const host=useRef<HTMLDivElement>(null);const [failure,setFailure]=useState('');const [retry,setRetry]=useState(0);
+export default function LowcodeLogs({ bootstrap, onRetry, kind='management', domain='workforce' }: {
+ bootstrap: LogBootstrap;
+ onRetry: () => void;
+ kind?: string;
+ domain?: string;
+}) {
+ const host=useRef<HTMLDivElement>(null);const [failure,setFailure]=useState('');
  useEffect(()=>{
   let disposed=false;let app:Vue.App|undefined;const styles:HTMLStyleElement[]=[];
   const previousClient=window.__logClient;const previousImport=window.___magic__import__;
-  const client:LogClient={request:(method,path,data={})=>requestLog(method,path,data,domain,kind),download:id=>downloadLog(id,domain)};
+  const client: LogClient = {
+   request: (method, url, data) => method === 'GET' && url === '/sym/logs/capabilities'
+    ? bootstrap.capabilities() : requestLog(method, url, data),
+   download: id => downloadLog(id, domain),
+  };
   window.__logClient=client;setFailure('');
   void (async()=>{
    try {
-    const components=await client.request('GET','/components',{kind:'auth'}) as Row[];
+    const components = await bootstrap.components();
     if(disposed||!host.current)return;
     const libraries:Record<string,Record<string,unknown>>={vue:Vue,'element-plus':ElementPlus};
     window.___magic__import__=(library,name)=>{
@@ -50,8 +60,8 @@ export default function LowcodeLogs({kind='management',domain='workforce'}:{kind
    } catch(error) {if(!disposed)setFailure(error instanceof Error?error.message:'日志页面加载失败');}
   })();
   return()=>{disposed=true;app?.unmount();styles.forEach(style=>style.remove());if(window.__logClient===client)window.__logClient=previousClient;window.___magic__import__=previousImport;};
- },[kind,domain,retry]);
- return <section aria-label={titles[kind]||'日志管理'} style={{minHeight:0,minWidth:0}}>{failure&&<div className="page-title"><h1 className="page-heading">{titles[kind]||'日志管理'}</h1></div>}{failure&&<div role="alert" style={{padding:24,color:'#b43d4b',background:'#fff5f5',borderRadius:10}}>{failure}<button type="button" onClick={()=>setRetry(value=>value+1)} style={{marginLeft:16}}>重新加载</button></div>}<div ref={host}/></section>;
+ },[kind,domain,bootstrap]);
+ return <section aria-label={titles[kind]||'日志管理'} style={{minHeight:0,minWidth:0}}>{failure&&<div className="page-title"><h1 className="page-heading">{titles[kind]||'日志管理'}</h1></div>}{failure&&<div role="alert" style={{padding:24,color:'#b43d4b',background:'#fff5f5',borderRadius:10}}>{failure}<button type="button" onClick={onRetry} style={{marginLeft:16}}>重新加载</button></div>}<div ref={host}/></section>;
 }
 
 export async function saveBlob(response:Response,id:string) {

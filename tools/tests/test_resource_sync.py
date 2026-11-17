@@ -53,6 +53,20 @@ class EditorParameterDefaultsTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Invalid or duplicate'):
             sync.magic_access_policy(dict(resource, options=resource['options'] * 2))
 
+    def test_relay_access_requires_post(self):
+        resource = {'method': 'POST', 'options': [{'name': 'access', 'value': 'HAITONG_RELAY'}]}
+        self.assertEqual(sync.magic_access_policy(resource), 'HAITONG_RELAY')
+        with self.assertRaisesRegex(ValueError, 'does not match the HTTP method'):
+            sync.magic_access_policy(dict(resource, method='GET'))
+
+    def test_rejects_malformed_api_option_shapes(self):
+        for options in ({'access': 'PUBLIC'}, '', True, ['PUBLIC'], [12]):
+            with self.subTest(options=options), self.assertRaisesRegex(ValueError, 'list of option objects'):
+                sync.magic_access_policy({'method': 'GET', 'options': options})
+        for options in (None, [], [None, {'name': 'other', 'value': 'unchanged'}]):
+            with self.subTest(options=options):
+                self.assertIsNone(sync.magic_access_policy({'method': 'GET', 'options': options}))
+
 
 class Cursor:
     def __init__(self, connection):
@@ -129,6 +143,15 @@ class ResourceTests(unittest.TestCase):
             sync.registration_plan(self.manifest, self.remote, [files[1]])
         with self.assertRaisesRegex(ValueError, 'distinct'):
             sync.registration_plan(self.manifest, self.remote, files + files)
+        self.assert_no_write()
+
+    def test_magic_registration_rejects_id_too_long_for_control_database(self):
+        files = self.registration_files()
+        path = self.root / files[1]
+        body = path.read_text(encoding='utf8')
+        path.write_text(body.replace('new-api', 'a' * 33), encoding='utf8')
+        with self.assertRaisesRegex(ValueError, 'api_file_t.api_id limit'):
+            sync.registration_plan(self.manifest, self.remote, files)
         self.assert_no_write()
 
     def test_new_magic_registration_blocks_concurrent_registry_edit(self):
@@ -265,6 +288,27 @@ class ResourceTests(unittest.TestCase):
         with patch.object(sync, 'snapshot', return_value=remote):
             with self.assertRaisesRegex(ValueError, 'identity changed'):
                 sync.publish(self.connection, {}, 'magic/api/example.ms')
+        self.assert_no_write()
+
+    def test_current_magic_script_returns_after_runtime_readback_without_writes(self):
+        runtime_resource = {**self.meta, 'script': 'return 1'}
+        with patch.object(sync, 'snapshot', return_value=self.remote), \
+                patch.object(sync, 'runtime_call', return_value=runtime_resource) as runtime:
+            result = sync.publish(self.connection, {}, 'magic/api/example.ms')
+        self.assertEqual(result['result'], 'already-current')
+        runtime.assert_called_once_with({}, '/api/web/resource/file/api-id')
+        self.assert_no_write()
+
+    def test_current_magic_script_rejects_runtime_drift_without_writes(self):
+        for changes, message in (
+                ({'method': 'GET'}, 'Runtime resource identity differs'),
+                ({'script': 'return 2'}, 'Runtime source differs'),
+                ({'script': None}, 'Runtime source differs'),
+                ({'options': [{'name': 'access', 'value': 'TENANT_SESSION'}]}, 'Runtime access policy differs')):
+            with self.subTest(changes=changes), patch.object(sync, 'snapshot', return_value=self.remote), \
+                    patch.object(sync, 'runtime_call', return_value={**self.meta, 'script': 'return 1', **changes}):
+                with self.assertRaisesRegex(ValueError, message):
+                    sync.publish(self.connection, {}, 'magic/api/example.ms')
         self.assert_no_write()
 
     def test_remote_duplicate_metadata_id_at_another_path_blocks_publication(self):

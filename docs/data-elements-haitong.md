@@ -149,6 +149,8 @@ NiFi 与业务接口使用数据平台的登录会话。独立打开海通时，
 
 本地开发代理见 `vite.config.ts`：`/nifi/api`、`/nifi-api`、`/nifi-ui` 代理到 `http://localhost:8088`，`/dev-api` 也转向同一服务并去掉前缀。NiFi API 默认基址是 `/nifi/api`，可用 `VITE_APP_BASE_API` 覆盖。生产构建的 `.env.production` 使用 `/prod-api/nifi/api`；部署网关需要把该路径及原生 NiFi 页面路径正确代理到现有后端，并提供页面同源访问。前端请求携带当前 token，租户及资源权限由后端校验。仅启动前端不会使后端接口可用。
 
+节点配置的连接测试、字段探查和表探查分别使用 `POST /nifi/api/connect`、`POST /nifi/api/columns`、`POST /nifi/api/tables`。既有画布请求的旧 POST 地址继续由共享后端按原参数及鉴权规则兼容。表探查接受关键词和限制数量，字段探查按当前所选表读取。
+
 
 <a id="overview--画布图标与主题"></a>
 
@@ -157,6 +159,8 @@ NiFi 与业务接口使用数据平台的登录会话。独立打开海通时，
 数据源在组件选择器、节点和配置抽屉中共用 `src/nifi/panels/databaseIcons.tsx` 提供的本地图标，资源来源及许可见 [数据源图标说明](#source-icon-assets)。图标随静态构建打包，离线环境不需要访问图片 CDN；API、FTP、SFTP 分别使用蓝色接口、橙色双向文件传输、绿色加密文件传输图形，与其他数据源共用白色圆角底板、尺寸、留白和缩放规则，深浅色主题均保持图形原色。JDBC 目标节点按配置中的数据库类型选择图标，不通过接口逐节点加载图片。
 
 “添加节点”和配置抽屉的类型切换均按澄天登记第一步的库表探查卡片顺序显示数据源。海通以一个 OceanBase 节点承接 MySQL 和 Oracle 兼容模式，放在登记中两个 OceanBase 卡片的共同位置。登记卡片之外的类型排在 Vertica 之后，按显示名称排序。
+
+OceanBase MySQL 来源在测试连接、探查表和生成 NiFi 流程时使用 `jdbc:oceanbase://` 与 `com.oceanbase.jdbc.Driver`，抽取 SQL 仍按 MySQL 语法生成。旧登记或画布保存的 `jdbc:mysql://` 由来源适配层转换，主机、端口、库名和已有连接参数不变。NiFi 驱动包从节点管理的 `OCEANBASE_MYSQL` 路径读取；填写目录时使用平台约定的 OceanBase JAR 文件名，其他版本请配置实际完整 JAR 路径。原生 OceanBase Oracle 来源使用 `jdbc:oceanbase:oracle://`。已部署的流程须从画布重新部署，才会更新现有的连接池配置。
 
 深色画布的启动主按钮和高级设置菜单按钮使用深黑底色；悬停、键盘焦点与禁用状态保持可识别。选择库、选择表和其他下拉控件使用当前主题的弹层与状态色，名称、注释、类型／Schema 标签、占位文字及错误提示不应硬编码浅色配色。
 
@@ -2342,6 +2346,8 @@ HiveRecordPut 模式同样按链路位置决定保留或旁路字段治理，并
 画布的 JDBC 写入节点已填写单主机、单数据库的 MySQL（含 MySQL 协议兼容库）、MariaDB、PostgreSQL、KingbaseES、HighGo 或 Vertica URL 时，可以直接打开「物化建表」。弹窗显示 URL 指定的目标库。执行时从最终 `CREATE TABLE` 或 MongoDB 创建命令提取名称，成功后刷新并回填对应的表或集合。画布的建表请求只允许创建选定库中的一张表及该表注释，登记库连接从当前租户解析。直连预览发送 `canvasJdbc` 的 URL 和方言提示，执行才提交该节点的账号密码。MongoDB 探查返回的 BSON ObjectId 生成 MySQL 建表语句时使用 `CHAR(24)`，保留主键约束。数据接入的批量物化继续按显式目标表名执行。澄天与风驰的 Mock 未接入这两个画布物化端点。
 
 MongoDB 目标节点填写主机和数据库后，可以从「集合」下拉打开「物化建表」。预览使用 `canvasMongo.database` 生成创建集合的 JSON 指令。可从来源表的主键生成唯一索引，也可直接创建空集合。执行时使用同一节点的端口、账号、认证库和 TLS 配置，成功后回填集合名并刷新列表。
+
+Elasticsearch 来源节点的「探查字段」使用配置中的索引名和连接认证，通过登记页共用的 HTTP mapping 探查器读取字段。未配置索引时先提示填写，旧画布可沿用已保存的表名。探查保留 ES 原生类型和已知长度，索引 mapping 未声明的长度保持为空。画布物化来源选择同样使用已配置的索引。
 
 <a id="field-mapping--273-分支规则与错误语义"></a>
 

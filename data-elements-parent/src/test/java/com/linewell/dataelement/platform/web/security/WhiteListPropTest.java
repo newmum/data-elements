@@ -13,8 +13,8 @@ class WhiteListPropTest {
         WhiteListProp properties = new WhiteListProp();
         properties.setWhiteList(List.of("/public/**"));
 
-        assertTrue(properties.isWhiteListed("/portal/main/index"));
-        assertTrue(properties.isWhiteListed("/portal/sso/options"));
+        assertTrue(properties.isWhiteListed("/portal/sso/login"));
+        assertFalse(properties.isWhiteListed("/portal/sso/options"));
         assertTrue(properties.isWhiteListed("/public/demo"));
         assertFalse(properties.isWhiteListed("/private/demo"));
     }
@@ -23,8 +23,18 @@ class WhiteListPropTest {
     void handlesMissingExternalWhitelist() {
         WhiteListProp properties = new WhiteListProp();
 
-        assertTrue(properties.isWhiteListed("/portal/main/index"));
+        assertTrue(properties.isWhiteListed("/portal/sso/login"));
         assertFalse(properties.isWhiteListed("/private/demo"));
+    }
+
+    @Test
+    void policyManagedReadRoutesDoNotNeedExactLegacyEntries() {
+        WhiteListProp properties = new WhiteListProp();
+        properties.setWhiteList(List.of("/portal/**"));
+        assertFalse(properties.isWhiteListed("/portal/main/index"));
+        assertFalse(properties.isWhiteListed("/idaas/auth/settings"));
+        assertFalse(properties.isWhiteListed("/portal/sso/options"));
+        assertFalse(properties.isWhiteListed("/portal/sso/settings"));
     }
 
     @Test

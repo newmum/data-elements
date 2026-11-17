@@ -924,7 +924,7 @@ const handleAttach = async (type: string, item: any) => {
 
   try {
     // 调用挂接接口
-    await $common.post("/dst/catalog/saveOrUpdate", {
+    await $common.post("/dst/catalog/save", {
       tid: props.catalogId,
       assetType: "catalog",
       propList: {
@@ -974,7 +974,7 @@ const handleRemove = async (type: string, id: string) => {
     );
 
     // 调用移除接口
-    await $common.post("/dst/catalog/saveOrUpdate", {
+    await $common.post("/dst/catalog/save", {
       tid: props.catalogId,
       assetType: "catalog",
       propList: {

@@ -321,7 +321,7 @@ public class DataSourceConnectionTestService {
         // Magic API adds endpoint metadata to the request variables before running the script.
         Map<String, Object> variables = new LinkedHashMap<>();
         variables.put("body", input);
-        Object result = magicApi.execute("POST", "/nifi/api/connection-test", variables);
+        Object result = magicApi.execute("POST", "/nifi/api/connect", variables);
         return result instanceof ResponseEntity<?> response ? response.getBody() : result;
     }
 

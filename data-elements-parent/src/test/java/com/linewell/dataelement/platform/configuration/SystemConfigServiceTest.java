@@ -1,5 +1,7 @@
 package com.linewell.dataelement.platform.configuration;
 
+import com.linewell.dataelement.magic.module.SystemConfigMagicModule;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;

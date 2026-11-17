@@ -16,6 +16,15 @@ class PackageArchitectureTest {
     private static final Path JAVA_ROOT = BackendTestSources.javaPackageRoot();
 
     @Test
+    void logMagicAdapterUsesItsModulePackageAndComponentQueriesStayInMagic() {
+        assertThat(JAVA_ROOT.resolve("magic/module/LogManagementMagicModule.java")).exists();
+        assertThat(JAVA_ROOT.resolve("feature/logmanagement/LogManagementMagicModule.java")).doesNotExist();
+        assertThat(JAVA_ROOT.resolve("feature/logmanagement/LogComponentService.java")).doesNotExist();
+        assertThat(JAVA_ROOT.resolve("platform/web/download/LogDownloadController.java")).exists();
+        assertThat(JAVA_ROOT.resolve("feature/logmanagement/PlatformLogDownloadController.java")).doesNotExist();
+    }
+
+    @Test
     void tenantAndReconciliationDoNotReturnToLegacyRootPackages() throws Exception {
         assertThat(javaFiles(JAVA_ROOT.resolve("tenant"))).isEmpty();
         assertThat(javaFiles(JAVA_ROOT.resolve("reconciliation"))).isEmpty();
@@ -137,15 +146,36 @@ class PackageArchitectureTest {
     }
 
     @Test
-    void runtimeDiagnosticsAndSearchClientConfigurationHaveDedicatedPackages() {
+    void runtimeDiagnosticsAndSearchClientConfigurationHaveDedicatedPackages() throws Exception {
         assertThat(JAVA_ROOT.resolve("magic/runtime/diagnostics/MagicApiRuntimeProbe.java")).exists();
+        assertThat(JAVA_ROOT.resolve("magic/runtime/result/CustomJsonValueProvider.java")).exists();
+        assertThat(JAVA_ROOT.resolve("magic/runtime/result/MagicApiResultProvider.java")).exists();
         assertThat(JAVA_ROOT.resolve("magic/module/MagicResourceLinkModule.java")).exists();
+        assertThat(JAVA_ROOT.resolve("magic/module/SystemConfigMagicModule.java")).exists();
+        assertThat(JAVA_ROOT.resolve("magic/module/MetadataScanMagicModule.java")).exists();
+        assertThat(JAVA_ROOT.resolve("integration/metadata/TableInventoryProbe.java")).exists();
+        assertThat(JAVA_ROOT.resolve("metautil/controller/TableMetadataCollectionController.java")).doesNotExist();
+        assertThat(JAVA_ROOT.resolve("metautil/service/TableMetadataCollectionService.java")).doesNotExist();
+        assertThat(JAVA_ROOT.resolve("platform/configuration/SystemConfigMagicModule.java")).doesNotExist();
+        assertThat(JAVA_ROOT.resolve("platform/tenant/api/TenantController.java")).doesNotExist();
         assertThat(JAVA_ROOT.resolve("integration/search/config/ElasticsearchCustomRestClient.java")).exists();
         assertThat(JAVA_ROOT.resolve("integration/search/config/EsIndexInit.java")).exists();
         assertThat(JAVA_ROOT.resolve("platform/magic/diagnostics/MagicApiRuntimeProbe.java")).doesNotExist();
+        assertThat(javaFiles(JAVA_ROOT.resolve("platform/magic/result"))).isEmpty();
         assertThat(JAVA_ROOT.resolve("platform/magic/module/MagicResourceLinkModule.java")).doesNotExist();
         assertThat(JAVA_ROOT.resolve("elasticsearch/ElasticsearchCustomRestClient.java")).doesNotExist();
         assertThat(JAVA_ROOT.resolve("integration/elasticsearch/config/EsIndexInit.java")).doesNotExist();
+    }
+
+    @Test
+    void ftpsTransportFactoryLivesWithProtocolAdapters() {
+        assertThat(JAVA_ROOT.resolve("integration/transfer/FtpsClientFactory.java")).exists();
+        assertThat(JAVA_ROOT.resolve("metautil/structured/FtpsClientFactory.java")).doesNotExist();
+        assertThat(JAVA_ROOT.resolve("integration/transfer/haitong/HaitongStandaloneRegistryClient.java")).exists();
+        assertThat(JAVA_ROOT.resolve("integration/transfer/haitong/DataPushFjghccDeliveryService.java")).exists();
+        assertThat(JAVA_ROOT.resolve("config/DataPushRegistryConfiguration.java")).exists();
+        assertThat(JAVA_ROOT.resolve("dataservice/push/DataPushRegistryController.java")).doesNotExist();
+        assertThat(JAVA_ROOT.resolve("dataservice/push/DataPushSchemaService.java")).doesNotExist();
     }
 
     @Test

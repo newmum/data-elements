@@ -966,7 +966,7 @@ async function refreshReviewSummary(tid, requestId, showLoading) {
       ),
       // 与第二步使用同一份采集快照，禁止改用实时 Owner 范围重新计算总数。
       requestWithTimeout(
-        () => $common.get("/dst/database/metadata/tables/snapshot", { dbId: tid, pageNo: 1, pageSize: 1 }),
+        () => $common.get("/dst/collect/snapshot", { dbId: tid, pageNo: 1, pageSize: 1 }),
         "数据表采集汇总",
         30000,
       ),
@@ -1045,7 +1045,7 @@ async function refreshTableChangeSummary(tid, requestId) {
   tableChangeError.value = "";
   try {
     // 审查只读第二步的持久化结果，不重新探查，也不触发关系修复写入。
-    const result = await $common.get("/dst/database/metadata/tables/collection/status", { dbId: tid });
+    const result = await $common.get("/dst/collect/status", { dbId: tid });
     if (requestId !== sourceDetailRequestId || sourceTid.value !== tid) return;
     applyTableChangeSnapshot(result);
     writeReviewSummaryCache(tid, sourceDetail.value, realtimeTables.value);
@@ -1700,7 +1700,7 @@ const pushFileStages = [
 ];
 const pushContractEndpointItems = computed(() => pushIsAttachmentMode.value ? pushFileStages.filter(stage => pushFileMode.value === "single" ? ["fileSingle","fileStatus"].includes(stage.key) : stage.key !== "fileSingle") : [
   {key:"dataPush",label:"数据推送接口",method:pushContract.value?.endpoints?.dataPush?.method || "POST",
-    path:pushContract.value?.endpoints?.dataPush?.path || "/api/v1/data-push",description:"接收业务系统的表数据，按登记规则校验并投递至目标端。"},
+    path:pushContract.value?.endpoints?.dataPush?.path || "/api/v1/push",description:"接收业务系统的表数据，按登记规则校验并投递至目标端。"},
 ]);
 const pushRequestContentType = computed(() => pushIsAttachmentMode.value ? (pushFileMode.value === "single" ? "multipart/form-data" : "JSON / 文件原始字节") : "application/json");
 const pushContractHeaders = computed(() => [
@@ -1810,7 +1810,7 @@ async function issuePushCredential(datasourceId, rotate = false, retry = false) 
   pushCredentialDatasourceId.value = normalizedDatasourceId;
   pushCredentialError.value = "";
   try {
-    const result = await $common.postSilently(rotate ? "/dws/push/credential/rotate" : "/dws/push/credential/issue", { datasourceId: normalizedDatasourceId });
+    const result = await $common.postSilently(rotate ? "/dws/push/rotate" : "/dws/push/issue", { datasourceId: normalizedDatasourceId });
     const payload = result?.data || result || {};
     if (credentialRequestId !== pushCredentialRequestId || normalizedDatasourceId !== String(sourceTid.value || "").trim()) return;
     if (String(payload.datasourceId || "") !== normalizedDatasourceId) throw new Error("密钥响应与当前数据源不一致，请重试。");
@@ -1891,7 +1891,7 @@ function buildLocalPushContract(datasourceId) {
       { name: "records", required: true, description: "1 至 10,000 条记录，每条仅可包含已登记字段" },
     ],
     endpoints: {
-      dataPush: { method: "POST", path: "/api/v1/data-push", description: "通过 deliveryType=FTP 或 KAFKA 选择已登记的投递通道" },
+      dataPush: { method: "POST", path: "/api/v1/push", description: "通过 deliveryType=FTP 或 KAFKA 选择已登记的投递通道" },
     },
     tables: contractTables,
   };
@@ -1944,7 +1944,7 @@ async function loadPushContract(force = false) {
       // Wait for authoritative source details; viewing never issues a key.
       result = buildLocalPushContract(datasourceId);
     } else {
-      const remote = await $common.getSilently("/dws/push/schema/contracts", { datasourceId });
+      const remote = await $common.getSilently("/dws/push/contracts", { datasourceId });
       const payload = remote?.data || remote;
       if (String(payload?.datasourceId || "") !== datasourceId || !Array.isArray(payload?.tables)) throw new Error("规范响应与当前数据源不一致，请重新读取。");
       result = payload.tables.length ? { ...payload, tableSource: "published" } : buildLocalPushContract(datasourceId);
@@ -3493,7 +3493,7 @@ async function loadReviewPage() {
         : { names: rows.map((row) => row.tableName) };
     const result = await requestWithTimeout(
       () =>
-        $common.post("/dst/database/metadata/tables/review-order", {
+        $common.post("/dst/collect/order", {
           dbId: sourceTid.value,
           ...scope,
           pageNo: reviewTablePage.value,
@@ -4181,7 +4181,7 @@ async function commit(items) {
   await persistCompletion(items);
   const completedSource = items.find((item) => item.assetType === "db" && item.tid);
   if (completedSource && isDataPushSource.value && !pushIsAttachmentMode.value && completedRegistrationTableCount.value > 0) {
-    await $common.post("/dws/push/schema/publish", { datasourceId: completedSource.tid });
+    await $common.post("/dws/push/publish", { datasourceId: completedSource.tid });
     if (sourceDetail.value) sourceDetail.value = { ...sourceDetail.value, assetStatus: completedSource.assetStatus };
     await loadPushContract(true);
   }

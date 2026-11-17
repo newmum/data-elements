@@ -119,7 +119,7 @@ import "@post:/dst/db/ddl" as getCreateTableDDL;
 import "@post:/dst/db/create" as createTable;
 import "@post:/dst/catalog/items" as getCatalogItem;
 import "@post:/dst/catalog/detail" as queryById;
-import "@post:/dst/catalog/saveOrUpdate" as saveAsset;
+import "@post:/dst/catalog/save" as saveAsset;
 
 // GET /dst/file/materialize 文件数据物化建表
 // 业务说明：根据文件目录数据项+resName，指定dbId建表。

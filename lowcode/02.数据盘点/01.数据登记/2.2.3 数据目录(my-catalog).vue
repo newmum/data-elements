@@ -310,7 +310,7 @@ const handleAction = async (type: string, row?: any) => {
       if (isLoadTree.value) {
         Promise.all([
           $common.post("/sym/org/tree", { parentId: $user.orgRootId }),
-          $common.post("/dst/catalog/treeStatistics", { conditions: buildConditions(false) }),
+          $common.post("/dst/catalog/treestats", { conditions: buildConditions(false) }),
         ])
           .then(([data, result]) => {
             orgTreeSource.value = data || [];
@@ -338,7 +338,7 @@ const handleAction = async (type: string, row?: any) => {
     case "query":
       if (isLoadTree.value) {
         state.leftLoading = true;
-        $common.post("/dst/catalog/treeStatistics", { conditions: buildConditions(false) })
+        $common.post("/dst/catalog/treestats", { conditions: buildConditions(false) })
           .then(applyStatistics)
           .then(() => tableRef.value?.refresh(true))
           .catch((error) => {

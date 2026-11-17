@@ -9,7 +9,7 @@
   "lock": null,
   "createBy": null,
   "updateBy": null,
-  "path": "/saveOrUpdate",
+  "path": "/save",
   "method": "POST",
   "parameters": [],
   "options": [],
@@ -31,7 +31,7 @@ import log
 import tenantRuntime
 
 // 数据盘点统一保存接口。
-// 目标是承接原 /dst/catalog/saveOrUpdate 的核心保存能力，业务逻辑直接落在 Magic API，便于后续调整。
+// POST /dst/catalog/save 校验目录及关联表归属当前租户，再保存目录主表、属性及数据项。
 // 原平台登记仍直接生效；数据中心传 reviewRequired=true 时保存为待提交审核。
 
 var textOf = (value) => value == null ? null : value + ''

@@ -205,6 +205,48 @@ class DslCompilerJdbcDriverLocationTest {
                 "/opt/nifi/nifi-current/lib/jdbc/oceanbase-client-2.4.10.jar");
     }
 
+    @ParameterizedTest
+    @CsvSource({
+            "source.oceanbase,MYSQL,jdbc:mysql://example.test:2883/prod?useSSL=true&serverTimezone=GMT%2B8",
+            "source.mysql,oceanbase-mysql,jdbc:oceanbasemysql://example.test:2883/prod?useSSL=true&serverTimezone=GMT%2B8",
+            "source.oceanbase,OCEANBASE_MYSQL,jdbc:oceanbase://example.test:2883/prod?useSSL=true&serverTimezone=GMT%2B8",
+            "source.oceanbase,OCEANBASE_MYSQL,"
+    })
+    void configuresOceanBaseMysqlSourceWithNativeUrlDriverAndJar(String component, String type, String url)
+            throws Exception {
+        NifiClient nifi = configuredNifi();
+        ManifestRegistry registry = mock(ManifestRegistry.class);
+        NifiNodeRuntimeResolver resolver = mock(NifiNodeRuntimeResolver.class);
+        when(registry.get("source.oceanbase")).thenReturn(oceanBaseManifest());
+        String nativeJar = "/opt/nifi/lib/jdbc/oceanbase-client-2.4.17.jar";
+        when(resolver.resolve()).thenReturn(runtimeNode(
+                "MYSQL=/opt/nifi/lib/jdbc/mysql-connector-j-8.4.0.jar;OCEANBASE_MYSQL=" + nativeJar));
+        var cfg = new java.util.LinkedHashMap<String, Object>(Map.of(
+                "dbType", type, "host", "example.test", "port", "2883", "database", "prod",
+                "username", "test-user@tenant#cluster", "password", "test-password",
+                "table", "TEST_TABLE", "incrementalColumn", "UPDATED_AT"));
+        if (url != null) cfg.put("jdbcURL", url);
+        Pipeline pipeline = new Pipeline("task", "OceanBase 接入", null, null, null,
+                new Pipeline.Dsl(1, List.of(new Pipeline.Node("source", component, "OceanBase MySQL",
+                        "source", 0, 0, cfg)), List.of()), null, null, null, null, null, null, null);
+
+        new DslCompiler(nifi, resolver, registry, mock(FieldMappingService.class), mock(HiveModule.class), "")
+                .compile(pipeline);
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Map<String, String>> properties = ArgumentCaptor.forClass(Map.class);
+        verify(nifi).createControllerService(eq("pg"), eq("org.apache.nifi.dbcp.DBCPConnectionPool"),
+                eq("OceanBase MySQL/dbcp"), properties.capture());
+        String expected = "jdbc:oceanbase://example.test:2883/prod?" + (url == null
+                ? "useSSL=false&serverTimezone=GMT%2B8&allowPublicKeyRetrieval=true"
+                : "useSSL=true&serverTimezone=GMT%2B8");
+        assertThat(properties.getValue()).containsEntry("Database Connection URL", expected)
+                .containsEntry("Database Driver Class Name", "com.oceanbase.jdbc.Driver")
+                .containsEntry("Database Driver Locations", nativeJar)
+                .containsEntry("Database User", "test-user@tenant#cluster");
+        assertThat(new com.oceanbase.jdbc.Driver().acceptsURL(properties.getValue().get("Database Connection URL"))).isTrue();
+    }
+
     private NifiClient configuredNifi() {
         NifiClient nifi = mock(NifiClient.class);
         when(nifi.getRootProcessGroupId()).thenReturn("root");

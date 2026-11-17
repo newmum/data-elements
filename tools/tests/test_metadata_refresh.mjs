@@ -43,10 +43,30 @@ for(const size of [20,100]) {
   assert.equal(ctx.actual.titleActions(rule).length,1);
   await ctx.actual.handleTitleAction(action);
   assert.equal(calls.length,2,`Viewing ${size} list rows still refreshes only the selected table`);
-  assert.equal(calls[0].body.tid,'db');assert.equal(calls[0].body.tableId,'table');
+  assert.equal(calls[0].url,'/dst/db/refresh');assert.equal(calls[0].body.tid,'db');assert.equal(calls[0].body.tableId,'table');
   assert.equal(values[0].recordCount,0);assert.equal(values[0].fieldCount,0);
   assert.equal(notices.length,1);assert.equal(ctx.state.actionLoading.refreshMetadata,false);
   assert.equal(rule.props.actions,undefined,'Dynamic tenant form configuration is not mutated');
+}
+for (const type of ['db','table']) {
+  const calls = [];
+  const context = vm.createContext({detailClass:{value:type},props:{tid:type},detailLoading:{value:false},loadError:{value:''},
+    state:{editing:false,actionLoading:{},formData:{datasourceId:'db'}},formRef:{value:null},store:{setData:()=>{}},
+    $common:{getSilently:async(url,body)=>{calls.push({url,body});return {};},post:async()=>({})},
+    $message:{success:()=>{},error:assert.fail}});
+  vm.runInContext(detail,context);
+  const oldRequest = {url:'/dst/database/metadata/refreshDbInfo',method:'get',payload:{tid:'$tid'}};
+  const rule = {props:{name:'元数据信息',actions:[{key:'metadata',label:'刷新元数据',request:oldRequest}]}};
+  const [action] = context.actual.titleActions(rule);
+  assert.equal(context.actual.titleActions(rule).length,1);
+  await context.actual.handleTitleAction(action);
+  assert.equal(calls.length,1);
+  assert.equal(calls[0].url,'/dst/db/refresh');
+  assert.equal(calls[0].body.tid,'db');
+  assert.equal(calls[0].body.tableId,type === 'table' ? 'table' : undefined);
+  assert.equal(rule.props.actions[0].request,oldRequest);
+  rule.props.actions.push(action);
+  assert.equal(context.actual.titleActions(rule).length,1,'Prefer the current action when a form has both routes');
 }
 const rejected = [], calls = [];
 const denied = vm.createContext({

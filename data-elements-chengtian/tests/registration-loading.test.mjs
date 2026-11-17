@@ -91,7 +91,7 @@ test("20/100 个所属系统候选一次读取，在浏览器按最新名称或 
     view.searchApplicationOptions("没结果");
     view.searchApplicationOptions(" APP-001 ");
     await tick();
-    assert.deepEqual(view.calls, [["/dst/application/register-options", []]]);
+    assert.deepEqual(view.calls, [["/dst/application/options", []]]);
     response.resolve(Array.from({ length: count }, (_, index) => ({
       value: `app-${String(index).padStart(3, "0")}`, label: index === 2 ? "有效系统（历史）" : `验证系统 ${index}`,
     })));

@@ -44,7 +44,7 @@ public class LogArchiveService {
             p.put("store",kind);p.put("start",archive.get("range_start"));p.put("end",archive.get("range_end"));
             Long held=store.named(scope.tenantId()).queryForObject("select count(*) from log_archive_batch_t where scope_kind=:kind and scope_id=:scope and identity_domain=:domain and event_store=:store and hold_status='HELD' and range_start<:end and range_end>:start",p,Long.class);
             if(held!=null&&held>0)throw new IllegalStateException("时间区间内存在冻结归档，不能清理");
-            var events=readFile(archive);Set<String> archivedIds=new HashSet<>();events.forEach(event->archivedIds.add(String.valueOf(event.get("tid"))));
+            var events=readVerifiedFile(archive);Set<String> archivedIds=new HashSet<>();events.forEach(event->archivedIds.add(String.valueOf(event.get("tid"))));
             var selection=query.selection(read,kind,Map.of("startTime",LogTimes.instant(archive.get("range_start")).toString(),"endTime",LogTimes.instant(archive.get("range_end")).toString()));
             // One bounded preload followed by chunked writes; no per-event database reads.
             var existing=store.named(scope.tenantId()).queryForList("select tid from "+selection.view().table()+selection.where()+" order by tid limit 100001",selection.params(),String.class);
@@ -63,7 +63,7 @@ public class LogArchiveService {
     }
     private Object browse(LogScope scope,Map<String,Object> archive,Map<String,Object> input){
         all(access.refresh(scope,String.valueOf(archive.get("event_store"))));
-        var events=readFile(archive);String field=LogQueryService.text(input.getOrDefault("sortField","event_time"),40),dir=LogQueryService.text(input.getOrDefault("sortDir","asc"),4);
+        var events=readVerifiedFile(archive);String field=LogQueryService.text(input.getOrDefault("sortField","event_time"),40),dir=LogQueryService.text(input.getOrDefault("sortDir","asc"),4);
         if(!Set.of("event_time","action_code","actor_name","duration_ms").contains(field)||!Set.of("asc","desc").contains(dir))throw new IllegalArgumentException("排序参数无效");
         Comparator<Map<String,Object>> order=Comparator.comparing(event->Objects.toString(event.get(field),""));
         if(field.equals("duration_ms"))order=Comparator.comparingLong(event->event.get(field) instanceof Number n?n.longValue():-1);
@@ -71,7 +71,7 @@ public class LogArchiveService {
         return Map.of("list",events.subList(start,Math.min(events.size(),start+size)),"total",events.size(),"page",page,"size",size);
     }
     @SuppressWarnings("unchecked")
-    private List<Map<String,Object>> readFile(Map<String,Object> archive){
+    public List<Map<String,Object>> readVerifiedFile(Map<String,Object> archive){
         try{
             if(!Set.of("VERIFIED","COMPLETE").contains(String.valueOf(archive.get("status"))))throw new IllegalStateException("归档未通过校验");
             String key=Objects.toString(archive.get("object_key"),"");if(!key.matches("[a-f0-9]{32}\\.archive\\.jsonl"))throw new IllegalStateException("归档标识无效");

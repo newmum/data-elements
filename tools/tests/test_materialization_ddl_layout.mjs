@@ -27,19 +27,17 @@ const executable = babel.Babel.transform(declarations.join('\n') + '\n' + script
   filename: 'ddl-layout.ts', presets: ['typescript'], configFile: false, babelrc: false,
 }).code + '\nglobalThis.actual = {ddlEditorHost,ddlEditorHeight,syncDdlEditorHeight,stopDdlEditorSizing};';
 const listeners = new Map(), observers = [];
-let callback, bodyBottom = 942;
-const body = { getBoundingClientRect: () => ({ bottom: bodyBottom }) };
-const host = { closest: () => body, getBoundingClientRect: () => ({ top: 160 }) };
+let callback;
+const host = { clientHeight: 770 };
 const context = vm.createContext({
   ref: value => ({ value }), open: {}, ddlMode: {}, activeDdlKey: {},
   watch: (_refs, handler, options) => { callback = handler; assert.equal(options.flush, 'post'); },
   ResizeObserver: class {
     constructor(handler) { this.handler = handler; this.disconnected = false; observers.push(this); }
-    observe(target) { assert.equal(target, body); }
+    observe(target) { assert.equal(target, host); }
     disconnect() { this.disconnected = true; }
   },
   window: {
-    getComputedStyle: () => ({ paddingBottom: '12px' }),
     addEventListener: (event, listener) => listeners.set(event, listener),
     removeEventListener: event => listeners.delete(event),
   },
@@ -48,12 +46,15 @@ vm.runInContext(executable, context);
 context.actual.ddlEditorHost.value = host;
 callback([true, true]);
 assert.equal(context.actual.ddlEditorHeight.value, '770px', 'Tall drawers should use their available space');
-bodyBottom = 602;
+host.clientHeight = 430;
 listeners.get('resize')();
 assert.equal(context.actual.ddlEditorHeight.value, '430px', 'Window resizing must update the explicit editor height');
-bodyBottom = 290;
+host.clientHeight = 90;
 observers[0].handler();
 assert.equal(context.actual.ddlEditorHeight.value, '200px', 'Short windows retain a readable editor minimum');
+host.clientHeight = 360;
+observers[0].handler();
+assert.equal(context.actual.ddlEditorHeight.value, '360px', 'Warning or partition changes resize the editor at the same window size');
 callback([true, true]);
 assert.equal(observers[0].disconnected, true, 'Switching targets must release the previous observer');
 assert.equal(listeners.size, 1, 'Only one resize listener may remain');

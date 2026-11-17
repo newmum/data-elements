@@ -149,7 +149,7 @@ Kafka 默认停用；启用时同时配置 Kafka 连接、目标 Topic、路由�
 服务默认端口 18083，日志 logs/haitong.log，运行文件 data/。
 健康检查：http://服务器IP:18083/actuator/health，成功返回 status=UP。
 Magic API 编辑器：http://服务器IP:18083/api/web/index.html。
-统一表数据推送：POST http://服务器IP:18083/api/v1/data-push。
+统一表数据推送：POST http://服务器IP:18083/api/v1/push。
 分片初始化：POST http://服务器IP:18083/api/file/init。
 主传输接口：PUT http://服务器IP:18083/api/file/part?id={{id}}&part={{part}}。
 

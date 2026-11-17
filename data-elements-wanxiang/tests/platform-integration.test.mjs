@@ -7,6 +7,48 @@ const ds=require('../.test-build/src/services/datasources.js');
 const registration=require('../.test-build/src/services/datasourceRegistrationApi.js');
 const auth=require('../.test-build/src/services/api.js');
 const shared=require('../.test-build/src/shared/platformApi.js');
+const {createLogBootstrap}=require('../.test-build/src/services/logBootstrap.js');
+
+test('log navigation and mounts share initial reads, and retries and new sessions fetch again', async () => {
+ const previous = {fetch:globalThis.fetch, location:globalThis.location, window:globalThis.window,
+   localStorage:globalThis.localStorage, sessionStorage:globalThis.sessionStorage};
+ const calls = [];
+ let token = 'first-fixture-session';
+ let failComponent = false;
+ globalThis.location = {href:'http://localhost:3000/#/governance/logs', origin:'http://localhost:3000',
+   hash:'#/governance/logs', replace:() => {}};
+ globalThis.window = {location:globalThis.location};
+ globalThis.localStorage = {getItem:() => null};
+ globalThis.sessionStorage = {getItem:() => JSON.stringify(token)};
+ globalThis.fetch = async (url, init) => {
+  calls.push({url, token:init.headers.token});
+  if (url.endsWith('/sym/logs/capabilities')) {
+   return Response.json({code:0, data:token.startsWith('first') ? ['requests'] : ['auth']});
+  }
+  assert.match(url, /\/sym\/logs\/components\?kind=auth$/);
+  if (failComponent) throw new Error('fixture component failure');
+  return Response.json({code:0,data:[{name:'log-management',compile_js:'fixture JS'}]});
+ };
+ try {
+  const page = createLogBootstrap();
+  assert.deepEqual(await Promise.all([page.capabilities(), page.capabilities()]), [['requests'], ['requests']]);
+  await Promise.all([page.components(), page.components()]);
+  assert.deepEqual(await page.capabilities(), ['requests']);
+  assert.equal(calls.length, 2);
+
+  token = 'next-fixture-session';
+  const next = createLogBootstrap();
+  assert.deepEqual(await next.capabilities(), ['auth']);
+  failComponent = true;
+  await assert.rejects(next.components(), /无法连接数据中台/);
+  failComponent = false;
+  assert.equal((await next.components())[0].name, 'log-management');
+  assert.deepEqual(calls.map(call => call.token), ['first-fixture-session', 'first-fixture-session',
+   'next-fixture-session', 'next-fixture-session', 'next-fixture-session']);
+ } finally {
+  Object.assign(globalThis, previous);
+ }
+});
 const source={tid:'canonical-source',dbName:'真实数据源',dbType:'mysql',orgId:'org-1',appId:'app-1',connectionStatus:'success',collectedTableCount:136,collectedFieldCount:2398,username:'must-not-leak',password:'must-not-leak',pool_cfg:{password:'must-not-leak'},tenantId:'never-send'};
 test('shared rows keep canonical IDs and actual counts without credentials',()=>{const row=ds.sourceRow(source);assert.equal(row.id,source.tid);assert.equal(row.entityCount,136);assert.equal(row.fieldCount,2398);assert.equal(row.status,'CONNECTED');assert.doesNotMatch(JSON.stringify(row),/must-not-leak|pool_cfg|tenantId/);});
 test('disabled and failed sources are not presented as connected',()=>{assert.equal(ds.sourceRow({...source,isEnable:0}).status,'DISABLED');assert.equal(ds.sourceRow({...source,connectionStatus:'failed'}).status,'ERROR');assert.equal(ds.sourceRow({...source,connectionStatus:undefined}).status,'REGISTERED');});

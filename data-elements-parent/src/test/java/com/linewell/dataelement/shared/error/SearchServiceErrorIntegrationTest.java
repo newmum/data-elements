@@ -3,7 +3,7 @@ package com.linewell.dataelement.shared.error;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.linewell.dataelement.platform.magic.result.MagicApiResultProvider;
+import com.linewell.dataelement.magic.runtime.result.MagicApiResultProvider;
 import java.net.ServerSocket;
 import java.nio.file.Files;
 import java.nio.file.Path;

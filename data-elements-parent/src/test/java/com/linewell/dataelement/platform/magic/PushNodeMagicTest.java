@@ -39,7 +39,7 @@ class PushNodeMagicTest {
 
             var synced = StructuredValues.objectMap(fixture.call(Map.of("datasourceId", "source", "nodeId", "node")));
             assertEquals(true, synced.get("synced"));
-            assertEquals(11, fixture.reads.get());
+            assertEquals(8, fixture.reads.get());
             assertEquals(1, upstream.registryCalls.get());
             assertEquals(count, upstream.tables);
             assertEquals("test-only-service-key", upstream.serviceKey);
@@ -162,7 +162,7 @@ class PushNodeMagicTest {
         NodeUpstream() throws IOException {
             server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
             var mapper = new ObjectMapper();
-            server.createContext("/api/v1/data-push", request -> {
+            server.createContext("/api/v1/push", request -> {
                 try (request) {
                     byte[] input = request.getRequestBody().readAllBytes();
                     var payload = mapper.readTree(input);

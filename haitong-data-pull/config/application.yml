@@ -141,7 +141,7 @@ relay:
 
   routes:
     # ===== 三个最常用场景：对方每张表按同一 JSON 格式推送，无须传目标地址或 Topic =====
-    table-to-log:                      # POST /api/v1/data-push（deliveryType=LOG），立即可用
+    table-to-log:                      # POST /api/v1/push（deliveryType=LOG），立即可用
       enabled: true
       batch-key-field: batchId
       targets: [table-log]

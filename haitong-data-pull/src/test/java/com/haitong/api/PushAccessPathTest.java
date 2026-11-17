@@ -4,6 +4,7 @@ import com.haitong.config.*;
 import com.haitong.core.Json;
 import com.haitong.security.PushCredentialStore;
 import jakarta.servlet.FilterChain;
+import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.*;
@@ -16,7 +17,10 @@ class PushAccessPathTest {
         var filter=new AuthenticationFilter(mock(Secrets.class),settings,new Json(),mock(PushCredentialStore.class));
         var valid=new MockHttpServletRequest("POST","/data/api/v1/data-push");valid.setContextPath("/data");
         var response=new MockHttpServletResponse();var chain=mock(FilterChain.class);filter.doFilter(valid,response,chain);
-        verify(chain).doFilter(valid,response);assertEquals(PushAccess.OWNER,AuthenticationFilter.identity(valid).id());
+        verify(chain).doFilter(argThat(request -> request instanceof HttpServletRequest mapped
+                && mapped.getRequestURI().equals("/data/api/v1/push")
+                && mapped.getServletPath().equals("/api/v1/push")), eq(response));
+        assertEquals(PushAccess.OWNER,AuthenticationFilter.identity(valid).id());
         for(String suffix:List.of("%20","%0A","%2F",";a=1","//x","/../x","/./x","\\x")){
             var bad=new MockHttpServletRequest("POST","/data/api/v1/data-push"+suffix);bad.setContextPath("/data");
             var rejected=new MockHttpServletResponse();var denied=mock(FilterChain.class);filter.doFilter(bad,rejected,denied);

@@ -22,7 +22,7 @@
   "responseBodyDefinition": null
 }
 ================================
-import '@post:/dst/maintenance/batchRefresh' as batchRefresh
+import '@post:/dst/maintenance/reindex' as batchRefresh
 import com.linewell.dataelement.elasticsearch.EsCommonService as esCommonService
 import tenantRuntime
 

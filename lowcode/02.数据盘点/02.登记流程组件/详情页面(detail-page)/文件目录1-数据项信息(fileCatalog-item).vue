@@ -90,7 +90,7 @@ const save = async () => {
       ...item,
       sortNo: index + 1,
     }));
-    await $common.post("/dst/catalog/saveOrUpdate", {
+    await $common.post("/dst/catalog/save", {
       tid: props.fileCatalogId,
       assetType: "catalog",
       catalogItems,

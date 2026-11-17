@@ -65,7 +65,7 @@
       "path": "magic/haitong/api/03.数据推送调试/01.调试数据推送/01.统一数据推送.ms",
       "id": "haitong-push-operations-push-01",
       "databasePath": "/magic-api/api/03.数据推送调试/01.调试数据推送/01.统一数据推送.ms",
-      "baseSha256": "d8aafdf8206aaf9bb6d34dde0cb7f3335342252e18f1825b4a5c99eca8741085"
+      "baseSha256": "3087276b975577a82d37f807263a3f3046824b9c2a03b2a8700623d327848173"
     },
     {
       "path": "magic/haitong/api/03.数据推送调试/01.调试数据推送/group.json",
@@ -107,7 +107,7 @@
       "path": "magic/haitong/api/04.数据接收与附件/01.数据接收/01.统一数据推送.ms",
       "id": "haitong-public-1",
       "databasePath": "/magic-api/api/04.数据接收与附件/01.数据接收/01.统一数据推送.ms",
-      "baseSha256": "e8e55acd6bd5e6354245aa173f81ad64daa8772225a6048c1441298c3947b4eb"
+      "baseSha256": "ce2dc528afc3d2993bbd4ac4244cc8b0d45426cc2ed76cbea9b7956717364d90"
     },
     {
       "path": "magic/haitong/api/04.数据接收与附件/01.数据接收/02.兼容文件传输推送.ms",
@@ -389,13 +389,13 @@
       "path": "magic/haitong/api/05.运维与推送密钥/02.推送密钥/01.业务密钥签发.ms",
       "id": "haitong-credential-issue",
       "databasePath": "/magic-api/api/05.运维与推送密钥/02.推送密钥/01.业务密钥签发.ms",
-      "baseSha256": "0de1b9dcfce260d044bdc688d25bca57b6cd06f676830da5fda862fc2e655c02"
+      "baseSha256": "4652e161e499b329caad8e005ea27ad3c99477166914ad5bbf43276ed4e0b153"
     },
     {
       "path": "magic/haitong/api/05.运维与推送密钥/02.推送密钥/group.json",
       "id": "haitong-credential-api",
       "databasePath": "/magic-api/api/05.运维与推送密钥/02.推送密钥/group.json",
-      "baseSha256": "a92b33d28291d807bbe109b04c9c00f194718db8667bb7fa9310c80b478141d0"
+      "baseSha256": "ef892c8c3189c0b1b094e4cfbdd86551602f1709c35a15cb0fb9cbfa9491e447"
     },
     {
       "path": "magic/haitong/api/05.运维与推送密钥/group.json",
@@ -407,37 +407,37 @@
       "path": "magic/haitong/api/06.数据推送验证/01.推送链路验证/01.状态字典数据推送.ms",
       "id": "haitong-validation-push-status_dict",
       "databasePath": "/magic-api/api/06.数据推送验证/01.推送链路验证/01.状态字典数据推送.ms",
-      "baseSha256": "94a7e443e8539724fa417651bd4ce16122500d07268ff40693e225a4788b8202"
+      "baseSha256": "583eb907abd9113a5fb0f554517b9c4d0ec30f81db71b05a317146f244fd7fe0"
     },
     {
       "path": "magic/haitong/api/06.数据推送验证/01.推送链路验证/02.机构字典数据推送.ms",
       "id": "haitong-validation-push-org_dict",
       "databasePath": "/magic-api/api/06.数据推送验证/01.推送链路验证/02.机构字典数据推送.ms",
-      "baseSha256": "4d44f0b065c918433b33aa59fdb224372b5db94d0b5f1b5493f831469250d2b8"
+      "baseSha256": "8afdda8b072134507a6ebc548cbdbd15ed8754231abc0900f55412eb387c52bc"
     },
     {
       "path": "magic/haitong/api/06.数据推送验证/01.推送链路验证/03.人员登记数据推送.ms",
       "id": "haitong-validation-push-person",
       "databasePath": "/magic-api/api/06.数据推送验证/01.推送链路验证/03.人员登记数据推送.ms",
-      "baseSha256": "3a4611736781e985da6f17b0d343ac99d69fc1948a664039602d4519d9005415"
+      "baseSha256": "d7892aaba867cb5915bcb4548aa7a072dd00b480240562be84179787e0853176"
     },
     {
       "path": "magic/haitong/api/06.数据推送验证/01.推送链路验证/04.车辆登记数据推送.ms",
       "id": "haitong-validation-push-vehicle",
       "databasePath": "/magic-api/api/06.数据推送验证/01.推送链路验证/04.车辆登记数据推送.ms",
-      "baseSha256": "58bfc64f6ce553ffdafc848e4bc4739d4d2f6b67e7d7a36e719df65d7e803d8d"
+      "baseSha256": "478a3de56fe7574c7704124dcf61e8b2352f3add663ba823f0393c8f3070fc2c"
     },
     {
       "path": "magic/haitong/api/06.数据推送验证/01.推送链路验证/05.事件登记数据推送.ms",
       "id": "haitong-validation-push-event",
       "databasePath": "/magic-api/api/06.数据推送验证/01.推送链路验证/05.事件登记数据推送.ms",
-      "baseSha256": "de5d91c7663ccc57cb796807c4eab2abd6adac5969bb0e6e7a5466ac0cc507b2"
+      "baseSha256": "6eb3e794aa23a4903f2e5ad8e3200ea8831b054b89b30e6311fe481e05f88d93"
     },
     {
       "path": "magic/haitong/api/06.数据推送验证/01.推送链路验证/06.事件操作日志数据推送.ms",
       "id": "haitong-validation-push-event_log",
       "databasePath": "/magic-api/api/06.数据推送验证/01.推送链路验证/06.事件操作日志数据推送.ms",
-      "baseSha256": "944ffd7a91ceea87ab6330ff413b9d0194021ebff840364a099c8d7c50f4d1c6"
+      "baseSha256": "beaff8d036203c2676fb5a6cae154de6a4b924dbfb6ff725c77773aff1cdb4dc"
     },
     {
       "path": "magic/haitong/api/06.数据推送验证/01.推送链路验证/group.json",

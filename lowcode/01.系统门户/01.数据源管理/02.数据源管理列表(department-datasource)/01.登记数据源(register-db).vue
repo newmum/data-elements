@@ -5203,7 +5203,7 @@ const loadApplicationOptions = () => {
     .then(async () => {
       if (applicationOptionsDisposed || applicationOptionRequest !== request) return;
       if (ensureApplicationOptionSession() !== session) return;
-      const rows = await $common.post("/dst/application/register-options", {});
+      const rows = await $common.post("/dst/application/options", {});
       if (applicationOptionsDisposed || applicationOptionRequest !== request) return;
       if (ensureApplicationOptionSession() !== session) return;
       if (!Array.isArray(rows)) {

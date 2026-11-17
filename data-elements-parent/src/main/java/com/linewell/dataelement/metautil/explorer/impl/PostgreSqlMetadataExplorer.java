@@ -9,6 +9,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import com.linewell.dataelement.metautil.ddl.PortableDefaultExpression;
 import com.linewell.dataelement.metautil.explorer.AbstractMetadataExplorer;
 import com.linewell.dataelement.metautil.model.dto.*;
 import lombok.extern.slf4j.Slf4j;
@@ -381,7 +383,7 @@ public class PostgreSqlMetadataExplorer extends AbstractMetadataExplorer {
             "  col_description((quote_ident(c.table_schema) || '.' || quote_ident(c.table_name))::regclass, c.ordinal_position) as column_comment, " +
             "  c.data_type, c.udt_name, " +
             "  c.character_maximum_length, c.numeric_precision, c.numeric_scale, " +
-            "  c.is_nullable, c.column_default, c.ordinal_position " +
+            "  c.is_nullable, c.column_default, c.is_identity, c.ordinal_position " +
             "FROM information_schema.columns c " +
             "WHERE c.table_schema = '%s' AND c.table_name = '%s' " +
             "ORDER BY c.ordinal_position", schema, tableName
@@ -407,13 +409,12 @@ public class PostgreSqlMetadataExplorer extends AbstractMetadataExplorer {
                 column.setOrdinalPosition(rs.getInt("ordinal_position"));
                 column.setPrimaryKey(pkColumns.contains(column.getColumnName()));
                 
-                // 判断是否自增
-                String defaultValue = column.getDefaultValue();
-                column.setAutoIncrement(defaultValue != null && 
-                    (defaultValue.contains("nextval") || defaultValue.contains("_seq")));
-                
                 // 构建完整类型
                 String udtName = rs.getString("udt_name");
+                // PostgreSQL identity 或整数列的序列默认值表示自增，普通默认值可能包含序列字样。
+                column.setAutoIncrement("YES".equals(rs.getString("is_identity")) ||
+                        (Set.of("int2", "int4", "int8").contains(udtName) &&
+                         PortableDefaultExpression.isPostgresSequenceDefault(column.getDefaultValue())));
                 if (column.getLength() != null && column.getLength() > 0) {
                     column.setColumnType(udtName + "(" + column.getLength() + ")");
                 } else if (column.getPrecision() != null && column.getPrecision() > 0) {

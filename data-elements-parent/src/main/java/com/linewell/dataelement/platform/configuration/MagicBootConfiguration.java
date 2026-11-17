@@ -28,6 +28,7 @@ import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.regex.Pattern;
 
@@ -35,6 +36,10 @@ import java.util.regex.Pattern;
 public class MagicBootConfiguration {
 
     public static final String MAGIC_MAPPING_JSON_ERROR = MagicBootConfiguration.class.getName() + ".mappingJsonError";
+    public static final String MAGIC_PORTAL_SWITCH_JSON_ERROR = MagicBootConfiguration.class.getName() + ".portalSwitchJsonError";
+    public static final String MAGIC_COLLECTION_STATUS_JSON_ERROR = MagicBootConfiguration.class.getName() + ".collectionStatusJsonError";
+    public static final String MAGIC_COLLECTION_ORDER_JSON_ERROR = MagicBootConfiguration.class.getName() + ".collectionOrderJsonError";
+    public static final String MAGIC_COLLECTION_WRITE_JSON_ERROR = MagicBootConfiguration.class.getName() + ".collectionWriteJsonError";
     private static final Pattern MAPPING_JSON = Pattern.compile(
             "/nifi/(template/(save|import)|dict/(snapshot|lookup)|map/(schema|sample|check|preview|recommend|compile|convert)"
                     + "|plan/restore|maprun/(upgrade|start))");
@@ -44,11 +49,32 @@ public class MagicBootConfiguration {
         return new PolicyAwareApiResourceStorage(properties.getPrefix());
     }
 
-    /** Preserve exact decimal JSON for mapping scripts without changing the other Magic or MVC converters. */
+    /** Preserve legacy typed binding and exact mapping decimals on their respective Magic routes. */
     @Bean
     SmartInitializingSingleton magicMappingJsonConverter(MagicConfiguration magic, ObjectMapper mapper) {
         return () -> {
             var converters = new ArrayList<>(magic.getHttpMessageConverters());
+            converters.addFirst(new MappingJackson2HttpMessageConverter(mapper) {
+                @Override
+                public boolean canRead(Class<?> type, MediaType mediaType) {
+                    var request = AuditIdentityResolver.request();
+                    return type == Object.class && request != null && "POST".equals(request.getMethod())
+                            && legacyMapErrorAttribute(request) != null
+                            && super.canRead(type, mediaType);
+                }
+
+                @Override
+                protected Object readInternal(Class<?> type, HttpInputMessage input) throws IOException {
+                    try {
+                        // Match the former MVC Map binding for JSON primitives, arrays and invalid JSON.
+                        return super.readInternal(LinkedHashMap.class, input);
+                    } catch (HttpMessageNotReadableException error) {
+                        var request = AuditIdentityResolver.request();
+                        request.setAttribute(legacyMapErrorAttribute(request), error);
+                        throw error;
+                    }
+                }
+            });
             converters.addFirst(new MappingJackson2HttpMessageConverter(
                     mapper.copy().enable(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS)) {
                 @Override
@@ -75,10 +101,20 @@ public class MagicBootConfiguration {
         };
     }
 
+    private static String legacyMapErrorAttribute(HttpServletRequest request) {
+        return switch (request.getRequestURI().substring(request.getContextPath().length())) {
+            case "/portal/sso/switch" -> MAGIC_PORTAL_SWITCH_JSON_ERROR;
+            case "/dst/collect/statuses" -> MAGIC_COLLECTION_STATUS_JSON_ERROR;
+            case "/dst/collect/order" -> MAGIC_COLLECTION_ORDER_JSON_ERROR;
+            case "/dst/collect/start", "/dst/collect/rename" -> MAGIC_COLLECTION_WRITE_JSON_ERROR;
+            default -> null;
+        };
+    }
+
     /** Keep a bounded view of JSON consumed by Magic so scripts can preserve typed request errors. */
     @Bean
     public OncePerRequestFilter magicJsonRequestCache() {
-        Pattern requests = Pattern.compile("/nifi/(life/(deploy|activate)|node/attrs|api/(connection-test|columns-probe|tables-probe))"
+        Pattern requests = Pattern.compile("/nifi/(life/(deploy|activate)|node/attrs|api/(connect|columns|tables))"
                 + "|/(sym/table|idaas/workspace)/order|/sym/scope/(role|save|current)|/dwm/column/batch");
         return new OncePerRequestFilter() {
             @Override

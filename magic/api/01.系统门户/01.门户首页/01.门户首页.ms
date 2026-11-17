@@ -12,7 +12,14 @@
   "path": "/index",
   "method": "GET",
   "parameters": [],
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "PUBLIC",
+      "dataType": "String",
+      "required": false
+    }
+  ],
   "requestBody": "{\n}",
   "headers": [],
   "paths": [],

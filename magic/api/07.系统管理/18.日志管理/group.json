@@ -1,0 +1,11 @@
+{
+  "properties": {},
+  "id": "sys_log_management_v1",
+  "name": "18.日志管理",
+  "type": "api",
+  "parentId": "9a18bf0b6a994f5aa56aa775f3de9f3d",
+  "path": "/logs",
+  "paths": [],
+  "options": []
+}
+================================

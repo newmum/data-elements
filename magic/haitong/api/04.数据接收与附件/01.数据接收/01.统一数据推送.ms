@@ -2,7 +2,7 @@
   "id": "haitong-public-1",
   "groupId": "haitong-files-api",
   "name": "01.统一数据推送",
-  "path": "/data-push",
+  "path": "/push",
   "method": "POST",
   "parameters": [],
   "options": [],
@@ -15,7 +15,7 @@ import '@/haitong/common' as common
 import '@/haitong/push' as push
 import request
 
-// POST /api/v1/data-push。按可信调用方和已登记数据源接收表批次或同步登记快照。
+// POST /api/v1/push。按可信调用方和已登记数据源接收表批次或同步登记快照。
 // 与同组入口共用 /haitong/push 的调用方授权及业务处理。
 
 var context = common()

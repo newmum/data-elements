@@ -28,6 +28,7 @@ import org.ssssssss.magicapi.modules.db.provider.DefaultColumnMapperProvider;
 import org.ssssssss.script.MagicScript;
 import org.ssssssss.script.MagicScriptContext;
 import org.ssssssss.script.runtime.ExitValue;
+import org.ssssssss.script.runtime.function.MagicScriptLambdaFunction;
 
 /** Real Magic SQLModule transactions with an isolated, in-memory H2 datasource. */
 class IdaasMagicTransactionTest {
@@ -184,11 +185,19 @@ class IdaasMagicTransactionTest {
         jdbc.update("insert into iam_setting_t values ('GLOBAL','global','BRANDING','brand',0,'ACTIVE',?)",
                 "{\"title\":\"统一身份管理平台\",\"subtitle\":\"验证副标题\",\"logoUrl\":\"/validation.svg\",\"internal\":\"hidden\"}");
         jdbc.update("insert into iam_setting_t values ('APP','validation','BRANDING','brand',0,'ACTIVE','{}')");
-        String source = CanonicalMagicSources.byId("c5e8f3f5dc9d52d5b23709f6e3c2ec15")
+        String brand = CanonicalMagicSources.byPath("function/13.统一身份管理/34.读取平台公开品牌.ms",
+                        "idaas_public_brand_read_v1")
                 .replaceAll("(?m)^import (identityRuntime|db|'.+').*\\R", "");
-        var value = assertInstanceOf(Map.class, run("var apiCall=(callback)=>callback();\n" + source,
-                Map.of("identityRuntime", new ControlFixture())));
-        assertEquals(Map.of("title", "统一身份管理平台", "subtitle", "验证副标题", "logoUrl", "/validation.svg"), value);
+        MagicScriptLambdaFunction read = (ignored, args) -> run("var apiCall=(callback)=>callback();\n" + brand,
+                Map.of("identityRuntime", new ControlFixture()));
+        String head = CanonicalMagicSources.byPath("api/08.统一身份管理/01.认证会话/04.读取登录页设置响应头.ms",
+                "idaas_public_brand_head_v1");
+        String get = CanonicalMagicSources.byId("c5e8f3f5dc9d52d5b23709f6e3c2ec15");
+        for (String source : List.of(get, head)) {
+            String entry = source.replaceFirst("(?m)^import '@/idaas/publicbrand' as publicBrand;\\R", "");
+            var value = assertInstanceOf(Map.class, run(entry, Map.of("publicBrand", read)));
+            assertEquals(Map.of("title", "统一身份管理平台", "subtitle", "验证副标题", "logoUrl", "/validation.svg"), value);
+        }
     }
 
     @Test

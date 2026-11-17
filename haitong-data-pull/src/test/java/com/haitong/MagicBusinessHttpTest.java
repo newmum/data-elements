@@ -86,6 +86,7 @@ class MagicBusinessHttpTest {
     }
     @Test void registryAndTableValidationUseBoundedSqlAndSourceGrants()throws Exception{
         installSqlCounter();
+        var tableReads = new LinkedHashMap<Integer, Long>();
         for(int size:List.of(20,100)){
             var sources=new ArrayList<Map<String,Object>>();
             for(int i=0;i<size;i++)sources.add(Map.of("datasourceId","magic-batch-"+size+"-"+i,"datasourceName","synthetic","clientIds",List.of("default"),"tables",List.of(Map.of("tableName","demo","columns",List.of(Map.of("columnName","record_id","required",true))))));
@@ -93,8 +94,12 @@ class MagicBusinessHttpTest {
             mvc.perform(post("/api/v1/data-push").header("X-Admin-Key",ADMIN).header("Idempotency-Key","magic-registry-"+size).contentType("application/json").content(json.bytes(Map.of("deliveryType","REGISTRY_SYNC","datasources",sources)))).andExpect(status().isCreated()).andExpect(jsonPath("$.datasourceCount").value(size));
             assertEquals(4,reads(),"Two HTTP audit clock reads + business clock + idempotency read, independent of source count");
             var records=new ArrayList<Map<String,Object>>();for(int i=0;i<size;i++)records.add(Map.of("record_id",i));
-            mvc.perform(post("/api/v1/data-push").header("X-Api-Key",CLIENT).header("Idempotency-Key","magic-records-"+size).contentType("application/json").content(json.bytes(Map.of("deliveryType","FTP","datasourceId","magic-batch-"+size+"-0","tableName","demo","records",records)))).andExpect(status().isAccepted());
+            sqlReads.set(0);
+            mvc.perform(post("/api/v1/push").header("X-Api-Key",CLIENT).header("Idempotency-Key","magic-records-"+size).contentType("application/json").content(json.bytes(Map.of("deliveryType","FTP","datasourceId","magic-batch-"+size+"-0","tableName","demo","records",records)))).andExpect(status().isAccepted());
+            tableReads.put(size, reads());
         }
+        assertEquals(tableReads.get(20), tableReads.get(100), "Table pushes use fixed reads for either batch size");
+        System.out.println("canonical table push: one HTTP request per batch, SQL reads=" + tableReads);
         jdbc.update("UPDATE ht_standalone_datasource_client SET client_id='another-source-client' WHERE datasource_id='magic-batch-100-0'");
         mvc.perform(post("/api/v1/data-push").header("X-Api-Key",CLIENT).header("Idempotency-Key","magic-denied").contentType("application/json").content(json.bytes(Map.of("deliveryType","FTP","datasourceId","magic-batch-100-0","tableName","demo","records",List.of(Map.of("record_id",1)))))).andExpect(status().isForbidden());
     }
@@ -162,6 +167,52 @@ class MagicBusinessHttpTest {
                             .contentType("application/json").content("{\"deliveryType\":\"REGISTRY_SYNC\",\"registryAction\":\"STATUS\",\"tableRefs\":[{\"datasourceId\":\"validation-missing\",\"tableName\":\"demo\"}]}"))
                     .andExpect(status().isOk()).andExpect(jsonPath("$.data.readOnly").value(true));
         }
+    }
+
+    @Test void canonicalPushAndCredentialRoutesShareTheLegacyWriteContracts() throws Exception {
+        var table = Map.of("tableName", "demo", "columns", List.of(Map.of("columnName", "record_id", "required", true)));
+        var source = Map.of("datasourceId", "validation-short-routes", "datasourceName", "Validation",
+                "clientIds", List.of("default"), "tables", List.of(table));
+        mvc.perform(post("/api/v1/push").header("X-Standalone-Registry-Key","magic-sync-0123456789abcdef0123456789")
+                        .header("Idempotency-Key", "validation-short-registry").contentType("application/json")
+                        .content(json.bytes(Map.of("deliveryType", "REGISTRY_SYNC", "datasources", List.of(source)))))
+                .andExpect(status().isCreated());
+        var input = Map.of("deliveryType", "FTP", "datasourceId", "validation-short-routes", "tableName", "demo",
+                "records", List.of(Map.of("record_id", 1)));
+        var encoded = json.bytes(input);
+        var accepted = mvc.perform(post("/api/v1/push").header("X-Api-Key", CLIENT)
+                        .header("Idempotency-Key", "validation-short-push").contentType("application/json").content(encoded))
+                .andExpect(status().isAccepted()).andReturn().getResponse();
+        String messageId = json.object(accepted.getContentAsByteArray()).get("messageId").toString();
+        try {
+            // 投递还在排队时，相同正文仍返回 202，并重用原消息和 Location。
+            mvc.perform(post("/api/v1/data-push").header("X-Api-Key", CLIENT)
+                            .header("Idempotency-Key", "validation-short-push").contentType("application/json").content(encoded))
+                    .andExpect(status().isAccepted()).andExpect(jsonPath("$.messageId").value(messageId))
+                    .andExpect(jsonPath("$.duplicate").value(true))
+                    .andExpect(header().string("Location", accepted.getHeader("Location")))
+                    .andExpect(header().string("Cache-Control", "no-store"));
+            var different = new LinkedHashMap<String, Object>(input);
+            different.put("records", List.of(Map.of("record_id", 2)));
+            mvc.perform(post("/api/v1/data-push").header("X-Api-Key", CLIENT)
+                            .header("Idempotency-Key", "validation-short-push").contentType("application/json").content(json.bytes(different)))
+                    .andExpect(status().isConflict());
+        } finally {
+            jdbc.update("DELETE FROM ht_delivery WHERE message_id = ?", messageId);
+            jdbc.update("DELETE FROM ht_message WHERE id = ?", messageId);
+        }
+
+        var issue = "{\"clientId\":\"push-validation-short-routes\"}";
+        mvc.perform(post("/internal/credentials/issue").header("X-Admin-Key", ADMIN)
+                        .contentType("application/json").content(issue))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.revealed").value(true))
+                .andExpect(header().string("Cache-Control", "no-store"));
+        mvc.perform(post("/internal/push-credentials/issue").header("X-Admin-Key", ADMIN)
+                        .contentType("application/json").content(issue))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.revealed").value(false))
+                .andExpect(jsonPath("$.data.apiKey").doesNotExist());
+        mvc.perform(post("/internal/credentials/issue").header("X-Api-Key", CLIENT)
+                        .contentType("application/json").content(issue)).andExpect(status().isUnauthorized());
     }
 
     private void assertDiagnosticResponse(String oldPath, String path, String body, int expectedStatus) throws Exception {

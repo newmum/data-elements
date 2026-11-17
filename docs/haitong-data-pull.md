@@ -49,7 +49,7 @@ relay:
 | `true` | `X-Api-Key` 或 Bearer 验证本地静态调用方/数据库签发凭据，随后校验通道权限 | 海通独立库登记镜像为权威；没有镜像时兼容 YAML 契约，检查有效状态、调用方授权、表白名单、字段白名单及必填值 | 本机 `files.collections` 约束来源、集合、调用方、格式/大小及目标 |
 | `false` | 标准推送可省略或传入任意 `X-Api-Key`，统一使用非管理员身份 `unvalidated-publisher` | 不查询登记镜像、不校验登记状态、表字段白名单和必填字段；`datasourceId/tableName/records` 等基础参数仍须正确 | 不要求预先登记集合；固定本地隔离域 `unvalidated-push`，按 `files.unregistered-targets` 和全局传输配置生成运行契约；不接受请求中的租户或目标地址 |
 
-开关适用于 `/api/v1/data-push`、FTP/Kafka/LOG 兼容入口、`/push` 的推送、状态和模板调试入口，以及分片和兼容整文件上传、完成、提交、取消、状态与内容读取。未认证的请求不能访问历史已认证调用方的消息/文件。关闭时不同匿名发送方共享一个身份，须为每个业务批次使用全局唯一 `Idempotency-Key`；同一键及同一原始正文重试返回原消息，正文改变仍返回冲突。重新开启后，匿名模式创建的对象不会自动转授给其他业务密钥。
+开关适用于 `/api/v1/push`、FTP/Kafka/LOG 兼容入口、`/push` 的推送、状态和模板调试入口，以及分片和兼容整文件上传、完成、提交、取消、状态与内容读取。未认证的请求不能访问历史已认证调用方的消息/文件。关闭时不同匿名发送方共享一个身份，须为每个业务批次使用全局唯一 `Idempotency-Key`；同一键及同一原始正文重试返回原消息，正文改变仍返回冲突。重新开启后，匿名模式创建的对象不会自动转授给其他业务密钥。
 
 Magic 编辑器登录、`/internal/**` 运维及签发、`REGISTRY_SYNC` 服务间鉴权、下游业务回执和通用动作入口继续单独保护。可选 `X-Gateway-Key` 网关限制、路径格式、请求大小、记录数、幂等、配额、文件签名、SHA-256 和分片状态校验不因开关关闭而取消。未登记附件只支持既有 `jpg/jpeg/png/pdf/docx` 技术格式；若配置了 `scanner-command` 则继续执行扫描，无扫描器时记录 `HEADER_VERIFIED_NOT_SCANNED`。本地 FTP/Kafka 连接和目标仍必须启用并配置正确，接收结构化数据不等于平台已经知道如何物化该表，后续平台接入仍需自己的表结构。
 
@@ -59,13 +59,17 @@ Magic 编辑器登录、`/internal/**` 运维及签发、`REGISTRY_SYNC` 服务�
 
 原生包还通过隔离 H2、真实 HTTP 18083 和本地 FTP 的整链路验证：模拟旧 Magic 函数后，经包内更新工具保存并回读，新规范下 50 条未登记记录成功投递且重试复用原消息；160014 字节文件分 3 片上传并成功投递，FTP 原文字节及完成清单核对通过。此结果不代表生产环境网络、账号或 FTP 已验证。
 
-`400/INVALID_PATH` 发生在身份与登记校验之前。现行检查拒绝原始路径中的百分号、分号、反斜杠、重复斜杠及点路径段，URL 末尾的 `%20` 空格、`%0A` 换行可复现该响应。直连默认端口使用 `/api/v1/data-push`；只有实际配置 `server.servlet.context-path: /data`，或代理提供且正确转发该前缀时才使用 `/data/api/v1/data-push`。过滤器现按服务器可信 Servlet context 去掉前缀后识别业务、编辑器及管理路径，仍对原始 URI 检查异常字符；不信任客户端传入的 `X-Forwarded-Prefix` 来扩大匿名接口。仅 `/data` 本身不会导致 `INVALID_PATH`，截图无法证明具体隐藏字符，须通过 Postman Console 或服务器的实际请求 URI 核对；不应靠关闭业务密钥校验来修复路径错误。
+`400/INVALID_PATH` 发生在身份与登记校验之前。现行检查拒绝原始路径中的百分号、分号、反斜杠、重复斜杠及点路径段，URL 末尾的 `%20` 空格、`%0A` 换行可复现该响应。直连默认端口使用 `/api/v1/push`；只有实际配置 `server.servlet.context-path: /data`，或代理提供且正确转发该前缀时才使用 `/data/api/v1/push`。过滤器现按服务器可信 Servlet context 去掉前缀后识别业务、编辑器及管理路径，仍对原始 URI 检查异常字符；不信任客户端传入的 `X-Forwarded-Prefix` 来扩大匿名接口。仅 `/data` 本身不会导致 `INVALID_PATH`，截图无法证明具体隐藏字符，须通过 Postman Console 或服务器的实际请求 URI 核对；不应靠关闭业务密钥校验来修复路径错误。
 
 <a id="magic-first"></a>
 
 ## Magic API 统一入口与业务实现
 
-海通推送服务的 **37 个原 Java Controller 方法/路径组合均由 Magic API 注册**，原 `/api/v1/**`、`/internal/v1/**` 和 `/internal/push-credentials/issue` 地址继续使用。5 个业务 Controller 和将全部推送业务转给 Controller 的 `PushOperationsApi` 已移除。编辑器、Actuator 健康检查等框架管理入口仍由框架提供，不属于这 37 个业务接口。
+海通推送服务的 **37 个原 Java Controller 方法/路径组合均由 Magic API 注册**，原 `/api/v1/**`、`/internal/v1/**` 和 `/internal/credentials/issue` 地址继续使用。5 个业务 Controller 和将全部推送业务转给 Controller 的 `PushOperationsApi` 已移除。编辑器、Actuator 健康检查等框架管理入口仍由框架提供，不属于这 37 个业务接口。
+
+第 129 批统一表推送使用 `POST /api/v1/push`，业务密钥签发使用 `POST /internal/credentials/issue`。已部署调用方可继续使用原 `POST /api/v1/data-push` 和 `POST /internal/push-credentials/issue`，沿用原字节幂等、状态链接、服务间认证，以及首次返回明文和重复签发隐藏密钥的契约。旧 `PUT /api/v1/data-push` 仍处理普通文件推送。编辑器的状态字典、组织字典和事件日志示例分别使用 `/validation/push/status`、`/validation/push/org`、`/validation/push/eventlog`，旧示例仅对当前有效编辑器会话和匹配的脚本 ID 保留 POST 兼容。
+
+18083 冷启动回读 62 个 API、21 个分组及 10 条所选资源。真实客户端在新旧地址各执行 11 项验证，覆盖匿名及错误拒绝、同一已完成批次重放、同键字节变化冲突、只读登记状态和重复签发。已完成批次保留原消息和 Location，重放未创建业务消息，重复签发未变更验证密钥或返回明文。20/100 条表记录在启用校验的隔离回归中均为一次请求、15 条 SELECT，包含 HTTP 审计读数。证据见 `logs/magic-first/batch-129/relay-http-after.json` 和 `metrics.json`。
 
 文件资源模式默认读取 `./data/magic-api`，与内置资源初始化目录一致；正式原生部署模板使用独立数据库资源，不受此文件目录影响。批量文件导入通过 Servlet `Part` 读取原始 multipart 文件；表批次的缺失类型、空记录数组及已取消字段等基础契约错误返回 422，与本文件接口规范一致。集成测试的文件资源隔离在测试工作目录内，避免把上一次保留的脚本当成本次构建版本。
 
@@ -84,7 +88,7 @@ Magic 编辑器登录、`/internal/**` 运维及签发、`REGISTRY_SYNC` 服务�
 
 `01.零信任网关对接`、`02.文件传输诊断` 和 `03.数据推送调试` 提供网关与联调入口。数据推送调试与正式入口共用脚本业务函数。调试入口使用 Magic 成功信封和规范化 JSON 幂等校验，正式入口使用原生 HTTP/JSON 响应和原始 JSON 字节幂等校验。
 
-`09.数据推送验证` 是可直接运行的 Postman 请求示例。01～06 分别向正式 `POST /api/v1/data-push` 发送状态字典、机构字典、人员、车辆、事件和事件操作日志各两行合成数据；07～09 对正式附件接口发送内嵌 PNG 的原始字节；10 提交附件；11、12 各执行一次附件或业务消息状态查询。每条脚本按 URL、Headers、Body、一次 HTTP 调用、响应的顺序格式化，逐项说明数据源 ID、登记表名、字段、幂等键及返回 ID 的获取位置。脚本不直接调用内部业务函数，也不隐藏同步、查询数据库或轮询流程。
+`09.数据推送验证` 是可直接运行的 Postman 请求示例。01～06 分别向正式 `POST /api/v1/push` 发送状态字典、机构字典、人员、车辆、事件和事件操作日志各两行合成数据；07～09 对正式附件接口发送内嵌 PNG 的原始字节；10 提交附件；11、12 各执行一次附件或业务消息状态查询。每条脚本按 URL、Headers、Body、一次 HTTP 调用、响应的顺序格式化，逐项说明数据源 ID、登记表名、字段、幂等键及返回 ID 的获取位置。脚本不直接调用内部业务函数，也不隐藏同步、查询数据库或轮询流程。
 
 本机登录编辑器后打开示例并点击“运行”，无需填写下方接口信息页。脚本中的 `X-Api-Key` 从仓库外 YAML 的 `haitong.validation.api-key` 读取，并经通用密钥解析器支持 `env:` 引用；本机绑定已获授权的测试客户端及测试源，响应只显示脱敏请求头。复制到 Postman 时使用脚本中的正式 URL、对应请求头和 Body，并在本机填入该源业务密钥。部署到其他环境须先登记自己的测试源，替换源 ID、表名与返回 ID，再配置专属测试密钥。
 
@@ -135,7 +139,7 @@ python tools/resource-sync.py publish --project haitong-data-pull --file "magic/
 
 可维护配置示例为 [`application-files.yml.example`](../haitong-data-pull/config/application-files.yml.example)，默认整文件、可选分片续传的标准库流式客户端为 [`upload_file.py`](../haitong-data-pull/scripts/upload_file.py)，机器接口定义在 [`openapi.yaml`](../haitong-data-pull/src/main/resources/openapi.yaml)。配置只声明服务端可信租户、集合和目标，API 请求不接受 tenantId、路径、Topic、存储地址或回调 URL。
 
-平台结构化推送使用 `POST /api/v1/data-push` 和 JSON。非结构化普通文件使用 `PUT /api/push/single` 和 multipart，一次上传并提交，随后根据响应的 `statusUrl` 确认投递。旧 `PUT /api/v1/data-push` 和 `PUT /api/v1/data-push/single` 进入同一脚本。multipart包含datasourceId、fileCode、businessKey、file及可选JSON文本metadata，文件名取file部分，实际大小及SHA-256由服务端流式计算；默认20MiB并受类别上限约束，临时文件落运行目录并受Servlet上限约束。新模板增加文件英文名，其他名称、说明、格式、大小及可选关联保留，旧模板兼容；FILE定义复用现有表/治理JSON，无物理结构变化。
+平台结构化推送使用 `POST /api/v1/push` 和 JSON。非结构化普通文件使用 `PUT /api/push/single` 和 multipart，一次上传并提交，随后根据响应的 `statusUrl` 确认投递。旧 `PUT /api/v1/data-push` 和 `PUT /api/v1/data-push/single` 进入同一脚本。multipart包含datasourceId、fileCode、businessKey、file及可选JSON文本metadata，文件名取file部分，实际大小及SHA-256由服务端流式计算；默认20MiB并受类别上限约束，临时文件落运行目录并受Servlet上限约束。新模板增加文件英文名，其他名称、说明、格式、大小及可选关联保留，旧模板兼容；FILE定义复用现有表/治理JSON，无物理结构变化。
 
 新调用使用datasourceId＋fileCode定位文件类别，YAML的relay.files.collections.<key>.file-code可映射到既有collection-id，省略时沿用collection-id。同源英文名和集合编码不得冲突，调用方授权、租户及目标仍由服务端决定。登记不自动创建海通运行策略；部署方须匹配来源、英文名、集合编码、格式和大小。表字段附件使用 `/api/file`，原附件地址和原 CLI 参数继续兼容。客户端推荐 --file-code scene_photo，默认统一single；加--chunked则使用新分片协议。
 
@@ -147,7 +151,7 @@ python tools/resource-sync.py publish --project haitong-data-pull --file "magic/
 
 ### 1. 总体决策与现状依据
 
-**沿用同一个海通推送应用、统一认证、登记规范与投递账本，增加文件专用入口、可恢复上传会话和文件版本能力。** 原 `/api/v1/data-push` 继续接收表批次 JSON；新文件接口传文件原始字节或已上传文件的引用，文件内容不进入表批次 JSON、MySQL 大字段或 Kafka 消息。
+**沿用同一个海通推送应用、统一认证、登记规范与投递账本，增加文件专用入口、可恢复上传会话和文件版本能力。** 原 `/api/v1/push` 继续接收表批次 JSON；新文件接口传文件原始字节或已上传文件的引用，文件内容不进入表批次 JSON、MySQL 大字段或 Kafka 消息。
 
 | 现有基础 | 源码中已具备的行为 | 本设计要补充的部分 |
 | --- | --- | --- |
@@ -224,7 +228,7 @@ flowchart LR
 
 平台结构化与非结构化页面的标题统一为“数据推送接口规范”，已发布时显示“已发布接口规范”；这项展示统一不改变下表的路径、方法或正文。非结构化顶部同样展示 Idempotency-Key：初始化与业务提交分别使用稳定的键，同一操作重试保持不变；分片 PUT 以 uploadId、片号和实际摘要核对重复请求，complete 根据会话状态幂等，GET 查询无需额外幂等键。
 
-`POST /api/v1/data-push` 当前只接受 application/json，业务分支为 FTP/KAFKA/LOG 表批次及服务间 REGISTRY_SYNC，要求对应的表和 records 契约；当前不接受独立文件原始字节，也没有 FILE 分支。若扩展统一 POST 入口，可以让新的文件提交类型携带已上传会话/文件引用、businessKey 和 metadata，复用 FileUploadService.submit、现有授权及投递账本；文件字节仍可经现有分片接口传输。若要求单次 POST 同时上传文件，则需增加明确的流式原始字节或 multipart 契约，复用配额、大小/格式、摘要、安全校验和幂等逻辑，并核验代理正文限制、断线重试及权限边界。上述属于后续接口扩展方案，尚未实现；不能只修改页面 URL 或把 PUT 字样改成 POST。已有 `/api/file/single` 是绑定表字段的附件入口，仍要求 tableName/fieldName，不能直接替代关联字段可为空的独立文件集合协议。
+`POST /api/v1/push` 当前只接受 application/json，业务分支为 FTP/KAFKA/LOG 表批次及服务间 REGISTRY_SYNC，要求对应的表和 records 契约；当前不接受独立文件原始字节，也没有 FILE 分支。若扩展统一 POST 入口，可以让新的文件提交类型携带已上传会话/文件引用、businessKey 和 metadata，复用 FileUploadService.submit、现有授权及投递账本；文件字节仍可经现有分片接口传输。若要求单次 POST 同时上传文件，则需增加明确的流式原始字节或 multipart 契约，复用配额、大小/格式、摘要、安全校验和幂等逻辑，并核验代理正文限制、断线重试及权限边界。上述属于后续接口扩展方案，尚未实现；不能只修改页面 URL 或把 PUT 字样改成 POST。已有 `/api/file/single` 是绑定表字段的附件入口，仍要求 tableName/fieldName，不能直接替代关联字段可为空的独立文件集合协议。
 
 | 已实现接口 | 行为与边界 |
 | --- | --- |
@@ -277,7 +281,7 @@ flowchart LR
 
 受理前 `/messages/{messageId}` 返回 WAITING_FILE 或明确的终态；READY 并正式建任务后兼容原消息查询。状态页首选会话 statusUrl，能同时看到文件校验、各目标传输及业务回执。Kafka 消息包含 schemaVersion、messageId、deliveryId、fileId、集合、大小、摘要、元数据和相对 contentUrl；接收方使用约定的海通 base URL 与其自身只读凭据获取文件，通知中没有密钥、私有磁盘路径或 Base64 原文。
 
-原 `/api/v1/data-push`、旧 `/files/{channel}` 和原通道路由保持原有语义。旧 BINARY 通道不会自动成为新的文件集合。平台 FILE_VERSION_REF、短时下载授权、`/file-push` 快捷入口、multipart 表单入口、批量业务提交和内部 FJGHCC 复制回调目前均未开放；默认使用 `/api/file/single` 原始字节整文件接口；大文件保留原分片协议。
+原 `/api/v1/push`、旧 `/files/{channel}` 和原通道路由保持原有语义。旧 BINARY 通道不会自动成为新的文件集合。平台 FILE_VERSION_REF、短时下载授权、`/file-push` 快捷入口、multipart 表单入口、批量业务提交和内部 FJGHCC 复制回调目前均未开放；默认使用 `/api/file/single` 原始字节整文件接口；大文件保留原分片协议。
 
 ### 5. 大文件上传与存储
 
@@ -582,7 +586,7 @@ Linux 启动器依次检查 `HAITONG_JAVA_BIN`、有效的 `JAVA_HOME`、部署�
 
 Windows 启动脚本为 Java 21 的 HTTP 回环连接设置短临时目录，默认 `%SystemDrive%\Temp\haitong-uds`；如当前账号无法创建该目录，先把 `HAITONG_UDS_DIR` 指向自己可写的短绝对路径。示例业务时间显式使用北京时间，避免启动器的 UTC 时区影响增量水位。
 
-启动成功后检查 `http://<服务器IP>:18083/actuator/health`，编辑器为 `/api/web/index.html`，统一表推送入口为 `POST /api/v1/data-push`。本机私有配置、推送节点和部署包均使用 18083。
+启动成功后检查 `http://<服务器IP>:18083/actuator/health`，编辑器为 `/api/web/index.html`，统一表推送入口为 `POST /api/v1/push`。本机私有配置、推送节点和部署包均使用 18083。
 
 <a id="local-startup"></a>
 
@@ -752,7 +756,7 @@ FTP读取需要数据文件及 `<文件名>.done` 清单，可用 `scripts/make_
 
 ```
 POST /api/v1/ingest?channel={channel}
-POST /api/v1/data-push
+POST /api/v1/push
 GET  /api/v1/message?id={messageId}
 POST /api/v1/import?channel={channel}
 GET  /api/v1/file?id={fileId}
@@ -762,10 +766,10 @@ GET  /internal/v1/reconcile?from=<UTC毫秒>&to=<UTC毫秒>
 GET  /internal/v1/openapi
 ```
 
-`POST /api/v1/data-push` 是表批次数据推送的统一入口。请求体以
+`POST /api/v1/push` 是表批次数据推送的统一入口。请求体以
 `deliveryType: "FTP"` 或 `deliveryType: "KAFKA"` 选择登记好的投递通道；
 调用方不能传入 FTP 目录、FTP 主机或 Kafka Topic。`LOG` 仅用于不输出原文的
-运行验证。新接入的表批次统一使用 `POST /api/v1/data-push`。
+运行验证。新接入的表批次统一使用 `POST /api/v1/push`。
 
 「01.数据接收」中的 `POST /api/v1/ftp`、`POST /api/v1/kafka` 和 `POST /api/v1/log` 对应原 `/api/v1/simple` 系列。
 既有客户端仍可使用原方法和路径，路径中的通道、操作编码或对象 ID 优先于同名查询参数。原地址沿用原 `Location` 和 `statusUrl`，新短地址返回对应的查询链接。
@@ -815,7 +819,7 @@ Kafka ACK、FTP文件核验、HTTP响应不是对方业务成功回执。原表�
 ## 统一数据推送接口文档
 
 > **适用服务**：`haitong-data-pull`（数据推送服务）  
-> **统一入口**：`POST /api/v1/data-push`  
+> **统一入口**：`POST /api/v1/push`
 > **数据格式**：JSON 表批次（一次请求提交一张登记表的一批记录）  
 > **面向对象**：默认面向已在源数据管理平台完成“数据推送方式”登记的系统调用方；也支持由部署方在服务本地维护数据源和表规范的独立运行场景。
 
@@ -836,9 +840,9 @@ Kafka ACK、FTP文件核验、HTTP响应不是对方业务成功回执。原表�
 | 项目 | 内容 |
 | --- | --- |
 | 请求方法 | `POST` |
-| 请求路径 | `/api/v1/data-push` |
+| 请求路径 | `/api/v1/push` |
 | 本地开发基地址（示例） | `http://127.0.0.1:18083` |
-| 完整示例地址 | `http://127.0.0.1:18083/api/v1/data-push` |
+| 完整示例地址 | `http://127.0.0.1:18083/api/v1/push` |
 | Content-Type | `application/json` |
 | 请求体编码 | UTF-8 JSON |
 | 处理模式 | 异步、可查询、幂等 |
@@ -936,7 +940,7 @@ JSON 单字符串上限与 `relay.limits.max-message-bytes` 使用同一配置�
 
 ```text
 调用方
-  │  POST /api/v1/data-push
+  │  POST /api/v1/push
   │  X-Api-Key + Idempotency-Key + 表批次 JSON
   ▼
 haitong-data-pull
@@ -1098,7 +1102,7 @@ haitong-data-pull
 #### 5.1 请求示例
 
 ```http
-POST /api/v1/data-push HTTP/1.1
+POST /api/v1/push HTTP/1.1
 Host: 127.0.0.1:18083
 Content-Type: application/json
 X-Api-Key: <平台签发的数据源推送密钥>
@@ -1134,7 +1138,7 @@ Idempotency-Key: police_person_info-20260915-000001
 #### 5.2 cURL 示例
 
 ```bash
-curl --request POST "http://127.0.0.1:18083/api/v1/data-push" \
+curl --request POST "http://127.0.0.1:18083/api/v1/push" \
   --header "Content-Type: application/json" \
   --header "X-Api-Key: <平台签发的数据源推送密钥>" \
   --header "Idempotency-Key: police_person_info-20260915-000001" \
@@ -1173,7 +1177,7 @@ curl --request POST "http://127.0.0.1:18083/api/v1/data-push" \
 #### 6.1 请求示例
 
 ```http
-POST /api/v1/data-push HTTP/1.1
+POST /api/v1/push HTTP/1.1
 Host: 127.0.0.1:18083
 Content-Type: application/json
 X-Api-Key: <平台签发的数据源推送密钥>
@@ -1377,7 +1381,7 @@ Kafka 成功投递时，`result` 中可能包含 `partition`、`offset`；FTP �
 生成业务批次号与 Idempotency-Key
         │
         ▼
-POST /api/v1/data-push
+POST /api/v1/push
         │
         ├─ 202 / 200：保存 messageId、statusUrl、幂等键
         │              │
@@ -1469,9 +1473,9 @@ POST /api/v1/data-push
 
 | 旧接口 | 等价的新请求 |
 | --- | --- |
-| `POST /api/v1/simple/ftp` | `POST /api/v1/data-push`，正文增加 `"deliveryType":"FTP"` |
-| `POST /api/v1/simple/kafka` | `POST /api/v1/data-push`，正文增加 `"deliveryType":"KAFKA"` |
-| `POST /api/v1/simple/log` | `POST /api/v1/data-push`，正文增加 `"deliveryType":"LOG"`（仅运维/开发授权场景） |
+| `POST /api/v1/simple/ftp` | `POST /api/v1/push`，正文增加 `"deliveryType":"FTP"` |
+| `POST /api/v1/simple/kafka` | `POST /api/v1/push`，正文增加 `"deliveryType":"KAFKA"` |
+| `POST /api/v1/simple/log` | `POST /api/v1/push`，正文增加 `"deliveryType":"LOG"`（仅运维/开发授权场景） |
 
 迁移时请保持原有 `X-Api-Key` 和幂等策略不变，并为每个请求体增加 `deliveryType`。不要同时向旧入口和新入口各投递一次同一业务批次，因为二者使用的实际通道一致，重复调用会造成业务上的双写风险。
 
@@ -1486,7 +1490,7 @@ POST /api/v1/data-push
 | --- | --- | --- |
 | 数据源/数据表/字段登记与发布 | 源数据管理平台 | 定义允许接收的 `datasourceId`、`tableName` 和字段规范。 |
 | 推送密钥签发与轮换 | 源数据管理平台 | 为“数据推送方式”的数据源生成、展示一次、轮换 `X-Api-Key`。 |
-| 推送规范查询 | 源数据管理平台 | `GET /dws/push/schema/contracts`，供管理端展示接口、表及目的端状态；不返回密钥和目的端凭据。 |
+| 推送规范查询 | 源数据管理平台 | `GET /dws/push/contracts` 展示已发布接口、表和字段定义。`HEAD /dws/push/contracts` 使用相同会话与角色校验。 |
 | FTP/FJGHCC 关联配置 | 资源中心/数仓分层分域 | 决定当前环境 FTP 文件投递的实际关联数据源。 |
 | Kafka Topic 授权 | 数据源登记配置 | 决定当前数据源可投递的 Kafka Topic。 |
 | 消息投递查询 | `haitong-data-pull` | `GET /api/v1/message?id={messageId}`，供调用方确认最终投递结果。 |
@@ -1518,7 +1522,7 @@ POST /api/v1/data-push
 ### 14. 快速参考
 
 ```text
-POST {haitong-base-url}/api/v1/data-push
+POST {haitong-base-url}/api/v1/push
 
 Headers
   Content-Type: application/json
@@ -1984,11 +1988,11 @@ $body = @'
 对方调用统一接口，并使用 `deliveryType=FTP`：
 
 ```text
-POST /api/v1/data-push
+POST /api/v1/push
 ```
 
 ```powershell
-Invoke-RestMethod "$base/api/v1/data-push" -Method Post `
+Invoke-RestMethod "$base/api/v1/push" -Method Post `
   -Headers @{ 'X-Api-Key' = $apiKey; 'Idempotency-Key' = 'customer-20260908-001' } `
   -ContentType 'application/json' -Body $body
 ```
@@ -2026,11 +2030,11 @@ relay:
 对方调用统一接口，并将请求体的 `deliveryType` 改为 `KAFKA`：
 
 ```text
-POST /api/v1/data-push
+POST /api/v1/push
 ```
 
 ```powershell
-Invoke-RestMethod "$base/api/v1/data-push" -Method Post `
+Invoke-RestMethod "$base/api/v1/push" -Method Post `
   -Headers @{ 'X-Api-Key' = $apiKey; 'Idempotency-Key' = 'customer-20260908-001' } `
   -ContentType 'application/json' -Body $body
 ```
@@ -2059,11 +2063,11 @@ Kafka 中每条消息就是一个“表批次” JSON，包含 `tableName`、`ba
 这是默认已经开启、无需 FTP 或 Kafka 的验证场景。将请求体中的 `deliveryType` 改为 `LOG` 后调用统一接口：
 
 ```text
-POST /api/v1/data-push
+POST /api/v1/push
 ```
 
 ```powershell
-Invoke-RestMethod "$base/api/v1/data-push" -Method Post `
+Invoke-RestMethod "$base/api/v1/push" -Method Post `
   -Headers @{ 'X-Api-Key' = $apiKey; 'Idempotency-Key' = 'customer-20260908-001' } `
   -ContentType 'application/json' -Body $body
 ```
@@ -2162,7 +2166,7 @@ V1.0 relay_message→ht_message，relay_delivery→ht_delivery，relay_file_chec
 平台已经可以调用：
 
 ```http
-POST /api/v1/data-push
+POST /api/v1/push
 X-Standalone-Registry-Key: <sync-key>
 Idempotency-Key: registry-<datasourceId>-<contractVersion>
 Content-Type: application/json
@@ -2192,7 +2196,7 @@ Content-Type: application/json
 
 该请求不要求 `Idempotency-Key`，HTTP 200 返回 `code=REGISTRY_STATUS`、`readOnly=true` 和 `tables`。每项仅有源编码、表名、实际规范指纹 `definitionHash`、`active`、毫秒 `syncedAt`，不存在的表不返回。指纹按表ID、表名、说明、规范版本、启用状态、规范顺序的字段定义生成；使用有序数组保证两端JSON属性排序不同也能比较。每次至多100源、1000表、10000字段，非法或重复引用整体拒绝。镜像表和字段各一次批量查询，既不修改镜像，也不创建同步幂等账本。`MagicBusinessHttpTest` 对20/100项验证固定2次业务SELECT（另有2次HTTP审计读取）、查询不增加账本，并拒绝普通业务身份和超限查询。
 
-源平台预览入口为 `POST /dst/db/sync {all:true,nodeId,preview:true}`；返回清单摘要 `planHash`，确认同步传同一摘要，清单变化时返回409要求重新预览。原本地 `dryRun` 保持不外发。当前本机平台后端为 `http://127.0.0.1:8088`，接收服务为 `http://127.0.0.1:18083/api/v1/data-push`，实际部署由所选节点的保存地址决定。
+源平台预览入口为 `POST /dst/db/sync {all:true,nodeId,preview:true}`；返回清单摘要 `planHash`，确认同步传同一摘要，清单变化时返回409要求重新预览。原本地 `dryRun` 保持不外发。当前本机平台后端为 `http://127.0.0.1:8088`，接收服务为 `http://127.0.0.1:18083/api/v1/push`，实际部署由所选节点的保存地址决定。
 
 
 <a id="guide-a25caa3b--magic-api-调试入口"></a>
@@ -2201,7 +2205,7 @@ Content-Type: application/json
 
 服务启动后，Magic 编辑器中的 **03.数据推送调试** 与 **02.文件传输诊断** 提供：
 
-- `POST /push/debug/send`：与正式 `/api/v1/data-push` 复用同一 Magic 推送业务函数；
+- `POST /push/debug/send`：与正式 `/api/v1/push` 复用同一 Magic 推送业务函数；
 - `POST /push/message/status`：查询当前调用方拥有的异步消息状态；
 - `POST /push/template/test`：模板配套测试入口，编辑器中预填 `push_template_demo` 的五字段请求示例及必需请求头；与正式推送接口使用同一鉴权、登记规范、幂等和异步投递逻辑；
 - `POST /ftp/connect/probe`：使用服务器配置的 FTP 参数检查连接、目录、上传、回读和清理。
@@ -2250,7 +2254,7 @@ token: <当前平台登录会话>
 
 服务器使用 `tenantRuntime.id()` 确认当前认证租户，并逐对象校验数据源、表及字段归属。同步登记接口沿用节点管理的租户数据边界。数据源管理页面的菜单角色范围按其独立接口执行。同步仅允许 `pool_cfg` 标记为数据推送接入的有效数据源，兼容已有同义字段，任一启用配置显式为 `false` 时拒绝推送。来源登记状态为 1 或 2 时，只纳入状态 2 的有效表及其有效字段。应用系统标识和名称也从当前租户有效主表读取。
 
-复用既有 `DataPushSchemaService.standaloneSnapshot` 生成/发布权威表规范，以及 `HaitongStandaloneRegistryClient` 发送 `REGISTRY_SYNC`；不另建数据源主表，不从请求体接收表字段、租户、调用方或投递地址。固定调用方编号为 `push-<datasourceId>`，其授权随配置镜像维护；此操作本身不生成或轮换 `X-Api-Key`。业务密钥由 `/dws/push/credential/issue|rotate` 处理，第五步自动调用 issue。第五步即可主动获取密钥，无须结束数据源登记；平台生成凭据后会同步当前已登记表的完整快照及密钥摘要。未登记表不进入快照，空表快照不授予表访问权限。密钥首次签发或显式轮换时仅回显一次明文；重复获取保留原密钥并只返回状态。
+单源同步与契约发布共用 Magic 的 `/pushregistry/prepare` 和 `/pushregistry/persist`，由 `HaitongStandaloneRegistryClient` 发送 `REGISTRY_SYNC`。同步以当前会话租户的登记表和服务端节点配置生成快照，固定调用方为 `push-<datasourceId>`。业务密钥使用 `POST /dws/push/issue` 和 `POST /dws/push/rotate`，登记第五步自动调用签发入口。初次签发及成功占用新版本的轮换请求各回显一次，节点接收当前登记表完整快照和密钥摘要。空表快照可以登记凭据，后续完成表登记才授予表访问权限。节点暂时不可用时，重复签发重试同一摘要，轮换先确认节点当前摘要再生成下一版。旧登记和回调地址按原 HTTP 方法兼容。
 
 成功响应示例：
 
@@ -2299,7 +2303,7 @@ token: <当前平台登录会话>
 
 ### 用途与边界
 
-独立运行模式下，数据元素平台通过统一入口 `POST /api/v1/data-push`，以 `deliveryType: "REGISTRY_SYNC"` 向 `haitong-data-pull` 全量同步一个允许推送的数据源及其表、字段、调用方授权。海通将数据保存到自身数据库的下列表中：
+独立运行模式下，数据元素平台通过统一入口 `POST /api/v1/push`，以 `deliveryType: "REGISTRY_SYNC"` 向 `haitong-data-pull` 全量同步一个允许推送的数据源及其表、字段、调用方授权。海通将数据保存到自身数据库的下列表中：
 
 - `ht_standalone_datasource`：数据源镜像；
 - `ht_standalone_table`：数据表镜像；
@@ -2568,9 +2572,9 @@ $env:HAITONG_STANDALONE_PUSH_KEY = "<长度至少24字符的随机密钥>"
 
 ```text
 数据推送方式登记 → 表、字段登记 → 第五步完成登记
-  → POST /dws/push/schema/publish
+  → POST /dws/push/publish
   → 表级规范 PUBLISHED（schemaVersion 从 1 开始）
-  → 调用方 POST /api/v1/data-push（deliveryType=FTP 或 KAFKA）
+  → 调用方 POST /api/v1/push（deliveryType=FTP 或 KAFKA）
   → 海通用调用方身份绑定租户，再核验数据源、表、字段、版本、目标
   → 受理、幂等落账、后台投递
 ```
@@ -2758,7 +2762,7 @@ bash scripts/start-background.sh
 
 在 `config/application.yml` 填写实际的数据库、FTP、推送 API Key、登记同步密钥和 Magic-API 编辑器密码。密码、API Key 与同步密钥均应只保存在服务器，不要提交到版本库或发送到聊天工具。
 
-`relay.security.clients.standalone-publisher.api-key` 的值，就是调用 `POST /api/v1/data-push` 时请求头 `X-Api-Key` 的值。
+`relay.security.clients.standalone-publisher.api-key` 的值，就是调用 `POST /api/v1/push` 时请求头 `X-Api-Key` 的值。
 
 常用命令：
 

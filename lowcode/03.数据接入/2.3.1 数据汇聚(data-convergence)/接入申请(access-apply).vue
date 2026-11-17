@@ -180,8 +180,10 @@
           </div>
           <el-alert v-if="partitionError" :title="partitionError" :type="partitionErrorType" :closable="false" show-icon />
         </div>
-        <el-alert v-for="issue in activeDdlWarnings" :key="`${issue.field}:${issue.message}`"
-          :title="`${issue.field}：${issue.message}`" type="warning" :closable="false" show-icon class="mb-2" />
+        <div v-if="activeDdlWarnings.length" class="ddl-warnings" role="region" aria-label="建表提示" tabindex="0">
+          <el-alert v-for="issue in activeDdlWarnings" :key="`${issue.field}:${issue.message}`"
+            :title="`${issue.field}：${issue.message}`" type="warning" :closable="false" show-icon />
+        </div>
         <div ref="ddlEditorHost" class="ddl-editor-host">
           <CodeEditor
             :key="activeDdlKey"
@@ -324,12 +326,9 @@ const ddlEditorHeight = ref("360px");
 let ddlSizeObserver: ResizeObserver | null = null;
 const syncDdlEditorHeight = () => {
   const host = ddlEditorHost.value;
-  const body = host?.closest(".el-drawer__body");
-  if (!host || !body) return;
-  const bottomPadding = Number.parseFloat(window.getComputedStyle(body).paddingBottom) || 0;
-  const availableHeight = body.getBoundingClientRect().bottom - host.getBoundingClientRect().top - bottomPadding;
-  // 使用明确像素高度，避免旧浏览器在多层 flex/百分比高度中回退为 200px。
-  ddlEditorHeight.value = `${Math.max(200, Math.floor(availableHeight))}px`;
+  if (!host) return;
+  // 用容器的布局高度，避免切换提示数量或滚动面板时改变编辑器尺寸。
+  ddlEditorHeight.value = `${Math.max(200, host.clientHeight)}px`;
 };
 const stopDdlEditorSizing = () => {
   ddlSizeObserver?.disconnect();
@@ -2375,12 +2374,12 @@ onBeforeUnmount(stopMaterializationProgress);
 watch([open, ddlMode, activeDdlKey], ([visible, isDdl]) => {
   stopDdlEditorSizing();
   if (!visible || !isDdl) return;
-  const body = ddlEditorHost.value?.closest(".el-drawer__body");
-  if (!body) return;
+  const host = ddlEditorHost.value;
+  if (!host) return;
   syncDdlEditorHeight();
   if (typeof ResizeObserver !== "undefined") {
     ddlSizeObserver = new ResizeObserver(syncDdlEditorHeight);
-    ddlSizeObserver.observe(body);
+    ddlSizeObserver.observe(host);
   }
   window.addEventListener("resize", syncDdlEditorHeight);
 }, { flush: "post" });
@@ -2591,7 +2590,7 @@ onBeforeUnmount(stopDdlEditorSizing);
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  overflow: hidden;
+  overflow: auto;
   border: 1px solid #e3e9f2;
   border-radius: 6px;
   background: #fff;
@@ -2603,9 +2602,18 @@ onBeforeUnmount(stopDdlEditorSizing);
 .partition-settings-fields { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
 .partition-settings-fields :deep(.el-select), .partition-settings-fields :deep(.el-input) { width: 200px; }
 .partition-settings-fields :deep(.partition-values-input.el-input) { width: min(100%, 420px); flex: 1 1 280px; }
+.ddl-warnings {
+  display: grid;
+  gap: 4px;
+  flex: 0 0 auto;
+  max-height: min(26vh, 168px);
+  overflow-y: auto;
+  padding: 4px 12px 8px;
+}
+.ddl-warnings :deep(.el-alert__title) { overflow-wrap: anywhere; }
 .ddl-editor-host {
   flex: 1 1 0;
-  min-height: 0;
+  min-height: 200px;
   min-width: 0;
   overflow: hidden;
 }
@@ -2614,8 +2622,4 @@ onBeforeUnmount(stopDdlEditorSizing);
   width: 100%;
 }
 .ddl-inline-panel :deep(.ace_editor) { min-height: 200px !important; }
-
-@media (max-height: 430px) {
-  .ddl-editor-host { overflow: auto; }
-}
 </style>

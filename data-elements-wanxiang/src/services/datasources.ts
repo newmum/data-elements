@@ -86,26 +86,26 @@ export interface SourceTablePage {rows:Row[];total:number;page:number;size:numbe
 const tableRow=(t:Row,id:string):Row=>({id:String(t.tid||t.tableId||''),sourceId:id,name:String(t.tableNameEn||t.table_name_en||t.tableName||t.table_name||''),displayName:String(t.tableNameCn||t.table_name_cn||t.tableComment||t.tableName||''),kind:/view/i.test(String(t.tableType||t.table_type||''))?'view':'table',fieldCount:Number(t.fieldCount??t.field_count??0)});
 const asTablePage=(raw:Row,id:string,page:number,size:number):SourceTablePage=>({rows:rowsOf(raw).map(t=>tableRow(t,id)).filter(t=>t.id),total:Number(raw.total??0),page:Number(raw.pageNo??page),size:Number(raw.pageSize??size)});
 export async function sourceTablesPage(id:string,page=1,size=15,keyword='',sort:Row={}):Promise<SourceTablePage> {
- const raw=await platformApiGet<Row>('/dst/database/metadata/tables/saved',{dbId:id,pageNo:page,pageSize:size,...sort,...(keyword?{keyword}:{})});
+ const raw=await platformApiGet<Row>('/dst/collect/saved',{dbId:id,pageNo:page,pageSize:size,...sort,...(keyword?{keyword}:{})});
  return asTablePage(raw,id,page,size);
 }
 export async function addedSourceTablesPage(id:string,page=1,size=15,sort:Row={}):Promise<SourceTablePage> {
- const raw=await platformApiGet<Row>('/dst/database/metadata/tables/collection/additions',{dbId:id,pageNo:page,pageSize:size,...sort});
+ const raw=await platformApiGet<Row>('/dst/collect/additions',{dbId:id,pageNo:page,pageSize:size,...sort});
  return asTablePage(raw,id,page,size);
 }
 export async function missingSourceTablesPage(id:string,page=1,size=15,sort:Row={}):Promise<SourceTablePage> {
- const raw=await platformApiGet<Row>('/dst/database/metadata/tables/collection/changes',{dbId:id,pageNo:page,pageSize:size,...sort});
+ const raw=await platformApiGet<Row>('/dst/collect/changes',{dbId:id,pageNo:page,pageSize:size,...sort});
  return asTablePage(raw,id,page,size);
 }
 export interface CollectionJob {exists?:boolean;jobId?:string;datasourceId?:string;status:string;phase?:string;progressPercent?:number;totalCount?:number;persistedCount?:number;addedCount?:number;unchangedCount?:number;deletedCount?:number;startedAt?:string;finishedAt?:string;previousSuccessfulAt?:string;savedBeforeCount?:number;error?:string}
-export const collectionStatus=(id:string,jobId?:string)=>platformApiGet<CollectionJob>('/dst/database/metadata/tables/collection/status',{dbId:id,jobId});
+export const collectionStatus=(id:string,jobId?:string)=>platformApiGet<CollectionJob>('/dst/collect/status',{dbId:id,jobId});
 /** Fetch list-row statuses in bounded batches; the single-source route remains for detail polling. */
 export async function collectionStatuses(ids:string[],signal?:AbortSignal):Promise<CollectionJob[]> {
  const unique=[...new Set(ids.filter(Boolean))];
  const jobs:CollectionJob[]=[];
  for(let start=0;start<unique.length;start+=500){
   const batch=unique.slice(start,start+500);
-  const result=await platformApi<{items:CollectionJob[]}>('/dst/database/metadata/tables/collection/status/batch',{dbIds:batch},{signal});
+  const result=await platformApi<{items:CollectionJob[]}>('/dst/collect/statuses',{dbIds:batch},{signal});
   if(!Array.isArray(result?.items))throw new Error('采集任务批量状态返回格式不正确');
   const bySource=new Map(result.items.map(job=>[String(job.datasourceId||''),job]));
   if(batch.some(id=>!bySource.has(id)))throw new Error('采集任务批量状态缺少数据源，请刷新后重试');
@@ -113,7 +113,7 @@ export async function collectionStatuses(ids:string[],signal?:AbortSignal):Promi
  }
  return jobs;
 }
-export const startCollection=(id:string,refresh:boolean)=>platformApi<CollectionJob>('/dst/database/metadata/tables/collection/start',{dbId:id,mode:refresh?'REFRESH':'INITIAL'});
+export const startCollection=(id:string,refresh:boolean)=>platformApi<CollectionJob>('/dst/collect/start',{dbId:id,mode:refresh?'REFRESH':'INITIAL'});
 export const collectTableFields=(id:string,force=false)=>platformApi<unknown>('/dst/db/collect',{tableId:id,...(force?{force:true}:{})},{timeoutMs:120000});
 export const sharedSourceApi=datasourceRegistrationApi;
 export function openPlatformCatalog() {const url=new URL(dataPlatformHomeUrl(),location.href);url.hash='/register/register-sjml/list';location.assign(url.href);}

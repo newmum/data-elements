@@ -389,7 +389,7 @@ const handleResetMapping = (row: any) => {
 // 保存映射关系
 const saveMapping = async () => {
   try {
-    await $common.post("/dst/catalog/saveOrUpdate", {
+    await $common.post("/dst/catalog/save", {
       tid: props.catalogId,
       catalogItems: state.mappingData.map((item: any) => ({
         ...item,

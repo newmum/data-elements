@@ -28,3 +28,12 @@ test('sources follow upstream edges through transforms, avoid cycles and unrelat
   assert.equal(result[0].manifestKey, 'source.hive');
   assert.equal(result[0].sourceTableId, 'registered-events');
 });
+
+test('Elasticsearch materialization uses the canvas index instead of an older registered table name', () => {
+  const nodes = {
+    target: { id: 'target', category: 'sink', config: {} },
+    es: { id: 'es', category: 'source', label: 'Elasticsearch', manifestKey: 'source.elasticsearch', config: { defaultIndex: 'events', table: 'old-events' } },
+  };
+  const edges = { source: { source: 'es', target: 'target' } };
+  assert.deepEqual(upstreamTableSources('target', nodes, edges).map((source) => source.table), ['events']);
+});

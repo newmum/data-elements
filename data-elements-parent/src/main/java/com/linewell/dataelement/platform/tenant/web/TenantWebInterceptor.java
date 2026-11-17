@@ -1,17 +1,19 @@
 package com.linewell.dataelement.platform.tenant.web;
 
 import cn.dev33.satoken.stp.StpUtil;
-import com.linewell.dataelement.platform.tenant.application.TenantAccessService;
 import com.linewell.dataelement.feature.identity.application.TenantIdentityQueryService;
+import com.linewell.dataelement.magic.runtime.security.MagicAccessPolicy;
+import com.linewell.dataelement.platform.tenant.api.IdentityPolicyInvoker;
+import com.linewell.dataelement.platform.tenant.application.TenantAccessService;
 import com.linewell.dataelement.platform.tenant.application.TenantSessions;
-import com.linewell.dataelement.platform.tenant.domain.TenantAccessException;
 import com.linewell.dataelement.platform.tenant.config.TenantProperties;
+import com.linewell.dataelement.platform.tenant.domain.TenantAccessException;
 import com.linewell.dataelement.platform.tenant.domain.TenantContext;
+import com.linewell.dataelement.platform.web.security.GlobalInterceptor;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.springframework.stereotype.Component;
 import org.springframework.beans.factory.annotation.Autowired;
-import com.linewell.dataelement.platform.tenant.api.IdentityPolicyInvoker;
+import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
 @Component
@@ -45,28 +47,28 @@ public class TenantWebInterceptor implements HandlerInterceptor {
             Object handler
     ) {
         TenantContext.clear();
-        // Login establishes a new, separately scoped token. An old token on
-        // the request must not trigger compatibility tenant assignment.
-        if (request.getRequestURI().startsWith("/idaas/")
-                || "/portal/sso/login".equals(request.getRequestURI())
-                || "/portal/sso/options".equals(request.getRequestURI())
-                || "/portal/sso/settings".equals(request.getRequestURI())) {
+        MagicAccessPolicy access = GlobalInterceptor.verifiedMagicAccess(request);
+        String path = request.getRequestURI();
+        // Magic 已声明入口按通过鉴权的策略选库；旧登录入口仍在控制库建立新会话。
+        boolean control = access == null
+                ? path.startsWith("/idaas/") || "/portal/sso/login".equals(path)
+                : switch (access) {
+                    case PUBLIC, IDAAS_PLATFORM_SESSION, HAITONG_RELAY -> true;
+                    case TENANT_SESSION -> false;
+                };
+        if (control) {
             TenantContext.control();
             return true;
         }
         if (!properties.isEnabled()) {
             return true;
         }
-        String publishedTenantId = publishedTenantId(request.getRequestURI());
-        if (publishedTenantId != null) {
+        // 旧发布协议可由地址选租户；显式行业会话只使用会话中的租户。
+        String publishedTenantId = access == null ? publishedTenantId(path) : null;
+        if (publishedTenantId != null || (access == null && path.startsWith(PUBLISHED_PREFIX))) {
             TenantAccessService.TenantIdentity identity =
-                    tenantAccessService.requireActiveTenant(publishedTenantId);
-            TenantContext.use(identity.tenantId());
-            return true;
-        }
-        if (request.getRequestURI().startsWith(PUBLISHED_PREFIX)) {
-            TenantAccessService.TenantIdentity identity =
-                    tenantAccessService.requireActiveTenant(properties.getDefaultTenantId());
+                    tenantAccessService.requireActiveTenant(publishedTenantId == null
+                            ? properties.getDefaultTenantId() : publishedTenantId);
             TenantContext.use(identity.tenantId());
             return true;
         }
