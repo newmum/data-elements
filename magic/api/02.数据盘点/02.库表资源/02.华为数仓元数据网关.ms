@@ -12,7 +12,12 @@
   "path": "/hive",
   "method": "POST",
   "parameters": [],
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "TENANT_SESSION"
+    }
+  ],
   "requestBody": "{\n  \"action\": \"jdbcExample\",\n  \"database\": \"Hive 数据库（tables/columns 等动作需要）\",\n  \"table\": \"Hive 表名（表级动作需要）\",\n  \"limit\": 100,\n  \"confirm\": \"EXECUTE_JDBC_EXAMPLE\"\n}",
   "headers": [],
   "paths": [],

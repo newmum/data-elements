@@ -18,8 +18,8 @@ import com.linewell.dataelement.feature.approval.api.ApprovalFlowMagicModule;
 import com.linewell.dataelement.feature.approval.domain.ApprovalEngineModels.EngineInstance;
 import com.linewell.dataelement.feature.approval.domain.ApprovalEngineModels.StartCommand;
 import com.linewell.dataelement.feature.approval.infrastructure.persistence.service.IFlowSuggestionService;
-import com.linewell.dataelement.feature.approval.infrastructure.magic.MagicApprovalLifecycleAdapter;
-import com.linewell.dataelement.feature.approval.infrastructure.warmflow.listener.CustomGlobalListener;
+import com.linewell.dataelement.magic.runtime.route.RegisteredMagicApiInvoker;
+import com.linewell.dataelement.integration.workflow.CustomGlobalListener;
 import com.linewell.dataelement.feature.assetcenter.application.AssetCenterApprovalBridge;
 import com.linewell.dataelement.feature.delivery.application.ResourceDeliveryService;
 import com.linewell.dataelement.feature.identity.application.IdentityUserLookupService;
@@ -34,7 +34,6 @@ import org.dromara.warm.flow.core.entity.Node;
 import org.dromara.warm.flow.core.listener.ListenerVariable;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
-import org.ssssssss.magicapi.core.service.MagicAPIService;
 import org.ssssssss.script.MagicScript;
 import org.ssssssss.script.MagicScriptContext;
 import org.ssssssss.script.runtime.ExitValue;
@@ -108,9 +107,9 @@ class ApprovalFlowAssociationTest {
         verifyNoInteractions(bridge);
     }
 
-    @Test void warmFlowFinishesThroughShortRouteUsingTheEngineBusinessId() throws Exception {
-        var api = mock(MagicAPIService.class);
-        var listener = new CustomGlobalListener(new MagicApprovalLifecycleAdapter(api));
+    @Test void warmFlowFinishesThroughTheRegisteredResourceUsingTheEngineBusinessId() throws Exception {
+        var api = mock(RegisteredMagicApiInvoker.class);
+        var listener = new CustomGlobalListener(api);
         var instance = mock(Instance.class);
         var node = mock(Node.class);
         var event = mock(ListenerVariable.class);
@@ -124,10 +123,9 @@ class ApprovalFlowAssociationTest {
         var magic = new ApprovalFlowMagicModule(service, new ObjectMapper());
         var script = MagicScript.create(CanonicalMagicSources.byId("c30f3718868148ce84e65217f49a7720")
                 .replaceFirst("(?m)^import approvalFlow\\R", ""), null);
-        when(api.execute(org.mockito.ArgumentMatchers.eq("POST"),
-                org.mockito.ArgumentMatchers.eq("/sym/approval/finish"), any())).thenAnswer(call -> {
+        when(api.execute(org.mockito.ArgumentMatchers.eq("c30f3718868148ce84e65217f49a7720"), any())).thenAnswer(call -> {
                     var input = Map.<String, Object>of("approvalFlow", magic, "engineEvent",
-                            ((Map<?, ?>) call.getArgument(2)).get("engineEvent"));
+                            ((Map<?, ?>) call.getArgument(1)).get("engineEvent"));
                     assertThat(script.execute(new MagicScriptContext(input))).isEqualTo(true);
                     return true;
                 });

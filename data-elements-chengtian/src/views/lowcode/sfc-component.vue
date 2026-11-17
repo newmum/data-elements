@@ -780,8 +780,9 @@ const refreshComponentCache = async () => {
   componentCacheRefreshing.value = true;
   try {
     const result = await request({
-      url: "/sym/component/cache/refresh",
+      url: "/sym/component/manage",
       method: "post",
+      params: { action: "refresh" },
       data: {},
       timeout: 120000,
     });

@@ -15,7 +15,7 @@
     {
       "name": "action",
       "value": "list",
-      "description": "读取共享低代码编译包、组件树和历史，或通过组件管理服务维护组件。runtimeBatch 使用 body.root 请求已核对依赖的入口，返回 complete、scope 和 components。",
+      "description": "读取共享低代码编译包、组件树和历史，或维护组件。runtimeBatch 使用 body.root 请求已核对依赖的入口。refresh 刷新共享编译包的两级缓存并返回 version 和 count。",
       "required": false,
       "dataType": "String",
       "type": null,
@@ -52,12 +52,12 @@
       "children": null
     }
   ],
-  "options": [],
+  "options": [{"name": "access", "value": "TENANT_SESSION"}],
   "requestBody": "{\n    \"tid\": \"2e83a7abf33140c7a3df27d0c79e98c1\",\n    \"type\": \"app\",\n    \"name\": \"测试\",\n    \"pid\": \"测试\",\n    \"sourceCode\": \"测试\",\n    \"compileJs\": \"测试\",\n    \"compileCss\": \"测试\"\n}",
   "headers": [],
   "paths": [],
   "responseBody": "{\n    \"code\": 400,\n    \"msg\": \"body[type]不合法\",\n    \"message\": \"body[type]不合法\",\n    \"success\": false,\n    \"data\": null,\n    \"timestamp\": 1785741933452,\n    \"error\": {\n        \"code\": \"MAGIC-BUSINESS-400\",\n        \"message\": \"body[type]不合法\",\n        \"detail\": \"body[type]不合法\",\n        \"traceId\": \"959F15F9974C452A\",\n        \"type\": \"BusinessException\",\n        \"method\": \"POST\",\n        \"path\": \"/sym/component/manage\"\n    }\n}",
-  "description": "根据 action 查询页面组件列表或树，或调用组件管理服务执行保存与维护操作。",
+  "description": "已认证行业会话按 action 查询、维护共享组件，或刷新 JVM 和 Redis 的共享编译包缓存。",
   "requestBodyDefinition": {
     "name": "root",
     "value": "",
@@ -538,12 +538,18 @@
 }
 ================================
 import cn.hutool.crypto.digest.DigestUtil
+import com.linewell.dataelement.model.common.CommonResponse
 import java.util.Locale
+import org.springframework.http.ResponseEntity
 import uiComponentCache
 import uiComponentAdmin
 
 // POST /sym/component/manage 按 action 读取共享组件编译包、组件树和历史，或维护组件及其编译结果。
 // runtimeBatch 接收 body.root，在同一已认证路由返回入口包或兼容的全量包。
+// refresh 通过 uiComponentCache 模块从控制库重建 JVM 和 Redis 的编译包缓存，返回版本及组件数。
+if (action == 'refresh') {
+    return ResponseEntity.ok(CommonResponse.success(uiComponentCache.refresh()))
+}
 if (action == 'list') {
     return uiComponentCache.list()
 }

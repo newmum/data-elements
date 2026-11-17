@@ -224,6 +224,7 @@ def configure_nifi(ports, credentials):
         "nifi.security.keystore": "", "nifi.security.keystorePasswd": "", "nifi.security.keyPasswd": "",
         "nifi.security.truststore": "", "nifi.security.truststorePasswd": "",
         "nifi.security.user.login.identity.provider": "", "nifi.security.user.authorizer": "",
+        "nifi.nar.library.autoload.directory": "./extensions",
         "nifi.remote.input.secure": "false", "nifi.sensitive.props.key": credentials["nifi"],
     }
     content = path.read_text(encoding="utf-8")
@@ -234,6 +235,24 @@ def configure_nifi(ports, credentials):
             content += f"\n{line}\n"
     private_file(path, content)
     return home
+
+
+def verify_nifi_extensions(url):
+    required = {
+        ("haitong-mapping-nar", "com.linewell.dataelement.nifi.HaitongTransformRecord"),
+        ("datadevs-database-nar", "com.linewell.microservice.processors.database.LinewellPutDatabaseRecord"),
+        ("datadevs-database-nar", "com.linewell.microservice.processors.database.GenerateDateTableFetch"),
+    }
+
+    def extensions_ready():
+        response = http_json(url + "/flow/processor-types")
+        loaded = {(item["bundle"]["artifact"], item["type"]) for item in response["processorTypes"]}
+        return required <= loaded
+
+    try:
+        wait_for("nifi", extensions_ready, 45)
+    except RuntimeError as failure:
+        raise RuntimeError("NiFi 未注册海通字段映射或数据库处理器，请检查 runtime/nifi-2.9.0/logs/nifi-app.log") from failure
 
 
 def initialize_record_services(url):
@@ -290,6 +309,7 @@ def start(ports, credentials):
                        f"-Dorg.apache.nifi.bootstrap.config.log.dir={home / 'logs'}", "org.apache.nifi.NiFi"], cwd=home,
               env=dict(os.environ, JAVA_HOME=str(RUNTIME / "java"), PATH=str(RUNTIME / "java/bin") + ":" + os.environ["PATH"]))
         wait_for("nifi", lambda: bool(http_json(nifi_url + "/flow/process-groups/root")), 220)
+        verify_nifi_extensions(nifi_url)
         initialize_record_services(nifi_url)
         print("正在启动海通后端…", flush=True)
         backend_env = dict(os.environ, HAITONG_BACKEND_PORT=str(ports["backend"]),

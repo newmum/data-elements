@@ -29,3 +29,7 @@ spring:
         file-extension: yml
 # All runtime settings, including datasource, Redis, NiFi, and Magic API
 # options, are supplied from Nacos or explicitly injected deployment variables.
+data-element:
+  magic:
+    # MVC recovery route used by the publisher when the Magic registry is unavailable.
+    resource-reload-path: ${DATA_ELEMENT_MAGIC_RESOURCE_RELOAD_PATH:/sym/node-config/magic-resource/refresh}

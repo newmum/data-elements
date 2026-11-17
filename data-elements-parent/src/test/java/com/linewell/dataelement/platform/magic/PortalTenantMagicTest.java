@@ -92,7 +92,6 @@ class PortalTenantMagicTest {
 
     @Test
     void listsTwentyAndOneHundredPublicOptionsWithOneSelect() throws Exception {
-        function("read", "06.读取登录行业选项", "options");
         try (var spring = springBeans()) {
             for (int count : List.of(20, 100)) {
                 jdbc.update("delete from sym_tenant_t");
@@ -102,9 +101,7 @@ class PortalTenantMagicTest {
                 insertTenant("disabled", -1, 0, 0);
                 insertTenant("deleted", -1, 1, 1);
                 sql.clear();
-                String file = count == 20 ? "05.查询登录行业" : "06.查询登录行业响应头";
-                String id = count == 20 ? "portal_options_v1" : "portal_options_head_v1";
-                var response = entry(file, id);
+                var response = entry("05.查询登录行业", "portal_options_v1");
                 var rows = assertInstanceOf(List.class, response.getData());
                 assertEquals(count, rows.size());
                 assertEquals(Map.of("tid", "option-0", "code", "code-option-0", "name", "option-0"), rows.getFirst());
@@ -116,13 +113,12 @@ class PortalTenantMagicTest {
     @Test
     void readsOnlySelectedActiveBrandAndPreservesParameterPrecedence() throws Exception {
         insertTenant("local", 1, 1, 0);
-        function("read", "07.读取行业登录设置", "settings");
         try (var spring = springBeans()) {
-            assertEquals(20001, entry("07.查询行业登录设置", "portal_settings_v1").getCode());
+            assertEquals(20001, entry("06.查询行业登录设置", "portal_settings_v1").getCode());
             request.servlet.addParameter("tenantId[]", "local");
-            assertEquals(Map.of("brand", "local"), entry("08.查询行业登录设置响应头", "portal_settings_head_v1").getData());
+            assertEquals(Map.of("brand", "local"), entry("06.查询行业登录设置", "portal_settings_v1").getData());
             request.servlet.addParameter("tenantId", "forbidden");
-            assertEquals(403, entry("07.查询行业登录设置", "portal_settings_v1").getCode());
+            assertEquals(403, entry("06.查询行业登录设置", "portal_settings_v1").getCode());
         }
     }
 
@@ -130,13 +126,12 @@ class PortalTenantMagicTest {
     void sessionReusesItsControlReadAndSwitchCommitsOnlyAfterValidation() throws Exception {
         insertTenant("local", 1, 1, 0);
         insertTenant("other", 2, 1, 0);
-        function("read", "08.读取门户当前会话", "session");
         when(token.get("authRealm")).thenReturn("tenant-local-v1");
         try (var spring = springBeans(); var stp = mockStatic(StpUtil.class);
              var tenant = TenantContext.use("local")) {
             stp.when(StpUtil::isLogin).thenReturn(true);
             stp.when(StpUtil::getTokenSession).thenReturn(token);
-            var current = assertInstanceOf(Map.class, entry("09.读取当前行业会话", "portal_session_v1").getData());
+            var current = assertInstanceOf(Map.class, entry("07.读取当前行业会话", "portal_session_v1").getData());
             assertEquals("LOCAL", current.get("accountSource"));
             var available = assertInstanceOf(List.class, current.get("available"));
             assertEquals(1, available.size());
@@ -144,29 +139,28 @@ class PortalTenantMagicTest {
             assertEquals(1, sql.size());
 
             bindings.put("body", Map.of("tenantId", "other"));
-            assertEquals(403, entry("13.切换当前行业", "portal_switch_v1").getCode());
+            assertEquals(403, entry("09.切换当前行业", "portal_switch_v1").getCode());
             verify(token, never()).set(eq("tenantId"), any());
             bindings.put("body", Map.of("tenantId", "local"));
             request.servlet.setAttribute(MagicBootConfiguration.MAGIC_PORTAL_SWITCH_JSON_ERROR,
                     new HttpMessageNotReadableException("JSON parse error: validation", null, null));
-            var error = entry("13.切换当前行业", "portal_switch_v1");
+            var error = entry("09.切换当前行业", "portal_switch_v1");
             assertEquals(500, error.getCode());
             assertEquals("JSON parse error: validation", error.getMsg());
             verify(token, never()).set(eq("tenantId"), any());
             request.servlet.removeAttribute(MagicBootConfiguration.MAGIC_PORTAL_SWITCH_JSON_ERROR);
-            assertEquals(0, entry("13.切换当前行业", "portal_switch_v1").getCode());
+            assertEquals(0, entry("09.切换当前行业", "portal_switch_v1").getCode());
             verify(token).set("tenantId", "local");
 
             clearInvocations(token);
             jdbc.execute("alter table sym_tenant_t rename to validation_unavailable");
-            assertEquals(500, entry("13.切换当前行业", "portal_switch_v1").getCode());
+            assertEquals(500, entry("09.切换当前行业", "portal_switch_v1").getCode());
             verify(token, never()).set(eq("tenantId"), any());
         }
     }
 
     @Test
     void validatesEveryLegacyMembershipWithTwoQueriesAtTwentyAndOneHundred() throws Exception {
-        function("read", "09.读取门户可切换租户", "tenants");
         insertTenant("other", 0, 1, 0);
         insertTenant("blocked-local", 0, 1, 0);
         insertTenant("deleted", 0, 1, 1);
@@ -185,7 +179,7 @@ class PortalTenantMagicTest {
                     jdbc.update("insert into rm_user_tenant_rela_t values ('operator',?,?,1,0)", id, index == count - 1 ? 1 : 0);
                 }
                 sql.clear();
-                var result = assertInstanceOf(List.class, entry("11.查询会话可用行业", "portal_tenants_v1").getData());
+                var result = assertInstanceOf(List.class, entry("08.查询会话可用行业", "portal_tenants_v1").getData());
                 assertEquals(count, result.size());
                 assertEquals("member-" + (count - 1), assertInstanceOf(Map.class, result.getFirst()).get("tid"));
                 for (Object row : result) {

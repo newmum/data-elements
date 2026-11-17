@@ -14,7 +14,7 @@
   "path": "/login",
   "method": "POST",
   "parameters": [],
-  "options": [],
+  "options": [{"name": "access", "value": "SESSION_LOGIN"}],
   "requestBody": "{\"account\": \"本地账号\", \"password\": \"<SM3密码摘要>\", \"tenantId\": \"应用运行租户ID\", \"appId\": \"本地权限应用ID\"}",
   "headers": [],
   "paths": [],

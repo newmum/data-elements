@@ -8,7 +8,12 @@
   "method": "POST",
   "description": "根据 manifestKey、config 和表名探查字段结构。登记的 Hive 配置从当前租户读取，托管连接的表必须属于所选库。返回字段及诊断，不写业务记录。",
   "parameters": [],
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "TENANT_SESSION"
+    }
+  ],
   "headers": [],
   "paths": []
 }

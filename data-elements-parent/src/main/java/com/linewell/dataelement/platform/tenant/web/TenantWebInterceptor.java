@@ -49,11 +49,11 @@ public class TenantWebInterceptor implements HandlerInterceptor {
         TenantContext.clear();
         MagicAccessPolicy access = GlobalInterceptor.verifiedMagicAccess(request);
         String path = request.getRequestURI();
-        // Magic 已声明入口按通过鉴权的策略选库；旧登录入口仍在控制库建立新会话。
+        // Magic 已声明入口按通过鉴权的策略选库，登录脚本从控制库开始建立新会话。
         boolean control = access == null
-                ? path.startsWith("/idaas/") || "/portal/sso/login".equals(path)
+                ? path.startsWith("/idaas/")
                 : switch (access) {
-                    case PUBLIC, IDAAS_PLATFORM_SESSION, HAITONG_RELAY -> true;
+                    case PUBLIC, SESSION_LOGIN, SESSION_LOGOUT, IDAAS_PLATFORM_SESSION, HAITONG_RELAY -> true;
                     case TENANT_SESSION -> false;
                 };
         if (control) {

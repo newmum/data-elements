@@ -622,11 +622,35 @@ test("使用原行业选择接口登录其他行业后，刷新仍恢复该行�
 
 test("退出返回原接口的登录路径并清理模拟会话", async () => {
   const { runtime, sessionStorage } = setup();
+  for (const token of ["", "validation-revoked"]) {
+    const logout = await runtime.handle({method: "POST", path: "/portal/sso/logout", token});
+    assert.equal(logout.body.data, "/login");
+    assert.ok(runtime.session);
+  }
   const result = await request(runtime, "/portal/sso/logout");
   assert.equal(result.body.data, "/login");
   assert.equal(runtime.session, null);
   assert.equal(new ChengtianMockRuntime({sessionStorage}).session, null);
   assert.equal((await request(runtime, "/portal/sso/session", {}, {}, "GET")).body.code, 100120);
+  assert.equal((await request(runtime, "/portal/sso/logout")).body.data, "/login");
+});
+
+test("组件管理刷新认证后的共享包并返回版本和组件数", async () => {
+  const { runtime } = setup("registrar");
+  const url = "/sym/component/manage";
+  const query = {action: "refresh"};
+  const before = (await request(runtime, url, {}, {action: "list"})).body.data;
+  const firstResponse = await request(runtime, url, {}, query);
+  assert.equal(firstResponse.body.success, true);
+  const first = firstResponse.body.data;
+  const second = (await request(runtime, url, {}, query)).body.data;
+  assert.equal(first.count, before.length);
+  assert.equal(second.count, before.length);
+  assert.notEqual(first.version, second.version);
+  assert.deepEqual((await request(runtime, url, {}, {action: "list"})).body.data, before);
+  const denied = await runtime.handle({method: "POST", path: url, query, token: ""});
+  assert.equal(denied.status, 200);
+  assert.equal(denied.body.code, 100120);
 });
 
 test("菜单及组织树保持当前数据库层级，空租户不复制公安配置", async () => {

@@ -305,7 +305,7 @@ const healthDescription = node => node.healthStatus === 'unknown' || !node.healt
 const testNode = async (node, nodeType) => {
   testingId.value = node.id;
   try {
-    const response = await $common.post(nodeType === 'push' ? '/ods/node/page' : '/sym/node-config/service/health', { action: 'health', tid: node.id, nodeId: node.id, nodeType, baseUrl: node.baseUrl, managementUrl: node.managementUrl || '', localNode: Boolean(node.localNode) });
+    const response = await $common.post(nodeType === 'service' ? '/ods/service/page' : '/ods/node/page', { action: 'health', tid: node.id, nodeId: node.id, nodeType });
     const payload = response?.data || response || {};
     Object.assign(node, { healthStatus: payload.success ? 'reachable' : 'unreachable', healthMessage: payload.message || (payload.success ? text.healthOk : text.healthFailed), healthTime: payload.healthTime || new Date().toLocaleString(), healthLatencyMs: payload.latencyMs });
     if (payload.success) ElMessage.success(`${text.healthOk} (${payload.latencyMs ?? 0}ms)`);

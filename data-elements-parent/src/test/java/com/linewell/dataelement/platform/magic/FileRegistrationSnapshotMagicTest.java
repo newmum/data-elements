@@ -111,8 +111,7 @@ class FileRegistrationSnapshotMagicTest {
                 return null;
             };
             try (var tenant = TenantContext.use("police"); var login = mockStatic(StpUtil.class)) {
-                login.when(StpUtil::isLogin).thenReturn(true);
-                login.when(StpUtil::getLoginId).thenReturn(ACTOR);
+                login.when(StpUtil::getLoginIdDefaultNull).thenReturn(ACTOR);
                 return MagicScript.create(script,null).execute(new MagicScriptContext(Map.of("body",body,"db",base.db,
                         "tenantRuntime",base.scope,"dataScope",scope,"tableRead",new StructuredTableReadMagicModule(magicJdbc),
                         "tableWrite",new StructuredTableWriteMagicModule(magicJdbc), "refreshAssetIndex",refresh,"log",log)));

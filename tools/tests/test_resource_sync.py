@@ -53,11 +53,13 @@ class EditorParameterDefaultsTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Invalid or duplicate'):
             sync.magic_access_policy(dict(resource, options=resource['options'] * 2))
 
-    def test_relay_access_requires_post(self):
-        resource = {'method': 'POST', 'options': [{'name': 'access', 'value': 'HAITONG_RELAY'}]}
-        self.assertEqual(sync.magic_access_policy(resource), 'HAITONG_RELAY')
-        with self.assertRaisesRegex(ValueError, 'does not match the HTTP method'):
-            sync.magic_access_policy(dict(resource, method='GET'))
+    def test_relay_and_session_lifecycle_access_require_post(self):
+        for policy in ('HAITONG_RELAY', 'SESSION_LOGIN', 'SESSION_LOGOUT'):
+            with self.subTest(policy=policy):
+                resource = {'method': 'POST', 'options': [{'name': 'access', 'value': policy}]}
+                self.assertEqual(sync.magic_access_policy(resource), policy)
+                with self.assertRaisesRegex(ValueError, 'does not match the HTTP method'):
+                    sync.magic_access_policy(dict(resource, method='GET'))
 
     def test_rejects_malformed_api_option_shapes(self):
         for options in ({'access': 'PUBLIC'}, '', True, ['PUBLIC'], [12]):

@@ -43,7 +43,10 @@ class DslCompilerJdbcDriverLocationTest {
     void nativeGaussSourcesAndTargetsUseTheReviewedDriverNames(
             String component, String variant, String nodeKey, String filename,
             String driverClass, String protocol, boolean explicitMapping) throws Exception {
-        NifiClient nifi = configuredNifi();
+        String expectedPath = "/opt/nifi/drivers/" + filename;
+        NifiClient nifi = configuredNifi(explicitMapping
+                ? nodeKey + "=" + expectedPath + ";GAUSSDB=/legacy/other-driver.jar"
+                : "/opt/nifi/drivers/");
         ManifestRegistry registry = mock(ManifestRegistry.class);
         NifiNodeRuntimeResolver nodeResolver = mock(NifiNodeRuntimeResolver.class);
         String manifestPath = component.startsWith("source.")
@@ -51,10 +54,6 @@ class DslCompilerJdbcDriverLocationTest {
         try (var stream = getClass().getResourceAsStream(manifestPath)) {
             when(registry.get(component)).thenReturn(new ObjectMapper().readValue(stream, ComponentManifest.class));
         }
-        String expectedPath = "/opt/nifi/drivers/" + filename;
-        when(nodeResolver.resolve()).thenReturn(runtimeNode(explicitMapping
-                ? nodeKey + "=" + expectedPath + ";GAUSSDB=/legacy/other-driver.jar"
-                : "/opt/nifi/drivers/"));
         String url = "jdbc:" + protocol + "://validation.invalid:8000/business";
         Map<String, Object> config = Map.of("dbType", "GAUSSDB", "gaussdbVariant", variant,
                 "jdbcUrl", url, "host", "validation.invalid", "port", "8000", "database", "business",
@@ -99,7 +98,7 @@ class DslCompilerJdbcDriverLocationTest {
 
     @Test
     void expandsLegacyKingbase8TargetTypeUsingTheCurrentTargetNodesDriverDirectory() throws Exception {
-        NifiClient nifi = configuredNifi();
+        NifiClient nifi = configuredNifi("/opt/nifi/lib/jdbc/");
         ManifestRegistry registry = mock(ManifestRegistry.class);
         NifiNodeRuntimeResolver nodeResolver = mock(NifiNodeRuntimeResolver.class);
         ComponentManifest manifest;
@@ -107,7 +106,6 @@ class DslCompilerJdbcDriverLocationTest {
             manifest = new ObjectMapper().readValue(stream, ComponentManifest.class);
         }
         when(registry.get("sink.jdbc")).thenReturn(manifest);
-        when(nodeResolver.resolve()).thenReturn(runtimeNode("/opt/nifi/lib/jdbc/"));
         Map<String, Object> config = new java.util.LinkedHashMap<>(Map.of(
                 "dbType", "kingbase8", "jdbcUrl", "jdbc:kingbase8://example.test:54321/target",
                 "username", "target-user", "password", "target-password", "table", "TARGET_TABLE",
@@ -131,7 +129,7 @@ class DslCompilerJdbcDriverLocationTest {
 
     private void assertOracleDriverLocation(String component, String nodeLocation,
                                            Map<String, Object> overrides, String expected) throws Exception {
-        NifiClient nifi = configuredNifi();
+        NifiClient nifi = configuredNifi(nodeLocation);
         ManifestRegistry registry = mock(ManifestRegistry.class);
         NifiNodeRuntimeResolver nodeResolver = mock(NifiNodeRuntimeResolver.class);
         String manifestPath = "source.oracle".equals(component)
@@ -141,7 +139,6 @@ class DslCompilerJdbcDriverLocationTest {
             manifest = new ObjectMapper().readValue(stream, ComponentManifest.class);
         }
         when(registry.get(component)).thenReturn(manifest);
-        when(nodeResolver.resolve()).thenReturn(runtimeNode(nodeLocation));
         Map<String, Object> config = new java.util.LinkedHashMap<>(Map.of(
                 "dbType", "ORACLE", "jdbcUrl", "jdbc:oracle:thin:@//example.test:1521/prod",
                 "username", "test-user", "password", "test-password", "table", "TEST_TABLE", "incrementalColumn", "UPDATED_AT",
@@ -168,12 +165,11 @@ class DslCompilerJdbcDriverLocationTest {
 
     @Test
     void usesTheRuntimeNodesExactOceanBaseJarInsteadOfItsJdbcDirectory() throws Exception {
-        NifiClient nifi = configuredNifi();
+        NifiClient nifi = configuredNifi(
+                "OCEANBASE_ORACLE=/opt/nifi/nifi-current/lib/jdbc/oceanbase-client-2.4.17.jar");
         ManifestRegistry registry = mock(ManifestRegistry.class);
         NifiNodeRuntimeResolver nodeResolver = mock(NifiNodeRuntimeResolver.class);
         when(registry.get("source.oceanbase")).thenReturn(oceanBaseManifest());
-        when(nodeResolver.resolve()).thenReturn(runtimeNode(
-                "OCEANBASE_ORACLE=/opt/nifi/nifi-current/lib/jdbc/oceanbase-client-2.4.17.jar"));
 
         new DslCompiler(nifi, nodeResolver, registry, mock(FieldMappingService.class), mock(HiveModule.class), "")
                 .compile(oceanBasePipeline());
@@ -188,11 +184,10 @@ class DslCompilerJdbcDriverLocationTest {
 
     @Test
     void expandsRuntimeNodeDriverDirectoryUsingTheManagedVendorJar() throws Exception {
-        NifiClient nifi = configuredNifi();
+        NifiClient nifi = configuredNifi("/opt/nifi/nifi-current/lib/jdbc/");
         ManifestRegistry registry = mock(ManifestRegistry.class);
         NifiNodeRuntimeResolver nodeResolver = mock(NifiNodeRuntimeResolver.class);
         when(registry.get("source.oceanbase")).thenReturn(oceanBaseManifest());
-        when(nodeResolver.resolve()).thenReturn(runtimeNode("/opt/nifi/nifi-current/lib/jdbc/"));
 
         new DslCompiler(nifi, nodeResolver, registry, mock(FieldMappingService.class), mock(HiveModule.class), "")
                 .compile(oceanBasePipeline());
@@ -214,13 +209,12 @@ class DslCompilerJdbcDriverLocationTest {
     })
     void configuresOceanBaseMysqlSourceWithNativeUrlDriverAndJar(String component, String type, String url)
             throws Exception {
-        NifiClient nifi = configuredNifi();
+        String nativeJar = "/opt/nifi/lib/jdbc/oceanbase-client-2.4.17.jar";
+        NifiClient nifi = configuredNifi(
+                "MYSQL=/opt/nifi/lib/jdbc/mysql-connector-j-8.4.0.jar;OCEANBASE_MYSQL=" + nativeJar);
         ManifestRegistry registry = mock(ManifestRegistry.class);
         NifiNodeRuntimeResolver resolver = mock(NifiNodeRuntimeResolver.class);
         when(registry.get("source.oceanbase")).thenReturn(oceanBaseManifest());
-        String nativeJar = "/opt/nifi/lib/jdbc/oceanbase-client-2.4.17.jar";
-        when(resolver.resolve()).thenReturn(runtimeNode(
-                "MYSQL=/opt/nifi/lib/jdbc/mysql-connector-j-8.4.0.jar;OCEANBASE_MYSQL=" + nativeJar));
         var cfg = new java.util.LinkedHashMap<String, Object>(Map.of(
                 "dbType", type, "host", "example.test", "port", "2883", "database", "prod",
                 "username", "test-user@tenant#cluster", "password", "test-password",
@@ -247,8 +241,11 @@ class DslCompilerJdbcDriverLocationTest {
         assertThat(new com.oceanbase.jdbc.Driver().acceptsURL(properties.getValue().get("Database Connection URL"))).isTrue();
     }
 
-    private NifiClient configuredNifi() {
+    private NifiClient configuredNifi(String jdbcDriverLocations) {
         NifiClient nifi = mock(NifiClient.class);
+        var assignedNode = runtimeNode(jdbcDriverLocations);
+        when(nifi.jdbcDriverLocation(anyString()))
+                .thenAnswer(call -> assignedNode.jdbcDriverLocation(call.getArgument(0)));
         when(nifi.getRootProcessGroupId()).thenReturn("root");
         HiveServiceFixtures.stubGlobals(nifi);
         when(nifi.listProcessGroups("root")).thenReturn(List.of());

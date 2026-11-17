@@ -103,13 +103,14 @@ def magic_access_policy(meta):
                     if isinstance(option, dict) and option.get('name') == 'access']
     if not declarations:
         return None
+    post_only = {'SESSION_LOGIN', 'SESSION_LOGOUT', 'HAITONG_RELAY'}
     if (len(declarations) != 1 or not isinstance(declarations[0], str)
-            or declarations[0] not in {'PUBLIC', 'TENANT_SESSION', 'IDAAS_PLATFORM_SESSION', 'HAITONG_RELAY'}):
+            or declarations[0] not in {'PUBLIC', 'TENANT_SESSION', 'IDAAS_PLATFORM_SESSION'} | post_only):
         raise ValueError('Invalid or duplicate Magic API access declaration')
     method = meta.get('method')
     if (method not in ('GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS')
             or declarations[0] == 'PUBLIC' and method not in ('GET', 'HEAD')
-            or declarations[0] == 'HAITONG_RELAY' and method != 'POST'):
+            or declarations[0] in post_only and method != 'POST'):
         raise ValueError('Magic API access does not match the HTTP method')
     return declarations[0]
 
@@ -486,6 +487,12 @@ def runtime_call(config, route, body=None):
     return result.get('data')
 
 
+def reload_magic_runtime(config):
+    route = os.environ.get('DATA_ELEMENT_MAGIC_RESOURCE_RELOAD_PATH', config.get('runtime', {}).get(
+        'magicResourceReloadPath', '/sym/node-config/magic-resource/refresh'))
+    return runtime_call(config, route, {})
+
+
 def validate_identity(manifest, remote_data, entry, kind):
     if manifest.get('database') != remote_data.get('database'):
         raise ValueError('Control database identity changed; inspect before publication')
@@ -616,7 +623,7 @@ def register_magic(connection, config, files, apply=False):
     except Exception:
         connection.rollback()
         raise
-    runtime_call(config, '/sym/node-config/magic-resource/refresh', {})
+    reload_magic_runtime(config)
     for entry in entries:
         if entry['path'].endswith('.ms'):
             meta, script = metadata(entry['content'])
@@ -737,10 +744,10 @@ def publish(connection, config, file, compiled=None, backup=True):
         raise
     try:
         if kind == 'magic':
-            runtime_call(config, '/sym/node-config/magic-resource/refresh', {})
+            reload_magic_runtime(config)
             readback_magic(config, meta, script)
         else:
-            runtime_call(config, '/sym/component/cache/refresh', {})
+            runtime_call(config, '/sym/component/manage?action=refresh', {})
             if digest(runtime_call(config, '/sym/component/manage?action=getSourceCode&tid=' + urllib.parse.quote(entry['id'], safe=''), {})) != digest(local):
                 raise ValueError('Low-code source verification failed')
             items = runtime_call(config, '/sym/component/manage?action=list', {})
@@ -831,7 +838,7 @@ def repair_compiled(connection, config, bundles):
     except Exception:
         connection.rollback()
         raise
-    runtime_call(config, '/sym/component/cache/refresh', {})
+    runtime_call(config, '/sym/component/manage?action=refresh', {})
     loaded = runtime_call(config, '/sym/component/manage?action=list', {})
     by_name = {item['name']: item for item in loaded}
     for bundle in bundles:

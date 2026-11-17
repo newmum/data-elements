@@ -7,7 +7,7 @@ export function parseMockBody(path, source) {
   try { body = JSON.parse(source); } catch { throw new MockError(400, "Mock 仅支持 JSON 请求"); }
   const normalized = path.replace(/^\/(?:dev-api|prod-api)(?=\/)/, "");
   if (Array.isArray(body)) {
-    if (!/^\/sym\/(?:logs\/(?:auth|operations|requests|security)|logauth|logops|logreq|logsec)\/batch$/.test(normalized))
+    if (!/^\/sym\/(?:logauth|logops|logreq|logsec)\/batch$/.test(normalized))
       throw new MockError(400, "此接口不接受数组正文");
   } else if (!body || typeof body !== "object") throw new MockError(400, "此接口需要 JSON 对象");
   return body;

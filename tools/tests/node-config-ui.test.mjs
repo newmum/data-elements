@@ -42,5 +42,5 @@ test('disabled node cannot start preview',async()=>{
 });
 test('double click during asynchronous form validation submits only once',async()=>{
   const calls=[];let resolveValidation;const {ui}=fixture(async(url,body)=>{calls.push({url,body});return {list:[]};});ui.dialogMode.value='push';ui.formRef.value={validate:()=>new Promise(resolve=>{resolveValidation=resolve;})};
-  const first=ui.saveNode();const second=ui.saveNode();resolveValidation(true);await Promise.all([first,second]);assert.equal(calls.filter(call=>call.url.endsWith('/saveOrUpdate')).length,1);
+  const first=ui.saveNode();const second=ui.saveNode();resolveValidation(true);await Promise.all([first,second]);assert.equal(calls.filter(call=>call.url === '/ods/node/save').length,1);
 });

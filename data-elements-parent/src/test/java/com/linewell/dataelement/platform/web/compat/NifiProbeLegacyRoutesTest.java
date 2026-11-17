@@ -14,25 +14,32 @@ class NifiProbeLegacyRoutesTest {
 
     @ParameterizedTest
     @CsvSource({"connection-test,connect", "columns-probe,columns", "tables-probe,tables"})
-    void routesLegacyPostsThroughTheSameJsonCacheAsTheCanonicalPath(String oldSegment, String newSegment) throws Exception {
+    void retiredPostsPassThroughAndTheFormalPathKeepsItsJsonCache(String oldSegment, String newSegment) throws Exception {
         String prefix = "/nifi/api/";
         var compatibility = new LegacyRouteConfiguration().legacyResourceRoutes().getFilter();
         var cache = new MagicBootConfiguration().magicJsonRequestCache();
         byte[] malformed = "{".getBytes(StandardCharsets.UTF_8);
 
-        for (String segment : new String[]{oldSegment, newSegment}) {
-            var post = new MockHttpServletRequest("POST", "/app" + prefix + segment);
-            post.setContextPath("/app");
-            post.setContentType("application/json");
-            post.setContent(malformed);
-            compatibility.doFilter(post, new MockHttpServletResponse(), (incoming, response) ->
-                    cache.doFilter(incoming, response, (accepted, ignored) -> {
-                        var cached = (ContentCachingRequestWrapper) accepted;
-                        assertThat(cached.getRequestURI()).isEqualTo("/app" + prefix + newSegment);
-                        assertThat(cached.getInputStream().readAllBytes()).isEqualTo(malformed);
-                        assertThat(cached.getContentAsByteArray()).isEqualTo(malformed);
-                    }));
-        }
+        var retired = new MockHttpServletRequest("POST", "/app" + prefix + oldSegment);
+        retired.setContextPath("/app");
+        retired.setContentType("application/json");
+        retired.setContent(malformed);
+        compatibility.doFilter(retired, new MockHttpServletResponse(), (incoming, response) ->
+                cache.doFilter(incoming, response, (accepted, ignored) ->
+                        assertThat(accepted).isSameAs(retired)));
+
+        var formal = new MockHttpServletRequest("POST", "/app" + prefix + newSegment);
+        formal.setContextPath("/app");
+        formal.setContentType("application/json");
+        formal.setContent(malformed);
+        compatibility.doFilter(formal, new MockHttpServletResponse(), (incoming, response) ->
+                cache.doFilter(incoming, response, (accepted, ignored) -> {
+                    assertThat(accepted).isInstanceOf(ContentCachingRequestWrapper.class);
+                    var cached = (ContentCachingRequestWrapper) accepted;
+                    assertThat(cached.getRequestURI()).isEqualTo(formal.getRequestURI());
+                    assertThat(cached.getInputStream().readAllBytes()).isEqualTo(malformed);
+                    assertThat(cached.getContentAsByteArray()).isEqualTo(malformed);
+                }));
 
         var get = new MockHttpServletRequest("GET", prefix + oldSegment);
         compatibility.doFilter(get, new MockHttpServletResponse(), (incoming, ignored) ->

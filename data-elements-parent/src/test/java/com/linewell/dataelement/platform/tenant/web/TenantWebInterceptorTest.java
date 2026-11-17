@@ -82,29 +82,10 @@ class TenantWebInterceptorTest {
     }
 
     @Test
-    void portalLoginIgnoresStaleSessionAndNeverResolvesMembership() {
+    void legacyIdentityEndpointNeverAutoBindsTenant() {
         TenantAccessService access = mock(TenantAccessService.class);
         TenantWebInterceptor interceptor = new TenantWebInterceptor(access, new TenantProperties(), mock(com.linewell.dataelement.feature.identity.application.TenantIdentityQueryService.class));
-        try (var session = mockStatic(StpUtil.class)) {
-            session.when(StpUtil::isLogin).thenThrow(new IllegalStateException("stale session"));
-            MockHttpServletRequest request = new MockHttpServletRequest("POST", "/portal/sso/login");
-            request.addHeader("token", "obsolete-test-token");
-            TenantContext.bind("previous-request");
-            assertTrue(interceptor.preHandle(request, new MockHttpServletResponse(), new Object()));
-            assertTrue(TenantContext.usesControlDatabase());
-            assertNull(TenantContext.getTenantId());
-            interceptor.afterCompletion(request, new MockHttpServletResponse(), new Object(), null);
-            assertNull(TenantContext.getTenantId());
-            session.verifyNoInteractions();
-            verifyNoInteractions(access);
-        }
-    }
-
-    @Test
-    void identityLoginIgnoresOldTokenAndNeverAutoBindsTenant() {
-        TenantAccessService access = mock(TenantAccessService.class);
-        TenantWebInterceptor interceptor = new TenantWebInterceptor(access, new TenantProperties(), mock(com.linewell.dataelement.feature.identity.application.TenantIdentityQueryService.class));
-        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/idaas/auth/login");
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/idaas/legacy/validation");
         MockHttpServletResponse response = new MockHttpServletResponse();
         request.addHeader("token", "obsolete-test-token");
         TenantContext.bind("previous-request");

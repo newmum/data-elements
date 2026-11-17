@@ -12,6 +12,8 @@ import static org.mockito.Mockito.when;
 
 import cn.hutool.crypto.digest.DigestUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.linewell.dataelement.model.common.CommonResponse;
+import com.linewell.dataelement.platform.cache.UiComponentCacheService;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -31,6 +33,7 @@ import org.ssssssss.script.MagicScript;
 import org.ssssssss.script.MagicScriptContext;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.ResultSetExtractor;
 
@@ -72,6 +75,12 @@ class UiComponentCacheServiceTest {
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(valueOperations.get(anyString()))
                 .thenAnswer(invocation -> redisValues.get(invocation.getArgument(0)));
+        when(valueOperations.increment(anyString())).thenAnswer(invocation -> {
+            String key = invocation.getArgument(0);
+            long version = Long.parseLong(redisValues.getOrDefault(key, "0")) + 1;
+            redisValues.put(key, Long.toString(version));
+            return version;
+        });
         org.mockito.Mockito.doAnswer(invocation -> {
             redisValues.put(invocation.getArgument(0), invocation.getArgument(1));
             return null;
@@ -130,6 +139,31 @@ class UiComponentCacheServiceTest {
         assertPackage(run(script, "runtimeBatch", "my-workbench"), WORKBENCH_COMPONENTS);
         assertEquals(componentCount, ((List<?>) run(script, "list", "my-workbench")).size());
         verify(jdbcTemplate, times(1)).query(anyString(), any(ResultSetExtractor.class));
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {20, 100})
+    void refreshActionRebuildsBothCacheLayersWithOneRead(int componentCount) throws IOException {
+        for (int index = 0; index < componentCount; index++) {
+            saveComponent("component-" + index, "old-compiled-component");
+        }
+        MagicScript script = componentApi();
+        assertEquals(componentCount, ((List<?>) run(script, "list", "")).size());
+        jdbcTemplate.update("update ui_component_t set compile_js=? where name=?",
+                "new-compiled-component", "component-0");
+
+        var result = (ResponseEntity<?>) run(script, "refresh", "");
+        var response = (CommonResponse<?>) result.getBody();
+        assertEquals(200, result.getStatusCode().value());
+        assertEquals(0, response.getCode());
+        assertEquals(Map.of("version", "1", "count", componentCount), response.getData());
+        Object refreshed = service.list().stream().filter(item -> item.get("name").equals("component-0"))
+                .findFirst().orElseThrow().get("compileJs");
+        assertEquals("new-compiled-component", refreshed);
+        var redisBundle = new ObjectMapper().readTree(redisValues.get(new SystemConfigProperties().getUiComponentRedisKey()));
+        assertEquals("1", redisBundle.path("version").asText());
+        assertEquals(componentCount, redisBundle.path("components").size());
+        verify(jdbcTemplate, times(2)).query(anyString(), any(ResultSetExtractor.class));
     }
 
     @Test

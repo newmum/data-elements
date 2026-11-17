@@ -8,7 +8,16 @@
   "method": "GET",
   "description": "向已认证会话返回 NiFi 画布可用的组件清单，无请求参数。只读应用内置定义，响应为原始 JSON 数组。",
   "parameters": [],
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "TENANT_SESSION"
+    },
+    {
+      "name": "head",
+      "value": "true"
+    }
+  ],
   "headers": [],
   "paths": []
 }

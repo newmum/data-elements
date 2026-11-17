@@ -19,6 +19,14 @@
     {
       "name": "wrap_request_parameter",
       "value": "param"
+    },
+    {
+      "name": "access",
+      "value": "TENANT_SESSION"
+    },
+    {
+      "name": "head",
+      "value": "true"
     }
   ],
   "headers": [],

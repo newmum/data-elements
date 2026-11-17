@@ -214,7 +214,7 @@ NiFi 流程本身不保存在 IndexedDB；本地工作区只保存可选的 `nif
 
 共享平台的海通流程页和万象血缘页使用 Magic API 直接提供的 `GET /nifi/flow/page`。内部函数 `@/common/nifiPipelinePage` 从可信租户读取有效画布，按 `q` 在名称和说明中做字面匹配，空关键词显示全部有效流程。支持名称、节点数、创建及更新时间排序，默认更新时间降序，空值末置，同值按流程 ID 升序。节点数由数据库按旧 DSL 的节点展开规则计算后参与排序。默认每页 20 条，最多 100 条，越界页返回空 `list` 并保留请求页码和 `total`。非空页用一条计数和一条分页查询，空页只查总数。Magic 延续原参数转换和原始 JSON，提供对应的 `HEAD`。轻量安装包使用独立后端的 `GET /nifi/api/pipelines/page`。
 
-画布 API 可达检查 `GET /nifi/catalog/ping` 与 `HEAD /nifi/catalog/ping` 由 Magic 直接提供，沿用现有会话校验。GET 返回原始 `{"status":"ok"}`，用于确认画布 API 可用。它不读取数据库或访问 NiFi 节点。
+画布 API 可达检查使用 `GET /nifi/catalog/ping`。第 139 批由同一 Magic GET 资源处理 HEAD，两个方法均校验行业会话。GET 返回原始 `{"status":"ok"}`，HEAD 正文为空。探活只确认画布 API 可用。
 
 `GET /nifi/flow/list` 和 `GET /nifi/run/list` 及其 HEAD 由 Magic 直接提供。两个兼容查询均保留完整数组，只执行一次当前租户的结构化查询。游标逐行读取画布和节点映射，略过保存内容损坏的流程，并将未记录更新时间的流程放在末尾。普通列表返回摘要，海通工具栏的「打开流程」使用此入口。运行列表在关闭游标后，按需解析 NiFi 根组标识并读取一次递归快照，只有租户可见且已部署的流程才添加运行指标或对应错误。分页页面独立使用 `/nifi/flow/page`。
 
@@ -2431,7 +2431,7 @@ Elasticsearch 来源节点的「探查字段」使用配置中的索引名和连
 
 共享平台的 Magic 错误与公告接口为 `GET /nifi/event/errors`、`GET /nifi/event/live` 及对应 HEAD、`POST /nifi/event/clear`。使用查询参数 `id` 指定流程。三个入口共用 `@/common/nifiFlowErrorHttp`。历史从可信租户的错误存储读取，实时公告按已保存的流程组读取 ERROR 和 WARNING，流程不可见时返回空体 404，未部署流程的实时公告返回 400。清理在现有跨进程写锁内校验租户流程、执行原生清理及本地历史清理，然后失效租户运行状态缓存并释放锁。Magic 控制校验、过滤和清理规则，沿用现有错误存储及 NiFi 技术客户端。
 
-共享后端的 NiFi 组件清单使用 `GET /nifi/catalog/list` 和 `GET /nifi/catalog/detail?key={key}`。列表返回原始 JSON 数组，详情按完整组件键匹配（例如 `source.postgresql`），未命中时返回空体 HTTP 404。两个路径都支持 HEAD 和 OPTIONS。Magic 在现有登录及行业会话拦截后读取应用内置清单，供海通画布和任务登记共用。画布按会话集中读取，不按节点查询；共享后端的流程编译器复用同一组件注册表。接口说明在 Magic 编辑器的「NiFi流程接口 → 接口」维护。SpringDoc `/v3/api-docs` 只枚举 Java Controller 声明。
+共享后端的 NiFi 组件清单使用 `GET /nifi/catalog/list` 和 `GET /nifi/catalog/detail?key={key}`。列表返回原始 JSON 数组，详情按完整组件键匹配（例如 `source.postgresql`），未命中时返回空体 HTTP 404。两个 GET 资源均同时支持同址 HEAD。86 实测缺失组件键的 GET 与 HEAD 均返回 HTTP 404；行业会话的 OPTIONS 返回 `Allow: GET,HEAD,OPTIONS`。Magic 按行业会话读取应用内置清单，供海通画布和任务登记共用。画布按会话集中读取，流程编译器复用同一组件注册表。接口说明在 Magic 编辑器的「海通流程接口 → 组件清单」维护。SpringDoc `/v3/api-docs` 枚举 Java Controller 声明。 [第 139 批验收](data-elements-parent.md#backend-simplification-handoff)
 
 画布节点的运行血缘使用 `POST /nifi/node/lineage?id={id}&nodeId={nodeId}`，可选的 `maxEvents` 默认 10，允许 1 至 100。Magic 从可信租户的流程保存态解析节点和处理器映射，按同一节点的主处理器及后备处理器顺序查询。每次请求只读取一次流程并绑定一次 NiFi 节点，轮询和清理沿用该节点。正常响应返回图与事件摘要，事件摘要只包含公开字段。流程不可见时返回空体 404，流程未部署或节点无映射返回 400。业务库只读，查询结束时清理本次创建的 NiFi 临时查询。
 
@@ -3073,7 +3073,7 @@ MongoDB 使用万象原有的绿色叶片标识 `mongodb.svg`，Vertica 使用�
 
 海通独立部署保留完整前后端，仅精简数据库。从仓库根目录执行 `mvn -f data-elements-parent/pom.xml install` 构建标准后端，在 `data-elements-haitong` 执行 `pnpm run build`。回到仓库根目录执行 `python tools/package-haitong-deployment.py --bundle --nacos --jar data-elements-parent/target/data-element.jar --frontend data-elements-haitong/dist` 生成依赖 Nacos 的部署 ZIP。启动配置 `config/application.yml` 导入 Nacos 的海通 Data ID，配置模板位于 `nacos/haitong-data-element.yml`。若构建无 Nacos 版，Maven 参数使用 `"-Ddata-elements.without-nacos=true"`（PowerShell 中保留引号），打包工具省略 `--nacos`。
 
-Linux x86_64 单机版使用同一个无 Nacos 构建，打包时传入 `--bundle --linux-runtime-dir <已校验的运行组件目录>`。该目录提供 `java21.tar.gz`、`mysql.tar.xz`、`redis.tar.gz`、`nifi.zip`、`caddy.tar.gz` 和 `mysql-libs.tar.gz`。单机包从现行结构初始化控制库和海通租户库，按海通接口引用导入 Magic 资源。解压后执行 `bash start.sh`，启动器自动初始化并启动包内服务，首次管理员密码写入本机受限文件。见 [Linux 单机部署说明](../tools/haitong-deployment/linux-standalone/deployment.md)。
+Linux x86_64 单机版使用同一个无 Nacos 构建，打包时传入 `--bundle --linux-runtime-dir <已校验的运行组件目录>`，并用两个 `--nifi-extension` 参数传入与 NiFi 2.9.0 匹配的 `haitong-mapping-nar` 和 `datadevs-database-nar`。运行组件目录提供 `java21.tar.gz`、`mysql.tar.xz`、`redis.tar.gz`、官方 `nifi.zip`、`caddy.tar.gz` 和 `mysql-libs.tar.gz`。打包器把两个扩展加入包内 NiFi 的 `extensions/`，核对字段映射版本与后端一致。解压后执行 `python3 tools/standalone.py start`，启动器初始化控制库、海通租户库和账号，并确认两个扩展已注册。见 [Linux 单机部署说明](../tools/haitong-deployment/linux-standalone/deployment.md)。
 
 麒麟 V10 的无 Nacos DM8 版在打包时加 `--dm8-runtime-dir <下载目录>`。该目录提供 Linux x86_64、ARM64 的 JDK 21 和网页入口发行包及发布校验信息，打包器校验 SHA-256。部署者直接编辑 `config/application.yml` 中的 DM8 控制库、租户库和 Redis，执行 `bash start.sh`、`bash status.sh`、`bash stop.sh`。已有数据的升级沿用原模式、租户配置和数据目录。`db/new-install-only/` 仅用于空模式新装，不参与启动。见[麒麟 DM8 版部署说明](../tools/haitong-deployment/linux-dm8/deployment.md)。
 

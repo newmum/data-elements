@@ -182,11 +182,9 @@ class NifiFlowErrorMagicTest {
     }
 
     @Test
-    void headSharesTheHistoryContractAndUndeployedClearDoesNotBindNifi() throws Exception {
+    void undeployedClearDoesNotBindNifi() throws Exception {
         var f = new Fixture();
         f.pipeline("flow-a", TENANT, 0, DSL, null, null);
-        when(f.errors.list("flow-a")).thenReturn(List.of());
-        assertThat(f.invoke(f.historyHead, "flow-a")).isEqualTo(f.invoke(f.history, "flow-a"));
         assertThat(f.invoke(f.clear, "flow-a").getBody()).isEqualTo(
                 Map.of("historyCleared", true, "bulletinsCleared", 0, "nativeCleared", true));
         assertThat(f.source.reads).isOne();
@@ -224,9 +222,8 @@ class NifiFlowErrorMagicTest {
                 "com.linewell.dataelement.integration.nifi.canvas.lifecycle.NifiMutationAspect as mutation",
                 "com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient as nifi");
         final MagicScript history = endpoint(PIPELINES + "09.错误与公告/01.查询流程错误历史.ms", "nifi_pipe_error_history_get_v1");
-        final MagicScript historyHead = endpoint(PIPELINES + "09.错误与公告/02.核验流程错误历史.ms", "nifi_pipe_error_history_head_v1");
-        final MagicScript live = endpoint(PIPELINES + "09.错误与公告/03.查询流程实时公告.ms", "nifi_pipe_error_bulletin_get_v1");
-        final MagicScript clear = endpoint(PIPELINES + "09.错误与公告/05.清理流程错误.ms", "nifi_pipe_error_clear_post_v1");
+        final MagicScript live = endpoint(PIPELINES + "09.错误与公告/02.查询流程实时公告.ms", "nifi_pipe_error_bulletin_get_v1");
+        final MagicScript clear = endpoint(PIPELINES + "09.错误与公告/03.清理流程错误.ms", "nifi_pipe_error_clear_post_v1");
 
         Fixture() throws Exception {
             var statement = mock(PreparedStatement.class);

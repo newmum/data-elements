@@ -17,7 +17,7 @@ import com.linewell.dataelement.platform.magic.CanonicalMagicSources;
 import org.ssssssss.script.MagicScript;
 import org.ssssssss.script.MagicScriptContext;
 import org.mockito.ArgumentCaptor;
-import org.ssssssss.magicapi.core.service.MagicAPIService;
+import com.linewell.dataelement.magic.runtime.route.RegisteredMagicApiInvoker;
 
 class NifiConnectionProbeHiveTest {
 
@@ -37,7 +37,7 @@ class NifiConnectionProbeHiveTest {
                 .contains(";auth=none").doesNotContain("KERBEROS");
     }
 
-    private final MagicAPIService magic = mock(MagicAPIService.class);
+    private final RegisteredMagicApiInvoker magic = mock(RegisteredMagicApiInvoker.class);
     private final DataSourceConnectionPropertyResolver registered = mock(DataSourceConnectionPropertyResolver.class);
     private final NifiConnectionProbe probeRuntime = new NifiConnectionProbe(
             mock(StructuredSourceProbeService.class), magic);
@@ -52,7 +52,7 @@ class NifiConnectionProbeHiveTest {
             row.put("col_name", "field_" + i);
             rows.add(row);
         }
-        when(magic.call(eq("POST"), anyString(), anyMap()))
+        when(magic.call(eq("mrs_hive_jdbc_debug_23"), anyMap()))
                 .thenReturn(Map.of("success", true, "table", "EVENT_LOG", "columns", rows));
 
         Map<?, ?> result = probe();
@@ -71,7 +71,7 @@ class NifiConnectionProbeHiveTest {
         assertThat(((Map<?, ?>) columns.getLast()).get("columnName")).isEqualTo("field_81");
         @SuppressWarnings("unchecked")
         ArgumentCaptor<Map<String, Object>> context = ArgumentCaptor.captor();
-        verify(magic).call(eq("POST"), eq("/dst/db/hive"), context.capture());
+        verify(magic).call(eq("mrs_hive_jdbc_debug_23"), context.capture());
         assertThat(StructuredValues.objectMap(context.getValue().get("body")))
                 .containsEntry("action", "columns").containsEntry("contract", "gateway")
                 .containsEntry("database", "analytics").containsEntry("table", "EVENT_LOG");
@@ -79,7 +79,7 @@ class NifiConnectionProbeHiveTest {
 
     @Test
     void readsUppercaseLabelsAndDoesNotDuplicatePartitionColumns() {
-        when(magic.call(eq("POST"), anyString(), anyMap())).thenReturn(Map.of("success", true, "columns", List.of(
+        when(magic.call(eq("mrs_hive_jdbc_debug_23"), anyMap())).thenReturn(Map.of("success", true, "columns", List.of(
                 Map.of("COL_NAME", "event_id", "DATA_TYPE", "bigint", "COMMENT", "事件编号"),
                 Map.of("COL_NAME", "dt", "DATA_TYPE", "string"),
                 Map.of("COL_NAME", "# Partition Information", "DATA_TYPE", ""),
@@ -89,7 +89,7 @@ class NifiConnectionProbeHiveTest {
 
     @Test
     void preservesCanonicalMetadataWhenTheGatewayAlreadyNormalizesColumns() {
-        when(magic.call(eq("POST"), anyString(), anyMap())).thenReturn(Map.of("success", true, "columns", List.of(
+        when(magic.call(eq("mrs_hive_jdbc_debug_23"), anyMap())).thenReturn(Map.of("success", true, "columns", List.of(
                 Map.of("columnName", "id", "dataType", "bigint", "primaryKey", true, "nullable", false))));
         Map<?, ?> column = (Map<?, ?>) ((List<?>) probe().get("columns")).getFirst();
         assertThat(column.get("columnName")).isEqualTo("id");
@@ -99,7 +99,7 @@ class NifiConnectionProbeHiveTest {
 
     @Test
     void failsClearlyInsteadOfClaimingUnnamedRowsAreFields() {
-        when(magic.call(eq("POST"), anyString(), anyMap())).thenReturn(Map.of("success", true, "columns", List.of(
+        when(magic.call(eq("mrs_hive_jdbc_debug_23"), anyMap())).thenReturn(Map.of("success", true, "columns", List.of(
                 Map.of("unknown", "id", "data_type", "bigint"))));
         Map<?, ?> result = probe();
         assertThat(result.get("success")).isEqualTo(false);
@@ -108,15 +108,15 @@ class NifiConnectionProbeHiveTest {
 
     @Test
     void retainsGatewayFailureAndRejectsEmptyMetadata() {
-        when(magic.call(eq("POST"), anyString(), anyMap())).thenReturn(Map.of("success", false, "error", "Hive unavailable"));
+        when(magic.call(eq("mrs_hive_jdbc_debug_23"), anyMap())).thenReturn(Map.of("success", false, "error", "Hive unavailable"));
         assertThat(probe().get("error")).isEqualTo("Hive unavailable");
-        when(magic.call(eq("POST"), anyString(), anyMap())).thenReturn(Map.of("success", true, "columns", List.of()));
+        when(magic.call(eq("mrs_hive_jdbc_debug_23"), anyMap())).thenReturn(Map.of("success", true, "columns", List.of()));
         assertThat(probe().get("success")).isEqualTo(false);
     }
 
     @Test
     void turnsHiddenHiveClientConfigurationFailureIntoAnActionableCanvasMessage() {
-        when(magic.call(eq("POST"), anyString(), anyMap())).thenReturn(Map.of(
+        when(magic.call(eq("mrs_hive_jdbc_debug_23"), anyMap())).thenReturn(Map.of(
                 "code", 500, "success", false,
                 "error", Map.of("message", "接口脚本执行失败",
                         "detail", "Hive conf file not found: hiveclient.properties")));
@@ -140,7 +140,7 @@ class NifiConnectionProbeHiveTest {
         envelope.put("msg", "当前租户无权访问数据源");
         envelope.put("data", null);
         envelope.put("traceId", "probe-trace");
-        when(magic.call(eq("POST"), anyString(), anyMap())).thenReturn(envelope);
+        when(magic.call(eq("mrs_hive_jdbc_debug_23"), anyMap())).thenReturn(envelope);
         Map<?, ?> result = probeTables();
         assertThat(result.get("success")).isEqualTo(false);
         assertThat(result.get("error")).isEqualTo("当前租户无权访问数据源");
@@ -151,7 +151,7 @@ class NifiConnectionProbeHiveTest {
 
     @Test
     void doesNotTreatDiagnosticDataInsideAFailedEnvelopeAsSuccess() {
-        when(magic.call(eq("POST"), anyString(), anyMap())).thenReturn(Map.of(
+        when(magic.call(eq("mrs_hive_jdbc_debug_23"), anyMap())).thenReturn(Map.of(
                 "code", 500, "success", false, "msg", "Hive 元数据调用失败",
                 "data", Map.of("success", true, "tables", List.of())));
         assertThat(probeTables().get("error")).isEqualTo("Hive 元数据调用失败");
@@ -159,7 +159,7 @@ class NifiConnectionProbeHiveTest {
 
     @Test
     void returnsExplicitFailureForANullGatewayResponse() {
-        when(magic.call(eq("POST"), anyString(), anyMap())).thenReturn(null);
+        when(magic.call(eq("mrs_hive_jdbc_debug_23"), anyMap())).thenReturn(null);
         Map<?, ?> result = probeTables();
         assertThat(result.get("success")).isEqualTo(false);
         assertThat(result.get("error").toString()).contains("未返回结果");
@@ -168,7 +168,7 @@ class NifiConnectionProbeHiveTest {
     @Test
     void unwrapsNestedSuccessEnvelopesForTableSuggestions() {
         var table = Map.of("tableName", "EVENT_LOG", "schemaName", "analytics");
-        when(magic.call(eq("POST"), anyString(), anyMap())).thenReturn(Map.of("code", 0, "data",
+        when(magic.call(eq("mrs_hive_jdbc_debug_23"), anyMap())).thenReturn(Map.of("code", 0, "data",
                 Map.of("code", 200, "data", Map.of("success", true, "tables", List.of(table)))));
         Map<?, ?> result = probeTables();
         assertThat(result.get("success")).isEqualTo(true);
@@ -181,7 +181,7 @@ class NifiConnectionProbeHiveTest {
     }
 
     @Test void normalizesRawHiveTableNamesAndFiltersBeforeLimiting() {
-        when(magic.call(eq("POST"), anyString(), anyMap())).thenReturn(Map.of("success", true,
+        when(magic.call(eq("mrs_hive_jdbc_debug_23"), anyMap())).thenReturn(Map.of("success", true,
                 "tables", List.of("OTHER", "EVENT_Z", "EVENT_A", "EVENT_A")));
         Map<?, ?> result = probeTables();
         assertThat((List<?>) result.get("tables")).hasSize(2);
@@ -189,7 +189,7 @@ class NifiConnectionProbeHiveTest {
     }
 
     @Test void supportsLegacyJdbcHiveSinkAndEmptyTables() {
-        when(magic.call(eq("POST"), anyString(), anyMap())).thenReturn(Map.of("success", true, "tables", List.of()));
+        when(magic.call(eq("mrs_hive_jdbc_debug_23"), anyMap())).thenReturn(Map.of("success", true, "tables", List.of()));
         var result = (Map<?, ?>) tablesProbe(Map.of("manifestKey", "sink.jdbc", "config",
                 Map.of("dbType", "HIVE", "hiveProfile", "default", "database", "analytics"))).getBody();
         assertThat(result.get("success")).isEqualTo(true);
@@ -240,18 +240,14 @@ class NifiConnectionProbeHiveTest {
     @Test void takesRegisteredHiveConnectionModeFromTheActiveTenant() {
         when(registered.resolve("tenant-a", "hive-id")).thenReturn(Map.of("dbType", "hive",
                 "metadataAccessMode", "server-managed-mrs", "database", "analytics"));
-        when(magic.call(eq("POST"), eq("/dst/db/hive"), anyMap())).thenAnswer(invocation -> {
-            Map<String, Object> variables = invocation.getArgument(2);
-            variables.put("apiInfo", "/dst/db/hive");
-            return Map.of("success", true, "columns", List.of(Map.of("col_name", "id", "data_type", "bigint")));
-        });
+        when(magic.call(eq("mrs_hive_jdbc_debug_23"), anyMap())).thenReturn(Map.of("success", true, "columns", List.of(Map.of("col_name", "id", "data_type", "bigint"))));
         try (var ignored = com.linewell.dataelement.platform.tenant.domain.TenantContext.use("tenant-a")) {
             var result = (Map<?, ?>) columnsProbe(Map.of("manifestKey", "source.hive", "table", "`analytics`.`events`",
                     "config", Map.of("registeredDatasourceId", "hive-id", "database", "wrong-browser-db"))).getBody();
             assertThat(result.get("success")).isEqualTo(true);
         }
         verify(registered).resolve("tenant-a", "hive-id");
-        verify(magic).call(eq("POST"), anyString(), argThat(context -> {
+        verify(magic).call(eq("mrs_hive_jdbc_debug_23"), argThat(context -> {
             Map<?, ?> body = (Map<?, ?>) context.get("body");
             return "analytics".equals(body.get("database")) && "events".equals(body.get("table"));
         }));
@@ -299,8 +295,18 @@ class NifiConnectionProbeHiveTest {
             assertThat(source).endsWith("})");
             source = source.substring(0, source.length() - 1) + "\nreturn execute()";
             java.util.function.Function<Object[], Object> readBody = arguments -> arguments[0];
+            var connectivity = MagicScript.create(CanonicalMagicSources.byId("nifi_connection_health_v1")
+                    .replaceAll("(?m)^import ('@/common/|nifiConnectionProbe)[^\\r\\n]*\\R", ""), null);
+            java.util.function.Function<Object[], Object> probeHealth = arguments -> {
+                var vars = new HashMap<String, Object>();
+                vars.put("manifestKey", arguments[0]);
+                vars.put("submittedConfig", arguments[1]);
+                vars.put("probeSettings", prepareSettings);
+                vars.put("nifiConnectionProbe", probe);
+                return connectivity.execute(new MagicScriptContext(vars));
+            };
             var context = new MagicScriptContext(Map.of("body", body, "nifiConnectionProbe", probe,
-                    "probeSettings", prepareSettings, "readBody", readBody));
+                    "probeSettings", prepareSettings, "readBody", readBody, "probeHealth", probeHealth));
             return (org.springframework.http.ResponseEntity<?>) MagicScript.create(source, null).execute(context);
         } catch (java.io.IOException failure) {
             throw new java.io.UncheckedIOException(failure);

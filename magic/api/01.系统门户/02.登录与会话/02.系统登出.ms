@@ -12,7 +12,7 @@
   "path": "/logout",
   "method": "POST",
   "parameters": [],
-  "options": [],
+  "options": [{"name": "access", "value": "SESSION_LOGOUT"}],
   "requestBody": "{\n}",
   "headers": [],
   "paths": [],

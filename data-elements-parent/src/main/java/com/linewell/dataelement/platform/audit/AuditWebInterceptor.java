@@ -1,5 +1,8 @@
 package com.linewell.dataelement.platform.audit;
 
+import com.linewell.dataelement.magic.runtime.security.MagicAccessPolicy;
+import com.linewell.dataelement.model.common.BizException;
+import com.linewell.dataelement.platform.web.security.GlobalInterceptor;
 import jakarta.servlet.http.*;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
@@ -10,11 +13,17 @@ public class AuditWebInterceptor implements HandlerInterceptor {
     public static final String BUSINESS_RESULT="audit.businessResult";
     private final AuditIdentityResolver identities;
     private final AuditRecorder recorder;
-    public AuditWebInterceptor(AuditIdentityResolver identities,AuditRecorder recorder) { this.identities=identities; this.recorder=recorder; }
+    private final GlobalInterceptor access;
+    public AuditWebInterceptor(AuditIdentityResolver identities, AuditRecorder recorder, GlobalInterceptor access) {
+        this.identities = identities;
+        this.recorder = recorder;
+        this.access = access;
+    }
     @Override public boolean preHandle(HttpServletRequest request,HttpServletResponse response,Object handler) {
         request.setAttribute("audit.started",System.nanoTime());
-        if (!excluded(request)) AuditRequestParameters.captureMvc(request, handler);
-        if(!excluded(request) && !request.getRequestURI().equals("/portal/sso/login") && !request.getRequestURI().equals("/idaas/auth/login")) {
+        if (excluded(request)) return true;
+        AuditRequestParameters.captureMvc(request, handler);
+        if (!startsSession(request, handler)) {
             var actor=identities.current();if(actor!=null){if(actor.tenantId()!=null)org.slf4j.MDC.put("tenant_id",actor.tenantId());if(actor.id()!=null)org.slf4j.MDC.put("actor_id",actor.id());}
         }
         return true;
@@ -29,15 +38,28 @@ public class AuditWebInterceptor implements HandlerInterceptor {
         Object code=request.getAttribute(BUSINESS_CODE);
         recorder.request(actor,response.getStatus(),code==null?null:String.valueOf(code),result,(System.nanoTime()-started)/1_000_000);
         String path=request.getRequestURI();
-        if(actor!=null && !actor.platform() && !path.startsWith("/sym/logs/") && !path.equals("/portal/sso/login") && !path.equals("/portal/sso/logout")) {
+        MagicAccessPolicy policy = GlobalInterceptor.verifiedMagicAccess(request);
+        if(actor!=null && !actor.platform() && !path.startsWith("/sym/logs/")
+                && policy != MagicAccessPolicy.SESSION_LOGIN && policy != MagicAccessPolicy.SESSION_LOGOUT) {
             boolean mutation=!java.util.Set.of("GET","HEAD","OPTIONS").contains(request.getMethod()) && !path.matches("(?i).*/(?:page|list|query|find|detail|preview|statistics|batch|tree|me|userMenu|routes|load).*" );
             if(result.equals("DENIED") || mutation && (!Boolean.TRUE.equals(request.getAttribute("audit.operationRecorded")) || !result.equals("SUCCESS"))) {
                 recorder.observedOperation(actor,result,path,request.getAttribute("audit.functionName"));
             }
         }
     }
+
+    private boolean startsSession(HttpServletRequest request, Object handler) {
+        if (!"POST".equals(request.getMethod())) return false;
+        try {
+            return access.matchedMagicAccess(request, handler) == MagicAccessPolicy.SESSION_LOGIN;
+        } catch (BizException invalidPolicy) {
+            // 继续采集审计主体，由全局拦截器拒绝无效的访问策略。
+            return false;
+        }
+    }
+
     private boolean excluded(HttpServletRequest r) {
         String path=r.getRequestURI();
-        return path.startsWith("/api/web/") || path.startsWith("/log-console/") || path.startsWith("/actuator/") || path.contains("/component/cache/") || path.matches(".*\\.(js|css|png|svg|ico|woff2?)$");
+        return path.startsWith("/api/web/") || path.startsWith("/log-console/") || path.startsWith("/actuator/") || path.matches(".*\\.(js|css|png|svg|ico|woff2?)$");
     }
 }

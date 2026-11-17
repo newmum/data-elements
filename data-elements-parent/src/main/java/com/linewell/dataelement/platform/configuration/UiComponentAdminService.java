@@ -1,5 +1,6 @@
 package com.linewell.dataelement.platform.configuration;
 
+import com.linewell.dataelement.platform.cache.UiComponentCacheService;
 import com.linewell.dataelement.platform.tenant.infrastructure.datasource.UseControlDataSource;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;

@@ -4,6 +4,7 @@ import com.jcraft.jsch.ChannelSftp;
 import com.jcraft.jsch.JSch;
 import com.jcraft.jsch.Session;
 import com.linewell.dataelement.integration.nifi.canvas.compile.RegisteredDatasourceType;
+import com.linewell.dataelement.magic.runtime.route.RegisteredMagicApiInvoker;
 import com.linewell.dataelement.metautil.explorer.impl.ElasticsearchMetadataExplorer;
 import com.linewell.dataelement.metautil.explorer.impl.MongoDbMetadataExplorer;
 import com.linewell.dataelement.metautil.model.dto.ColumnInfo;
@@ -19,7 +20,6 @@ import org.apache.kafka.clients.admin.DescribeClusterOptions;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 import org.ssssssss.magicapi.core.annotation.MagicModule;
-import org.ssssssss.magicapi.core.service.MagicAPIService;
 import org.ssssssss.script.exception.MagicScriptException;
 import org.ssssssss.script.exception.MagicScriptRuntimeException;
 import org.ssssssss.magicapi.core.model.JsonBean;
@@ -69,15 +69,16 @@ public class NifiConnectionProbe {
 
     private static final ObjectMapper MAGIC_RESPONSE_MAPPER = new ObjectMapper();
     private static final int JDBC_CONNECT_TIMEOUT_SECONDS = 30;
+    private static final String HIVE_GATEWAY_RESOURCE_ID = "mrs_hive_jdbc_debug_23";
     private final Map<String, Driver> driverCache = new ConcurrentHashMap<>();
     private final ElasticsearchMetadataExplorer elasticsearch = new ElasticsearchMetadataExplorer();
     private final StructuredSourceProbeService structuredSourceProbeService;
-    private final MagicAPIService magicApiService;
+    private final RegisteredMagicApiInvoker magicApi;
 
     public NifiConnectionProbe(StructuredSourceProbeService structuredSourceProbeService,
-                               @Lazy MagicAPIService magicApiService) {
+                               @Lazy RegisteredMagicApiInvoker magicApi) {
         this.structuredSourceProbeService = structuredSourceProbeService;
-        this.magicApiService = magicApiService;
+        this.magicApi = magicApi;
     }
 
     public Map<String, Object> connect(String manifestKey, Map<String, Object> config) throws Exception {
@@ -243,9 +244,7 @@ public class NifiConnectionProbe {
         String database = str(request.get("database"));
         String keyword = str(request.get("keyword"));
         Integer limit = request.get("limit") instanceof Number value ? value.intValue() : null;
-        Map<String, Object> variables = new LinkedHashMap<>();
-        variables.put("body", request);
-        Object raw = magicApiService.call("POST", "/dst/db/hive", variables);
+        Object raw = magicApi.call(HIVE_GATEWAY_RESOURCE_ID, Map.of("body", request));
         Map<String, Object> response = asMap(unwrapMagicData(raw));
         if (response == null) {
             return Map.of("success", false, "error", "华为 MRS Hive 元数据网关返回格式异常");

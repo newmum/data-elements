@@ -581,8 +581,8 @@ When testing locally, try the frontend proxy path first if the page uses `dev-ap
 - Treat `baseline.ui_component_t.compile_js` and `compile_css` as the released runtime artifacts. Saving only `source_code` does not fix a browser page.
 - Before accepting a low-code fix, inspect the target component through `POST /sym/component/manage?action=list`. The compiled JS for an SFC contains a factory that returns the component, normally `return __sfc__`.
 - A registration dialog whose header, steps, and bottom actions render while one step is blank usually means that the dynamic step component's compiled artifact is stale or invalid. Inspect that named component directly; do not diagnose it only from the parent wrapper or static frontend source.
-- First reconcile the local `lowcode/` source with the current control-database source; compile the confirmed local source and save source + compiled JS + compiled CSS together through `action=saveCode`, then call `/sym/component/cache/refresh`. Verify the refreshed component again through the list endpoint. Do not overwrite newer database source with an old local copy; compare source hashes before publication.
-- The component-cache refresh must be usable by ordinary authorized users; do not add a separate platform-administrator gate to `/sym/component/cache/refresh` unless a future explicit authorization model requires it.
+- First reconcile the local `lowcode/` source with the current control-database source; compile the confirmed local source and save source + compiled JS + compiled CSS together through `action=saveCode`, then call `POST /sym/component/manage?action=refresh`. Verify the refreshed component again through the list endpoint. Do not overwrite newer database source with an old local copy; compare source hashes before publication.
+- The component-cache refresh must be usable by ordinary authorized users; do not add a separate platform-administrator gate to `POST /sym/component/manage?action=refresh` unless a future explicit authorization model requires it.
 - `register-modal` is a static shell around dynamically registered low-code steps (`register-db`, `register-dbTable`, and subsequent registration pages). When it opens, ensure the runtime SFC bundle has been loaded with `loadAllRuntimeSfc(app)` before rendering the step, and surface a visible error if loading fails. Route guards alone are insufficient after a cache refresh, direct portal entry, or hot update.
 - Keep the static registration components (`RegisterModal`, `AssetRegister`, `RegisterBody`, `RegisterAction`) registered in the application component entry and directly imported by `BaseLayout`; a Vue warning such as `Failed to resolve component: register-modal` is a blocking integration defect, not cosmetic logging.
 - `useRegisterModal` must have a safe shared/fallback context for low-code pages that are evaluated outside the normal Vue injection tree. Opening registration must never silently create an empty dialog.
@@ -642,7 +642,7 @@ The frontend uses `@form-create/element-ui` to render configurable business form
 2. Back up the exact form record before a persistent tenant-database change. For page code changes, first compare the current `form-config` runtime source/artifacts against its canonical `lowcode/` file and reconcile any changes according to the local-first publishing workflow.
 3. Keep the existing storage format for the selected form. Verify that every form-create `type` is registered/importable in the runtime, custom effect names exist in `formCreate.ts`, each persisted data field is unique, and rule references/slots still match the consuming page.
 4. Test with a real authenticated session in the intended tenant: load `POST /sym/form/config?action=get` with the target `env`, render the actual consuming page, populate values, validate required fields, verify preview/read-only behavior when applicable, and inspect the API payload (including `baseData`/`dynamicData` where used). Repeat after switching to another tenant to prove definitions neither leak nor overwrite across tenant databases.
-5. If the changed artifact is the shared `/setting/form-config` UI itself, publish `source_code`, `compile_js`, and `compile_css` together to `baseline.ui_component_t`, invoke `/sym/component/cache/refresh`, and re-open the page. A `sym_form` data-only update does not require component-cache refresh or a backend restart.
+5. If the changed artifact is the shared `/setting/form-config` UI itself, publish `source_code`, `compile_js`, and `compile_css` together to `baseline.ui_component_t`, invoke `POST /sym/component/manage?action=refresh`, and re-open the page. A `sym_form` data-only update does not require component-cache refresh or a backend restart.
 
 
 <a id="lowcode-magic--dynamic-detail-page-completeness-and-save-performance-mandatory"></a>
@@ -768,7 +768,8 @@ Use the released `my-db` page at `/register/register-sjkb/list` as the default v
 - 编号和文件名只控制显示顺序。先列出旧、新的完整 HTTP 方法、路由、参数和资源 ID，核对所有实际调用。在改址同批更新真实前端、Magic 导入、Java 调用及权限、低代码源码及编译产物、配置、任务、Mock 契约和已知外部回调，演练恢复并验证切换。合并 GET 与 HEAD 前核对当前框架的隐式 HEAD、认证、状态、响应头及无响应体契约。
 - 独立海通的联调和内部运维接口将新地址注册在 Magic，仍需兼容的旧 HTTP 地址在认证层匹配原方法后转入同一脚本。旧协议将对象标识放在路径时，该标识优先于同名查询参数。发布后核对编辑器回读、真实 HTTP 和冷启动。
 - 系统管理的 `/sym/dict` 叶组提供 `GET /query`、`POST /tree`、`POST /save` 和 `POST /sort`。字典保存和排序以认证租户中的有效字典项为边界，保存时校验普通父节点的租户归属。
-- 系统管理的组件和动态表单使用 `POST /sym/component/manage` 与 `POST /sym/form/config`。两项入口通过 `action` 选择各自的业务操作，组件缓存刷新使用 `/sym/component/cache/refresh`。
+- 系统管理的组件和动态表单使用 `POST /sym/component/manage` 与 `POST /sym/form/config`。两项入口通过 `action` 选择各自的业务操作，组件缓存刷新使用 `POST /sym/component/manage?action=refresh`。
+- 节点探活和诊断直接使用已认证的 Magic 入口。向 `POST /ods/node/page` 传入 `action=health` 或 `action=diagnostics` 及 `nodeId` 查询当前行业的已保存 NiFi 节点。服务节点探活使用 `POST /ods/service/page`，正文传入 `action=health` 和 `nodeId`，目标地址及本机标记由当前租户保存的配置确定。
 - `02.数据盘点/03.文件操作` 的前缀为 `/dst/file`。`POST /manage` 操作附件，`GET /download` 读取二进制，`POST /snapshot` 维护非结构化文件登记快照，`POST /register` 处理数据上报登记、历史和回执，`POST /submit` 提交规范化文件。文件目录使用 `POST /upload`、`GET /template`、`POST /import`、`GET /rows` 和 `GET /materialize`。Web 层在会话校验前将已保存的 `GET /data/download?fileId=…` 映射到同一 Magic 下载入口，保留查询参数及文件归属校验。
 - 目录数据项由 `POST /dst/catalog/items` 读取。`02.数据盘点/08.工作台` 的前缀为 `/dst/workbench`，提供概览 `/overview`、事项分页 `/items` 和导出 `/export`。`/dst/asset` 的资产模块分页、保存、删除、统计、盘点和评估依次使用 `POST /page`、`/save`、`/delete`、`/stats`、`/scan` 和 `/score`，已有资产调用可沿用原 POST 地址。
 - Direct database moves must preserve the complete resource tree:
@@ -804,7 +805,7 @@ Use the released `my-db` page at `/register/register-sjkb/list` as the default v
 - 所有 `import` 集中放在脚本最前面。最后一个 `import` 之后，第一段写中文资源说明，再开始可执行代码。接口写明请求方法、完整路由、用途、主要参数和返回结果。函数或任务写明实际导入路径或执行入口、输入及用途。有权限、事务、外部调用或写入时，说明边界和副作用。没有导入的脚本从该说明开始。
 - 在关键代码上方就近写中文行注释，解释为何采用该做法。租户与角色范围、分页前后顺序、去重优先级、批量读取、状态流转、事务、异常和外部副作用都应按实际逻辑说明。普通赋值、方法名已经能表达的操作无需复述。业务变化后同步改资源说明和行注释。
 - 使用同一脚本内一致的缩进、空格和大括号风格，按导入、说明、参数与权限、数据访问和结果组装组织。分支与循环的主体分行缩进，长对象和链式调用按含义换行。复杂条件先用业务名称拆解，再组合；只为确实复用的逻辑或必要技术边界提取函数。保持 MagicScript 语法和原有接口契约，整理后执行实际脚本回归。
-- 主业务接口直接呈现专属的校验、权限、CRUD、事务和流程编排。只服务同一接口的逻辑留在 API 脚本，需要分段时使用该脚本内的局部函数。独立 Magic Function 需要多个现役入口实际共用，沿引用追到 API、任务、兼容别名及 Java 回调，同一入口的多层转发只算一个。GET 和 HEAD 可以共用实现。短入口在导入后的中文说明及编辑器描述中标注实现函数、复用对象和实际副作用。清理多层转发和只在单入口生效的分派分支，将专属编排移回 API 后核对在线引用及回退材料。探活等固定状态接口按实际用途说明并验收。
+- 主业务接口直接呈现专属的校验、权限、CRUD、事务和流程编排。只服务同一接口的逻辑留在 API 脚本，需要分段时使用该脚本内的局部函数。独立 Magic Function 需要多个现役入口实际共用，沿引用追到 API、任务、兼容别名及 Java 回调，同一业务的 GET/HEAD 和多层转发只算一个入口。框架满足实际 HEAD 契约后，优先登记一份 GET 资源，并将专用共享函数收回 API。多前端在业务语义、权限、参数、结果及副作用一致时共用正式入口。短入口在导入后的中文说明及编辑器描述中标注实现函数、复用对象和实际副作用。清理前核对在线引用及回退材料。探活等固定状态接口按实际用途说明并验收。
 - 整理待迁移的旧脚本时，保留既有 SQL 的参数绑定、标识符和别名大小写以及查询语义。改造数据访问时遵循 [Magic API 优先与数据库访问抽象](#magic-first-data-access)。
 - 批量整理前按 [本地资源版本管理](#resource-versioning) 核对所选资源，备份对应的活动记录。元数据 `id` 重复或旧记录缺少表行 `tid` 时，使用准确的 `file_path` 和内容区分，并报告编辑器不可见的孤立资源。发布后回读运行脚本，逐业务域验证实际入口。
 
@@ -1255,11 +1256,11 @@ SFTP 验证来源为演示服务器端口 22 下的独立模拟文件目录 `/ho
 
 #### 已实现的后端契约
 
-行业路由为 `/sym/logs`：`GET /capabilities`、`GET /components?kind=…`；`GET /{kind}`、`/{kind}/statistics`、`/{kind}/{id}`、`/{kind}/{id}/items`，以及 `POST /{kind}/batch`。事件类型仅允许 `auth/operations/requests/security`。列表接收 `page/size/keyword/result/startTime/endTime/sortField/sortDir`，单页最多 100 条、时间窗口最多 90 天，时间必须带时区。关键字匹配当时保存的姓名、账号、部门、操作编码、操作对象、链路号、菜单完整路径、功能／接口名称、接口标识、页面路由及请求路由；查询、统计、导出共用同一选择条件，使用绑定参数并转义 LIKE 通配符。历史缺失菜单／接口名称的事件不按当前目录伪造快照，可按既存账号、编码或路由检索。旧记录以创建时间按部署时区换算为 UTC 后与新事件一起排序，升降序及导出均在分页前处理。总数、统计、详情、批量明细与导出均保留当前租户、同角色分配中的功能与部门范围条件；客户端参数不能覆盖这些条件。
+行业能力与组件读取使用 `GET /sym/logs/capabilities` 和 `GET /sym/logs/components?kind=…`。登录、操作、接口和安全事件分别使用 `/sym/logauth`、`/sym/logops`、`/sym/logreq`、`/sym/logsec`，各组提供 `GET /page`、`GET /stats`、`GET /detail?id=…`、`GET /items?id=…` 和 `POST /batch`。第 137 批已在 86 发布上述正式路由、共享组件和配套后端。列表接收 `page/size/keyword/result/startTime/endTime/sortField/sortDir`，单页最多 100 条、时间窗口最多 90 天，时间必须带时区。关键字匹配当时保存的姓名、账号、部门、操作编码、操作对象、链路号、菜单完整路径、功能／接口名称、接口标识、页面路由及请求路由。查询、统计、导出共用同一选择条件，使用绑定参数并转义 LIKE 通配符。历史缺失菜单／接口名称的事件可按既存账号、编码或路由检索。旧记录以创建时间按部署时区换算为 UTC 后与新事件一起排序，升降序及导出均在分页前处理。总数、统计、详情、批量明细与导出均按当前租户、同角色分配中的功能与部门范围筛选。
 
 具备行业操作或接口日志读取权限时，`capabilities` 返回 `requestParameters`。`parameterKeyword` 是单个完整字符串字面，最长 200 个 UTF-16 单位；缺失、`null`、空字符串不加条件，其他类型及超长值拒绝。不拆词、不剥离两端空格，纯空格也过滤；`%/_/!` 和正则符号无特殊含义，按大小写不敏感的字面包含匹配。旧 `parameterName + parameterValue` 成对白名单精确匹配仍兼容，与新参数及普通 `keyword` 同传时全部按 AND 组合；敏感原文先拒绝，不能先掩码再命中旧索引，已脱敏的合法值仍可按旧契约匹配，此旁路修正已有测试并纳入本机发布。新词仅搜索同一安全快照的“路径=安全叶值”投影，不搜索原始正文、脱敏占位符、状态或说明，也不为 `LEGACY` 伪造新索引；IDAAS 及其他日志类别不开放此新筛选。
 
-业务条件在[日志参数关键词条件 Magic 函数](../magic/function/01.通用函数/19.日志参数关键词条件.ms)（ID `log_parameter_condition_v1`，`/common/log-parameter-keyword-condition`）校验类别、类型及长度，返回结构化 `contains` 谓词，不查库、不接收客户端权限范围。Java 提供可信上下文、采集／脱敏／冻结、方言绑定、查询执行与文件处理；[查询服务](../data-elements-parent/src/main/java/com/linewell/dataelement/feature/logmanagement/LogQueryService.java)先限定租户、角色及部门范围，再 AND 附加条件，旧成对参数兼容校验仍在 Java。现有查询、导出等 Java 业务仍属待迁移范围，不能因本批技术能力扩大保留范围或 IDAAS 身份域。
+日志参数关键词的共享 Magic 函数校验类别、类型和长度，返回结构化 `contains` 条件。行业入口按可信租户和当前菜单授权确定角色范围后应用查询条件。Java 提供可信上下文、采集、脱敏、方言执行、事务锁以及后台文件队列和传输。独立身份管理端仍使用自己的平台会话、功能授权和身份域。[日志参数关键词条件](../magic/function/01.通用函数/19.日志参数关键词条件.ms)，[第 137 批验收](data-elements-parent.md#backend-simplification-handoff)。
 
 计数、分页、统计及在线导出在数据库筛选阶段复用相同选择条件；默认最近 7 天、最大 90 天，起点包含、终点排除。每条读取 SQL 配置 15 秒超时，不是 HTTP／整个导出任务总时限或性能达标证明。20/100 行均为一次列表请求、两条事件 SQL，身份／角色范围解析另有固定开销；列表／批量摘要仅含采集状态，不带快照、旧参数详情或检索投影，详情按用户主动操作读取。导出另冻结截止条件并重校权限，条件一致不等于并发下行数相同或事务级强快照。
 
@@ -1275,9 +1276,9 @@ SFTP 验证来源为演示服务器端口 22 下的独立模拟文件目录 `/ho
 
 完整初始化与 [MySQL](../db/increments/000008_audit_parameter_snapshot.mysql.sql)、[金仓](../db/increments/000008_audit_parameter_snapshot.kingbase.sql)、[达梦](../db/increments/000008_audit_parameter_snapshot.dameng.sql)增量同步维护。无已验证的任意子串索引，本批不新增索引；固定查询次数不代表扫描成本与数据量无关。
 
-根 Mock 当前为 56 项 HTTP 契约加 1 项非 HTTP 共享函数依赖（其中 25 项 HTTP 为日志），四行业各 5760 条虚构日志；列表、详情、统计、批量及 exports 已接入，按当前模拟会话逐 ID 校验租户和角色范围。Node 实际 MSW 传输及真实组件浏览器 fixture 已通过，但尚未独立完成真实 Mock 整页／浏览器下载，不将两者合称 Mock 全栈 E2E。归档／策略仅明确返回 501、不穿透后端；集中状态见[Mock 设计与接手说明](mock-design.md)。
+根 Mock 的日志列表、详情、统计、批量和导出使用上述正式路由，按当前模拟会话逐 ID 校验租户和角色范围。归档和策略仍明确返回 501。Node 的 MSW 传输和共享组件浏览器夹具已通过。当前覆盖见 [Mock 设计与接手说明](mock-design.md)。
 
-行业辅助管理使用 `GET /exports|archives|policies`、`POST /exports|archives`、`PUT/POST /policies`、`GET /exports/{id}/download`。归档的冻结、解除、回读查询、清理预览及确认清理为 `POST /archives/{id}`，动作分别是 `hold/release/browse/purge-plan/purge`。清理必须提供预览返回的版本及归档标识确认值；同事务检查冻结、范围和精确归档 ID，保留未归档及迟到事件，不按时间区间直接删除。
+行业导出使用 `GET /sym/logexport/page`、`POST /sym/logexport/create` 及 `GET /sym/logs/exports/{id}/download`。归档使用 `GET /sym/logarchive/page`、`POST /sym/logarchive/create` 和 `POST /sym/logarchive/action`。归档操作提交 `id` 与 `action`，可执行 `hold`、`release`、`browse`、`purge-plan` 或 `purge`。策略通过 `GET /sym/logpolicy/list` 与 `PUT` 或 `POST /sym/logpolicy/save` 读写。清理提供预览返回的版本和归档确认值，同事务检查冻结、范围和归档 ID，仅删除文件校验通过且仍在授权范围内的事件。
 
 平台沿用 Magic 规则：`GET /idaas/logs/query`、`POST /idaas/logs/command`，二进制下载为 `/idaas/logs/export-download`。模块与操作严格匹配，不能拿导出／归档权限调用日志详情或统计。平台事件读取沿用 `audit:read`；新增 `audit:export/audit:configure/audit:archive` 分别保护导出、策略及归档。行业使用当前菜单资源中的 `logs:auth/operations/requests/security/exports/archives/policies`，仍从现有角色的数据范围计算权限，不增加管理员标志。
 

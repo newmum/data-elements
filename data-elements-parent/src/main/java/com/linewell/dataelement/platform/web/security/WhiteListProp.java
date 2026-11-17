@@ -17,12 +17,9 @@ import org.springframework.context.annotation.Configuration;
 public class WhiteListProp {
     private static final AntPathMatcher PATH_MATCHER = new AntPathMatcher();
     private static final Set<String> FRAMEWORK_PUBLIC_PATHS = Set.of(
-            "/portal/sso/login",
-            "/portal/sso/logout",
             "/portal/sso/redeem",
             "/portal/sso/ticket",
             "/portal/profile/password",
-            "/idaas/auth/login",
             "/idaas/recovery/request",
             "/idaas/identity/login",
             "/idaas/identity/register",

@@ -80,7 +80,11 @@ export async function checkContracts(root = repository) {
       try {
         const meta = metadata(source);
         const route = await magicRoute(filename, meta, "api");
-        if (meta.id !== entry.source.id || `${meta.method.toUpperCase()} ${route}` !== entry.operation)
+        const method = meta.method.toUpperCase();
+        const headOptions = (meta.options ?? []).filter(option => option?.name === "head");
+        const implicitHead = method === "GET" && headOptions.length === 1 && headOptions[0].value === "true"
+          && entry.operation === `HEAD ${route}`;
+        if (meta.id !== entry.source.id || `${method} ${route}` !== entry.operation && !implicitHead)
           errors.push(`Magic 身份或路由已变化：${entry.operation}`);
       } catch {
         errors.push(`Magic 源码或分组无法核验：${entry.operation}`);

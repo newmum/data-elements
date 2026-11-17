@@ -1,5 +1,6 @@
 package com.linewell.dataelement.platform.configuration;
 
+import com.linewell.dataelement.platform.cache.UiComponentCacheService;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 

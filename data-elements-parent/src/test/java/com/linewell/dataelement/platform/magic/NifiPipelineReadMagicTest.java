@@ -62,13 +62,11 @@ class NifiPipelineReadMagicTest {
         var url = "https://secondary-nifi.test/nifi/#/process-groups/group-a";
         when(nifi.assignedNodeUiUrl("secondary", "group-a")).thenReturn(url);
 
-        assertThat(fixture.runRead("ui", false, "foreign", bindings).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(fixture.link("foreign", bindings).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         verifyNoInteractions(nifi);
-        for (boolean head : List.of(false, true)) {
-            assertThat(body(fixture.runRead("ui", head, "selected", bindings)))
-                    .containsEntry("url", url).containsEntry("directNode", true)
-                    .containsEntry("processGroupId", "group-a").containsEntry("authenticatedByBackend", false);
-        }
+        assertThat(body(fixture.link("selected", bindings)))
+                .containsEntry("url", url).containsEntry("directNode", true)
+                .containsEntry("processGroupId", "group-a").containsEntry("authenticatedByBackend", false);
     }
 
     @Test void runtimeReadUsesSavedBindingAndCompilerFingerprintWithoutExposingForeignRows() throws Exception {
@@ -91,12 +89,12 @@ class NifiPipelineReadMagicTest {
         when(runtime.describe(fresh, "group-a", "SAVED")).thenReturn(Map.of("runtimeState", "RUNNING", "runtimeFresh", true));
         var errors = mock(ErrorService.class);
         var bindings = Map.<String, Object>of("runtimeStatus", runtime, "errorStore", errors);
+        var link = body(fixture.link("design", Map.of()));
+        assertThat(link).containsEntry("url", "/nifi-ui/#/process-groups/group-a")
+                .containsEntry("processGroupId", "group-a").containsEntry("reusesBrowserSession", true)
+                .containsEntry("authenticatedByBackend", true);
+        assertThat(fixture.reads).isEqualTo(1);
         for (boolean head : List.of(false, true)) {
-            var link = body(fixture.runRead("ui", head, "design", Map.of()));
-            assertThat(link).containsEntry("url", "/nifi-ui/#/process-groups/group-a")
-                    .containsEntry("processGroupId", "group-a").containsEntry("reusesBrowserSession", true)
-                    .containsEntry("authenticatedByBackend", true);
-            assertThat(fixture.reads).isEqualTo(1);
             var state = body(fixture.runRead("status", head, "design", bindings));
             assertThat(state).containsEntry("status", "RUNNING").containsEntry("deployed", true)
                     .containsEntry("runtimeRevision", 8).containsEntry("nifiStatus", nativeStatus)
@@ -109,19 +107,22 @@ class NifiPipelineReadMagicTest {
                 .containsEntry("nifiStatusError", "NiFi 中未找到已关联的流程");
 
         for (String absent : List.of("foreign", "deleted", "invalid")) {
-            for (String operation : List.of("ui", "status", "page")) {
+            assertThat(fixture.link(absent, Map.of()).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+            assertThat(fixture.reads).isEqualTo(1);
+            assertThat(fixture.detailSql.getFirst()).contains("tenant_id");
+            for (String operation : List.of("status", "page")) {
                 assertThat(fixture.runRead(operation, false, absent, Map.of()).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
                 assertThat(fixture.reads).isEqualTo(1);
                 assertThat(fixture.detailSql.getFirst()).contains("tenant_id");
             }
         }
-        assertThat(fixture.runRead("ui", false, "draft", Map.of()).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(fixture.link("draft", Map.of()).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         fixture.jdbc.update("UPDATE nifi_pipeline_t SET nifi_process_group_id=' ' WHERE id='draft'");
-        assertThat(fixture.runRead("ui", false, "draft", Map.of()).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(fixture.link("draft", Map.of()).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         for (String status : List.of("STOPPED", "DEPLOY_FAILED", "RUNNING", "DEPLOYING")) {
             fixture.jdbc.update("UPDATE nifi_pipeline_t SET status=?, last_deployed_hash=? WHERE id='design'",
                     status, status.equals("RUNNING") ? null : "old-compiler-fingerprint");
-            assertThat(body(fixture.runRead("ui", false, "design", Map.of()))).containsEntry("processGroupId", "group-a");
+            assertThat(body(fixture.link("design", Map.of()))).containsEntry("processGroupId", "group-a");
         }
         org.mockito.Mockito.verify(errors, org.mockito.Mockito.times(3)).list("design");
         org.mockito.Mockito.verifyNoMoreInteractions(errors);
@@ -277,7 +278,7 @@ class NifiPipelineReadMagicTest {
         fixture.request.put("sortDir", "asc");
         fixture.request.put("q", "%_", "literal");
         fixture.request.put("tenantId", "tenant-b");
-        var response = TenantContext.call("tenant-a", () -> fixture.route(fixture.pageGet));
+        var response = TenantContext.call("tenant-a", () -> fixture.pageResponse());
         assertThat(body(response)).containsExactlyInAnyOrderEntriesOf(
                 Map.of("page", 2, "size", size, "total", 1L, "list", List.of()));
         assertThat(fixture.reads).isOne();
@@ -286,27 +287,24 @@ class NifiPipelineReadMagicTest {
     @Test
     void pageRejectsInvalidNumbersAndUnavailableIndustryTenantBeforeReading() throws Exception {
         var fixture = new Fixture();
-        assertError(fixture.route(fixture.pageGet), 403, "当前请求未绑定租户");
+        assertError(fixture.pageResponse(), 403, "当前请求未绑定租户");
         try (var tenant = TenantContext.use("tenant-a"); var control = TenantContext.control()) {
-            assertError(fixture.route(fixture.pageGet), StatusCodeEnum.ERROR.getCode(), "流程查询必须绑定行业租户");
+            assertError(fixture.pageResponse(), StatusCodeEnum.ERROR.getCode(), "流程查询必须绑定行业租户");
         }
         fixture.request.put("size", "2147483648");
-        TenantContext.run("tenant-a", () -> assertError(fixture.route(fixture.pageGet),
+        TenantContext.run("tenant-a", () -> assertError(fixture.pageResponse(),
                 StatusCodeEnum.PARAMS_UNVALID.getCode(), "参数[size]类型错误，期望类型: int"));
         assertThat(fixture.reads).isZero();
     }
 
     @Test
-    void headUsesTheSameResponseObjectAsGetForAllThreeRoutes() throws Exception {
+    void overviewHeadUsesItsGetResponseAndCatalogPingReturnsHealth() throws Exception {
         var fixture = new Fixture();
         try (var tenant = TenantContext.use("tenant-a")) {
-            assertThat(fixture.route(fixture.pageHead)).isEqualTo(fixture.route(fixture.pageGet));
             assertThat(fixture.route(fixture.overviewHead)).isEqualTo(fixture.route(fixture.overviewGet));
         }
-        var ping = script(API + "01.组件清单/05.查询画布接口健康.ms", "nifi_canvas_ping_get_v1");
-        var pingHead = script(API + "01.组件清单/06.核验画布接口健康.ms", "nifi_canvas_ping_head_v1");
+        var ping = MagicScript.create(CanonicalMagicSources.byId("nifi_canvas_ping_get_v1"), null);
         assertThat(fixture.route(ping)).isEqualTo(ResponseEntity.ok(Map.of("status", "ok")));
-        assertThat(fixture.route(pingHead)).isEqualTo(fixture.route(ping));
     }
 
     @ParameterizedTest
@@ -327,7 +325,7 @@ class NifiPipelineReadMagicTest {
                 9007199254740993L);
         fixture.detailFlow(saved, "sToP", "tenant-a", 0);
 
-        var get = TenantContext.call("tenant-a", () -> fixture.detail(fixture.detailGet, saved.id()));
+        var get = TenantContext.call("tenant-a", () -> fixture.detail(saved.id()));
         assertThat(get.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(get.getBody()).isEqualTo(saved);
         assertThat((JsonNode) JSON.valueToTree(get.getBody())).isEqualTo(JSON.valueToTree(saved));
@@ -335,10 +333,6 @@ class NifiPipelineReadMagicTest {
                 .startsWith("SELECT ").contains("tenant_id", "id"));
         assertThat(fixture.reads).isOne();
 
-        var head = TenantContext.call("tenant-a", () -> fixture.detail(fixture.detailHead, saved.id()));
-        assertThat(head).isEqualTo(get);
-        assertThat(fixture.reads).isOne();
-        assertThat(fixture.detailSql).hasSize(1);
         assertThat(fixture.jdbc.queryForObject("SELECT dsl_json FROM nifi_pipeline_t WHERE id=?", String.class, saved.id()))
                 .isEqualTo(JSON.writeValueAsString(saved.dsl()));
     }
@@ -357,7 +351,7 @@ class NifiPipelineReadMagicTest {
                 null, PipelineStatus.SAVED, null, null, null, null, null);
         fixture.detailFlow(saved, "unknown", "tenant-a", 0);
 
-        var response = TenantContext.call("tenant-a", () -> fixture.detail(fixture.detailGet, saved.id()));
+        var response = TenantContext.call("tenant-a", () -> fixture.detail(saved.id()));
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isInstanceOfSatisfying(Pipeline.class, projected -> {
             assertThat(projected.dsl().nodes()).containsExactly(source, hive);
@@ -383,13 +377,13 @@ class NifiPipelineReadMagicTest {
         fixture.jdbc.update("UPDATE nifi_pipeline_t SET node_mapping_json=? WHERE id=?", "[]", "validation-invalid-mapping");
         for (String id : List.of("validation-foreign", "validation-deleted", "validation-invalid-dsl",
                 "validation-invalid-mapping", "validation-missing", "x' OR '1'='1")) {
-            var result = TenantContext.call("tenant-a", () -> fixture.detail(fixture.detailGet, id));
+            var result = TenantContext.call("tenant-a", () -> fixture.detail(id));
             assertThat(result.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
             assertThat(result.getBody()).isNull();
             assertThat(fixture.detailSql).hasSize(1);
         }
 
-        var foreignOwner = TenantContext.call("tenant-b", () -> fixture.detail(fixture.detailGet, "validation-foreign"));
+        var foreignOwner = TenantContext.call("tenant-b", () -> fixture.detail("validation-foreign"));
         assertThat(foreignOwner.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(foreignOwner.getBody()).isInstanceOfSatisfying(Pipeline.class, pipeline -> {
             assertThat(pipeline.status()).isEqualTo(PipelineStatus.RUNNING);
@@ -402,14 +396,14 @@ class NifiPipelineReadMagicTest {
     @Test
     void detailRejectsMissingControlAndIgnoredTenantBeforeReading() throws Exception {
         var fixture = new Fixture();
-        assertError(fixture.detail(fixture.detailHead, "validation-missing"), 403, "当前请求未绑定租户");
+        assertError(fixture.detail("validation-missing"), 403, "当前请求未绑定租户");
         assertThat(fixture.detailSql).isEmpty();
         try (var tenant = TenantContext.use("tenant-a"); var control = TenantContext.control()) {
-            assertError(fixture.detail(fixture.detailGet, "validation-missing"), 403, "流程数据必须在当前租户数据库中访问");
+            assertError(fixture.detail("validation-missing"), 403, "流程数据必须在当前租户数据库中访问");
             assertThat(fixture.detailSql).isEmpty();
         }
         try (var tenant = TenantContext.use("tenant-a"); var ignored = TenantContext.ignore()) {
-            assertError(fixture.detail(fixture.detailGet, "validation-missing"), 403, "流程数据必须在当前租户数据库中访问");
+            assertError(fixture.detail("validation-missing"), 403, "流程数据必须在当前租户数据库中访问");
             assertThat(fixture.detailSql).isEmpty();
         }
     }
@@ -471,23 +465,18 @@ class NifiPipelineReadMagicTest {
         final StructuredTableReadMagicModule tableRead;
         final MagicScript overview = script(COMMON + "20.海通流程运行总览.ms", "4a9311c67f104f589affeb51aa1e3a62",
                 "tableRead", "tableSort", "tenantRuntime", "'@/common/nifiPipelineReadHttp' as withHttpResponse");
-        final MagicScript page = script(COMMON + "22.海通流程分页.ms", "947c14bf3a694e99ae078d79d4307cbd",
+        final MagicScript page = script(PIPELINE_API + "02.流程设计/03.查询流程分页.ms", "nifi_pipeline_page_get_v1",
                 "tableRead", "tableSort", "tenantRuntime", "'@/common/nifiPipelineReadHttp' as withHttpResponse");
         final MagicScript response = script(COMMON + "29.海通流程只读接口响应.ms", "nifi_pipeline_read_http_v1", "request");
-        final MagicScript pageGet = script(PIPELINE_API + "02.流程设计/04.查询流程分页.ms", "nifi_pipeline_page_get_v1",
-                "'@/common/nifiPipelinePage' as readPipelinePage");
-        final MagicScript pageHead = script(PIPELINE_API + "02.流程设计/05.核验流程分页.ms", "nifi_pipeline_page_head_v1",
-                "'@/common/nifiPipelinePage' as readPipelinePage");
         final MagicScript overviewGet = script(PIPELINE_API + "05.运行状态/01.查询流程运行总览.ms", "nifi_runtime_overview_get_v1",
                 "'@/common/nifiRuntimeOverview' as readOverview");
         final MagicScript overviewHead = script(PIPELINE_API + "05.运行状态/02.核验流程运行总览.ms", "nifi_runtime_overview_head_v1",
                 "'@/common/nifiRuntimeOverview' as readOverview");
-        final MagicScript detailResponse = script(COMMON + "32.海通流程详情接口响应.ms", "nifi_pipe_detail_http_v1",
+        final MagicScript detail = script(PIPELINE_API + "02.流程设计/04.查询流程详情.ms", "nifi_pipe_detail_get_v1",
                 "com.fasterxml.jackson.databind.ObjectMapper as objectMapper", "tableRead", "tenantRuntime");
-        final MagicScript detailGet = script(PIPELINE_API + "02.流程设计/06.查询流程详情.ms", "nifi_pipe_detail_get_v1",
-                "'@/common/nifiPipelineDetailHttp' as pipelineDetail");
-        final MagicScript detailHead = script(PIPELINE_API + "02.流程设计/07.核验流程详情.ms", "nifi_pipe_detail_head_v1",
-                "'@/common/nifiPipelineDetailHttp' as pipelineDetail");
+        final MagicScript link = script(PIPELINE_API + "02.流程设计/07.查询流程原生地址.ms", "nifi_pipeline_ui_link_get_v1",
+                "'@/common/nifiFindCanvas' as findCanvas", "'@/common/nifiPipelineReadHttp' as withHttpResponse",
+                "com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient as nifi", "tenantRuntime");
         final List<String> detailSql = new ArrayList<>();
         final MagicScript decodeCanvas = script(COMMON + "43.海通解码保存画布.ms", "e06d4eb123494419e67f70f2fc03bceb",
                 "com.fasterxml.jackson.databind.ObjectMapper as mapper");
@@ -561,14 +550,20 @@ class NifiPipelineReadMagicTest {
                     JSON.writeValueAsString(saved.nodeMapping()), saved.lastBulletinId());
         }
 
-        ResponseEntity<?> detail(MagicScript route, String id) {
+        ResponseEntity<?> detail(String id) {
             detailSql.clear();
             reads = 0;
-            MagicScriptLambdaFunction pipelineDetail = (context, args) -> detailResponse.execute(
-                    new MagicScriptContext(Map.of("flowId", args[0], "objectMapper", JSON,
-                            "tenantRuntime", new TenantMagicModule(null), "tableRead", tableRead)));
-            return (ResponseEntity<?>) route.execute(new MagicScriptContext(Map.of(
-                    "param", Map.of("id", id, "tenantId", "tenant-b"), "pipelineDetail", pipelineDetail)));
+            return (ResponseEntity<?>) detail.execute(new MagicScriptContext(Map.of(
+                    "param", Map.of("id", id, "tenantId", "tenant-b"), "objectMapper", JSON,
+                    "tenantRuntime", new TenantMagicModule(null), "tableRead", tableRead)));
+        }
+
+        ResponseEntity<?> link(String id, Map<String, Object> extras) {
+            var variables = canvasReadVariables(extras);
+            variables.put("param", Map.of("id", id, "tenantId", "tenant-b"));
+            detailSql.clear();
+            reads = 0;
+            return TenantContext.call("tenant-a", () -> (ResponseEntity<?>) link.execute(new MagicScriptContext(variables)));
         }
 
         ResponseEntity<?> runRead(String operation, boolean head, String id, Map<String, Object> extras) throws Exception {
@@ -579,14 +574,6 @@ class NifiPipelineReadMagicTest {
             String getRoute;
             String headRoute;
             switch (operation) {
-                case "ui" -> {
-                    functionFile = "49.海通流程原生地址响应.ms";
-                    functionId = "nifi_pipeline_ui_link_http_v1";
-                    importName = "nifiPipelineUiLink";
-                    routeId = "nifi_pipeline_ui_link";
-                    getRoute = "02.流程设计/10.查询流程原生地址.ms";
-                    headRoute = "02.流程设计/11.核验流程原生地址.ms";
-                }
                 case "status" -> {
                     functionFile = "50.海通流程运行状态响应.ms";
                     functionId = "nifi_pipeline_status_http_v1";
@@ -612,21 +599,32 @@ class NifiPipelineReadMagicTest {
                     "com.linewell.dataelement.integration.nifi.canvas.runtime.TaskRuntimeStatusService as runtimeStatus");
             var endpoint = script(API + (head ? headRoute : getRoute),
                     routeId + (head ? "_head" : "_get") + "_v1", "'@/common/" + importName + "' as read");
-            MagicScriptLambdaFunction decode = (context, args) -> decodeCanvas.execute(
-                    new MagicScriptContext(Map.of("row", args[0], "mapper", JSON)));
-            MagicScriptLambdaFunction find = (context, args) -> findCanvas.execute(new MagicScriptContext(
-                    Map.of("flowId", args[0], "tenantId", args[1], "tableRead", tableRead, "decodeCanvas", decode)));
-            MagicScriptLambdaFunction http = (context, args) -> response.execute(new MagicScriptContext(Map.of("action", args[0], "request", request)));
             MagicScriptLambdaFunction action = (context, args) -> {
-                var variables = new LinkedHashMap<>(extras);
-                variables.putAll(Map.of("flowId", args[0], "findCanvas", find, "withHttpResponse", http,
-                        "tableSort", new TableSortMagicModule(), "tenantRuntime", new TenantMagicModule(null)));
+                var variables = canvasReadVariables(extras);
+                variables.put("flowId", args[0]);
                 return read.execute(new MagicScriptContext(variables));
             };
             detailSql.clear();
             reads = 0;
             return TenantContext.call("tenant-a", () -> (ResponseEntity<?>) endpoint.execute(new MagicScriptContext(
                     Map.of("param", Map.of("id", id, "tenantId", "tenant-b"), "read", action))));
+        }
+
+        private Map<String, Object> canvasReadVariables(Map<String, Object> extras) {
+            MagicScriptLambdaFunction decode = (context, args) -> decodeCanvas.execute(
+                    new MagicScriptContext(Map.of("row", args[0], "mapper", JSON)));
+            MagicScriptLambdaFunction find = (context, args) -> findCanvas.execute(new MagicScriptContext(
+                    Map.of("flowId", args[0], "tenantId", args[1], "tableRead", tableRead, "decodeCanvas", decode)));
+            MagicScriptLambdaFunction http = (context, args) ->
+                    response.execute(new MagicScriptContext(Map.of("action", args[0], "request", request)));
+            var variables = new LinkedHashMap<>(extras);
+            variables.putAll(Map.of("findCanvas", find, "withHttpResponse", http,
+                    "tableSort", new TableSortMagicModule(), "tenantRuntime", new TenantMagicModule(null)));
+            return variables;
+        }
+
+        ResponseEntity<?> pageResponse() {
+            return (ResponseEntity<?>) executeRead(page);
         }
 
         Object executeRead(MagicScript businessScript) {
@@ -638,10 +636,8 @@ class NifiPipelineReadMagicTest {
         }
 
         ResponseEntity<?> route(MagicScript route) {
-            MagicScriptLambdaFunction readPage = (context, args) -> executeRead(page);
             MagicScriptLambdaFunction readOverview = (context, args) -> executeRead(overview);
-            return (ResponseEntity<?>) route.execute(new MagicScriptContext(
-                    Map.of("readPipelinePage", readPage, "readOverview", readOverview)));
+            return (ResponseEntity<?>) route.execute(new MagicScriptContext(Map.of("readOverview", readOverview)));
         }
 
         ResponseEntity<?> overviewResponse(String field, String direction) {

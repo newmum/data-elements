@@ -8,7 +8,12 @@
   "method": "POST",
   "description": "根据组件连接配置探查可读的表或数据集合，支持关键词和 1 到 500 项限制。登记的 Hive 配置限定当前租户。返回表、总数或原始诊断，不写业务记录。",
   "parameters": [],
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "TENANT_SESSION"
+    }
+  ],
   "headers": [],
   "paths": []
 }

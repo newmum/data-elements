@@ -22,7 +22,21 @@ function setup(role = "admin", scenario = "police", storage = memory()) {
   runtime.login(scenario);
   return { runtime, storage, advance: (value) => { current += value; } };
 }
-const call = (runtime, route, query = {}, body = {}, method = "GET") => runtime.handle({ path: route.startsWith("/") ? route : `/sym/logs/${route}`, method, query, body, token: runtime.session?.token || "" });
+const eventGroups = { auth: "logauth", operations: "logops", requests: "logreq", security: "logsec" };
+function call(runtime, route, query = {}, body = {}, method = "GET") {
+  const token = runtime.session?.token || "";
+  if (route.startsWith("/")) return runtime.handle({ path: route, method, query, body, token });
+  const [kind, item, items] = route.split("/");
+  let path = `/sym/logs/${route}`;
+  if (Object.hasOwn(eventGroups, kind)) {
+    const action = !item ? "page" : item === "statistics" ? "stats" : item === "batch" ? "batch" : items ? "items" : "detail";
+    path = `/sym/${eventGroups[kind]}/${action}`;
+    if (action === "detail" || action === "items") query = { ...query, id: item };
+  } else if (route === "exports") {
+    path = method === "POST" ? "/sym/logexport/create" : "/sym/logexport/page";
+  }
+  return runtime.handle({ path, method, query, body, token });
+}
 async function ok(runtime, route, query, body, method) {
   const response = await call(runtime, route, query, body, method);
   assert.equal(response.status, 200);
@@ -317,25 +331,25 @@ test("未知动作/归档/策略/平台路径拒绝、无真实网络访问、�
     await ok(runtime, "requests", { size: 20 });
   } finally { globalThis.fetch = previous; }
   assert(runtime.requests.every((row) => !row.includes(runtime.session.token)));
-  const unauthenticated = await runtime.handle({ path: "/sym/logs/auth", token: "not-current" });
+  const unauthenticated = await runtime.handle({ path: "/sym/logauth/page", token: "not-current" });
   assert.equal(unauthenticated.status, 200);
   assert.equal(unauthenticated.body.code, 100120);
 });
 
-test("行业日志短路径保留旧地址的分页、标识优先级和 HEAD 契约", async () => {
+test("行业日志直接调用正式分页、详情、批读和 HEAD，旧入口拒绝", async () => {
   const { runtime } = setup();
   const token = runtime.session.token;
   const query = { size: 20 };
   const legacy = await runtime.handle({ path: "/sym/logs/requests", query, token });
   const official = await runtime.handle({ path: "/sym/logreq/page", query, token });
-  assert.deepEqual(official.body, legacy.body);
+  assert.equal(legacy.status, 501);
   const ids = official.body.data.list.slice(0, 2).map(row => row.tid).reverse();
   const selected = await runtime.handle({ path: "/sym/logreq/batch", method: "POST", body: ids, token });
   assert.deepEqual(selected.body.data.map(row => row.tid), ids);
   const oldDetail = await runtime.handle({ path: `/sym/logs/requests/${ids[0]}`, query: { id: ids[1] }, token });
   const newDetail = await runtime.handle({ path: "/sym/logreq/detail", query: { id: ids[0] }, token });
-  assert.equal(oldDetail.body.data.tid, ids[0]);
-  assert.deepEqual(newDetail.body, oldDetail.body);
+  assert.equal(oldDetail.status, 501);
+  assert.equal(newDetail.body.data.tid, ids[0]);
   const head = await runtime.handle({ path: "/sym/logreq/detail", method: "HEAD", query: { id: ids[0] }, token });
   assert.equal(head.status, 200);
   assert.equal(head.body, null);
@@ -345,14 +359,14 @@ test("行业日志短路径保留旧地址的分页、标识优先级和 HEAD �
 test("根传输适配保留裸批量数组与日志响应，其他路由仍拒绝数组", async () => {
   const { runtime } = setup();
   const id = (await ok(runtime, "auth")).list[0].tid;
-  const body = parseMockBody("/dev-api/sym/logs/auth/batch", JSON.stringify([id]));
+  const body = parseMockBody("/dev-api/sym/logauth/batch", JSON.stringify([id]));
   assert.deepEqual(body, [id]);
-  assert.deepEqual(parseMockBody("/dev-api/sym/logauth/batch", JSON.stringify([id])), [id]);
+  assert.throws(() => parseMockBody("/dev-api/sym/logs/auth/batch", JSON.stringify([id])));
   const result = await call(runtime, "auth/batch", {}, body, "POST");
   assert.equal((await mockResponse(result).json()).data[0].tid, id);
-  assert.throws(() => parseMockBody("/sym/logs/exports", "[]"));
-  assert.throws(() => parseMockBody("/sym/logs/auth/batch", "null"));
-  assert.throws(() => parseMockBody("/sym/logs/auth/batch", "invalid"));
+  assert.throws(() => parseMockBody("/sym/logexport/create", "[]"));
+  assert.throws(() => parseMockBody("/sym/logauth/batch", "null"));
+  assert.throws(() => parseMockBody("/sym/logauth/batch", "invalid"));
 });
 
 test("统一浏览器宿主实际复用传输入口，MSW保持批量、错误状态及CSV/JSONL原始字节", async () => {
@@ -365,7 +379,7 @@ test("统一浏览器宿主实际复用传输入口，MSW保持批量、错误�
   const { runtime } = setup();
   for (const prefix of ["", "/dev-api", "/prod-api"]) {
     const ids = seeds(runtime).slice(0, 100).map((row) => row.tid);
-    const body = parseMockBody(`${prefix}/sym/logs/operations/batch`, JSON.stringify(ids));
+    const body = parseMockBody(`${prefix}/sym/logops/batch`, JSON.stringify(ids));
     const response = mockResponse(await call(runtime, "operations/batch", {}, body, "POST"), HttpResponse);
     assert(response instanceof HttpResponse);
     assert.equal((await response.json()).data.length, 100);
@@ -595,9 +609,8 @@ test("日志44项HTTP契约覆盖能力、HEAD、列表、详情、统计、批�
   assert.equal(exportList.list.find(({ tid }) => tid === exportJob.id).status, "RUNNING");
   const fixtures = [["GET /sym/logs/capabilities", {}, await ok(runtime, "capabilities")],
     ["GET " + exportsUrl, {}, exportList]];
-  const groups = {auth: "logauth", operations: "logops", requests: "logreq", security: "logsec"};
   for (const kind of logKinds) {
-    const prefix = "/sym/" + groups[kind];
+    const prefix = "/sym/" + eventGroups[kind];
     const listed = await ok(runtime, prefix + "/page"), id = listed.list[0].tid;
     fixtures.push(["GET " + prefix + "/page", {}, listed], ["GET " + prefix + "/stats", {}, await ok(runtime, prefix + "/stats")],
       ["GET " + prefix + "/detail", { id }, await ok(runtime, prefix + "/detail", { id })],

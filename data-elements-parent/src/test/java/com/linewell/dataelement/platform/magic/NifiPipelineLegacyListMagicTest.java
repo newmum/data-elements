@@ -143,7 +143,6 @@ class NifiPipelineLegacyListMagicTest {
                 .containsEntry("description", null).containsEntry("nifiProcessGroupId", null);
         assertThat(rows.getLast()).containsEntry("id", "null-update").containsEntry("updatedAt", null);
         verifyNoInteractions(fixture.nifi);
-        assertThat(fixture.rows(fixture.listHead)).isEqualTo(rows);
     }
 
     private static MagicScript script(String resource, String id, String... imports) throws Exception {
@@ -165,15 +164,11 @@ class NifiPipelineLegacyListMagicTest {
         final MagicScript load = script(COMMON + "33.海通已保存流程列表.ms", "nifi_saved_canvas_rows_v1",
                 "com.fasterxml.jackson.databind.ObjectMapper as objectMapper", "tableRead", "tenantRuntime");
         final MagicScript respond = script(COMMON + "35.海通流程列表超文本响应.ms", "nifi_pipe_list_response_v1");
-        final MagicScript list = script(COMMON + "34.海通流程列表响应.ms", "nifi_pipe_list_http_v1",
-                "'@/common/nifiSavedCanvasRows' as loadSavedCanvases", "'@/common/nifiPipelineListResponse' as respond");
         final MagicScript runtime = script(COMMON + "36.海通流程运行列表响应.ms", "nifi_pipe_runtime_list_http_v1",
                 "'@/common/nifiSavedCanvasRows' as loadSavedCanvases", "'@/common/nifiPipelineListResponse' as respond",
                 "com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient as nifi");
         final MagicScript listGet = script(API + "02.流程设计/01.查询流程列表.ms", "nifi_pipe_list_get_v1",
-                "'@/common/nifiPipelineListHttp' as readPipelines");
-        final MagicScript listHead = script(API + "02.流程设计/02.核验流程列表.ms", "nifi_pipe_list_head_v1",
-                "'@/common/nifiPipelineListHttp' as readPipelines");
+                "'@/common/nifiSavedCanvasRows' as loadSavedCanvases", "'@/common/nifiPipelineListResponse' as respond");
         final MagicScript runtimeGet = script(API + "05.运行状态/03.查询流程运行列表.ms", "nifi_pipe_runtime_list_get_v1",
                 "'@/common/nifiPipelineRuntimeListHttp' as readPipelines");
         final MagicScript runtimeHead = script(API + "05.运行状态/04.核验流程运行列表.ms", "nifi_pipe_runtime_list_head_v1",
@@ -206,10 +201,11 @@ class NifiPipelineLegacyListMagicTest {
                                 "tenantRuntime", new TenantMagicModule(null), "objectMapper", JSON)));
                 MagicScriptLambdaFunction reply = (context, arguments) ->
                         respond.execute(new MagicScriptContext(Map.of("action", arguments[0])));
-                MagicScript behavior = route == listGet || route == listHead ? list : runtime;
-                MagicScriptLambdaFunction read = (context, arguments) -> behavior.execute(
-                        new MagicScriptContext(Map.of("loadSavedCanvases", loadSavedCanvases, "respond", reply, "nifi", nifi)));
-                var response = (ResponseEntity<?>) route.execute(new MagicScriptContext(Map.of("readPipelines", read)));
+                var bindings = new MagicScriptContext(Map.of(
+                        "loadSavedCanvases", loadSavedCanvases, "respond", reply, "nifi", nifi));
+                MagicScriptLambdaFunction read = (context, arguments) -> runtime.execute(bindings);
+                var input = route == listGet ? bindings : new MagicScriptContext(Map.of("readPipelines", read));
+                var response = (ResponseEntity<?>) route.execute(input);
                 assertThat(response.getStatusCode().value()).isEqualTo(200);
                 assertThat(response.getBody()).isInstanceOf(List.class);
                 return StructuredValues.objectRows(response.getBody());

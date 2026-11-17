@@ -43,17 +43,13 @@ public class WebConfiguration implements WebMvcConfigurer {
             .excludePathPatterns(
                 "/api/web/**",
                 "/nifi-ui/**",
-                "/nifi-api/**",
-                "/portal/sso/login",
-                "/portal/sso/logout"
+                "/nifi-api/**"
             );
         registry.addInterceptor(tenantWebInterceptor)
             .excludePathPatterns(
                 "/api/web/**",
                 "/nifi-ui/**",
-                "/nifi-api/**",
-                "/portal/sso/login",
-                "/portal/sso/logout"
+                "/nifi-api/**"
             );
             //.addPathPatterns("/**"); // 根据需要调整路径匹配规则
     }

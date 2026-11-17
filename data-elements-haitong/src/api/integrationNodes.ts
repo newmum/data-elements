@@ -100,6 +100,6 @@ export const integrationNodesApi = {
     remark: draft.remark || '', enabled: draft.enabled ? 1 : 0, isDefault: draft.isDefault ? 1 : 0,
   }),
   remove: (tid: string) => platformApi<boolean>('/ods/node/delete', { tid }),
-  health: (node: Pick<IntegrationNode, 'tid' | 'baseUrl'>) => platformApi<{ success: boolean; latencyMs?: number; message?: string }>('/sym/node-config/service/health', { nodeId: node.tid, nodeType: 'sync', baseUrl: node.baseUrl }),
-  diagnostics: (nodeId: string) => platformApi<NodeDiagnostics>('/sym/node-config/service/diagnostics', { nodeId }),
+  health: (node: Pick<IntegrationNode, 'tid'>) => platformApi<{ success: boolean; latencyMs?: number; message?: string }>('/ods/node/page', { action: 'health', nodeId: node.tid, nodeType: 'sync' }),
+  diagnostics: (nodeId: string) => platformApi<NodeDiagnostics>('/ods/node/page', { action: 'diagnostics', nodeId }),
 };

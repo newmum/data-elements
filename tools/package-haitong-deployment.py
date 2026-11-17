@@ -2,9 +2,11 @@
 """Assemble the full Haitong apps and generate a separate minimal database bootstrap."""
 import argparse
 import hashlib
+from io import BytesIO
 import json
 from pathlib import Path
 import re
+import shutil
 from zipfile import ZIP_DEFLATED, ZIP_STORED, ZipFile, ZipInfo
 
 from haitong_quality_example import EXAMPLES, build_quality_example
@@ -53,6 +55,62 @@ STANDALONE_API_ROUTES = {
 }
 # These two functions are called by the Java NiFi lifecycle synchronizer.
 STANDALONE_NIFI_CALLBACKS = {"/common/ensureNifiCatalogAccessTask", "/common/nifiTaskState"}
+NIFI_RELEASE = "2.9.0"
+REQUIRED_NIFI_EXTENSIONS = {
+    "haitong-mapping-nar": "com.linewell.dataelement",
+    "datadevs-database-nar": "com.linewell.microservice",
+}
+
+
+def nar_metadata(archive):
+    text = archive.read("META-INF/MANIFEST.MF").decode("utf-8")
+    return dict(line.split(": ", 1) for line in re.sub(r"\r?\n ", "", text).splitlines() if ": " in line)
+
+
+def bundle_nifi(base_archive, extensions, mapping_version, destination):
+    """Assemble NiFi with both project extensions, preserving the stock archive entries."""
+    selected = {}
+    for extension in extensions:
+        with ZipFile(extension) as nar:
+            meta = nar_metadata(nar)
+            if nar.testzip() is not None:
+                raise ValueError(f"Corrupt NiFi extension: {extension.name}")
+        artifact = meta["Nar-Id"]
+        version = meta["Nar-Version"]
+        parent = (meta.get("Nar-Dependency-Group"), meta.get("Nar-Dependency-Id"), meta.get("Nar-Dependency-Version"))
+        if (artifact not in REQUIRED_NIFI_EXTENSIONS or meta["Nar-Group"] != REQUIRED_NIFI_EXTENSIONS[artifact]
+                or parent != ("org.apache.nifi", "nifi-standard-services-api-nar", NIFI_RELEASE)
+                or extension.name != f"{artifact}-{version}.nar"
+                or (artifact == "haitong-mapping-nar" and version != mapping_version)
+                or (artifact == "datadevs-database-nar" and version != NIFI_RELEASE)):
+            raise ValueError(f"Unsupported NiFi {NIFI_RELEASE} extension: {extension.name}")
+        if artifact in selected:
+            raise ValueError(f"Multiple versions of NiFi extension supplied: {artifact}")
+        selected[artifact] = extension
+    if missing := REQUIRED_NIFI_EXTENSIONS.keys() - selected.keys():
+        raise ValueError("Missing required NiFi extensions: " + ", ".join(sorted(missing)))
+
+    prefix = f"nifi-{NIFI_RELEASE}/"
+    parent_path = prefix + f"lib/nifi-standard-services-api-nar-{NIFI_RELEASE}.nar"
+    with ZipFile(base_archive) as archive:
+        entries = archive.namelist()
+        if (len(entries) != len(set(entries)) or not all(name.startswith(prefix) for name in entries)
+                or prefix + "conf/nifi.properties" not in entries or parent_path not in entries):
+            raise ValueError(f"Expected a complete stock NiFi {NIFI_RELEASE} ZIP")
+        with ZipFile(BytesIO(archive.read(parent_path))) as nar:
+            meta = nar_metadata(nar)
+            if (meta["Nar-Group"], meta["Nar-Id"], meta["Nar-Version"]) != (
+                    "org.apache.nifi", "nifi-standard-services-api-nar", NIFI_RELEASE):
+                raise ValueError("NiFi ZIP contains a mismatched standard services API")
+        for name in entries:
+            if name.endswith(".nar") and any(Path(name).name.startswith(artifact + "-") for artifact in selected):
+                raise ValueError(f"Stock archive already contains a project extension: {name}")
+
+    shutil.copyfile(base_archive, destination)
+    with ZipFile(destination, "a") as archive:
+        for extension in selected.values():
+            archive.write(extension, prefix + "extensions/" + extension.name, compress_type=ZIP_STORED)
+    return destination
 
 
 def literal(value):
@@ -204,6 +262,8 @@ def main():
     parser.add_argument("--nacos", action="store_true", help="Use the standard backend and import configuration from Nacos")
     parser.add_argument("--dm8-runtime-dir", type=Path, help="Bundle DM8 SQL and verified Linux x64/ARM64 runtimes")
     parser.add_argument("--linux-runtime-dir", type=Path, help="Bundle x86_64 MySQL, Redis, NiFi, Caddy and Java 21")
+    parser.add_argument("--nifi-extension", type=Path, action="append", default=[],
+                        help="Version-matched project NAR to embed in the Linux NiFi distribution (repeat for each NAR)")
     layout = parser.add_mutually_exclusive_group()
     layout.add_argument("--database-only", action="store_true")
     layout.add_argument("--bundle", action="store_true", help="Package the complete deployment in a single ZIP")
@@ -212,6 +272,10 @@ def main():
         parser.error("--dm8-runtime-dir requires --bundle with Nacos disabled")
     if args.linux_runtime_dir and (not args.bundle or args.nacos or args.dm8_runtime_dir):
         parser.error("--linux-runtime-dir requires the no-Nacos MySQL bundle")
+    if args.nifi_extension and not args.linux_runtime_dir:
+        parser.error("--nifi-extension requires the Linux runtime bundle")
+    if args.linux_runtime_dir and len(args.nifi_extension) != len(REQUIRED_NIFI_EXTENSIONS):
+        parser.error("The Linux runtime bundle requires both project NiFi NARs (--nifi-extension)")
     args.output.mkdir(parents=True, exist_ok=True)
     database = (dameng_database_files(ROOT, CONTROL_TABLES, TENANT_TABLES, TENANT, magic_rows(), seed_sql())
                 if args.dm8_runtime_dir else database_files(bool(args.linux_runtime_dir)))
@@ -241,6 +305,11 @@ def main():
         mariadb = examples_build / Path(driver).name
         mariadb.write_bytes(jar.read(driver))
         if args.linux_runtime_dir:
+            mapping_class = jar.read("BOOT-INF/classes/com/linewell/dataelement/mapping/core/MappingEngine.class")
+            versions = set(re.findall(rb"\x01\x00[\x05-\x0c](\d+\.\d+\.\d+)", mapping_class))
+            if len(versions) != 1:
+                raise ValueError("Cannot determine the field mapping engine version from the backend JAR")
+            mapping_version = versions.pop().decode("ascii")
             driver = next(name for name in names if re.fullmatch(r"BOOT-INF/lib/mysql-connector-j-\d[^/]*\.jar", name))
             mysql_driver = examples_build / Path(driver).name
             mysql_driver.write_bytes(jar.read(driver))
@@ -295,6 +364,8 @@ def main():
             if not file.is_file():
                 raise ValueError(f"Missing verified Linux runtime asset: {asset}")
             backend[f"vendor/{asset}"] = file
+        backend["vendor/nifi.zip"] = bundle_nifi(backend["vendor/nifi.zip"], args.nifi_extension, mapping_version,
+                                              examples_build / "nifi-with-haitong-extensions.zip")
         backend.update({f"config/{name}": linux / name for name in ("ports.json", "Caddyfile")})
         config = runtime_config.read_text(encoding="utf-8")
         for setting in ("monitor-enabled", "provenance-sync-enabled"):

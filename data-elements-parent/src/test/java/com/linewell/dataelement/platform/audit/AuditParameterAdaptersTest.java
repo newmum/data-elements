@@ -1,5 +1,6 @@
 package com.linewell.dataelement.platform.audit;
 
+import com.linewell.dataelement.platform.web.security.GlobalInterceptor;
 import java.io.InputStream;
 import java.util.Map;
 import org.junit.jupiter.api.AfterEach;
@@ -205,7 +206,8 @@ class AuditParameterAdaptersTest {
 
     private MockMvc mvc() {
         return MockMvcBuilders.standaloneSetup(new Controller()).setControllerAdvice(new AuditRequestBodyAdvice(), new AuditResponseAdvice())
-                .addInterceptors(new AuditWebInterceptor(mock(AuditIdentityResolver.class), mock(AuditRecorder.class))).build();
+                .addInterceptors(new AuditWebInterceptor(mock(AuditIdentityResolver.class), mock(AuditRecorder.class),
+                        mock(GlobalInterceptor.class))).build();
     }
 
     @RestController

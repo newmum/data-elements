@@ -5,17 +5,20 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.linewell.dataelement.dataservice.flowserve.module.FlowHttpModule;
 import com.linewell.dataelement.integration.nifi.canvas.config.NifiNodeRuntimeResolver;
 import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient;
-import com.linewell.dataelement.platform.configuration.NodeConfigurationController;
+import com.linewell.dataelement.model.common.CommonResponse;
 import com.linewell.dataelement.platform.tenant.config.TenantProperties;
 import com.linewell.dataelement.platform.tenant.domain.TenantContext;
 import com.linewell.dataelement.platform.tenant.infrastructure.datasource.TenantDataSourceRegistry;
 import com.linewell.dataelement.utils.LocalCache;
 import com.sun.net.httpserver.HttpServer;
 import java.net.InetSocketAddress;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.sql.Timestamp;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -27,6 +30,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.ssssssss.magicapi.core.context.RequestEntity;
 import org.ssssssss.magicapi.datasource.model.MagicDynamicDataSource;
@@ -99,6 +103,41 @@ class NifiNodeListMagicTest {
     }
 
     @Test
+    void serviceHealthUsesOnlyTheSavedCurrentTenantTarget() throws Exception {
+        var fixture = new Fixture(0);
+        fixture.jdbc.execute("create table service_node_t(tid varchar(64),tenant_id varchar(64),is_del int,local_node int,base_url varchar(255),management_url varchar(255))");
+        var paths = new ArrayList<String>();
+        var upstream = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        try {
+            upstream.createContext("/", request -> {
+                try (request) {
+                    paths.add(request.getRequestMethod() + " " + request.getRequestURI().getPath());
+                    request.getResponseHeaders().set("Location", "/must-not-follow");
+                    request.sendResponseHeaders(302, -1);
+                }
+            });
+            upstream.start();
+            String base = "http://127.0.0.1:" + upstream.getAddress().getPort();
+            fixture.jdbc.update("insert into service_node_t values('own','police',0,0,?,null),('foreign','other',0,0,?,null)", base, base);
+            var unauthorized = fixture.serviceHealth(Map.of("action", "health", "nodeId", "foreign",
+                    "tenantId", "other", "localNode", true));
+            assertEquals(404, assertInstanceOf(ExitValue.class, unauthorized).getValues()[0]);
+            assertTrue(paths.isEmpty());
+
+            fixture.counter.reads = 0;
+            var response = assertInstanceOf(ResponseEntity.class, fixture.serviceHealth(Map.of("action", "health",
+                    "nodeId", "own", "managementUrl", base + "/caller-injected", "localNode", true)));
+            var result = assertInstanceOf(Map.class, assertInstanceOf(CommonResponse.class, response.getBody()).getData());
+            assertEquals(false, result.get("success"));
+            assertEquals(302, result.get("status"));
+            assertEquals(List.of("GET /api/v1/runtime/health"), paths);
+            assertEquals(1, fixture.counter.reads);
+        } finally {
+            upstream.stop(0);
+        }
+    }
+
+    @Test
     void savesAndReconnectsToAnAnonymousDefaultNodeAndListsItsLastHealthCheck() throws Exception {
         var fixture = new Fixture(0);
         var exchanges = Collections.synchronizedList(new ArrayList<String>());
@@ -125,13 +164,14 @@ class NifiNodeListMagicTest {
             when(registry.dataSourceForTenant("police")).thenReturn(fixture.jdbc.getDataSource());
             var resolver = new NifiNodeRuntimeResolver(registry, new TenantProperties());
             var client = new NifiClient(resolver, new ObjectMapper());
-            var controller = new NodeConfigurationController(null, null, client, resolver, new ObjectMapper());
-            var probeRequest = Map.<String, Object>of("nodeType", "sync", "nodeId", id);
+            fixture.resolver = resolver;
+            fixture.client = client;
+            var probeRequest = Map.<String, Object>of("action", "health", "nodeType", "sync", "nodeId", id);
             try (var tenant = TenantContext.use("police")) {
-                var forbidden = controller.checkServiceNodeHealth(Map.of("nodeType", "sync", "nodeId", "foreign", "tenantId", "foreign"));
-                assertEquals(false, forbidden.getData().get("success"));
+                var forbidden = fixture.probe(Map.of("action", "health", "nodeType", "sync", "nodeId", "foreign", "tenantId", "foreign"));
+                assertEquals(false, forbidden.get("success"));
                 assertTrue(exchanges.isEmpty());
-                var success = controller.checkServiceNodeHealth(probeRequest).getData();
+                var success = fixture.probe(probeRequest);
                 assertEquals(true, success.get("success"));
                 var initialListRow = fixture.firstNode();
                 assertEquals("reachable", initialListRow.get("healthStatus"));
@@ -148,7 +188,7 @@ class NifiNodeListMagicTest {
                 }
                 client.getRuntimeRootStatus(resolver.resolve());
                 rejectConnection.set(true);
-                var failure = controller.checkServiceNodeHealth(probeRequest).getData();
+                var failure = fixture.probe(probeRequest);
                 assertEquals(false, failure.get("success"));
                 var failedListRow = fixture.firstNode();
                 assertEquals("unreachable", failedListRow.get("healthStatus"));
@@ -198,6 +238,8 @@ class NifiNodeListMagicTest {
         final SQLModule db;
         final Counter counter = new Counter();
         final Scope scope = new Scope();
+        NifiNodeRuntimeResolver resolver;
+        NifiClient client;
         Fixture(int size) {
             var source = new DriverManagerDataSource("jdbc:h2:mem:nifi_nodes_" + UUID.randomUUID()
                     + ";MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1");
@@ -223,6 +265,11 @@ class NifiNodeListMagicTest {
         Map<?, ?> firstNode() throws Exception {
             return assertInstanceOf(Map.class, ((List<?>) run(Map.of()).get("list")).getFirst());
         }
+        Map<?, ?> probe(Map<String, Object> body) throws Exception {
+            var response = assertInstanceOf(ResponseEntity.class, runRaw(body));
+            assertEquals(200, response.getStatusCode().value());
+            return assertInstanceOf(Map.class, assertInstanceOf(CommonResponse.class, response.getBody()).getData());
+        }
         Object runRaw(Map<String, Object> body) throws Exception {
             var bindings = new LinkedHashMap<String, Object>();
             bindings.put("db",db); bindings.put("tenantRuntime",scope); bindings.put("tableSort",new TableSortMagicModule()); bindings.put("body",body);
@@ -230,6 +277,11 @@ class NifiNodeListMagicTest {
             bindings.put("Map", Map.class);
             bindings.put("Timestamp", Timestamp.class);
             bindings.put("LocalCache", LocalCache.class);
+            bindings.put("SimpleDateFormat", SimpleDateFormat.class);
+            bindings.put("CommonResponse", CommonResponse.class);
+            bindings.put("ResponseEntity", ResponseEntity.class);
+            bindings.put("nodeResolver", resolver);
+            bindings.put("nifi", client);
             var script = CanonicalMagicSources.byId("ods_nifi_node_page_01").replaceAll("(?m)^import [^\\r\\n]*\\r?\\n", "");
             return MagicScript.create(script,null).execute(new MagicScriptContext(bindings));
         }
@@ -237,6 +289,12 @@ class NifiNodeListMagicTest {
             var script = CanonicalMagicSources.byId("ods_nifi_node_save_01").replaceFirst("(?m)^import tenantRuntime\\R", "");
             return MagicScript.create(script, null).execute(new MagicScriptContext(
                     Map.of("db", db, "tenantRuntime", scope, "body", body)));
+        }
+        Object serviceHealth(Map<String, Object> body) throws Exception {
+            var script = CanonicalMagicSources.byId("ods_service_node_page_01").replaceAll("(?m)^import [^\\r\\n]*\\r?\\n", "");
+            return MagicScript.create(script, null).execute(new MagicScriptContext(Map.of(
+                    "db", db, "tenantRuntime", scope, "httpx", new FlowHttpModule(null, new ObjectMapper()), "body", body,
+                    "URI", URI.class, "CommonResponse", CommonResponse.class, "ResponseEntity", ResponseEntity.class)));
         }
     }
     public static class Scope { String tenant = "police"; public String id() { return tenant; } }

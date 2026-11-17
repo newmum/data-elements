@@ -24,6 +24,7 @@ import org.ssssssss.magicapi.servlet.jakarta.MagicJakartaHttpServletRequest;
 
 @Component
 public class GlobalInterceptor implements HandlerInterceptor, RequestInterceptor {
+    private static final String MATCHED_ACCESS = GlobalInterceptor.class.getName() + ".matchedAccess";
     private static final String VERIFIED_ACCESS = GlobalInterceptor.class.getName() + ".verifiedAccess";
     private static final String VERIFIED_EXECUTION = GlobalInterceptor.class.getName() + ".verifiedExecution";
 
@@ -45,15 +46,32 @@ public class GlobalInterceptor implements HandlerInterceptor, RequestInterceptor
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
-        boolean magic = handler instanceof HandlerMethod method
-                && RequestHandler.class.isAssignableFrom(method.getBeanType());
-        MagicAccessPolicy access = magic ? declared(registry.getObject().getApiInfoFromRequest(
-                new MagicJakartaHttpServletRequest(request, null))) : null;
-        authorize(request, access);
-        if (magic) {
-            request.setAttribute(VERIFIED_ACCESS, new VerifiedAccess(access));
+        request.removeAttribute(VERIFIED_ACCESS);
+        AccessMatch match = match(request, handler);
+        request.removeAttribute(MATCHED_ACCESS);
+        authorize(request, match == null ? null : match.policy());
+        if (match != null) {
+            request.setAttribute(VERIFIED_ACCESS, match);
         }
         return true;
+    }
+
+    public MagicAccessPolicy matchedMagicAccess(HttpServletRequest request, Object handler) {
+        AccessMatch match = match(request, handler);
+        return match == null ? null : match.policy();
+    }
+
+    private AccessMatch match(HttpServletRequest request, Object handler) {
+        if (!(handler instanceof HandlerMethod method) || !RequestHandler.class.isAssignableFrom(method.getBeanType())) {
+            return null;
+        }
+        if (request.getAttribute(MATCHED_ACCESS) instanceof AccessMatch match) {
+            return match;
+        }
+        var api = registry.getObject().getApiInfoFromRequest(new MagicJakartaHttpServletRequest(request, null));
+        var match = new AccessMatch(declared(api));
+        request.setAttribute(MATCHED_ACCESS, match);
+        return match;
     }
 
     @Override
@@ -63,9 +81,9 @@ public class GlobalInterceptor implements HandlerInterceptor, RequestInterceptor
                 request.removeAttribute(VERIFIED_EXECUTION);
                 // 热刷新可能在 MVC 通过后变更实际执行的资源，切换访问类型时重新校验。
                 MagicAccessPolicy access = declared(entity.getApiInfo());
-                VerifiedAccess prior = request.getAttribute(VERIFIED_ACCESS) instanceof VerifiedAccess result
+                AccessMatch prior = request.getAttribute(VERIFIED_ACCESS) instanceof AccessMatch result
                         ? result : null;
-                MagicAccessPolicy verified = prior == null ? null : prior.access();
+                MagicAccessPolicy verified = prior == null ? null : prior.policy();
                 if (access != verified) {
                     // 服务间回调与行业会话使用不同的数据源上下文，热刷新中途切换时要求客户端重新请求。
                     if (access == MagicAccessPolicy.HAITONG_RELAY || verified == MagicAccessPolicy.HAITONG_RELAY) {
@@ -100,7 +118,7 @@ public class GlobalInterceptor implements HandlerInterceptor, RequestInterceptor
         boolean allowed = access == null
                 ? whiteList.isWhiteListed(path) || (path.startsWith("/idaas/") ? platformSession.isLogin() : StpUtil.isLogin())
                 : switch (access) {
-                    case PUBLIC -> true;
+                    case PUBLIC, SESSION_LOGIN, SESSION_LOGOUT -> true;
                     case TENANT_SESSION -> StpUtil.isLogin();
                     case IDAAS_PLATFORM_SESSION -> platformSession.isLogin();
                     case HAITONG_RELAY -> {
@@ -114,8 +132,8 @@ public class GlobalInterceptor implements HandlerInterceptor, RequestInterceptor
     }
 
     public static MagicAccessPolicy verifiedMagicAccess(HttpServletRequest request) {
-        return request.getAttribute(VERIFIED_ACCESS) instanceof VerifiedAccess prior
-                ? prior.access() : null;
+        return request.getAttribute(VERIFIED_ACCESS) instanceof AccessMatch prior
+                ? prior.policy() : null;
     }
 
     public static boolean hasVerifiedMagicPolicy(RequestEntity entity) {
@@ -124,5 +142,5 @@ public class GlobalInterceptor implements HandlerInterceptor, RequestInterceptor
                 && request.getAttribute(VERIFIED_EXECUTION) == entity;
     }
 
-    private record VerifiedAccess(MagicAccessPolicy access) { }
+    private record AccessMatch(MagicAccessPolicy policy) { }
 }

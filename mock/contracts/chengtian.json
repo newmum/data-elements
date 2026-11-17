@@ -41,7 +41,7 @@
         "kind": "magic",
         "id": "portal_login_01",
         "file": "magic/api/01.系统门户/02.登录与会话/01.用户登录.ms",
-        "reviewedSha256": "0eb99fa8e01d0a10349f781ee89dbf70c26512e53ba7a19e4c5ebcd01f42ce71"
+        "reviewedSha256": "7803cce2d9c3cf725aecb5c2f443f141636cb348ffebaa6adeeff762a99934b8"
       },
       "request": {
         "type": "object"
@@ -53,7 +53,7 @@
           "url"
         ]
       },
-      "review": "实际登录接收租户、应用和账号凭据，返回本地会话、跳转地址、认证域和租户。第 82 批在原地址内使用结构化查询校验可信租户库的本地账号，来源校验及审计补偿由真实脚本回归覆盖。Mock 沿用现有行业选择和演示会话行为。 第 83 批切换到系统入口的新路径，当前会话、鉴权和业务响应契约保持原语义。"
+      "review": "实际登录接收租户、应用和账号凭据，返回本地会话、跳转地址、认证域和租户。第 82 批在原地址内使用结构化查询校验可信租户库的本地账号，来源校验及审计补偿由真实脚本回归覆盖。Mock 沿用现有行业选择和演示会话行为。 第 83 批切换到系统入口的新路径，当前会话、鉴权和业务响应契约保持原语义。第 140 批由 Magic 声明 SESSION_LOGIN，租户与凭据校验、登录结果和审计契约保持原语义。"
     },
     {
       "operation": "POST /portal/sso/logout",
@@ -61,7 +61,7 @@
         "kind": "magic",
         "id": "10def1f21f6e42769e696534efbb91a9",
         "file": "magic/api/01.系统门户/02.登录与会话/02.系统登出.ms",
-        "reviewedSha256": "008c4679586f6e93f1305f983e0e25d4c4bf30c4bed1428cae91474b627c3251"
+        "reviewedSha256": "f4421cc64d551e2b7620ef878c1fa1202556f9355324a830889ca31cf9f2f9b1"
       },
       "request": {
         "type": "object"
@@ -69,7 +69,7 @@
       "response": {
         "type": "string"
       },
-      "review": "沿用真实 Magic 登出接口返回 /login 路径，调用方据此跳转；退出清理模拟会话。 第 77 批迁移至两层目录，方法、地址、认证与脚本正文保持原契约。 第 83 批切换到系统入口的新路径，当前会话、鉴权和业务响应契约保持原语义。"
+      "review": "沿用真实 Magic 登出接口返回 /login 路径，调用方据此跳转；退出清理模拟会话。 第 77 批迁移至两层目录，方法、地址、认证与脚本正文保持原契约。 第 83 批切换到系统入口的新路径，当前会话、鉴权和业务响应契约保持原语义。第 140 批由 Magic 声明 SESSION_LOGOUT，匿名或令牌失效仍返回 /login，仅有效令牌撤销其当前会话。"
     },
     {
       "operation": "POST /sym/user/me",
@@ -141,7 +141,7 @@
         "kind": "magic",
         "id": "a3b59b1dfb2c4c3989bf0a8a0e1f91cc",
         "file": "magic/api/07.系统管理/08.组件管理/01.页面组件管理.ms",
-        "reviewedSha256": "a9e455b2ce896100ada44df6ab23c2272a74f9bfe4dcd9546d09fd9c807f61e7"
+        "reviewedSha256": "73978dc6afea1d5481924ccc523ea42bd91166f663c697ca66c9218969a8b1a3"
       },
       "request": {
         "type": "object"
@@ -149,7 +149,7 @@
       "response": {
         "type": "any"
       },
-      "review": "第 102 批已核对新路由与读取契约，Mock 继续覆盖实际页面读取。"
+      "review": "使用已认证行业会话读取组件。第 142 批以 action=refresh 重建共享组件缓存，返回新的 version 和当前 count。Mock 使用当前内存组件集合。"
     },
     {
       "operation": "POST /sym/form/config",
@@ -450,7 +450,7 @@
         "kind": "magic",
         "id": "portal_options_v1",
         "file": "magic/api/01.系统门户/02.登录与会话/05.查询登录行业.ms",
-        "reviewedSha256": "53f364ae1e484d0fdc3f916b4be8fc82aca528b31d9267c11e3a0cf677501fe2"
+        "reviewedSha256": "1166dd5cd9a34153d7b184e676f1c16413b2de12196a7bb6ef871e7e4a686cb9"
       },
       "request": {
         "type": "object"
@@ -464,9 +464,9 @@
       "operation": "HEAD /portal/sso/options",
       "source": {
         "kind": "magic",
-        "id": "portal_options_head_v1",
-        "file": "magic/api/01.系统门户/02.登录与会话/06.查询登录行业响应头.ms",
-        "reviewedSha256": "e8bf9d9370039d1d2f8610c648290a632d5072b7184a485ff2ecb22b100e0645"
+        "id": "portal_options_v1",
+        "file": "magic/api/01.系统门户/02.登录与会话/05.查询登录行业.ms",
+        "reviewedSha256": "1166dd5cd9a34153d7b184e676f1c16413b2de12196a7bb6ef871e7e4a686cb9"
       },
       "request": {
         "type": "object"
@@ -481,8 +481,8 @@
       "source": {
         "kind": "magic",
         "id": "portal_settings_v1",
-        "file": "magic/api/01.系统门户/02.登录与会话/07.查询行业登录设置.ms",
-        "reviewedSha256": "2be2e2e5e7d4f3e8f4079c04ef78e8b9f4f711cc121a3276368aff54cd90461b"
+        "file": "magic/api/01.系统门户/02.登录与会话/06.查询行业登录设置.ms",
+        "reviewedSha256": "8c2fcb8a1be2b45bb0e7f1377c234dd24b5959528ecec731e0f6983d2c562657"
       },
       "request": {
         "type": "object"
@@ -496,9 +496,9 @@
       "operation": "HEAD /portal/sso/settings",
       "source": {
         "kind": "magic",
-        "id": "portal_settings_head_v1",
-        "file": "magic/api/01.系统门户/02.登录与会话/08.查询行业登录设置响应头.ms",
-        "reviewedSha256": "4da70e9d21fa63c8997e794c9b50206cd57c3b55894ebfb17f3a0ce214ca8baa"
+        "id": "portal_settings_v1",
+        "file": "magic/api/01.系统门户/02.登录与会话/06.查询行业登录设置.ms",
+        "reviewedSha256": "8c2fcb8a1be2b45bb0e7f1377c234dd24b5959528ecec731e0f6983d2c562657"
       },
       "request": {
         "type": "object"
@@ -513,8 +513,8 @@
       "source": {
         "kind": "magic",
         "id": "portal_session_v1",
-        "file": "magic/api/01.系统门户/02.登录与会话/09.读取当前行业会话.ms",
-        "reviewedSha256": "1117c3b72757db4d0262847e4bdaff6cafd603ec772bee5160c089c291965f4e"
+        "file": "magic/api/01.系统门户/02.登录与会话/07.读取当前行业会话.ms",
+        "reviewedSha256": "b4e29dac7034d6c51972bff89cb16ab02e93622350f92d2d4e46b1289b064cdd"
       },
       "request": {
         "type": "object"
@@ -528,9 +528,9 @@
       "operation": "HEAD /portal/sso/session",
       "source": {
         "kind": "magic",
-        "id": "portal_session_head_v1",
-        "file": "magic/api/01.系统门户/02.登录与会话/10.读取当前行业会话响应头.ms",
-        "reviewedSha256": "7d2769a74004195f80a04408dcf1c4d32540972129638e429ee52478a74052cf"
+        "id": "portal_session_v1",
+        "file": "magic/api/01.系统门户/02.登录与会话/07.读取当前行业会话.ms",
+        "reviewedSha256": "b4e29dac7034d6c51972bff89cb16ab02e93622350f92d2d4e46b1289b064cdd"
       },
       "request": {
         "type": "object"
@@ -545,8 +545,8 @@
       "source": {
         "kind": "magic",
         "id": "portal_tenants_v1",
-        "file": "magic/api/01.系统门户/02.登录与会话/11.查询会话可用行业.ms",
-        "reviewedSha256": "4511ab66eef7544325e13cdc30c61d53157dacd85de07608270c0040559623c9"
+        "file": "magic/api/01.系统门户/02.登录与会话/08.查询会话可用行业.ms",
+        "reviewedSha256": "1af156b7fefcb9313a0ec60c5889d8d0d512c740be80a1a7e52bff980ccd361f"
       },
       "request": {
         "type": "object"
@@ -560,9 +560,9 @@
       "operation": "HEAD /portal/sso/tenants",
       "source": {
         "kind": "magic",
-        "id": "portal_tenants_head_v1",
-        "file": "magic/api/01.系统门户/02.登录与会话/12.查询会话可用行业响应头.ms",
-        "reviewedSha256": "58154a8477303538c7b9e5a42d63210dafb74920be4456746cbaca4d17c1f181"
+        "id": "portal_tenants_v1",
+        "file": "magic/api/01.系统门户/02.登录与会话/08.查询会话可用行业.ms",
+        "reviewedSha256": "1af156b7fefcb9313a0ec60c5889d8d0d512c740be80a1a7e52bff980ccd361f"
       },
       "request": {
         "type": "object"
@@ -577,8 +577,8 @@
       "source": {
         "kind": "magic",
         "id": "portal_switch_v1",
-        "file": "magic/api/01.系统门户/02.登录与会话/13.切换当前行业.ms",
-        "reviewedSha256": "f4f330f73e58b1980dfb555cb1c0079605a10d5ee4f8aa5053362ac2004fe170"
+        "file": "magic/api/01.系统门户/02.登录与会话/09.切换当前行业.ms",
+        "reviewedSha256": "865eae4dde1ea107af9ec15ea0b9fa9c8bfe30c8bd3ea8f298c881c2187f9891"
       },
       "request": {
         "type": "object"
@@ -922,7 +922,7 @@
       "source": {"kind": "magic", "id": "tenant_logsec_items_get_v1", "file": "magic/api/07.系统管理/22.安全日志/07.分页读取批次明细.ms", "reviewedSha256": "608973abf609bafc5c21fe7737114ab4a76ec37c065ad0ffd9c5015c16bd8983"},
       "request": { "type": "object", "required": ["id"] }, "response": { "type": "object", "required": ["list", "total", "page", "size"] }, "review": "父事件按当前租户、角色及SECURITY范围授权，不套默认7天；再按item_no asc分页读取虚构明细，不按行补查，不造可见菜单或组织。"
     },
-    {"operation": "GET /sym/logexport/page", "source": {"kind": "magic", "id": "tenant_logexport_page_get_v1", "file": "magic/api/07.系统管理/23.日志导出/01.分页读取任务.ms", "reviewedSha256": "228b9452f99d02380cd8e367f08e45a3d6c171c4503297f4e190d0062edbe657"}, "request": {"type": "object"}, "response": {"type": "object", "required": ["list", "total", "page", "size"]}, "review": "仅列当前租户本人任务。原 GET /sym/logs/exports 同方法兼容。Mock 两次有效列表读取推进虚构任务，真实任务由后台处理。"},
+    {"operation": "GET /sym/logexport/page", "source": {"kind": "magic", "id": "tenant_logexport_page_get_v1", "file": "magic/api/07.系统管理/23.日志导出/01.分页读取任务.ms", "reviewedSha256": "228b9452f99d02380cd8e367f08e45a3d6c171c4503297f4e190d0062edbe657"}, "request": {"type": "object"}, "response": {"type": "object", "required": ["list", "total", "page", "size"]}, "review": "仅列当前租户本人任务。调用方直接使用此正式路径。Mock 两次有效列表读取推进虚构任务，真实任务由后台处理。"},
     {"operation": "HEAD /sym/logexport/page", "source": {"kind": "magic", "id": "tenant_logexport_page_head_v1", "file": "magic/api/07.系统管理/23.日志导出/02.分页读取任务响应头.ms", "reviewedSha256": "afd0bb5453cca81a92f12727906f19dc5068c30c70e82125e570e274f3eb48fe"}, "request": {"type": "object"}, "response": {"type": "any"}, "review": "复用 GET 的行业会话和本人范围，HTTP 200、JSON 响应头及空正文。Mock 不推进任务状态。"},
     {
       "operation": "POST /sym/logexport/create",
@@ -952,8 +952,8 @@
     {"operation": "HEAD /sym/logsec/items", "source": {"kind": "magic", "id": "tenant_logsec_items_head_v1", "file": "magic/api/07.系统管理/22.安全日志/08.分页读取批次明细响应头.ms", "reviewedSha256": "3b6ea61fa19d42216367f48bfb15ad095d14818ec5915654ff0225b3d61f118a"}, "request": {"type": "object"}, "response": {"type": "any"}, "review": "与 GET 共用行业会话、授权及查询，HTTP 200、JSON 响应头和空正文。"}
   ],
   "dependencies": [
-    {"operations": ["GET /sym/logauth/page", "GET /sym/logauth/stats", "GET /sym/logops/page", "GET /sym/logops/stats", "GET /sym/logreq/page", "GET /sym/logreq/stats", "GET /sym/logsec/page", "GET /sym/logsec/stats", "HEAD /sym/logauth/page", "HEAD /sym/logauth/stats", "HEAD /sym/logops/page", "HEAD /sym/logops/stats", "HEAD /sym/logreq/page", "HEAD /sym/logreq/stats", "HEAD /sym/logsec/page", "HEAD /sym/logsec/stats", "POST /sym/logexport/create"], "source": {"kind": "magic-function", "id": "log_tenant_event_criteria_v1", "path": "/common/logeventcriteria", "file": "magic/function/01.通用函数/96.解析行业日志事件条件.ms", "reviewedSha256": "9a2d63e5aa3384533eac7318be171d475b3d324b855f20389ef185111ebde2ae"}, "review": "统一校验行业事件检索与导出提交的条件和时间窗口。"},
-    {"operations": ["GET /sym/logexport/page", "HEAD /sym/logexport/page"], "source": {"kind": "magic-function", "id": "log_tenant_lifecycle_page_v1", "file": "magic/function/01.通用函数/93.分页读取行业日志任务.ms", "reviewedSha256": "bbf9f65cd0457bbef2644503a5f8ed4c1560065d6dcbca5034337f9acd2bae55", "path": "/common/logtaskpage"}, "review": "共用行业任务范围与结构化分页。"},
+    {"operations": ["GET /sym/logauth/page", "GET /sym/logauth/stats", "GET /sym/logops/page", "GET /sym/logops/stats", "GET /sym/logreq/page", "GET /sym/logreq/stats", "GET /sym/logsec/page", "GET /sym/logsec/stats", "HEAD /sym/logauth/page", "HEAD /sym/logauth/stats", "HEAD /sym/logops/page", "HEAD /sym/logops/stats", "HEAD /sym/logreq/page", "HEAD /sym/logreq/stats", "HEAD /sym/logsec/page", "HEAD /sym/logsec/stats", "POST /sym/logexport/create"], "source": {"kind": "magic-function", "id": "log_tenant_event_criteria_v1", "path": "/common/logeventcriteria", "file": "magic/function/01.通用函数/49.解析行业日志事件条件.ms", "reviewedSha256": "d2ef7c0b5c5e3e96ee1ef0693f1ab5c1a78071f5c1092f383d03c0506a18663a"}, "review": "统一校验行业事件检索与导出提交的条件和时间窗口。"},
+    {"operations": ["GET /sym/logexport/page", "HEAD /sym/logexport/page"], "source": {"kind": "magic-function", "id": "log_tenant_lifecycle_page_v1", "file": "magic/function/01.通用函数/22.分页读取行业日志任务.ms", "reviewedSha256": "54ebe7c42249a063c17f50ff8af5b7fe07b8bf56b1fdd8b5407f17a89fcdf3d4", "path": "/common/logtaskpage"}, "review": "共用行业任务范围与结构化分页。"},
     {"operations": ["POST /sym/logexport/create", "GET /sym/logexport/page", "HEAD /sym/logexport/page", "GET /sym/logauth/detail", "GET /sym/logauth/items", "GET /sym/logauth/page", "GET /sym/logauth/stats", "GET /sym/logops/detail", "GET /sym/logops/items", "GET /sym/logops/page", "GET /sym/logops/stats", "GET /sym/logreq/detail", "GET /sym/logreq/items", "GET /sym/logreq/page", "GET /sym/logreq/stats", "GET /sym/logsec/detail", "GET /sym/logsec/items", "GET /sym/logsec/page", "GET /sym/logsec/stats", "HEAD /sym/logauth/detail", "HEAD /sym/logauth/items", "HEAD /sym/logauth/page", "HEAD /sym/logauth/stats", "HEAD /sym/logops/detail", "HEAD /sym/logops/items", "HEAD /sym/logops/page", "HEAD /sym/logops/stats", "HEAD /sym/logreq/detail", "HEAD /sym/logreq/items", "HEAD /sym/logreq/page", "HEAD /sym/logreq/stats", "HEAD /sym/logsec/detail", "HEAD /sym/logsec/items", "HEAD /sym/logsec/page", "HEAD /sym/logsec/stats", "POST /sym/logauth/batch", "POST /sym/logops/batch", "POST /sym/logreq/batch", "POST /sym/logsec/batch"], "source": {"kind": "magic-function", "id": "log_tenant_legacy_response_v1", "path": "/common/logresponse", "file": "magic/function/01.通用函数/92.行业日志原响应.ms", "reviewedSha256": "dbf5f2a1537928c53bfecb173e7ba93621255ab62acaa461229c7be0143d63db"}, "review": "行业日志入口共用原 HTTP 成功、校验失败和权限拒绝响应。"},
     {"operations": ["GET /sym/logauth/detail", "GET /sym/logauth/items", "GET /sym/logops/detail", "GET /sym/logops/items", "GET /sym/logreq/detail", "GET /sym/logreq/items", "GET /sym/logsec/detail", "GET /sym/logsec/items", "HEAD /sym/logauth/detail", "HEAD /sym/logauth/items", "HEAD /sym/logops/detail", "HEAD /sym/logops/items", "HEAD /sym/logreq/detail", "HEAD /sym/logreq/items", "HEAD /sym/logsec/detail", "HEAD /sym/logsec/items", "POST /sym/logauth/batch", "POST /sym/logops/batch", "POST /sym/logreq/batch", "POST /sym/logsec/batch"], "source": {"kind": "magic-function", "id": "log_tenant_event_objects_v1", "path": "/common/logeventobjects", "file": "magic/function/01.通用函数/91.按标识读取行业日志事件.ms", "reviewedSha256": "26805f861805f3f20f67ad2d4796c0725f700af7e1c2865d80f82d70cf512236"}, "review": "四类行业日志共用详情、批读及父事件范围内的批次明细读取。验证逐 ID 可见性并保持输入顺序。"},
     {"operations": ["GET /sym/logauth/page", "GET /sym/logauth/stats", "GET /sym/logops/page", "GET /sym/logops/stats", "GET /sym/logreq/page", "GET /sym/logreq/stats", "GET /sym/logsec/page", "GET /sym/logsec/stats", "HEAD /sym/logauth/page", "HEAD /sym/logauth/stats", "HEAD /sym/logops/page", "HEAD /sym/logops/stats", "HEAD /sym/logreq/page", "HEAD /sym/logreq/stats", "HEAD /sym/logsec/page", "HEAD /sym/logsec/stats"], "source": {"kind": "magic-function", "id": "log_tenant_event_search_v1", "path": "/common/logeventsearch", "file": "magic/function/01.通用函数/90.分页统计行业日志事件.ms", "reviewedSha256": "e619cb1ddbd7e8d54b6e4b130be69b72fb1e3030123bdb4fe94341b0b1bf8c89"}, "review": "四类行业日志分页和统计共用授权、日期、关键词和精确筛选，兼容历史上海时间与无事件统计。"},
@@ -1189,62 +1189,6 @@
         "HEAD /portal/sso/tenants"
       ],
       "review": "会话详情和可用租户共用。LOCAL 仅返回本租户。旧共享会话保留开启条件、成员检查和账号来源配置校验。"
-    },
-    {
-      "source": {
-        "kind": "magic-function",
-        "id": "portal_fn_options_v1",
-        "file": "magic/function/09.租户账号/06.读取登录行业选项.ms",
-        "reviewedSha256": "635bd882c710b3119b6652d75b21f238c9159ff1019cc0606103634e6145d3c5",
-        "path": "/tenant-account/options"
-      },
-      "operations": [
-        "GET /portal/sso/options",
-        "HEAD /portal/sso/options"
-      ],
-      "review": "GET 和 HEAD 登录行业选项共用，从控制库读取启用租户的公开标识、编码和名称。"
-    },
-    {
-      "source": {
-        "kind": "magic-function",
-        "id": "portal_fn_settings_v1",
-        "file": "magic/function/09.租户账号/07.读取行业登录设置.ms",
-        "reviewedSha256": "11db4fb84e9ac1adc839f222a2006c2a75ba8a54603549dfb45e82a84252a91c",
-        "path": "/tenant-account/settings"
-      },
-      "operations": [
-        "GET /portal/sso/settings",
-        "HEAD /portal/sso/settings"
-      ],
-      "review": "GET 和 HEAD 行业登录设置共用，核验启用租户后通过现有缓存读取其公开字段，不创建会话。"
-    },
-    {
-      "source": {
-        "kind": "magic-function",
-        "id": "portal_fn_session_v1",
-        "file": "magic/function/09.租户账号/08.读取门户当前会话.ms",
-        "reviewedSha256": "93b3ce0517c098d3f408fb843ee8e38a1b41f45d33e7a8993437604e639bd833",
-        "path": "/tenant-account/session"
-      },
-      "operations": [
-        "GET /portal/sso/session",
-        "HEAD /portal/sso/session"
-      ],
-      "review": "GET 和 HEAD 当前会话共用，使用可信租户与当前令牌账号源返回租户资料和可用租户。"
-    },
-    {
-      "source": {
-        "kind": "magic-function",
-        "id": "portal_fn_tenants_v1",
-        "file": "magic/function/09.租户账号/09.读取门户可切换租户.ms",
-        "reviewedSha256": "43042324abc5eddda81bb4b7918ca281a027f67e4da37a311a463db673bf838a",
-        "path": "/tenant-account/tenants"
-      },
-      "operations": [
-        "GET /portal/sso/tenants",
-        "HEAD /portal/sso/tenants"
-      ],
-      "review": "GET 和 HEAD 可用租户共用，按行业会话的账号来源和成员资格读取。"
     }
   ],
   "implementationNotes": {

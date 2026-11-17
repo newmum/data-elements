@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.ser.LocalDateTimeSerializer;
+import com.linewell.dataelement.magic.runtime.route.HeadFallbackMagicRegistry;
 import com.linewell.dataelement.magic.runtime.security.PolicyAwareApiResourceStorage;
 import com.linewell.dataelement.platform.audit.AuditIdentityResolver;
 import jakarta.servlet.FilterChain;
@@ -12,6 +13,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.boot.autoconfigure.jackson.Jackson2ObjectMapperBuilderCustomizer;
 import org.springframework.beans.factory.SmartInitializingSingleton;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.MediaType;
@@ -19,10 +21,12 @@ import org.springframework.http.HttpInputMessage;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.web.filter.OncePerRequestFilter;
+import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
 import org.springframework.web.util.ContentCachingRequestWrapper;
 import org.ssssssss.magicapi.core.config.MagicAPIProperties;
 import org.ssssssss.magicapi.core.config.MagicConfiguration;
 import org.ssssssss.magicapi.core.service.impl.ApiInfoMagicResourceStorage;
+import org.ssssssss.magicapi.utils.Mapping;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
@@ -47,6 +51,14 @@ public class MagicBootConfiguration {
     @Bean
     ApiInfoMagicResourceStorage apiInfoMagicResourceStorage(MagicAPIProperties properties) {
         return new PolicyAwareApiResourceStorage(properties.getPrefix());
+    }
+
+    @Bean
+    HeadFallbackMagicRegistry magicRequestMagicDynamicRegistry(ApiInfoMagicResourceStorage storage,
+            @Qualifier("requestMappingHandlerMapping") RequestMappingHandlerMapping handlerMapping,
+            MagicAPIProperties properties) throws NoSuchMethodException {
+        return new HeadFallbackMagicRegistry(storage, Mapping.create(handlerMapping, properties.getWeb()),
+                properties.isAllowOverride(), properties.getPrefix());
     }
 
     /** Preserve legacy typed binding and exact mapping decimals on their respective Magic routes. */

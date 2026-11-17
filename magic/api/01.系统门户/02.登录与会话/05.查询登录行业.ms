@@ -9,14 +9,20 @@
     {
       "name": "access",
       "value": "PUBLIC"
+    },
+    {
+      "name": "head",
+      "value": "true"
     }
   ],
   "headers": [],
   "paths": [],
-  "description": "公开读取可用于登录的行业列表。与同址另一方法共用 /tenant-account/options。"
+  "description": "从控制库读取已启用行业的公开选项。同一 GET 资源提供 HEAD。"
 }
 ================================
-import '@/tenant-account/options' as read
+import '@/tenant-account/response' as respond
+import db
 
-// GET /portal/sso/options。与同址另一方法共用 /tenant-account/options。
-return read()
+// /portal/sso/options 为门户登录行业选择读取公开资料，不返回账号源和连接配置。
+return respond(() => db.normal().table('sym_tenant_t').columns('tid', 'code', 'name').where()
+    .eq('status', 1).eq('is_del', 0).orderBy('sort_no', 'asc').orderBy('created_time', 'asc').select())

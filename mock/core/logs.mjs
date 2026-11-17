@@ -302,10 +302,9 @@ export class LogMockService {
       assert(logCapabilities(session).length, 403, "当前会话没有日志权限");
       return components.filter((row) => row.name === "log-management").map((row) => ({ tid: row.componentId, name: row.name, compile_js: row.compileJs, compile_css: row.compileCss }));
     }
-    if (/ \/sym\/(?:logs\/(?:archives|policies)|logarchive|logpolicy)(?:\/|$)/.test(key))
+    if (/ \/sym\/(?:logarchive|logpolicy)(?:\/|$)/.test(key))
       throw new MockError(501, "本批未实现日志归档或策略；不会虚构成功，已阻止访问真实服务");
-    if (["GET /sym/logexport/page", "HEAD /sym/logexport/page", "POST /sym/logexport/create",
-         "GET /sym/logs/exports", "HEAD /sym/logs/exports", "POST /sym/logs/exports"].includes(key)) {
+    if (["GET /sym/logexport/page", "HEAD /sym/logexport/page", "POST /sym/logexport/create"].includes(key)) {
       requireCapability(session, "exports");
       return this.withJobs(database, () => key.startsWith("POST")
         ? this.createExport(database, session, body) : this.exportPage(database, session, query, !key.startsWith("HEAD")));
@@ -313,15 +312,12 @@ export class LogMockService {
     const download = /^GET \/sym\/logs\/exports\/([a-f0-9]{32})\/download$/.exec(key);
     if (download) { requireCapability(session, "exports"); return this.withJobs(database, () => this.download(database, session, download[1])); }
     const event = /^(GET|HEAD|POST) \/sym\/(logauth|logops|logreq|logsec)\/(page|stats|detail|items|batch)$/.exec(key);
-    const legacy = /^(GET|HEAD|POST) \/sym\/logs\/(auth|operations|requests|security)(?:\/([^/]+))?(?:\/(items))?$/.exec(key);
-    if (event || legacy) {
-      const [, method, group, segment, items] = event ?? legacy;
-      const kind = event ? {logauth: "auth", logops: "operations", logreq: "requests", logsec: "security"}[group] : group;
+    if (event) {
+      const [, method, group, action] = event;
+      const kind = {logauth: "auth", logops: "operations", logreq: "requests", logsec: "security"}[group];
       const read = method === "GET" || method === "HEAD";
-      const action = event ? segment : items ? "items" :
-        segment === "statistics" ? "stats" : segment === "batch" ? "batch" : segment ? "detail" : "page";
-      const id = event ? String(query.id ?? "") : segment;
-      if (event && (action === "detail" || action === "items")) {
+      const id = String(query.id ?? "");
+      if (action === "detail" || action === "items") {
         assert(id.trim() && id.length <= 64, 400, "一次最多查询100个不同事件");
       }
       requireCapability(session, kind);
@@ -335,7 +331,7 @@ export class LogMockService {
         const rows = selectLogRows(this.rows(database), session, kind, query, this.clock());
         return Object.fromEntries([["total", rows.length], ...[["success_count", "SUCCESS"], ["failure_count", "FAILED"], ["denied_count", "DENIED"], ["partial_count", "PARTIAL"]].map(([key, value]) => [key, rows.length ? rows.filter((row) => row.result === value).length : null])]);
       }
-      if (read && (action === "detail" || action === "items") && !["batch", "summary", "statistics"].includes(id)) {
+      if (read && (action === "detail" || action === "items")) {
         const [row] = this.authorized(database, session, kind, [id]);
         return action === "items" ? page(row.items, query) : detail(row);
       }

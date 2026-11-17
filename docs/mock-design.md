@@ -223,7 +223,7 @@ python tools/export-mock-config.py --with-structure --check
 
 ### 7.2 本地导出、真实对齐与验证边界
 
-- 使用真实任务路由 `POST/GET /sym/logs/exports` 与 `GET /sym/logs/exports/{id}/download`，提交只返回 `{id,status:'PENDING'}`；两次合法列表读取分别推进 RUNNING、实际生成文件并计算摘要后 SUCCESS，失败为 FAILED。这个确定性 Mock 调度不是 Java 后台队列。任务列表仅当前租户当前人员可见，即使 ALL 也不看他人；不暴露内部过滤快照、内容或摘要。
+- 第 137 批源码使用 `POST /sym/logexport/create`、`GET /sym/logexport/page` 和现役 `GET /sym/logs/exports/{id}/download`。提交只返回 `{id,status:'PENDING'}`。Mock 两次合法列表读取分别推进 RUNNING、生成文件并计算摘要后 SUCCESS，失败为 FAILED。任务列表仅当前租户当前人员可见，响应省略内部过滤快照、内容和摘要。事件分页、统计、详情和批量同样直接调用 `/sym/logauth`、`/sym/logops`、`/sym/logreq`、`/sym/logsec` 下的正式路由。共享 86 的切换状态以第 137 批运行验收为准。
 - CSV／JSONL 共用列表和统计的完整选择条件；冻结 `end=min(用户终点,提交截止)`、`receivedBefore=提交截止`，事件 `<end`、接收 `<=cutoff` 或为空。默认起点从冻结终点减七天，真实端本就不会随后台执行漂移。默认列表终点是 `now+1s`，导出是提交当前，不无条件断言两者严格同窗。冻结的是条件，**不是 ID／事务一致性快照**：提交后迟可见但满足截止的记录仍可入选；Java 每 500 行 offset 重读，Mock 一次选择后每 500 行编码，不认证并发强一致。忽略列表页码／大小，发生时间升序／ID 升序，上限 100000 行／256 MiB、本地 32 项。24 小时有效，下载复核本人、模块与导出权限、范围及 SHA256。按场景串行，浏览器支持时用 Web Locks，否则仅同一 Storage 对象内串行，不声称不支持 Web Locks 的跨标签页原子性。
 - CSV 带 UTF-8 BOM，清洗控制字符、双引号转义，防止首字符或前导空白后的 `=+@-` 公式注入；JSONL 每行安全详情。CSV 历史发生时间使用 `created_time`，不丢弃页面上的历史时间。下载保留真实 MIME、attachment 和 no-store，为原始正文而非 JSON 成功包装。
 - 模拟导出另用隔离键 `data-elements:mock:chengtian:logs:v1:<场景>`，保存虚构任务和文件供刷新恢复；不清理真实存储或其他行业，存储失败明确报错。日志状态独立于共享数据源状态，不给风驰复制业务种子。
@@ -324,7 +324,7 @@ Mock 路径不执行 SQL，SQL 数为 0；这个结果只能证明模拟路径�
 1. 检查用户更新的会话是否有效，只读核对运行目标；通过受限配置或进程环境提供 `RESOURCE_API_TOKEN`／`RESOURCE_API_URL`，不得输出实际值。
 2. 重新生成所选资源计划，核对当前本地、索引基准与运行库差异，合并并发修改后再发布。
 3. 重新从当前根源码编译，使用编译命令返回的产物路径发布，不能发布旧包。
-4. 用现有工具逐资源发布，保存 `source_code`、`compile_js`、`compile_css`，刷新 `/sym/component/cache/refresh`，运行回读源码及编译结果，验证实际导航地址与入口。
+4. 用现有工具逐资源发布，保存 `source_code`、`compile_js`、`compile_css`，刷新 `POST /sym/component/manage?action=refresh`，运行回读源码及编译结果，验证实际导航地址与入口。
 5. 再次比较选定资源，确认内容一致。其他 Magic／低代码差异分别报告，不全量同步，不删除、不覆盖其他窗口工作。
 
 ```powershell

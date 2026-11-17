@@ -281,7 +281,7 @@ class NifiPipelineWriteMagicTest {
 
     @Test
     void independentBindingSurvivesOuterRollbackAndFailureDoesNotPreventCreation() throws Exception {
-        var endpoint = script(API + "02.流程设计/03.创建流程.ms", "faf0e7885f4429edbeaa5add552fe155");
+        var endpoint = script(API + "02.流程设计/02.创建流程.ms", "faf0e7885f4429edbeaa5add552fe155");
         var id = TenantContext.call(TENANT, () -> transaction.execute(status -> {
             var created = canvas(invoke(endpoint, "", Map.of("catalogTid", new String[]{"catalog"}), createBody()));
             status.setRollbackOnly();
@@ -366,7 +366,7 @@ class NifiPipelineWriteMagicTest {
         var hive = HiveDownstreamFixtures.rawTarget(new Pipeline.Node("h", "sink.hive", "Hive", "sink", 600, 0, Map.of()));
         var dsl = new Pipeline.Dsl(1, List.of(source, mapping, hive), List.of(
                 new Pipeline.Edge("sm", "s", "m", "default"), new Pipeline.Edge("mh", "m", "h", "default")));
-        var first = canvas(endpoint("02.流程设计/08.保存流程.ms", "660b71dbe633aaa4bd79dd68e0baad70", loaded.id(),
+        var first = canvas(endpoint("02.流程设计/05.保存流程.ms", "660b71dbe633aaa4bd79dd68e0baad70", loaded.id(),
                 Map.of("expectedUpdatedAt", new String[]{loaded.updatedAt().toString()}), Map.of("name", "Hive", "dsl", dsl)));
         assertThat(first.dsl().nodes()).extracting(Pipeline.Node::id).containsExactly("s", "h");
         assertThat(first.dsl().nodes().getFirst().config()).containsEntry("schedulingPeriod", "1 day");
@@ -380,7 +380,7 @@ class NifiPipelineWriteMagicTest {
 
     @Test
     void missingBodyKeepsTheLegacyDiagnosticEnvelope() throws Exception {
-        var response = endpoint("02.流程设计/03.创建流程.ms", "faf0e7885f4429edbeaa5add552fe155", "", Map.of(), null);
+        var response = endpoint("02.流程设计/02.创建流程.ms", "faf0e7885f4429edbeaa5add552fe155", "", Map.of(), null);
         assertThat(response.getStatusCode().value()).isEqualTo(200);
         var error = (CommonResponse<?>) response.getBody();
         assertThat(error.getCode()).isEqualTo(500);
@@ -463,7 +463,7 @@ class NifiPipelineWriteMagicTest {
     }
 
     private ResponseEntity<?> deleteCanvas(String id) throws Exception {
-        return endpoint("02.流程设计/09.删除流程.ms", "c6f76e36f0106bc81f93a2f372c80571", id, Map.of(), null);
+        return endpoint("02.流程设计/06.删除流程.ms", "c6f76e36f0106bc81f93a2f372c80571", id, Map.of(), null);
     }
 
     private ResponseEntity<?> deleteTree(String id) throws Exception {
@@ -479,7 +479,7 @@ class NifiPipelineWriteMagicTest {
 
     private ResponseEntity<?> create(String catalog) throws Exception {
         var params = catalog == null ? Map.<String, String[]>of() : Map.of("catalogTid", new String[]{catalog});
-        return endpoint("02.流程设计/03.创建流程.ms", "faf0e7885f4429edbeaa5add552fe155", "", params, createBody());
+        return endpoint("02.流程设计/02.创建流程.ms", "faf0e7885f4429edbeaa5add552fe155", "", params, createBody());
     }
 
     private static Map<String, Object> createBody() {
@@ -487,7 +487,7 @@ class NifiPipelineWriteMagicTest {
     }
 
     private ResponseEntity<?> save(String id, String name, Map<String, String[]> params) throws Exception {
-        return endpoint("02.流程设计/08.保存流程.ms", "660b71dbe633aaa4bd79dd68e0baad70", id, params,
+        return endpoint("02.流程设计/05.保存流程.ms", "660b71dbe633aaa4bd79dd68e0baad70", id, params,
                 Map.of("name", name, "status", "DRAFT", "nifiProcessGroupId", "caller-group", "dsl", emptyDesign()));
     }
 

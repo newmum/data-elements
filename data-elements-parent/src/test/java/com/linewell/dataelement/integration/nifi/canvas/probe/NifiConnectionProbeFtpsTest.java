@@ -14,13 +14,13 @@ import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
-import org.ssssssss.magicapi.core.service.MagicAPIService;
+import com.linewell.dataelement.magic.runtime.route.RegisteredMagicApiInvoker;
 
 class NifiConnectionProbeFtpsTest {
     private static final int PEER_READ_TIMEOUT_MILLIS = 20_000;
     private static final int COMMAND_TIMEOUT_SECONDS = 25;
     private final NifiConnectionProbe probe = new NifiConnectionProbe(
-            mock(StructuredSourceProbeService.class), mock(MagicAPIService.class));
+            mock(StructuredSourceProbeService.class), mock(RegisteredMagicApiInvoker.class));
     private final DataSourceConnectionPropertyResolver registered = mock(DataSourceConnectionPropertyResolver.class);
 
     @Test

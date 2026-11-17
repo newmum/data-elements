@@ -7,6 +7,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.LinkedHashMap;
@@ -27,6 +28,12 @@ public class FlowHttpModule {
     public FlowHttpModule(FlowServeDataSourceRuntime dataSources, ObjectMapper mapper) {
         this.dataSources = dataSources;
         this.mapper = mapper;
+    }
+
+    @Comment("读取 HTTP 状态码，丢弃响应正文，不跟随重定向")
+    public int status(URI uri) throws IOException, InterruptedException {
+        HttpRequest request = HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(8)).GET().build();
+        return client.send(request, HttpResponse.BodyHandlers.discarding()).statusCode();
     }
 
     @Comment("执行云梯编排 HTTP 调用")

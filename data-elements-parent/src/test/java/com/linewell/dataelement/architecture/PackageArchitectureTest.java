@@ -148,15 +148,26 @@ class PackageArchitectureTest {
     @Test
     void runtimeDiagnosticsAndSearchClientConfigurationHaveDedicatedPackages() throws Exception {
         assertThat(JAVA_ROOT.resolve("magic/runtime/diagnostics/MagicApiRuntimeProbe.java")).exists();
+        assertThat(JAVA_ROOT.resolve("magic/runtime/resource/MagicResourceReloadController.java")).exists();
+        assertThat(JAVA_ROOT.resolve("magic/runtime/route/RegisteredMagicApiInvoker.java")).exists();
+        assertThat(JAVA_ROOT.resolve("integration/workflow/CustomGlobalListener.java")).exists();
+        assertThat(JAVA_ROOT.resolve("feature/approval/application/ApprovalLifecyclePort.java")).doesNotExist();
+        assertThat(JAVA_ROOT.resolve("feature/approval/infrastructure/magic/MagicApprovalLifecycleAdapter.java")).doesNotExist();
+        assertThat(JAVA_ROOT.resolve("platform/configuration/NodeConfigurationController.java")).doesNotExist();
         assertThat(JAVA_ROOT.resolve("magic/runtime/result/CustomJsonValueProvider.java")).exists();
         assertThat(JAVA_ROOT.resolve("magic/runtime/result/MagicApiResultProvider.java")).exists();
         assertThat(JAVA_ROOT.resolve("magic/module/MagicResourceLinkModule.java")).exists();
         assertThat(JAVA_ROOT.resolve("magic/module/SystemConfigMagicModule.java")).exists();
+        assertThat(JAVA_ROOT.resolve("magic/module/UiComponentCacheMagicModule.java")).exists();
+        assertThat(JAVA_ROOT.resolve("platform/cache/UiComponentCacheService.java")).exists();
         assertThat(JAVA_ROOT.resolve("magic/module/MetadataScanMagicModule.java")).exists();
         assertThat(JAVA_ROOT.resolve("integration/metadata/TableInventoryProbe.java")).exists();
         assertThat(JAVA_ROOT.resolve("metautil/controller/TableMetadataCollectionController.java")).doesNotExist();
         assertThat(JAVA_ROOT.resolve("metautil/service/TableMetadataCollectionService.java")).doesNotExist();
         assertThat(JAVA_ROOT.resolve("platform/configuration/SystemConfigMagicModule.java")).doesNotExist();
+        assertThat(JAVA_ROOT.resolve("platform/configuration/UiComponentCacheController.java")).doesNotExist();
+        assertThat(JAVA_ROOT.resolve("platform/configuration/UiComponentCacheMagicModule.java")).doesNotExist();
+        assertThat(JAVA_ROOT.resolve("platform/configuration/UiComponentCacheService.java")).doesNotExist();
         assertThat(JAVA_ROOT.resolve("platform/tenant/api/TenantController.java")).doesNotExist();
         assertThat(JAVA_ROOT.resolve("integration/search/config/ElasticsearchCustomRestClient.java")).exists();
         assertThat(JAVA_ROOT.resolve("integration/search/config/EsIndexInit.java")).exists();

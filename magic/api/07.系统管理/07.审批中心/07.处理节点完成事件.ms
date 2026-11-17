@@ -12,7 +12,12 @@
   "path": "/finish",
   "method": "POST",
   "parameters": [],
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "TENANT_SESSION"
+    }
+  ],
   "requestBody": "{\n}",
   "headers": [],
   "paths": [],

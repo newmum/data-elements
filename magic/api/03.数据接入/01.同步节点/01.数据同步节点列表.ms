@@ -6,12 +6,12 @@
   "path": "/page",
   "method": "POST",
   "parameters": [],
-  "options": [],
+  "options": [{"name": "access", "value": "TENANT_SESSION"}],
   "headers": [],
   "paths": [],
   "requestBody": "{\n  \"keyword\": \"主节点\"\n}",
   "responseBody": "{\n  \"list\": [],\n  \"total\": 0\n}",
-  "description": "数据抽取和推送节点列表（POST /ods/node/page）。按 keyword 查询当前登录租户的未删除节点并回显最近一次连通检测。nodeType=push 且 action=health 时检测指定推送节点。",
+  "description": "查询当前行业的抽取和推送节点。health 检测本租户已保存节点，diagnostics 读取已保存 NiFi 节点的有限指标。列表回显当前配置版本的最近检测。",
   "script": null
 }
 ================================
@@ -23,9 +23,13 @@ import java.util.Map
 import java.text.SimpleDateFormat
 import java.sql.Timestamp
 import com.linewell.dataelement.utils.LocalCache
+import com.linewell.dataelement.integration.nifi.canvas.config.NifiNodeRuntimeResolver as nodeResolver
+import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient as nifi
+import com.linewell.dataelement.model.common.CommonResponse
+import org.springframework.http.ResponseEntity
 
 // POST /ods/node/page 查询当前租户的抽取或推送节点，支持 keyword 筛选并回显最近一次连通检测。
-// 仅 nodeType=push 且 action=health 会连接请求中的推送节点，抽取节点检测使用 NiFi 客户端接口。
+// health 和 diagnostics 只访问当前行业保存的节点，NiFi 客户端从该节点取得连接配置。
 
 var text = value => value == null ? '' : value + ''
 // 读取请求中的业务标识与筛选条件，供下面的校验和查询使用。
@@ -84,6 +88,71 @@ if (text(body?.nodeType) == 'push') {
             lastSyncTime:row.lastSyncTime || row.last_sync_time,lastSyncStatus:row.lastSyncStatus || row.last_sync_status})
     }
     return {list:tableSort.rows(list,body,{name:'nodeName',nodeName:'nodeName',updatedTime:'updatedTime'},'updatedTime','tid'),total:list.size()}
+}
+
+var action = text(body?.action)
+if (action == 'health' || action == 'diagnostics') {
+    var nodeId = text(body?.nodeId).trim()
+    var respond = data => ResponseEntity.ok(CommonResponse.success(data))
+    var rootMessage = error => {
+        var cause = error
+        while (cause.getCause() != null) {
+            cause = cause.getCause()
+        }
+        return cause.getMessage() == null ? cause.getClass().getSimpleName() : cause.getMessage()
+    }
+    if (action == 'diagnostics') {
+        if (nodeId == '') {
+            exit 400, '请选择需要查询的 NiFi 节点'
+        }
+        try {
+            var snapshot = nifi.systemDiagnostics(nodeId).path('systemDiagnostics').path('aggregateSnapshot')
+            if (snapshot.isMissingNode() || snapshot.isNull()) {
+                return respond({success:false, message:'NiFi 未返回系统诊断快照'})
+            }
+            // 由脚本选择对前端开放的指标，避免返回原生诊断内容。
+            var number = key => snapshot.path(key).isNumber() ? snapshot.path(key).numberValue() : null
+            return respond({
+                success:true,
+                heapUtilization:snapshot.path('heapUtilization').asText(''),
+                usedHeapBytes:number('usedHeapBytes'),
+                maxHeapBytes:number('maxHeapBytes'),
+                processorLoadAverage:number('processorLoadAverage'),
+                availableProcessors:number('availableProcessors'),
+                totalThreads:number('totalThreads'),
+                statsLastRefreshed:snapshot.path('statsLastRefreshed').asText('')
+            })
+        } catch (error) {
+            return respond({success:false, message:rootMessage(error)})
+        }
+    }
+    var started = new Date().getTime()
+    var configured = null
+    try {
+        configured = nodeResolver.configuredNodeById(nodeId)
+    } catch (error) {
+        return respond({success:false, status:0, latencyMs:new Date().getTime()-started, message:rootMessage(error), url:''})
+    }
+    var node = configured.runtimeNode()
+    var success = true
+    var message = 'NiFi 节点根流程组访问正常'
+    try {
+        nifi.testConnection(node)
+    } catch (error) {
+        success = false
+        message = rootMessage(error)
+    }
+    var result = {
+        success:success, status:success ? 200 : 0, latencyMs:new Date().getTime()-started, message:message,
+        url:node.baseUrl() + '/nifi-api/flow/process-groups/root',
+        healthTime:new SimpleDateFormat('yyyy-MM-dd HH:mm:ss').format(new Date())
+    }
+    // 只回显此探活实际使用的配置版本。保存新配置后，旧结果自然失效。
+    var key = 'nifi-node-health:' + tenantId + ':' + node.id() + ':' + configured.revision()
+    LocalCache.put(key, new ObjectMapper().writeValueAsString({
+        success:result.success, message:result.message, healthTime:result.healthTime, latencyMs:result.latencyMs
+    }))
+    return respond(result)
 }
 
 // 以下从 sym_dict_t 业务表读取或维护当前操作涉及的记录。

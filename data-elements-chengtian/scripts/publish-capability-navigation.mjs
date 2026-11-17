@@ -36,7 +36,7 @@ let updated = false;
 if (onlineSource !== sourceCode) {
   assert.equal(onlineSource, before, "Online component changed after backup; stopped to preserve concurrent work");
   await request("/sym/component/manage?action=saveCode", { tid, sourceCode, compileJs, compileCss });
-  await request("/sym/component/cache/refresh");
+  await request("/sym/component/manage?action=refresh");
   updated = true;
 }
 assert.equal(await request(`/sym/component/manage?action=getSourceCode&tid=${tid}`), sourceCode);

@@ -632,7 +632,7 @@
       "type": "1",
       "sortOrder": 3,
       "path": "03.数据接入/2.3.1 数据汇聚(data-convergence)/接入申请(access-apply).vue",
-      "baseSha256": "5d483973444c423ce81e150b538192be325a40f7fb220d6c1ba0dd460576a50e"
+      "baseSha256": "94def4e92f179c913b991b2923170249d9a0f81b7b8f6c92355421ab6d94a345"
     },
     {
       "id": "2016463450651824128",
@@ -1332,7 +1332,7 @@
       "type": "1",
       "sortOrder": 1,
       "path": "09.系统管理/02.用户与权限/NiFi 节点配置(nifi-node-config).vue",
-      "baseSha256": "78a840f449d0c10445b6d4d6332b41367f53d5fb4ba6a1d373d57736ab13aa73"
+      "baseSha256": "74f6b3eba10bd9a4844f485144d8ab659d956f447a37b47b36a20c72ed9c7d1b"
     },
     {
       "id": "178716197774800001",
@@ -1472,7 +1472,7 @@
       "type": "1",
       "sortOrder": 1,
       "path": "09.系统管理/09.日志管理/日志管理(log-management).vue",
-      "baseSha256": "4e239a14a5b4ed92fde2d06570d7256d05bde8cedc4a6b0e01447079dacc25a1",
+      "baseSha256": "57c8786c36a6a34031b8cf5457e2e31ac6c091abde04a037f0a9a2730f637da8",
       "remark": "日志管理"
     },
     {

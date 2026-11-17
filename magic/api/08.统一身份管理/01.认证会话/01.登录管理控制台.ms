@@ -13,7 +13,7 @@
   "description": "根据平台操作账号读取独立凭据与安全状态，检查失败锁定、密码和多因子挑战，成功后签发平台会话并记录登录审计；租户本地账号不能在此登录。",
   "parameters": [],
   "method": "POST",
-  "options": [],
+  "options": [{"name": "access", "value": "SESSION_LOGIN"}],
   "requestBody": "{}",
   "headers": [],
   "paths": [],
@@ -22,9 +22,6 @@
 ================================
 import auditEvents;
 import identityTransport;
-// 接口：01.登录管理控制台
-// 路由：POST /idaas/auth/login
-// 业务说明：根据平台操作账号读取独立凭据与安全状态，检查失败锁定、密码和多因子挑战，成功后签发平台会话并记录登录审计；租户本地账号不能在此登录。
 import db;
 import request;
 import platformSession;
@@ -37,6 +34,8 @@ import cn.hutool.json.JSONUtil;
 import identityRuntime;
 import '@/idaas/api-call' as apiCall;
 
+// POST /idaas/auth/login 管理控制台登录。
+// 根据平台操作账号检查独立凭据、失败锁定和多因子挑战，通过后签发平台会话并记录登录审计。
 
 return identityRuntime.control(()=>apiCall(()=>{
     // 请求参数与本接口业务处理。

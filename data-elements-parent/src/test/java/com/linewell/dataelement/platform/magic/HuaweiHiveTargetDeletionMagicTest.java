@@ -631,7 +631,10 @@ class HuaweiHiveTargetDeletionMagicTest {
                 "sourceTableId", "source-1", "taskId", "foreign-task", "deleteTargetTable", false)));
         assertEquals(403, foreign.getValues()[0]);
         assertLifecycleIntact();
+        verifyNoInteractions(nifi);
 
+        var runtime = mock(NifiClient.RuntimeScope.class);
+        when(nifi.bindAssignedNode("")).thenReturn(runtime);
         var result = assertInstanceOf(Map.class, run(Map.of(
                 "sourceTableId", "source-1", "taskId", "task-1", "deleteTargetTable", false)));
         assertEquals(1, result.get("taskCount"));
@@ -641,8 +644,11 @@ class HuaweiHiveTargetDeletionMagicTest {
         assertEquals(0, deleted("data_access_agg_task_t", "foreign-task"));
         assertEquals(0, deleted("db_table_t", "target-1"));
         assertEquals(0, deleted("db_table_column_t", "target-column"));
-        verify(nifi).cleanupProcessGroup("selected-pg");
-        verifyNoMoreInteractions(nifi);
+        var cleanup = inOrder(nifi, runtime);
+        cleanup.verify(nifi).bindAssignedNode("");
+        cleanup.verify(nifi).cleanupProcessGroup("selected-pg");
+        cleanup.verify(runtime).close();
+        verifyNoMoreInteractions(nifi, runtime);
         verifyNoInteractions(hive, explorer);
     }
 

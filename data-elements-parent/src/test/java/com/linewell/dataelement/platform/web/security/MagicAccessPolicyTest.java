@@ -14,6 +14,7 @@ import com.linewell.dataelement.config.DataPushRegistryProperties;
 import com.linewell.dataelement.feature.identity.application.TenantIdentityQueryService;
 import com.linewell.dataelement.integration.transfer.haitong.RelayRequestAuthentication;
 import com.linewell.dataelement.magic.runtime.result.CustomJsonValueProvider;
+import com.linewell.dataelement.magic.runtime.route.HeadFallbackMagicRegistry;
 import com.linewell.dataelement.magic.runtime.security.MagicAccessPolicy;
 import com.linewell.dataelement.magic.runtime.security.PolicyAwareApiResourceStorage;
 import com.linewell.dataelement.model.common.BizException;
@@ -69,7 +70,7 @@ class MagicAccessPolicyTest {
         when(resources.getGroupPath("idaas")).thenReturn("/idaas");
         when(resources.getGroupPath("published")).thenReturn("/dws/flowserve/published");
         storage.setMagicResourceService(resources);
-        registry = new RequestMagicDynamicRegistry(storage, Mapping.create(new RequestMappingHandlerMapping()), false, "");
+        registry = new HeadFallbackMagicRegistry(storage, Mapping.create(new RequestMappingHandlerMapping()), false, "");
         var handler = new RequestHandler(new MagicConfiguration(), registry);
         registry.setHandler(handler);
         magicHandler = new HandlerMethod(handler, RequestHandler.class.getMethod("invoke",
@@ -107,6 +108,38 @@ class MagicAccessPolicyTest {
             assertThat(preHandle("GET", "/validation/legacy/operator")).isTrue();
             assertDenied(() -> preHandle("POST", "/validation/resource"));
         }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"SESSION_LOGIN", "SESSION_LOGOUT"})
+    void sessionLifecycleStartsOnControlWithNoSessionLookup(String policy) {
+        var api = register("session", "POST", "/session", policy);
+        var request = request("POST", "/validation/session");
+        request.addHeader("token", "obsolete-test-token");
+        var response = new MockHttpServletResponse();
+        var tenantAccess = mock(TenantAccessService.class);
+        var accounts = mock(TenantIdentityQueryService.class);
+        var tenantWeb = new TenantWebInterceptor(tenantAccess, new TenantProperties(), accounts);
+        try (var session = mockStatic(StpUtil.class)) {
+            TenantContext.bind("previous-request");
+            assertThat(access.matchedMagicAccess(request, magicHandler)).isEqualTo(MagicAccessPolicy.valueOf(policy));
+            assertThat(GlobalInterceptor.verifiedMagicAccess(request)).isNull();
+            assertThat(access.preHandle(request, response, magicHandler)).isTrue();
+            assertThat(tenantWeb.preHandle(request, response, magicHandler)).isTrue();
+            assertThat(TenantContext.usesControlDatabase()).isTrue();
+            assertThat(TenantContext.getTenantId()).isNull();
+            var execution = RequestEntity.create().info(api)
+                    .request(new MagicJakartaHttpServletRequest(request, null));
+            assertThat(access.preHandle(execution)).isNull();
+            assertThat(GlobalInterceptor.hasVerifiedMagicPolicy(execution)).isTrue();
+            session.verifyNoInteractions();
+            verifyNoInteractions(tenantAccess, accounts, platformSession);
+            api.setMethod("GET");
+            assertThatThrownBy(() -> storage.write(api)).isInstanceOf(IllegalArgumentException.class);
+        } finally {
+            tenantWeb.afterCompletion(request, response, magicHandler, null);
+        }
+        assertThat(TenantContext.usesControlDatabase()).isFalse();
     }
 
     @Test
@@ -351,6 +384,39 @@ class MagicAccessPolicyTest {
         assertThat(MagicAccessPolicy.declared(storage.read(storage.write(relay)))).isEqualTo(MagicAccessPolicy.HAITONG_RELAY);
         relay.setMethod("GET");
         assertThatThrownBy(() -> storage.write(relay)).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void implicitHeadUsesTheGetResourceAndItsPolicyWhenNoExplicitHeadIsRegistered() {
+        var get = api("read", "GET", "/resource", "TENANT_SESSION");
+        get.setOption(List.of(new Option("access", "TENANT_SESSION"), new Option("head", "true")));
+        assertThat(registry.register(storage.read(storage.write(get)))).isTrue();
+        var request = request("HEAD", "/validation/resource");
+        var magicRequest = new MagicJakartaHttpServletRequest(request, null);
+        assertThat(registry.getApiInfoFromRequest(magicRequest).getId()).isEqualTo("read");
+        try (var tenant = mockStatic(StpUtil.class)) {
+            assertDenied(() -> preHandle("HEAD", "/validation/resource"));
+            tenant.when(StpUtil::isLogin).thenReturn(true);
+            assertThat(access.preHandle(request, new MockHttpServletResponse(), magicHandler)).isTrue();
+            assertThat(GlobalInterceptor.verifiedMagicAccess(request)).isEqualTo(MagicAccessPolicy.TENANT_SESSION);
+        }
+
+        register("explicit", "HEAD", "/resource", "PUBLIC");
+        assertThat(registry.getApiInfoFromRequest(magicRequest).getId()).isEqualTo("explicit");
+        request.removeAttribute(HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE);
+        assertThat(registry.getApiInfoFromRequest(magicRequest)).isNull();
+    }
+
+    @Test
+    void resourceStorageOnlyAcceptsOneHeadOptionOnGet() {
+        var api = api("read", "GET", "/resource", null);
+        api.setOption(List.of(new Option("head", "yes")));
+        assertThatThrownBy(() -> storage.write(api)).isInstanceOf(IllegalArgumentException.class);
+        api.setOption(List.of(new Option("head", "true"), new Option("head", "false")));
+        assertThatThrownBy(() -> storage.write(api)).isInstanceOf(IllegalArgumentException.class);
+        api.setOption(List.of(new Option("head", "true")));
+        api.setMethod("HEAD");
+        assertThatThrownBy(() -> storage.write(api)).isInstanceOf(IllegalArgumentException.class);
     }
 
     private ApiInfo register(String id, String method, String path, String policy) {

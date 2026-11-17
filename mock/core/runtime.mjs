@@ -630,21 +630,20 @@ export class ChengtianMockRuntime {
     if (this.requests.length > 500) this.requests.shift();
     const portal = (/^(GET|HEAD) \/portal\/sso\/(options|settings|session|tenants)$/.test(key)
       || key === "POST /portal/sso/switch");
+    const componentRefresh = key === "POST /sym/component/manage" && query.action === "refresh";
     const readVerb = verb === "HEAD" ? "GET" : verb;
     const collection = collectionOperation(`${readVerb} ${path}`);
     const logBootstrap = /^(GET|HEAD) \/sym\/logs\/(capabilities|components)$/.test(key);
     const shortEvent = /^\/sym\/(logauth|logops|logreq|logsec)\/(page|stats|detail|items|batch)$/.exec(path);
-    const canonicalEvent = shortEvent && (shortEvent[2] === "batch" ? verb === "POST" : readVerb === "GET");
-    const legacyEvent = /^(GET|HEAD) \/sym\/logs\/(auth|operations|requests|security)(?:\/[^/]+(?:\/items)?)?$/.test(key)
-      || /^POST \/sym\/logs\/(auth|operations|requests|security)\/batch$/.test(key);
-    const logEvent = canonicalEvent || legacyEvent;
-    const logTask = /^(?:GET|HEAD) \/sym\/(?:logs\/(?:exports|archives)|(?:logexport|logarchive)\/page)$/.test(key);
-    const exportCreate = /^POST \/sym\/(?:logs\/exports|logexport\/create)$/.test(key);
+    const logEvent = shortEvent && (shortEvent[2] === "batch" ? verb === "POST" : readVerb === "GET");
+    const logTask = /^(?:GET|HEAD) \/sym\/(?:logexport|logarchive)\/page$/.test(key);
+    const exportCreate = key === "POST /sym/logexport/create";
     const archiveCreate = key === "POST /sym/logarchive/create";
     const archiveAction = key === "POST /sym/logarchive/action";
     const logPolicy = /^(?:GET|HEAD) \/sym\/logpolicy\/list$/.test(key)
       || /^(?:PUT|POST) \/sym\/logpolicy\/save$/.test(key);
-    const logRoute = logBootstrap || logEvent || logTask || exportCreate || archiveCreate || archiveAction || logPolicy || path.startsWith("/sym/logs/");
+    const logDownload = /^GET \/sym\/logs\/exports\/[a-f0-9]{32}\/download$/.test(key);
+    const logRoute = logBootstrap || logEvent || logTask || exportCreate || archiveCreate || archiveAction || logPolicy || logDownload;
     const head = (portal || collection || logBootstrap || logEvent || logTask) && verb === "HEAD";
     const headResponse = () => ({ raw: true, status: 200, body: null, headers: {
       "Content-Type": "application/json",
@@ -654,15 +653,15 @@ export class ChengtianMockRuntime {
     try {
       const data = await this.dispatch(key, query, body || {}, token, { logRoute, collection });
       if (head) return headResponse();
-      if (portal) return { status: 200, body: { code: 0, msg: "success", success: true, data } };
+      if (portal || componentRefresh) return { status: 200, body: { code: 0, msg: "success", success: true, data } };
       if (collection) return { status: 200, body: { code: 0, msg: "success", data } };
       if (logBootstrap || logEvent || logTask || exportCreate) return { status: 200, body: { code: 0, success: true, data } };
-      if (path.startsWith("/sym/logs/") && data?.raw === true) return data;
-      return { status: 200, body: { code: 0, message: "操作成功", ...(path.startsWith("/sym/logs/") ? { success: true } : {}), data } };
+      if (logDownload && data?.raw === true) return data;
+      return { status: 200, body: { code: 0, message: "操作成功", data } };
     } catch (error) {
       if (!(error instanceof MockError)) throw error;
       if (head) return headResponse();
-      if (portal || (logBootstrap || logEvent || logTask || exportCreate) && error.status === 401) return { status: 200, body: {
+      if (portal || componentRefresh || (logBootstrap || logEvent || logTask || exportCreate) && error.status === 401) return { status: 200, body: {
         code: error.status === 401 ? 100120 : error.status,
         msg: error.status === 401 ? "user_no_login" : error.message,
         success: false, data: null,
@@ -707,6 +706,13 @@ export class ChengtianMockRuntime {
       assert(code, 403, "请选择有效的行业场景");
       return this.login(code);
     }
+    if (key === "POST /portal/sso/logout") {
+      if (this.session && token === this.session.token) {
+        this.session = null;
+        this.sessionStorage?.removeItem("data-elements:mock:session:v3");
+      }
+      return "/login";
+    }
     assert(
       this.session && token === this.session.token,
       401,
@@ -714,11 +720,6 @@ export class ChengtianMockRuntime {
     );
     if (logRoute)
       return this.logs.handle(key, query, body, this.database, clone(this.session), this.components);
-    if (key === "POST /portal/sso/logout") {
-      this.session = null;
-      this.sessionStorage?.removeItem("data-elements:mock:session:v3");
-      return "/login";
-    }
     if (key === "GET /portal/sso/session" || key === "HEAD /portal/sso/session") return this.tenant();
     if (key === "GET /portal/sso/tenants" || key === "HEAD /portal/sso/tenants") return this.tenant().available;
     if (key === "POST /portal/sso/switch") {
@@ -736,6 +737,9 @@ export class ChengtianMockRuntime {
     if (key === "POST /sym/org/tree")
       return organizationTree(this.database.organizations, body.parentId || "ROOT");
     if (key === "POST /sym/component/manage") {
+      if (query.action === "refresh") {
+        return { version: crypto.randomUUID(), count: this.components.length };
+      }
       assert(
         ["list", "runtimeBatch"].includes(query.action),
         501,
