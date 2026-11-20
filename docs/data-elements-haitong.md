@@ -169,6 +169,8 @@ OceanBase MySQL 来源在测试连接、探查表和生成 NiFi 流程时使用 
 
 ### 数据库画布同步方式
 
+物化建表选定的接入节点保存在目标登记的 `field_governance_config.nifiNodeId`，创建任务后保存为画布 `node_mapping_json.runtimeNodeId`。首次部署、属性预览与同步、启停、重新部署及原生详情都读取该任务绑定节点。不同任务可绑定不同 NiFi。节点已删除、停用或不属于当前租户时拒绝对应操作。历史未保存节点绑定的画布沿用默认节点，已有部署关联需先核对原流程位置再处理绑定。
+
 平台画布保存使用服务端返回的 `designHash` 核对已加载的设计内容（名称、说明、节点配置、位置和连线）；运行状态、部署元数据及 NiFi 原生组件状态变化不构成设计保存冲突。其他入口真正修改平台设计时仍返回409，避免覆盖并发编辑；旧版前端仅发送 `expectedUpdatedAt` 时保留时间版本检查，更新时需同时部署海通静态前端与 Java 后端。
 
 组件面板的「保存」只确认当前画布中的配置，顶部「保存」才写入流程设计。画布保存未提交说明时保留原值，空说明与未填写说明按同一状态计算设计版本。任务链路和流程详情使用同一份已保存的名称、说明和设计计算版本。候选流程生成成功后清除之前的配置和部署错误，运行错误仍可查阅。DM8 独立版通过达梦的会话锁串行化保存、部署等流程变更。
@@ -3073,7 +3075,7 @@ MongoDB 使用万象原有的绿色叶片标识 `mongodb.svg`，Vertica 使用�
 
 海通独立部署保留完整前后端，仅精简数据库。从仓库根目录执行 `mvn -f data-elements-parent/pom.xml install` 构建标准后端，在 `data-elements-haitong` 执行 `pnpm run build`。回到仓库根目录执行 `python tools/package-haitong-deployment.py --bundle --nacos --jar data-elements-parent/target/data-element.jar --frontend data-elements-haitong/dist` 生成依赖 Nacos 的部署 ZIP。启动配置 `config/application.yml` 导入 Nacos 的海通 Data ID，配置模板位于 `nacos/haitong-data-element.yml`。若构建无 Nacos 版，Maven 参数使用 `"-Ddata-elements.without-nacos=true"`（PowerShell 中保留引号），打包工具省略 `--nacos`。
 
-Linux x86_64 单机版使用同一个无 Nacos 构建，打包时传入 `--bundle --linux-runtime-dir <已校验的运行组件目录>`，并用两个 `--nifi-extension` 参数传入与 NiFi 2.9.0 匹配的 `haitong-mapping-nar` 和 `datadevs-database-nar`。运行组件目录提供 `java21.tar.gz`、`mysql.tar.xz`、`redis.tar.gz`、官方 `nifi.zip`、`caddy.tar.gz` 和 `mysql-libs.tar.gz`。打包器把两个扩展加入包内 NiFi 的 `extensions/`，核对字段映射版本与后端一致。解压后执行 `python3 tools/standalone.py start`，启动器初始化控制库、海通租户库和账号，并确认两个扩展已注册。见 [Linux 单机部署说明](../tools/haitong-deployment/linux-standalone/deployment.md)。
+Linux x86_64 和 aarch64（ARM64）单机版使用同一个无 Nacos 构建，打包时传入 `--bundle --linux-runtime-dir <对应架构的运行组件目录> --linux-arch x86_64|aarch64`，并用两个 `--nifi-extension` 参数传入与 NiFi 2.9.0 匹配的 `haitong-mapping-nar` 和 `datadevs-database-nar`。运行组件目录提供 `java21.tar.gz`、`mysql.tar.xz`、`redis.tar.gz`、官方 `nifi.zip`、`caddy.tar.gz` 和 `mysql-libs.tar.gz`。打包器检查 Java、MySQL、Valkey 及其加载器、Caddy 和 MySQL 补充库的 ELF 架构，再把两个扩展加入 NiFi 的 `extensions/`，并核对字段映射版本与后端一致。解压后执行 `python3 tools/standalone.py start`，启动器按 `config/runtime.json` 核对宿主机架构和选择 Valkey 加载器，离线初始化控制库、海通租户库和账号，并确认两个扩展已注册。各架构包内的 `部署说明.md` 给出目标系统要求和启停命令。
 
 麒麟 V10 的无 Nacos DM8 版在打包时加 `--dm8-runtime-dir <下载目录>`。该目录提供 Linux x86_64、ARM64 的 JDK 21 和网页入口发行包及发布校验信息，打包器校验 SHA-256。部署者直接编辑 `config/application.yml` 中的 DM8 控制库、租户库和 Redis，执行 `bash start.sh`、`bash status.sh`、`bash stop.sh`。已有数据的升级沿用原模式、租户配置和数据目录。`db/new-install-only/` 仅用于空模式新装，不参与启动。见[麒麟 DM8 版部署说明](../tools/haitong-deployment/linux-dm8/deployment.md)。
 

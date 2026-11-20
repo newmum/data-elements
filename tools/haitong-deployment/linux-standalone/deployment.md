@@ -1,6 +1,6 @@
-# 海通数据集成中心 Linux 无 Nacos 安装包
+# 海通数据集成中心 Linux @@LINUX_ARCH@@ 无 Nacos 安装包
 
-服务器使用 **Linux x86_64、glibc 2.34 或更新版本**。准备 Bash、GNU tar、gzip、xz、ZIP 解压工具及支持 SM3 的 Python 3.10+。建议 8 GB 内存和 10 GB 可用磁盘，剩余容量按 NiFi 数据量规划。
+服务器使用 **Linux @@LINUX_ARCH@@、glibc 2.34 或更新版本**。用 `uname -m` 查看处理器架构，用 `getconf GNU_LIBC_VERSION` 查看 glibc 版本。准备 Bash、GNU tar、gzip、xz、ZIP 解压工具及支持 SM3 的 Python 3.10+。建议 8 GB 内存和 10 GB 可用磁盘，剩余容量按 NiFi 数据量规划。
 
 在新目录解压整个安装包，目录应由运行海通的账号拥有。进入解压目录并执行：
 
@@ -8,7 +8,7 @@
 python3 tools/standalone.py start
 ```
 
-首次启动会解开 `vendor/` 中的 Java 21、MySQL、Valkey（兼容 Redis 协议）、NiFi 和 Caddy，导入两份数据库脚本，生成本地初始账号，并配置 NiFi 节点及公共 JSON 服务。NiFi 2.9.0 使用 HTTP，默认监听本机的 18080 端口。首次解包、建库和 NiFi 加载可能需要几分钟。
+首次启动会离线解开 `vendor/` 中的 Java 21、MySQL、Valkey（兼容 Redis 协议）、NiFi 和 Caddy，导入两份数据库脚本，生成本地初始账号，并配置 NiFi 节点及公共 JSON 服务。启动器按 `config/runtime.json` 校验服务器架构并选择包内 Valkey 动态加载器。NiFi 2.9.0 使用 HTTP，默认监听本机的 18080 端口。首次解包、建库和 NiFi 加载可能需要几分钟。
 
 终端显示「海通已就绪」后，在浏览器打开 `http://服务器地址:8090/`。初始用户名为 `admin`，密码和本机地址写在 `data/local/admin-login.txt`。该文件权限为 0600。日常使用时进入「NiFi 流程」，在画布配置业务来源和目标连接。
 

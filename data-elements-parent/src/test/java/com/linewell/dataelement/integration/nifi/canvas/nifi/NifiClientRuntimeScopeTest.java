@@ -103,6 +103,37 @@ class NifiClientRuntimeScopeTest {
         verify(resolver, never()).restClient(fallback);
     }
 
+    @Test void tasksWithTheSameGroupIdStillUseTheirOwnNifiServers() {
+        var resolver = mock(NifiNodeRuntimeResolver.class);
+        var first = new RuntimeNode("tenant-a", "first", "first", "http://first-nifi.test", "", "", false, "root");
+        var second = new RuntimeNode("tenant-a", "second", "second", "http://second-nifi.test", "", "", false, "root");
+        var firstBuilder = RestClient.builder().baseUrl(first.baseUrl());
+        var secondBuilder = RestClient.builder().baseUrl(second.baseUrl());
+        var firstServer = MockRestServiceServer.bindTo(firstBuilder).build();
+        var secondServer = MockRestServiceServer.bindTo(secondBuilder).build();
+        when(resolver.resolveAssignedNode("first")).thenReturn(first);
+        when(resolver.resolveAssignedNode("second")).thenReturn(second);
+        when(resolver.restClient(first)).thenReturn(firstBuilder.build());
+        when(resolver.restClient(second)).thenReturn(secondBuilder.build());
+        firstServer.expect(requestTo("http://first-nifi.test/nifi-api/process-groups/group"))
+                .andRespond(withSuccess("{\"component\":{\"name\":\"first-task\"}}", MediaType.APPLICATION_JSON));
+        secondServer.expect(requestTo("http://second-nifi.test/nifi-api/process-groups/group"))
+                .andRespond(withSuccess("{\"component\":{\"name\":\"second-task\"}}", MediaType.APPLICATION_JSON));
+        var client = new NifiClient(resolver, new ObjectMapper());
+        try (var tenant = TenantContext.use("tenant-a")) {
+            try (var selected = client.bindAssignedNode("first")) {
+                assertThat(client.getProcessGroup("group").path("component").path("name").asText()).isEqualTo("first-task");
+            }
+            try (var selected = client.bindAssignedNode("second")) {
+                assertThat(client.getProcessGroup("group").path("component").path("name").asText()).isEqualTo("second-task");
+                assertThat(client.assignedNodeUiUrl("second", "group")).startsWith("http://second-nifi.test/nifi/");
+            }
+        }
+        verify(resolver, never()).resolve();
+        firstServer.verify();
+        secondServer.verify();
+    }
+
     private RuntimeNode node(String tenant) {
         return new RuntimeNode(tenant, "node-" + tenant, "test", "http://nifi.test", "test-user", "test-password", false, "root-" + tenant);
     }

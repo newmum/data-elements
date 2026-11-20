@@ -1,28 +1,49 @@
 {
-  "properties": {},
-  "id": "nifi_attribute_sync_post_v1",
-  "script": null,
-  "groupId": "32618128861a58318b8524b74df21a23",
-  "name": "04.同步原生属性",
-  "path": "/attrs",
-  "method": "POST",
-  "description": "提交属性差异选择，按原生组件版本检查并同步。",
-  "parameters": [
-    {
-      "name": "id",
-      "required": true,
-      "dataType": "String",
-      "description": "流程或映射资源标识"
-    }
-  ],
-  "options": [
-    {
-      "name": "wrap_request_parameter",
-      "value": "param"
-    }
-  ],
-  "headers": [],
-  "paths": []
+  "properties" : { },
+  "id" : "nifi_attribute_sync_post_v1",
+  "script" : null,
+  "groupId" : "32618128861a58318b8524b74df21a23",
+  "name" : "04.同步原生属性",
+  "createTime" : null,
+  "updateTime" : 1795047206111,
+  "lock" : null,
+  "createBy" : null,
+  "updateBy" : null,
+  "path" : "/attrs",
+  "method" : "POST",
+  "parameters" : [ {
+    "name" : "id",
+    "value" : null,
+    "description" : "流程或映射资源标识",
+    "required" : true,
+    "dataType" : "String",
+    "type" : null,
+    "defaultValue" : null,
+    "validateType" : null,
+    "error" : null,
+    "expression" : null,
+    "children" : null
+  } ],
+  "options" : [ {
+    "name" : "wrap_request_parameter",
+    "value" : "param",
+    "description" : null,
+    "required" : false,
+    "dataType" : "String",
+    "type" : null,
+    "defaultValue" : null,
+    "validateType" : null,
+    "error" : null,
+    "expression" : null,
+    "children" : null
+  } ],
+  "requestBody" : null,
+  "headers" : [ ],
+  "paths" : [ ],
+  "responseBody" : null,
+  "description" : "提交属性差异选择，按原生组件版本检查并同步。",
+  "requestBodyDefinition" : null,
+  "responseBodyDefinition" : null
 }
 ================================
 import '@/common/nifiFindCanvas' as findCanvas
@@ -59,7 +80,14 @@ return respond(rootCause => {
         if (canvas == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, '流程不存在')
         }
-        var applied = new NifiAttributeSync(nifi).apply(canvas, command)
+        // 只修改该任务绑定节点的原生组件，与首次部署、详情链接保持同一节点。
+        var runtime = nifi.bindAssignedNode(canvas.nodeMapping()?.runtimeNodeId())
+        var applied = null
+        try {
+            applied = new NifiAttributeSync(nifi).apply(canvas, command)
+        } finally {
+            runtime.close()
+        }
         for (change in applied.results()) {
             if (['SYNCED', 'KEPT_NATIVE'].contains(change.status())) {
                 writeRuntime(pipelineId, tenantId, {mapping: canvas.nodeMapping().withAttributes(applied.baselines())})

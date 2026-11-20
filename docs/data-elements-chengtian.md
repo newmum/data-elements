@@ -231,6 +231,20 @@ http://localhost:3000/
 
 ### 部署建议
 
+同一域名下部署彼此独立的实例时，可在构建时设置 `VITE_APP_STORAGE_PREFIX`，例如 `police-dm`，使该实例的登录令牌与界面偏好使用独立的浏览器存储键。子路径部署可将 `VITE_APP_BASE_API` 设为 `./prod-api`、将 `VITE_APP_NIFI_API` 设为 `./prod-api/nifi/api`，并由该站点的网关转发同一子路径下的接口。
+
+公安单租户达梦部署的初始化数据包含当前公安门户公开配置、`orgRootId`、既有资源数据范围配置和完整有效组织树。源配置从当前绑定的公安库读取，控制库只读取 `GLOBAL` 门户配置，再以公安公开品牌字段生成登录前的全局品牌缺省值，仅导出已审阅的公开品牌字段和上述两个租户内部配置项。使用 `python tools/export-police-defaults.py --tenant-database <当前公安库名>` 导出到 `tools/police-deployment/db/`，脚本核对当前租户绑定、配置键、内嵌 Logo 与组织父子关系。连接信息留在仓库外。NiFi、SSO、对象存储等环境连接继续在目标环境配置。
+
+新部署的 `platform.sh init-db` 导入原结构、菜单字典、表单和初始账号后，通过 `PoliceDefaults.java --apply` 添加配置和组织。已有部署使用更新包中的 `bash apply-update.sh --plan` 查看缺项，再执行 `bash apply-update.sh --apply`，写入后重启独立实例刷新配置缓存。导入按表和租户一次预读，使用参数批量写入，保留已有同键配置和组织。只将固定演示账号原先的占位组织关联到公安根机构，执行记录写在部署目录的 `logs/police-defaults-*/`。初始化与补齐共用同一份数据和导入器，重复执行应报告零新增。
+
+`python tools/package-police-update.py --backend <已验证的修复后端.jar> --output <仓库外或logs中的更新.zip>` 生成限定更新包，附带文件校验清单。后端先暂存到 `updates/police-defaults/`，更新脚本备份当前 JAR、停止旧进程后替换，启动失败时恢复原 JAR。平台启动后先刷新本机缓存中的全局与公安门户配置，再启动后端，兼容缓存持久化后离线导入的情况。首次初始化也安装同一暂存后端。
+
+需要完整交付时，使用 `python tools/package-police-deployment.py --base <原完整包.zip> --update <已验证更新包.zip> --output <完整包.zip>`，将修复后端直接放到正式 `backend/data-element.jar`，合并初始化数据和启动入口，保留原前端、完整结构与运行依赖，生成逐文件校验清单并核对所有合并内容。完整包可以直接完成空库初始化。NiFi 2.9.0的独立完整配套包及自定义组件范围见[共享后端NiFi配套交付](data-elements-parent.md#nifi-deployment)。
+
+接入任务的 SSE 实时状态在公安新库尚未配置 NiFi 节点时返回正常事件，标注状态未确认和节点配置提示。按正常订阅周期重新认证和解析节点，配置后新订阅即可恢复采样。未配置节点的事件不包含任务标识，也不发起 NiFi 请求。
+
+该状态沿用现有 SSE 的 `revision/fresh/observedAt/message` 契约，前端运行通道测试覆盖未确认状态和20/100行固定请求数。当前 Mock 未接入实时 SSE，本次配置缺省处理保持原事件格式与调用方协议，未添加独立的 Mock 状态缓存。
+
 ```bash
 pnpm run build
 ```

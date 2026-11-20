@@ -8,6 +8,7 @@ param(
     [string]$JavaExe = '',
     [int]$Port = 8088,
     [switch]$ValidateOnly,
+    [switch]$Foreground,
     [hashtable]$NacosSettings = @{}
 )
 
@@ -108,9 +109,17 @@ foreach ($taskProperty in $taskConfig.environment.PSObject.Properties) {
 }
 $taskOwners = @(Get-NetTCPConnection -LocalPort ([int]$taskConfig.port) -State Listen -ErrorAction SilentlyContinue |
     Select-Object -ExpandProperty OwningProcess -Unique)
+$taskPidFile = Join-Path $taskLogRoot 'backend.pid'
+if (Test-Path -LiteralPath $taskPidFile -PathType Leaf) {
+    $taskRecordedPid = 0
+    if ([int]::TryParse((Get-Content -LiteralPath $taskPidFile -Raw).Trim(), [ref]$taskRecordedPid) -and
+        (Get-Process -Id $taskRecordedPid -ErrorAction SilentlyContinue) -and $taskRecordedPid -notin $taskOwners) {
+        $taskOwners += $taskRecordedPid
+    }
+}
 if ($taskOwners.Count -gt 0 -and !$Restart) { throw 'A backend is already listening; use -Restart only for an authorized restart' }
 foreach ($taskOwner in $taskOwners) {
-    $taskProcess = Get-CimInstance Win32_Process -Filter "ProcessId=$taskOwner"
+    $taskProcess = Get-CimInstance Win32_Process -Filter "ProcessId=$taskOwner" -OperationTimeoutSec 3
     if (!$taskProcess -or !$taskProcess.CommandLine -or
         !$taskProcess.CommandLine.Replace('\', '/').ToLowerInvariant().Contains($taskNormalizedJar) -or
         $taskProcess.ExecutablePath -ne $taskConfig.executable) {
@@ -176,8 +185,15 @@ if ($WithoutNacos) {
     [Environment]::SetEnvironmentVariable('DATA_ELEMENTS_LOG_DIR', $taskLogRoot, 'Process')
 }
 New-Item -Path $taskLogRoot -ItemType Directory -Force | Out-Null
-$taskLaunched = Start-Process -FilePath $taskConfig.executable -ArgumentList $taskConfig.argumentLine `
-    -WorkingDirectory $taskRepo -WindowStyle Hidden `
-    -RedirectStandardOutput (Join-Path $taskLogRoot 'stdout.log') `
-    -RedirectStandardError (Join-Path $taskLogRoot 'stderr.log') -PassThru
+if ($Foreground) {
+    Write-Host '[start-data-elements] Attaching Java stdout and stderr to this console.'
+    $taskLaunched = Start-Process -FilePath $taskConfig.executable -ArgumentList $taskConfig.argumentLine `
+        -WorkingDirectory $taskRepo -NoNewWindow -PassThru
+} else {
+    $taskLaunched = Start-Process -FilePath $taskConfig.executable -ArgumentList $taskConfig.argumentLine `
+        -WorkingDirectory $taskRepo -WindowStyle Hidden `
+        -RedirectStandardOutput (Join-Path $taskLogRoot 'stdout.log') `
+        -RedirectStandardError (Join-Path $taskLogRoot 'stderr.log') -PassThru
+}
+Set-Content -LiteralPath $taskPidFile -Value $taskLaunched.Id -Encoding ascii
 @{pid = $taskLaunched.Id; port = [int]$taskConfig.port; configuration = 'private'; status = 'started-awaiting-health'} | ConvertTo-Json -Compress

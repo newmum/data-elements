@@ -3,6 +3,7 @@ package com.linewell.dataelement.integration.nifi.canvas.runtime;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.linewell.dataelement.integration.nifi.canvas.config.NifiNodeRuntimeResolver;
 import com.linewell.dataelement.integration.nifi.canvas.config.NifiNodeRuntimeResolver.RuntimeNode;
+import com.linewell.dataelement.integration.nifi.canvas.config.NifiNodeRuntimeResolver.NodeNotConfiguredException;
 import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient;
 import com.linewell.dataelement.platform.tenant.domain.TenantContext;
 import jakarta.annotation.PreDestroy;
@@ -19,6 +20,7 @@ public class TaskRuntimeStatusService {
     private final NifiNodeRuntimeResolver resolver;
     private final NifiClient nifi;
     private final Map<String, Entry> entries = new ConcurrentHashMap<>();
+    private final Set<Subscriber> unconfigured = ConcurrentHashMap.newKeySet();
     private final Semaphore connections = new Semaphore(512);
     private final ScheduledExecutorService clock = Executors.newSingleThreadScheduledExecutor(r -> { Thread t = new Thread(r, "nifi-runtime-clock"); t.setDaemon(true); return t; });
     private final ExecutorService readers = new ThreadPoolExecutor(2, 4, 30, TimeUnit.SECONDS, new ArrayBlockingQueue<>(16), r -> { Thread t = new Thread(r, "nifi-runtime-reader"); t.setDaemon(true); return t; });
@@ -42,11 +44,14 @@ public class TaskRuntimeStatusService {
         final AtomicBoolean writing = new AtomicBoolean();
         volatile Map<String, Object> pending;
         volatile ScheduledFuture<?> renewal;
+        volatile ScheduledFuture<?> heartbeat;
         volatile boolean disconnected;
         Subscriber(Entry entry) {
             Runnable remove = () -> {
                 if (entry.subscribers.remove(this)) connections.release();
+                unconfigured.remove(this);
                 if (renewal != null) renewal.cancel(false);
+                if (heartbeat != null) heartbeat.cancel(false);
             };
             emitter.onCompletion(remove); emitter.onTimeout(remove); emitter.onError(e -> remove.run());
         }
@@ -139,9 +144,24 @@ public class TaskRuntimeStatusService {
         return result;
     }
     public SseEmitter subscribe() {
-        Entry entry = current(null);
+        Entry entry;
+        boolean configured = true;
+        try {
+            entry = current(null);
+        } catch (NodeNotConfiguredException missing) {
+            // Missing configuration is a normal first-install state. Keep the SSE
+            // contract so MVC does not attempt to serialize a JSON error as a stream.
+            entry = new Entry(null);
+            entry.error = missing.getMessage();
+            configured = false;
+        }
         if (!connections.tryAcquire()) throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE, "实时状态连接繁忙，请稍后重试");
         Subscriber subscriber = new Subscriber(entry); entry.subscribers.add(subscriber);
+        if (!configured) {
+            unconfigured.add(subscriber);
+            Map<String, Object> unavailable = event(entry);
+            subscriber.heartbeat = clock.scheduleAtFixedRate(() -> subscriber.offer(unavailable), 15, 15, TimeUnit.SECONDS);
+        }
         // Finish normally before MVC's fallback timeout, then authenticate the renewal.
         subscriber.renewal = clock.schedule(subscriber.emitter::complete, 55, TimeUnit.SECONDS);
         subscriber.offer(event(entry));
@@ -166,5 +186,5 @@ public class TaskRuntimeStatusService {
         value.put("invalidProcessorCount", group == null ? 0 : group.invalidCount());
         return value;
     }
-    @PreDestroy public void close() { entries.values().forEach(e -> e.subscribers.forEach(s -> s.emitter.complete())); clock.shutdownNow(); readers.shutdownNow(); writers.shutdownNow(); }
+    @PreDestroy public void close() { entries.values().forEach(e -> e.subscribers.forEach(s -> s.emitter.complete())); unconfigured.forEach(s -> s.emitter.complete()); clock.shutdownNow(); readers.shutdownNow(); writers.shutdownNow(); }
 }

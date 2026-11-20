@@ -1,21 +1,31 @@
 {
-  "properties": {},
-  "id": "nifi_attribute_preview_v1",
-  "script": null,
-  "groupId": "0f27d7cf99494ceca369c14f35fbb987",
-  "name": "60.海通原生属性差异",
-  "path": "/nifiAttributePreview",
-  "description": "原生属性 GET 和 HEAD 共用租户校验和原生快照。",
-  "parameters": [
-    {
-      "name": "pipelineId",
-      "description": "当前租户流程标识",
-      "required": false,
-      "dataType": "Object",
-      "type": "java.lang.Object"
-    }
-  ],
-  "options": []
+  "properties" : { },
+  "id" : "nifi_attribute_preview_v1",
+  "script" : null,
+  "groupId" : "0f27d7cf99494ceca369c14f35fbb987",
+  "name" : "60.海通原生属性差异",
+  "createTime" : null,
+  "updateTime" : 1795047201833,
+  "lock" : null,
+  "createBy" : null,
+  "updateBy" : null,
+  "path" : "/nifiAttributePreview",
+  "description" : "原生属性 GET 和 HEAD 共用租户校验和原生快照。",
+  "returnType" : null,
+  "mappingPath" : null,
+  "parameters" : [ {
+    "name" : "pipelineId",
+    "value" : null,
+    "description" : "当前租户流程标识",
+    "required" : false,
+    "dataType" : "Object",
+    "type" : "java.lang.Object",
+    "defaultValue" : null,
+    "validateType" : null,
+    "error" : null,
+    "expression" : null,
+    "children" : null
+  } ]
 }
 ================================
 import '@/common/nifiFindCanvas' as findCanvas
@@ -41,5 +51,11 @@ return respond(rootCause => {
     if (canvas == null) {
         throw new ResponseStatusException(HttpStatus.NOT_FOUND, '流程不存在')
     }
-    return ResponseEntity.ok(new NifiAttributeSync(nifi).preview(canvas))
+    // 属性读取与部署共用该任务持久化的运行节点，关闭后恢复原线程绑定。
+    var runtime = nifi.bindAssignedNode(canvas.nodeMapping()?.runtimeNodeId())
+    try {
+        return ResponseEntity.ok(new NifiAttributeSync(nifi).preview(canvas))
+    } finally {
+        runtime.close()
+    }
 })

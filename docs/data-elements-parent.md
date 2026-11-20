@@ -59,6 +59,8 @@
 
 普通启动读取 `db/nacos/local.properties` 的 Nacos 地址、命名空间和 Data ID；该文件同时指定工程外私有运行配置文件名，由私有文件提供对应环境的凭据和 Java 路径。修改文件中的五项即可切换 86 或 14，文件末尾列出了 14 的取值；然后执行 `.\start-data-elements.cmd -Restart`。启动时会打印实际选择。已有服务需要重启才会生效，切换前会检查 Nacos HTTP 响应，无法访问时保留原进程。切换会改变整套本地租户及依赖配置，并非只切换单个租户；实际生效还须检查日志、登录和租户路由。私有资源工具的 `resources.local.json` 不会自动切换，需在目标可访问时使用 `tools/configure-resources.py` 同步。`-RuntimeConfigPath` 显式指定私有配置时不使用选择文件。入口运行 `.runtime/data-element-runtime.jar`，不会用旧 `target/` 包覆盖它。
 
+根入口默认将 Java 标准输出和错误输出直接连接当前控制台，启动期间即可看到日志，应用日志仍由 Logback 写入 `logs/backend/`。启动完成要求行业与统一身份的 Magic 登录接口都已加载。超时、启动失败或关闭前台入口时结束本次启动的进程。显式 `-NoLiveLog` 使用文件输出。MyBatis 共享工厂按已配置默认行业的 JDBC 协议识别原有 XML 方言，行业连接在实际操作中解析；单库或未匹配协议的部署通过控制库识别产品。默认行业库离线不会阻塞此项启动识别，控制库仍须可用。
+
 `-Build` 明确要求重新打包并替换运行包；`-JarPath` 明确选择其他包。需要其他环境时可显式传入 `-NacosHost`，并在该进程中提供相应 Nacos 凭据、命名空间和配置导入。直接执行 `java -jar` 或以下 Maven 命令不会自动读取上述受限 JSON，需要先设置同一套环境变量；不要依赖 JAR 的历史环境默认值。
 
 ```bash
@@ -1372,6 +1374,16 @@ FTPS 密码保存在 NiFi 敏感动态属性中，脚本正文不含凭据。发
 | FTP／SFTP／FTPS | 沿用文件链路，补齐 FTPS TLS、敏感配置及持久化水位 | 协议、证书信任库与 NiFi Groovy／Commons Net 客户端 |
 
 新增产品的单元测试和模拟编译验证不能代替对应版本实库验收。首次接入应核对驱动、Schema、字段类型、分页、全量、增量边界和中断恢复；当前时间／水位抽取不等同于日志 CDC，不承诺自动捕获删除。
+
+<a id="nifi-deployment"></a>
+
+## NiFi 配套交付
+
+根工具 `tools/package-nifi-deployment.py` 从已校验的 Apache NiFi 2.9.0 完整发行 ZIP、匹配的厂商 NAR、海通字段治理 NAR、Linux x86_64 JDK21和驱动清单生成独立完整包。参数通过工具 `--help` 查看，发行文件使用官方SHA-512校验，JDK和驱动使用已登记SHA-256校验，所有自定义NAR核对坐标、父依赖和完整性。输出包含逐文件二进制校验清单、`extensions.json`、驱动版本清单及现场绝对路径映射生成入口，厂商二进制与运行配置继续留在仓库外。
+
+当前匹配组合含9个NAR，包括`haitong-mapping-nar:1.1.29`，以及2.9.0的`datadevs-database`、`datadevs-record`、`datadevs-record-service-api`、`datadevs-record-redis-service`、`datadevs-avro`、`datadevs-encrypt`、`linewell-hadoop-libraries`和`linewell-hadoop`。同版本厂商原件已在临时NiFi 2.9.0 / JDK21实例核对20类自定义Processor和2类Controller Service注册，覆盖此前保存的公司节点全部自定义类型；原公司节点本次不可达，交付依据本地原件与历史清单，未宣称重新获取了服务器当前磁盘快照。注册验证不等同于现场数据库、Hadoop或Kerberos业务流验收。
+
+启动入口为包根目录`bash nifi.sh start|stop|status`，启动时解开包内x86_64 JDK、校验发行二进制和扩展、生成驱动映射。配置目录可按现场修改，默认沿用官方HTTPS单用户模式与8443端口。MySQL、达梦、金仓、Oracle、OceanBase、PostgreSQL、SQL Server、Vertica等JDBC驱动及多种GaussDB原厂驱动随包提供；现场连接、证书、MRS站点与Kerberos凭据由部署环境配置。平台节点管理中的驱动路径指向NiFi实际执行服务器，包内模板中的路径在运行时生成。
 
 ## 时间窗口抓取扩展
 

@@ -3,6 +3,12 @@ export const mockEnabled = import.meta.env.VITE_MOCK_ENABLED === "true";
 export const mockScenario = import.meta.env.VITE_MOCK_SCENARIO || "police";
 export const mockRole = import.meta.env.VITE_MOCK_ROLE || "admin";
 export const mockLatency = Number(import.meta.env.VITE_MOCK_LATENCY_MS || 120);
-// 行业切换沿用现有会话和登录选择流程；UI 缓存仅隔离真实模式与 Mock 角色。
+const deploymentStoragePrefix = import.meta.env.VITE_APP_STORAGE_PREFIX?.trim();
+
+// 同源子路径部署可配置独立的会话和偏好键。Mock 仍使用按角色隔离的键。
 export const scopedStorageKey = (key: string) =>
-  mockEnabled ? `data-elements:mock:ui:v3:${mockRole}:${key}` : key;
+  mockEnabled
+    ? `data-elements:mock:ui:v3:${mockRole}:${key}`
+    : deploymentStoragePrefix
+      ? `data-elements:${deploymentStoragePrefix}:${key}`
+      : key;

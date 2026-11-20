@@ -8,6 +8,8 @@ interface ImportMetaEnv {
   VITE_APP_NAME: string;
   /** API 基础路径(代理前缀) */
   VITE_APP_BASE_API: string;
+  /** 可选的浏览器存储命名空间，用于同源部署彼此独立的站点。 */
+  VITE_APP_STORAGE_PREFIX?: string;
   /** nifi API 基础路径(代理前缀) */
   VITE_APP_NIFI_API: string;
   /** API 地址 */

@@ -8304,7 +8304,7 @@
         "fd513d684499469dad241c1d993c6d13"
       ],
       "kind": "api",
-      "baseSha256": "ebd218f9754fc202c08e781dff96ca42fd976eba172edf6c5efd92c9e667f8e7",
+      "baseSha256": "01f120dfa430879f08a443181994997cc6916453cbdece860add395fa00d123c",
       "metadataId": "nifi_attribute_sync_post_v1"
     },
     {
@@ -9459,7 +9459,7 @@
         "cfb0785ffae54a34ad3f1977ba59c0d2"
       ],
       "kind": "function",
-      "baseSha256": "7474a4f02db814ccf21eb51c122f85dedf29d287929950a0fbcac8e3b50d6b6e",
+      "baseSha256": "afd4da683d734bd41a06fbbdd9e03387c794dd35e2f5d58e434c6948b77b0fe1",
       "metadataId": "nifi_attribute_preview_v1"
     },
     {

@@ -286,7 +286,7 @@ def mysql_tcp_url(ports, database):
             "?characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true")
 
 
-def start(ports, credentials):
+def start(ports, credentials, redis_loader):
     for service in ("mysql", "redis", "nifi", "backend"):
         require_free_port(ports[service], service)
     require_free_port(ports["web"], "web", ports["webBind"])
@@ -298,7 +298,7 @@ def start(ports, credentials):
         redis_config = STATE / "redis.conf"
         private_file(redis_config, f"bind 127.0.0.1\nport {ports['redis']}\n"
                      f"requirepass {credentials['redis']}\nappendonly yes\n")
-        spawn("redis", [str(redis / "lib/ld-musl-x86_64.so.1"), "--library-path",
+        spawn("redis", [str(redis / redis_loader), "--library-path",
                         f"{redis / 'lib'}:{redis / 'usr/lib'}", str(redis / "usr/bin/valkey-server"), str(redis_config)], cwd=STATE)
         home = configure_nifi(ports, credentials)
         java = str(RUNTIME / "java/bin/java")
@@ -308,7 +308,8 @@ def start(ports, credentials):
                        f"-Dnifi.properties.file.path={home / 'conf/nifi.properties'}",
                        f"-Dorg.apache.nifi.bootstrap.config.log.dir={home / 'logs'}", "org.apache.nifi.NiFi"], cwd=home,
               env=dict(os.environ, JAVA_HOME=str(RUNTIME / "java"), PATH=str(RUNTIME / "java/bin") + ":" + os.environ["PATH"]))
-        wait_for("nifi", lambda: bool(http_json(nifi_url + "/flow/process-groups/root")), 220)
+        # 首次启动需要展开 NiFi 自带的 NAR 并初始化 Web 应用。
+        wait_for("nifi", lambda: bool(http_json(nifi_url + "/flow/process-groups/root")), 480)
         verify_nifi_extensions(nifi_url)
         initialize_record_services(nifi_url)
         print("正在启动海通后端…", flush=True)
@@ -352,8 +353,11 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("action", choices=("start", "status", "stop", "init-db"))
     options = parser.parse_args()
-    if platform.system() != "Linux" or platform.machine() != "x86_64":
-        raise RuntimeError("此部署包需要 Linux x86_64")
+    runtime = json.loads((ROOT / "config/runtime.json").read_text(encoding="ascii"))
+    machine = platform.machine().lower()
+    architecture = {"amd64": "x86_64", "arm64": "aarch64"}.get(machine, machine)
+    if platform.system() != "Linux" or architecture != runtime["architecture"]:
+        raise RuntimeError(f"此部署包需要 Linux {runtime['architecture']}，当前是 {platform.system()} {machine}")
     os.umask(0o077)
     STATE.mkdir(parents=True, exist_ok=True)
     LOGS.mkdir(exist_ok=True)
@@ -377,7 +381,7 @@ def main():
             bootstrap_database(ports, credentials)
             print("数据库初始化完成")
         else:
-            start(ports, credentials)
+            start(ports, credentials, runtime["redisLoader"])
 
 
 if __name__ == "__main__":

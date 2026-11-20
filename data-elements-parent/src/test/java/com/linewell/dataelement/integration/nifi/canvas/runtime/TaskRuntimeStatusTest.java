@@ -6,9 +6,13 @@ import com.linewell.dataelement.integration.nifi.canvas.config.NifiNodeRuntimeRe
 import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient;
 import com.linewell.dataelement.platform.tenant.domain.TenantContext;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import java.util.*;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 class TaskRuntimeStatusTest {
     private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -17,6 +21,29 @@ class TaskRuntimeStatusTest {
         {"processGroupStatusSnapshot":{"id":"child","activeThreadCount":0,"processorStatusSnapshots":[
         {"processorStatusSnapshot":{"id":"p","runStatus":"%s"}}]}}]}}}
         """.formatted(state); }
+    @Test void tenantWithoutNifiReceivesUnavailableStreamAndCanReconnectAfterConfiguration() throws Exception {
+        var resolver = mock(NifiNodeRuntimeResolver.class);
+        var nifi = mock(NifiClient.class);
+        when(resolver.resolve()).thenThrow(new NifiNodeRuntimeResolver.NodeNotConfiguredException());
+        var service = new TaskRuntimeStatusService(resolver, nifi);
+        try (var tenant = TenantContext.use("tenant-new")) {
+            var mvc = MockMvcBuilders.standaloneSetup(new TaskRuntimeController(service)).build();
+            var result = mvc.perform(get("/nifi/api/task-runtime/events").accept("text/event-stream"))
+                    .andExpect(status().isOk()).andExpect(request().asyncStarted()).andReturn();
+            for (int retry = 0; retry < 100 && !result.getResponse().getContentAsString().contains("unavailable"); retry++) {
+                Thread.sleep(10);
+            }
+            String event = result.getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
+            assertThat(event).contains("event:runtime", "\"fresh\":false", "尚未配置 NiFi 节点");
+            verifyNoInteractions(nifi);
+            var node = new RuntimeNode("tenant-new", "new-node", "new", "http://nifi.invalid", "", "", false, "root");
+            doReturn(node).when(resolver).resolve();
+            when(nifi.getRuntimeRootStatus(node)).thenReturn(MAPPER.readTree(response("Running")));
+            assertThat(service.snapshot()).containsEntry("fresh", true);
+        } finally {
+            service.close();
+        }
+    }
     @Test void idleScheduledProcessorIsRunningAndNestedStateIsIncluded() throws Exception {
         var index = RuntimeStatusIndex.parse(MAPPER.readTree(response("Running")));
         assertThat(index.groups().get("child").state()).isEqualTo("RUNNING");

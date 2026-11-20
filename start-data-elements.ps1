@@ -57,7 +57,7 @@ if (-not $WithoutNacos -and -not $PSBoundParameters.ContainsKey('RuntimeConfigPa
 $usesPrivateRuntime = (Test-Path -LiteralPath $RuntimeConfigPath -PathType Leaf) -and
     @($PSBoundParameters.Keys | Where-Object { $_ -notin $privateRuntimeArguments }).Count -eq 0
 if ($WithoutNacos -or $usesPrivateRuntime) {
-    $runtimeParameters = @{ConfigPath=$RuntimeConfigPath; Restart=$Restart}
+    $runtimeParameters = @{ConfigPath=$RuntimeConfigPath; Restart=$Restart; Foreground=(!$NoLiveLog)}
     if ($localNacos) {
         $runtimeParameters.NacosSettings = @{}
         foreach ($key in @('NACOS_HOST','NACOS_PORT','NACOS_NAMESPACE','NACOS_CONFIG_IMPORTS')) {
@@ -70,23 +70,33 @@ if ($WithoutNacos -or $usesPrivateRuntime) {
         $runtimeParameters += @{WithoutNacos=$true; LocalConfigPath=$LocalConfigPath; LocalEnvironmentPath=$LocalEnvironmentPath;
                                JarPath=$JarPath; JavaExe=$JavaExe; Port=$Port; ValidateOnly=$ValidateOnly}
     } elseif ($ValidateOnly) { throw '-ValidateOnly requires -WithoutNacos' }
-    $runtimeResult = & (Join-Path $PSScriptRoot 'tools/start-local-backend.ps1') @runtimeParameters | ConvertFrom-Json
-    if ($ValidateOnly) { $runtimeResult | ConvertTo-Json -Depth 4; return }
-    $runtimeLogDirectory = if ($WithoutNacos) { 'logs/backend/no-nacos' } else { 'logs/backend/local-runtime' }
-    Write-Host "[start-data-elements] Starting runtime on port $($runtimeResult.port); without Nacos=$([bool]$WithoutNacos)."
-    $runtimeDeadline = (Get-Date).AddSeconds($StartupTimeoutSeconds)
-    $runtimeReady = $false
-    while ((Get-Date) -lt $runtimeDeadline -and (Get-Process -Id $runtimeResult.pid -ErrorAction SilentlyContinue)) {
-        try {
-            $readyResponse = Invoke-RestMethod -Uri "http://localhost:$($runtimeResult.port)/portal/sso/options" -TimeoutSec 3
-            if ($readyResponse.code -eq 0) { $runtimeReady = $true; break }
-        } catch { }
-        Start-Sleep -Seconds 1
+    $runtimeResult = $null
+    try {
+        $runtimeResult = & (Join-Path $PSScriptRoot 'tools/start-local-backend.ps1') @runtimeParameters | ConvertFrom-Json
+        if ($ValidateOnly) { $runtimeResult | ConvertTo-Json -Depth 4; return }
+        Write-Host "[start-data-elements] Starting runtime on port $($runtimeResult.port); without Nacos=$([bool]$WithoutNacos)."
+        Write-Host '[start-data-elements] Waiting for tenant and identity Magic login routes.'
+        $runtimeDeadline = (Get-Date).AddSeconds($StartupTimeoutSeconds)
+        $runtimeReady = $false
+        while ((Get-Date) -lt $runtimeDeadline -and (Get-Process -Id $runtimeResult.pid -ErrorAction SilentlyContinue)) {
+            $runtimeReady = $true
+            foreach ($loginPath in @('/portal/sso/login', '/idaas/auth/login')) {
+                try {
+                    $readyResponse = Invoke-RestMethod -Uri "http://localhost:$($runtimeResult.port)$loginPath" -Method Post -ContentType 'application/json' -Body '{}' -TimeoutSec 3
+                    if ($readyResponse.code -ne 400) { $runtimeReady = $false }
+                } catch { $runtimeReady = $false }
+            }
+            if ($runtimeReady) { break }
+            Start-Sleep -Seconds 1
+        }
+        if (-not $runtimeReady) { throw 'Backend did not load its Magic login routes. Inspect logs/backend for the database or configuration error.' }
+        Write-Host '[start-data-elements] Backend ready. Tenant and identity Magic login routes are loaded.'
+        Wait-Process -Id $runtimeResult.pid -ErrorAction SilentlyContinue
+    } finally {
+        if ($runtimeResult -and !$ValidateOnly) {
+            Stop-Process -Id $runtimeResult.pid -ErrorAction SilentlyContinue
+        }
     }
-    if (-not $runtimeReady) { throw "Runtime did not become ready; inspect $runtimeLogDirectory" }
-    Write-Host "[start-data-elements] Tenant login routes ready. Runtime logs: $runtimeLogDirectory/stdout.log"
-    if ($NoLiveLog) { Wait-Process -Id $runtimeResult.pid -ErrorAction SilentlyContinue }
-    else { Get-Content -LiteralPath (Join-Path $PSScriptRoot "$runtimeLogDirectory/stdout.log") -Tail 30 -Wait }
     return
 }
 
@@ -386,7 +396,7 @@ if ([string]::IsNullOrWhiteSpace($KafkaBootstrapServers)) {
 }
 
 Write-Status "Starting backend in foreground."
-Write-Status "Live logs will appear in this terminal and are retained in: $stdoutLog"
+Write-Status "Java output will appear in this terminal. Application logs are retained under: $logDir"
 
 # Nacos supplies database, Redis, Elasticsearch, NiFi and tenant-routing
 # settings. Do not duplicate those settings here: command-line properties have
@@ -408,23 +418,11 @@ try {
     # paths so the launcher also works when this repository lives under a space.
     $logbackConfig = Join-Path $projectDir 'src/main/resources/logback.xml'
     $javaArgs = @("-Djdk.net.unixdomain.tmpdir=`"$unixDomainTempDir`"", "-DDATA_ELEMENTS_LOG_DIR=`"$logDir`"", "-Dlogback.configurationFile=`"$logbackConfig`"", "-jar", "`"$JarPath`"") + $runtimeArgs
-    # Keep the JVM hidden and its file handles independent from this PowerShell process, but
-    # forward the redirected files back to the same console in real time. A
-    # direct `java | Tee-Object` pipeline can close child streams during Spring
-    # bootstrap on this Windows host; tailing the files avoids that failure
-    # while still making startup errors visible immediately.
-    New-Item -ItemType File -Force -Path $stdoutLog, $stderrLog | Out-Null
-    $process = Start-Process -FilePath $JavaExe -ArgumentList $javaArgs -WorkingDirectory $projectDir -PassThru -WindowStyle Hidden -RedirectStandardOutput $stdoutLog -RedirectStandardError $stderrLog
-    $logTailJobs = @()
-    if (-not $NoLiveLog) {
-        $logTailJobs += Start-Job -ScriptBlock {
-            param([string]$Path)
-            Get-Content -LiteralPath $Path -Tail 0 -Wait
-        } -ArgumentList $stdoutLog
-        $logTailJobs += Start-Job -ScriptBlock {
-            param([string]$Path)
-            Get-Content -LiteralPath $Path -Tail 0 -Wait | ForEach-Object { "[stderr] $_" }
-        } -ArgumentList $stderrLog
+    if ($NoLiveLog) {
+        New-Item -ItemType File -Force -Path $stdoutLog, $stderrLog | Out-Null
+        $process = Start-Process -FilePath $JavaExe -ArgumentList $javaArgs -WorkingDirectory $projectDir -PassThru -WindowStyle Hidden -RedirectStandardOutput $stdoutLog -RedirectStandardError $stderrLog
+    } else {
+        $process = Start-Process -FilePath $JavaExe -ArgumentList $javaArgs -WorkingDirectory $projectDir -PassThru -NoNewWindow
     }
     $magicReady = $false
     $magicReadinessFailed = $false
@@ -432,9 +430,6 @@ try {
     $magicNextProbe = Get-Date
     Write-Status 'Waiting for tenant and identity login routes to finish loading.'
     while (-not $process.HasExited) {
-        foreach ($job in $logTailJobs) {
-            Receive-Job -Job $job -ErrorAction SilentlyContinue
-        }
         if (-not $magicReady -and (Get-Date) -ge $magicNextProbe) {
             $magicReady = Test-MagicLoginReadiness -PortNumber $Port
             $magicNextProbe = (Get-Date).AddSeconds(5)
@@ -449,11 +444,6 @@ try {
         Start-Sleep -Milliseconds 250
         $process.Refresh()
     }
-    foreach ($job in $logTailJobs) {
-        Receive-Job -Job $job -ErrorAction SilentlyContinue
-        Stop-Job -Job $job -ErrorAction SilentlyContinue
-        Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
-    }
     $exitCode = $process.ExitCode
     if ($magicReadinessFailed) { $exitCode = 1 }
 } catch {
@@ -465,6 +455,8 @@ try {
     Write-Status "Backend launcher failed: $($launchError.Exception.Message)"
     Show-LogTail -Path $stdoutLog -Lines 200
     Show-LogTail -Path $stderrLog -Lines 200
+} finally {
+    if ($process -and !$process.HasExited) { Stop-Process -Id $process.Id -ErrorAction SilentlyContinue }
 }
 
 if ($null -eq $exitCode) { $exitCode = 0 }

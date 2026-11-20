@@ -38,7 +38,7 @@ class PrivateBackendLauncherTest(unittest.TestCase):
         }
         self.probe = self.folder / 'probe.ps1'
         self.probe.write_text(r'''
-param([string]$Launcher, [string]$Config, [string]$ExpectedKey, [string]$EventFile, [string]$ExpectedLocalHttp)
+param([string]$Launcher, [string]$Config, [string]$ExpectedKey, [string]$EventFile, [string]$ExpectedLocalHttp, [switch]$Foreground)
 $ErrorActionPreference = 'Stop'
 function Get-NetTCPConnection { [pscustomobject]@{OwningProcess=12345} }
 function Get-CimInstance {
@@ -48,16 +48,22 @@ function Get-CimInstance {
 function Stop-Process { Add-Content -LiteralPath $EventFile -Value 'stop' }
 function Wait-Process { }
 function Start-Process {
+    param([string]$FilePath, [string]$ArgumentList, [string]$WorkingDirectory,
+          [switch]$NoNewWindow, [switch]$PassThru, [string]$WindowStyle,
+          [string]$RedirectStandardOutput, [string]$RedirectStandardError)
+    if ($Foreground -and (!$NoNewWindow -or $WindowStyle -or $RedirectStandardOutput -or $RedirectStandardError)) {
+        throw 'Foreground must inherit console output and error directly'
+    }
     if ($env:IDAAS_TRANSPORT_KEY -cne $ExpectedKey) { throw 'Wrong child environment' }
     if ($env:NACOS_HOST -ne '203.0.113.10') { throw 'Runtime environment was lost' }
     if ([string]$env:IDAAS_TRANSPORT_ALLOW_LOCAL_HTTP -cne $ExpectedLocalHttp) { throw 'Wrong HTTP development setting' }
     Add-Content -LiteralPath $EventFile -Value 'start'
     [pscustomobject]@{Id=54321}
 }
-& $Launcher -ConfigPath $Config -Restart
+& $Launcher -ConfigPath $Config -Restart -Foreground:$Foreground
 ''', encoding='utf-8')
 
-    def run_probe(self, inherited_key=None):
+    def run_probe(self, inherited_key=None, foreground=False):
         self.config.write_text(json.dumps(self.fixture), encoding='utf-8')
         environment = {key: value for key, value in os.environ.items()
                        if key not in {'IDAAS_TRANSPORT_KEY', 'IDAAS_TRANSPORT_ALLOW_LOCAL_HTTP'}}
@@ -68,7 +74,8 @@ function Start-Process {
         result = subprocess.run([PWSH, '-NoProfile', '-File', str(self.probe),
                                  '-Launcher', str(self.launcher), '-Config', str(self.config),
                                  '-ExpectedKey', self.key, '-EventFile', str(events),
-                                 '-ExpectedLocalHttp', self.fixture['environment'].get('IDAAS_TRANSPORT_ALLOW_LOCAL_HTTP', '')],
+                                 '-ExpectedLocalHttp', self.fixture['environment'].get('IDAAS_TRANSPORT_ALLOW_LOCAL_HTTP', ''),
+                                 *(['-Foreground'] if foreground else [])],
                                 env=environment, capture_output=True, text=True,
                                 encoding='utf-8', timeout=15)
         self.assertNotIn(self.key, result.stdout + result.stderr)
@@ -80,6 +87,11 @@ function Start-Process {
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertEqual(['stop', 'start'], events)
         self.assertEqual(before, self.keyfile.read_bytes())
+
+    def test_foreground_inherits_the_existing_console_streams(self):
+        result, events = self.run_probe(foreground=True)
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(['stop', 'start'], events)
 
     def test_explicit_environment_key_takes_precedence(self):
         self.keyfile.write_text('invalid unused fallback', encoding='utf-8')

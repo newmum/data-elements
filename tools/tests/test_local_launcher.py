@@ -36,34 +36,36 @@ class LocalLauncherTest(unittest.TestCase):
         # The stub replaces the private launcher only inside this disposable workspace.
         # Process inspection, the health request and waiting are intercepted in this child shell.
         (self.workspace / 'tools' / 'start-local-backend.ps1').write_text('''
-param([string]$ConfigPath, [switch]$Restart, [hashtable]$NacosSettings = @{})
+param([string]$ConfigPath, [switch]$Restart, [switch]$Foreground, [hashtable]$NacosSettings = @{})
 function global:Get-Process {
     param([int]$Id, [string]$ErrorAction)
     if ($Id -ne 54321) { throw 'Unexpected process' }
     @{Id=$Id}
 }
 function global:Invoke-RestMethod {
-    param([string]$Uri, [int]$TimeoutSec)
-    if ($Uri -ne 'http://localhost:18088/portal/sso/options') {
+    param([string]$Uri, [int]$TimeoutSec, [string]$Method, [string]$ContentType, [string]$Body)
+    if ($Uri -notin @('http://localhost:18088/portal/sso/login','http://localhost:18088/idaas/auth/login') -or $Method -ne 'Post' -or $Body -ne '{}') {
         throw 'Unexpected readiness endpoint'
     }
-    @{code=0}
+    @{code=400}
 }
 function global:Wait-Process {
     param([int]$Id, [string]$ErrorAction)
     @{waitedFor=$Id} | ConvertTo-Json -Compress
 }
-@{configPath=$ConfigPath; restart=[bool]$Restart; nacos=$NacosSettings} | ConvertTo-Json -Compress |
+function global:Stop-Process { param([int]$Id, [string]$ErrorAction) }
+@{configPath=$ConfigPath; restart=[bool]$Restart; foreground=[bool]$Foreground; nacos=$NacosSettings} | ConvertTo-Json -Compress |
     Set-Content -LiteralPath (Join-Path $PSScriptRoot 'delegation.json') -Encoding utf8
 @{pid=54321; port=18088} | ConvertTo-Json -Compress
 ''', encoding='utf-8')
 
-    def run_probe(self, *arguments):
+    def run_probe(self, *arguments, live_log=False):
         environment = {key: value for key, value in os.environ.items()
                        if not key.startswith(('NACOS_', 'DATA_ELEMENT_', 'DATA_ELEMENTS_'))}
         environment.update(USERPROFILE=str(self.profile), NACOS_HOST='stale.invalid',
                            NACOS_CONFIG_IMPORTS='nacos:stale.yml', KAFKA_BOOTSTRAP_SERVERS='stale:9092')
-        result = subprocess.run([PWSH, '-NoProfile', '-File', str(self.probe), '-NoLiveLog',
+        log_options = [] if live_log else ['-NoLiveLog']
+        result = subprocess.run([PWSH, '-NoProfile', '-File', str(self.probe), *log_options,
                                  '-StartupTimeoutSeconds', '3', *arguments], env=environment,
                                 capture_output=True, text=True, encoding='utf-8', timeout=15)
         self.assertEqual(0, result.returncode, result.stderr)
@@ -97,6 +99,12 @@ function global:Wait-Process {
 
     def test_explicit_private_configuration_is_forwarded(self):
         self.assert_delegated(self.config, False, '-RuntimeConfigPath', str(self.config))
+
+    def test_default_launch_attaches_java_to_the_console(self):
+        self.config.write_text('{}', encoding='utf-8')
+        self.run_probe('-RuntimeConfigPath', str(self.config), live_log=True)
+        actual = json.loads(self.delegation.read_text(encoding='utf-8-sig'))
+        self.assertTrue(actual['foreground'])
 
     def test_missing_private_configuration_uses_configurable_launcher(self):
         actual = self.run_probe('-RuntimeConfigPath', str(self.config))

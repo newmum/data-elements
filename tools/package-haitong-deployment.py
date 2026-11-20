@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 import re
 import shutil
+import tarfile
 from zipfile import ZIP_DEFLATED, ZIP_STORED, ZipFile, ZipInfo
 
 from haitong_quality_example import EXAMPLES, build_quality_example
@@ -60,6 +61,37 @@ REQUIRED_NIFI_EXTENSIONS = {
     "haitong-mapping-nar": "com.linewell.dataelement",
     "datadevs-database-nar": "com.linewell.microservice",
 }
+LINUX_ARCHITECTURES = {"x86_64": 62, "aarch64": 183}
+
+
+def validate_linux_assets(assets, architecture, redis_loader):
+    """Inspect the binaries that the standalone launcher will actually use."""
+    required = {
+        "java21.tar.gz": ("bin/java", "lib/server/libjvm.so"),
+        "mysql.tar.xz": ("bin/mysql", "bin/mysqld", "bin/mysqladmin"),
+        "redis.tar.gz": (redis_loader, "usr/bin/valkey-server", "usr/lib/libssl.so.3", "usr/lib/libcrypto.so.3"),
+        "caddy.tar.gz": ("caddy",),
+        "mysql-libs.tar.gz": ("libaio.so.1", "libnuma.so.1", "libncurses.so.6", "libtinfo.so.6"),
+    }
+    for archive, files in required.items():
+        pending = set(files)
+        strip_root = archive in {"java21.tar.gz", "mysql.tar.xz"}
+        with tarfile.open(assets[archive]) as source:
+            for member in source:
+                name = member.name.removeprefix("./")
+                if strip_root:
+                    name = name.partition("/")[2]
+                if name not in pending:
+                    continue
+                with source.extractfile(member) as stream:
+                    header = stream.read(20)
+                if header[:6] != b"\x7fELF\x02\x01" or int.from_bytes(header[18:20], "little") != LINUX_ARCHITECTURES[architecture]:
+                    raise ValueError(f"Expected a Linux {architecture} binary: {archive}/{member.name}")
+                pending.remove(name)
+                if not pending:
+                    break
+        if pending:
+            raise ValueError(f"Missing Linux runtime files in {archive}: {', '.join(sorted(pending))}")
 
 
 def nar_metadata(archive):
@@ -261,7 +293,9 @@ def main():
     parser.add_argument("--frontend", type=Path, default=BUILD / "frontend")
     parser.add_argument("--nacos", action="store_true", help="Use the standard backend and import configuration from Nacos")
     parser.add_argument("--dm8-runtime-dir", type=Path, help="Bundle DM8 SQL and verified Linux x64/ARM64 runtimes")
-    parser.add_argument("--linux-runtime-dir", type=Path, help="Bundle x86_64 MySQL, Redis, NiFi, Caddy and Java 21")
+    parser.add_argument("--linux-runtime-dir", type=Path, help="Bundle Linux MySQL, Redis, NiFi, Caddy and Java 21")
+    parser.add_argument("--linux-arch", choices=tuple(LINUX_ARCHITECTURES),
+                        help="Architecture of the supplied Linux runtime files (default: x86_64)")
     parser.add_argument("--nifi-extension", type=Path, action="append", default=[],
                         help="Version-matched project NAR to embed in the Linux NiFi distribution (repeat for each NAR)")
     layout = parser.add_mutually_exclusive_group()
@@ -272,6 +306,8 @@ def main():
         parser.error("--dm8-runtime-dir requires --bundle with Nacos disabled")
     if args.linux_runtime_dir and (not args.bundle or args.nacos or args.dm8_runtime_dir):
         parser.error("--linux-runtime-dir requires the no-Nacos MySQL bundle")
+    if args.linux_arch and not args.linux_runtime_dir:
+        parser.error("--linux-arch requires the Linux runtime bundle")
     if args.nifi_extension and not args.linux_runtime_dir:
         parser.error("--nifi-extension requires the Linux runtime bundle")
     if args.linux_runtime_dir and len(args.nifi_extension) != len(REQUIRED_NIFI_EXTENSIONS):
@@ -356,23 +392,31 @@ def main():
     })
     configuration = "nacos" if args.nacos else "no-nacos"
     if args.linux_runtime_dir:
-        configuration = "linux-x86_64-no-nacos"
+        architecture = args.linux_arch or "x86_64"
+        configuration = f"linux-{architecture}-no-nacos"
         linux = TEMPLATES / "linux-standalone"
-        assets = ("java21.tar.gz", "mysql.tar.xz", "redis.tar.gz", "nifi.zip", "caddy.tar.gz", "mysql-libs.tar.gz")
-        for asset in assets:
-            file = args.linux_runtime_dir / asset
+        redis_loader = f"lib/ld-musl-{architecture}.so.1"
+        assets = {name: args.linux_runtime_dir / name for name in (
+            "java21.tar.gz", "mysql.tar.xz", "redis.tar.gz", "nifi.zip", "caddy.tar.gz", "mysql-libs.tar.gz")}
+        for name, file in assets.items():
             if not file.is_file():
-                raise ValueError(f"Missing verified Linux runtime asset: {asset}")
-            backend[f"vendor/{asset}"] = file
+                raise ValueError(f"Missing verified Linux runtime asset: {name}")
+        validate_linux_assets(assets, architecture, redis_loader)
+        backend.update({f"vendor/{name}": file for name, file in assets.items()})
         backend["vendor/nifi.zip"] = bundle_nifi(backend["vendor/nifi.zip"], args.nifi_extension, mapping_version,
                                               examples_build / "nifi-with-haitong-extensions.zip")
         backend.update({f"config/{name}": linux / name for name in ("ports.json", "Caddyfile")})
+        backend["config/runtime.json"] = json.dumps({
+            "architecture": architecture, "redisLoader": redis_loader,
+        }, indent=2).encode("ascii")
         config = runtime_config.read_text(encoding="utf-8")
         for setting in ("monitor-enabled", "provenance-sync-enabled"):
             config = config.replace(f"{setting}: false", f"{setting}: true")
         backend["config/application.yml"] = config.encode("utf-8")
         backend["tools/standalone.py"] = linux / "standalone.py"
-        backend["部署说明.md"] = linux / "deployment.md"
+        architecture_label = "aarch64（ARM64）" if architecture == "aarch64" else architecture
+        backend["部署说明.md"] = (linux / "deployment.md").read_text(encoding="utf-8").replace(
+            "@@LINUX_ARCH@@", architecture_label).encode("utf-8")
         frontend["www/haitong/deployment.js"] = (
             f"window.haitongDeployment = {{ tenantId: '{TENANT}', appId: '{APP}', nifiUiUrl: '' }};\n"
         ).encode()

@@ -48,9 +48,16 @@ public class NifiNodeRuntimeResolver {
                  limit 1
                 """, tenantId);
         if (rows.isEmpty()) {
-            throw new IllegalStateException("当前租户未配置可用的默认 NiFi 节点，请在节点管理中启用并设置一个默认节点");
+            throw new NodeNotConfiguredException();
         }
         return toRuntimeNode(tenantId, rows.getFirst()).requireValidConnection();
+    }
+
+    /** A new tenant can browse its access tasks before connecting a NiFi node. */
+    public static final class NodeNotConfiguredException extends IllegalStateException {
+        public NodeNotConfiguredException() {
+            super("当前租户尚未配置 NiFi 节点，请在节点管理中配置并启用后查看实时状态");
+        }
     }
 
     /** Resolves one saved node for a server-side connectivity check without accepting credentials from the browser. */
