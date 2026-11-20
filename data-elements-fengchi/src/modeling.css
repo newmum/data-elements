@@ -112,3 +112,21 @@
 .execution-design-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}.execution-design-header small{font-size:10px;letter-spacing:1.2px;color:#4a7d9d}.execution-design h3{font-size:21px;margin:7px 0}.execution-design-header p{margin:0;color:#86909a;font-size:12px}.execution-design-grid{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(220px,1fr);gap:22px;margin-top:20px}.execution-fields h4{font-size:13px;margin:0 0 14px}.execution-field-pair{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px}.execution-field-pair label{display:flex;flex-direction:column;gap:7px;font-size:12px;color:#727d89}.execution-field-pair :is(.model-ant-select,.model-ant-input-number){width:100%}.execution-switch{display:flex;align-items:center;justify-content:space-between;margin-bottom:17px}.execution-summary{background:#8098ac0b;border:1px solid #8098ac22;border-radius:10px;padding:18px;align-self:start}.execution-summary h4{margin:0 0 18px;font-size:13px}.execution-summary dl>div{display:flex;justify-content:space-between;margin:12px 0;font-size:12px}.execution-summary dt{color:#84909a}.execution-summary dd{margin:0}.execution-summary h5{border-top:1px solid #8098ac22;padding-top:18px;margin-bottom:12px}.execution-summary ol{padding-left:19px;font-size:12px;line-height:2.4}.execution-summary small{color:#8a939c;font-size:11px;line-height:1.7}.execution-actions{display:flex;align-items:center;gap:8px;border-top:1px solid #8098ac22;padding-top:16px;margin-top:18px}.execution-actions>span{margin-right:auto;font-size:11px;color:#87939e}.execution-status{font-size:12px;padding:10px 12px;background:#1677c808;border-radius:6px;margin-top:12px}@media(max-width:700px){.execution-design-grid{grid-template-columns:1fr}.execution-field-pair{grid-template-columns:1fr}}
 
 .execution-dialog .model-ant-modal-body{max-height:calc(100vh - 150px);overflow:auto;padding-right:4px}.execution-dialog .execution-actions{position:sticky;bottom:0;background:var(--model-bg,#fff);padding-bottom:4px;z-index:2}.execution-dialog .execution-design-header{margin-bottom:12px}.execution-dialog .execution-design h3{font-size:19px}.execution-dialog .execution-design-grid{gap:18px;margin-top:16px}.execution-dialog .execution-field-pair{margin-bottom:12px}.execution-dialog .model-ant-alert-with-description{padding:12px}
+
+.modeling-start-label{display:grid;gap:2px;text-align:left}.modeling-start-label .modeling-start-configure:hover{color:#428267}.modeling-preview-running{display:flex;align-items:center;justify-content:center;gap:10px;min-height:80px;color:var(--model-text)}
+
+/* Dense, two-column source cards and legible result metadata. */
+.modeling-palette{container-type:inline-size}
+.modeling-operator-list.modeling-input-connectors{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.modeling-operator-list.modeling-input-connectors .modeling-palette-item{width:100%;min-width:0;min-height:58px;height:auto;padding:7px 4px;flex-direction:column;align-items:center;justify-content:center;gap:5px;white-space:normal;text-align:center}
+.modeling-input-connectors .modeling-palette-item>.modeling-operator-icon{width:25px;height:22px;font-size:16px}
+.modeling-input-connectors .modeling-palette-item>.modeling-operator-label{flex:initial;line-height:1.2;white-space:normal;overflow-wrap:anywhere;text-overflow:clip}
+@container(max-width:125px){.modeling-operator-list.modeling-input-connectors{grid-template-columns:1fr}}
+.modeling-preview-column{display:grid;gap:2px;min-width:90px;line-height:1.2}
+.modeling-preview-column-comment{color:var(--model-text);font-size:12px}
+.modeling-preview-column-name,.modeling-preview-column-type{color:var(--model-muted);font-size:11px;font-weight:400}
+.modeling-preview-column-type{display:flex;align-items:center;gap:4px;white-space:nowrap}
+.modeling-preview-column-type>b{font-size:12px;color:var(--field-type-number,#337769);min-width:12px;text-align:center}
+.modeling-preview-column-type>b.preview-type-text{color:var(--field-type-text,#4b6f9b)}
+.modeling-preview-column-name.is-primary{color:var(--model-text);font-weight:600}
+.modeling-preview-column-type>.anticon{color:var(--field-type-temporal,#8b642e)}

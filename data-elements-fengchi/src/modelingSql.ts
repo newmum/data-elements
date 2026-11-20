@@ -9,7 +9,7 @@ export function quoteModelLiteral(value:string,engine:ExecutionSettings['engine'
 export function generateModelSql(nodes:ModelNode[],tables:Record<string,TableDef>,settings:ExecutionSettings):ModelSqlDraft {
  const diagnostics:ModelSqlDiagnostic[]=[];const finish=(sql=''):ModelSqlDraft=>({sql,diagnostics,...settings,nodeCtes:Object.fromEntries(nodes.map(n=>[n.id,`node_${n.id}`]))});
  const error=(message:string,nodeId?:string)=>diagnostics.push({level:'error',message,nodeId});
- const supported=new Set(['source','filter','join','aggregate','rename','output']);
+ const supported=new Set(['source','filter','join','aggregate','rename','select','distinct','output']);
  if(nodes.length>30){error('最多支持 30 个节点');return finish()}
  if(new Set(nodes.map(n=>n.id)).size!==nodes.length)error('存在重复节点 ID');
  for(const n of nodes){if(!supported.has(n.kind))error(n.kind==='sql'?'自定义 SQL 无法验证，未纳入生成':`暂不支持算子 ${n.kind} 的 SQL 生成`,n.id);if(Object.values(n.config).some(v=>typeof v!=='string'||v.length>10000))error('配置超过长度限制',n.id)}
@@ -31,6 +31,15 @@ export function generateModelSql(nodes:ModelNode[],tables:Record<string,TableDef
    case 'join':{const left=field(a,c.left),right=field(b,c.right),renamed=b.columns.map(v=>`right.${v}`);if(renamed.some(v=>a.columns.includes(v)))throw new Error('关联后字段重名');columns=[...a.columns,...renamed];body=`SELECT ${[...a.columns.map(v=>`l.${q(v)} AS ${q(v)}`),...b.columns.map(v=>`r.${q(v)} AS ${q('right.'+v)}`)].join(', ')}\nFROM ${q(a.name)} AS l\nINNER JOIN ${q(b.name)} AS r ON l.${left} = r.${right}`;break}
    case 'aggregate':{const group=field(a,c.group);if(!['count','sum'].includes(c.operation))throw new Error('聚合方式不支持');const name=c.operation==='count'?'_count':'_sum';if(c.group===name)throw new Error('聚合输出字段重名');const expression=c.operation==='count'?'COUNT(*)':`COALESCE(SUM(${field(a,c.field)}), 0)`;columns=[c.group,name];body=`SELECT ${group}, ${expression} AS ${q(name)}\nFROM ${q(a.name)}\nGROUP BY ${group}`;break}
    case 'rename':{field(a,c.field);const name=c.name.trim();q(name);if(name!==c.field&&a.columns.includes(name))throw new Error('重命名字段已存在');columns=a.columns.map(v=>v===c.field?name:v);body=`SELECT ${a.columns.map(v=>v===c.field?`${q(v)} AS ${q(name)}`:q(v)).join(', ')}\nFROM ${q(a.name)}`;break}
+   case 'select':{
+    columns=[...new Set((c.fields||'').split(',').map(x=>x.trim()).filter(Boolean))];if(!columns.length)throw new Error('请至少选择一个字段');
+    body=`SELECT ${columns.map(v=>field(a,v)).join(', ')}\nFROM ${q(a.name)}`;break;
+   }
+   case 'distinct':{
+    const keys=(c.fields||'').split(',').map(x=>x.trim()).filter(Boolean);keys.forEach(k=>field(a,k));
+    if(keys.length&&new Set(keys).size!==a.columns.length)throw new Error('审核 SQL 仅支持全字段去重；按部分字段保留首行需要定义确定排序');
+    columns=[...a.columns];body=`SELECT DISTINCT ${columns.map(q).join(', ')}\nFROM ${q(a.name)}`;break;
+   }
    case 'output':columns=[...a.columns];body=`SELECT ${columns.map(q).join(', ')}\nFROM ${q(a.name)}`;break;
    default:throw new Error('算子不支持 SQL 生成');
   }

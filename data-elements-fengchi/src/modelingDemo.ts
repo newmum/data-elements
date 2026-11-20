@@ -9,15 +9,16 @@ export const DEMO_SOURCE_LABELS:Record<string,string>={
  'demo.DB3.customer_region_view':'区域库 / 客户地区视图',
 };
 export type ModelingDemoSource={database:'DB1'|'DB2'|'DB3';table:string;tableKey:string;nodeId:string;kind:'table'|'view'};
-export const DEMO_VIEW_SQL=`-- 溯源示意：本示例不执行 SQL，视图行由本地夹具关联生成
+const LEGACY_DEMO_VIEW_SQL=`-- 溯源示意：本示例不执行 SQL，视图行由本地夹具关联生成
 SELECT cr.region_customer_id, r.region_name
 FROM DB3.customer_regions cr
 JOIN DB3.regions r ON cr.region_id = r.region_id;`;
+export const DEMO_VIEW_SQL=LEGACY_DEMO_VIEW_SQL.replace('r.region_name\n','r.region_name, r.region_code, r.sales_hub, r.currency, r.report_as_of\n');
 function table(name:string,comment:string,fields:[string,string][],rows:Row[]):TableDef {
  const columns:Column[]=fields.map(([name,type])=>({name,type}));return {name,comment,columns,rows};
 }
 /** Isolated synthetic dataset. Never merges or reads live/shared workspace tables. */
-export function createModelingDemo(){
+export function createModelingDemo(options:{legacy?:boolean}={}){
  const regions=[{region_id:1,region_name:'华东'},{region_id:2,region_name:'华南'}];
  const customerRegions=[{region_customer_id:101,region_id:1},{region_customer_id:102,region_id:2},{region_customer_id:103,region_id:1}];
  const regionView:Row[]=customerRegions.flatMap(c=>regions.filter(r=>r.region_id===c.region_id).map(r=>({region_customer_id:c.region_customer_id,region_name:r.region_name})));
@@ -47,6 +48,32 @@ export function createModelingDemo(){
  add('rename','demo-amount','命名总金额字段',['demo-aggregate'],{field:'_sum',name:'total_amount'},2220,380);
  add('output','demo-output','地区金额输出',['demo-amount'],{},2530,380);
  const expectedRows:Row[]=[{'right.region_name':'华东',total_amount:550},{'right.region_name':'华南',total_amount:300}];
- const sqlNode=nodes.find(n=>n.id==='demo-regions')!;sqlNode.name='区域库 / 自定义 SQL';sqlNode.config={inputMode:'sql',database:'DB3',table:'',sqlText:DEMO_VIEW_SQL,mockSqlTable:'demo.DB3.customer_region_view'};tables['demo.DB3.customer_region_view'].mockSqlText=DEMO_VIEW_SQL;
- return {tables,nodes,sources,viewTableKey:'demo.DB3.customer_region_view',outputId:'demo-output',viewSql:DEMO_VIEW_SQL,expectedRows,description:'独立合成数据：DB1 一张客户表、DB2 三张业务表、DB3 一个本地多表关联视图。全部内关联，仅统计已完成订单，排除取消订单；按地区汇总明细已记账金额；无真实数据库连接或 SQL 执行。'};
+ const viewSql=options.legacy?LEGACY_DEMO_VIEW_SQL:DEMO_VIEW_SQL;const sqlNode=nodes.find(n=>n.id==='demo-regions')!;sqlNode.name='区域库 / 自定义 SQL';sqlNode.config={inputMode:'sql',database:'DB3',table:'',sqlText:viewSql,mockSqlTable:'demo.DB3.customer_region_view'};tables['demo.DB3.customer_region_view'].mockSqlText=viewSql;
+ if(!options.legacy){
+  const customers=tables['demo.DB1.customers'],orders=tables['demo.DB2.orders'],items=tables['demo.DB2.order_items'],regionsTable=tables['demo.DB3.customer_region_view'];
+  const more=[['华北','CN-N','北京',420],['华中','CN-C','武汉',260],['西南','CN-SW','成都',375],['西北','CN-NW','西安',180]] as const;
+  for(const [i,[regionName,,city,amount]] of more.entries()){
+   const customerId=104+i,orderId=206+i;
+   customers.rows.push({customer_id:customerId,customer_name:'示例客户'+city});
+   orders.rows.push({order_id:orderId,order_customer_id:customerId,order_status:'completed'});
+   items.rows.push({detail_id:307+i,detail_order_id:orderId,detail_product_id:401+i%2,quantity:1,line_amount:amount});
+   regionsTable.rows.push({region_customer_id:customerId,region_name:regionName});
+   expectedRows.push({'right.region_name':regionName,total_amount:amount});
+  }
+  const info:Record<string,readonly [string,string]>={'华东':['CN-E','上海'],'华南':['CN-S','广州'],...Object.fromEntries(more.map(([region,code,city])=>[region,[code,city]]))};
+  const reporting=(region:string)=>({region_code:info[region][0],sales_hub:info[region][1],currency:'CNY',report_as_of:'2026-11-20 00:00:00'});
+  regionsTable.columns.find(column=>column.name==='region_name')!.comment='销售地区';
+  regionsTable.columns.push({name:'region_code',type:'varchar',comment:'地区编码'},{name:'sales_hub',type:'varchar',comment:'区域中心'},{name:'currency',type:'char(3)',comment:'结算币种'},{name:'report_as_of',type:'datetime',comment:'统计截止时间'});
+  regionsTable.rows=regionsTable.rows.map(row=>({...row,...reporting(String(row.region_name))}));
+  for(const col of items.columns) if(col.name==='line_amount')col.comment='明细入账金额';
+  const output=nodes.pop()!;
+  add('select','demo-region-profile','提取地区报表字段',['demo-regions'],{fields:'region_name,region_code,sales_hub,currency,report_as_of'},980,675);
+  add('distinct','demo-region-distinct','每个地区保留一条',['demo-region-profile'],{fields:'region_name,region_code,sales_hub,currency,report_as_of'},1290,675);
+  add('rename','demo-region-key','设置地区关联键',['demo-region-distinct'],{field:'region_name',name:'region_key'},1600,675);
+  add('join','demo-report','补充地区报表信息',['demo-amount','demo-region-key'],{left:'right.region_name',right:'region_key'},2530,380);
+  add('select','demo-report-fields','整理报表字段',['demo-report'],{fields:'right.region_name,right.region_code,right.sales_hub,right.currency,total_amount,right.report_as_of'},2840,380);
+  nodes.push({...output,inputs:['demo-report-fields'],x:3150});
+  for(const row of expectedRows) for(const [key,value] of Object.entries(reporting(String(row['right.region_name'])))) row['right.'+key]=value;
+ }
+ return {tables,nodes,sources,viewTableKey:'demo.DB3.customer_region_view',outputId:'demo-output',viewSql,expectedRows,description:'独立合成数据：DB1 一张客户表、DB2 三张业务表、DB3 一个本地多表关联视图。全部内关联，仅统计已完成订单，排除取消订单；按地区汇总明细已记账金额；无真实数据库连接或 SQL 执行。'};
 }
