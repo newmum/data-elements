@@ -37,6 +37,7 @@ class NifiClientRuntimeScopeTest {
         }
         server.verify();
         verify(resolver, times(1)).resolve();
+        verify(resolver, times(1)).restClient(node);
     }
 
     @Test void nestedScopeIsReleasedAndCannotBeReusedAcrossTenants() {

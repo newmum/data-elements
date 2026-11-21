@@ -26,11 +26,14 @@ class RegistrationAccessMagicTest {
             for(String column:List.of("table_name varchar(128)","table_name_cn varchar(128)","business_type varchar(20)","field_count int","timestamp_field varchar(128)","access_request_status int default 0 not null","access_requested_by varchar(32)","access_requested_at timestamp")) f.jdbc.execute("alter table db_table_t add "+column);
             f.jdbc.execute("create table data_access_agg_task_t(tid varchar(64),source_table_id varchar(64),target_table_id varchar(64),pipeline_id varchar(64),task_name varchar(128),schedule_cycle int,last_running timestamp,end_running timestamp,is_timeout int,tenant_id varchar(32),is_del int,process_group_id varchar(64),created_time timestamp)");
             f.jdbc.execute("create table nifi_pipeline_t(id varchar(64),tenant_id varchar(32),is_del int,status varchar(32),last_deployed_hash varchar(64),last_deployed_at timestamp,nifi_process_group_id varchar(64))");
+            TaskRuntimeMagicFixture.bindingColumns(f.jdbc);
             f.jdbc.update("update db_datasource_t set db_name='测试数据源',asset_status=0");
             for (String db : List.of("target", "other-source")) f.jdbc.update("insert into db_datasource_t(tid,tenant_id,db_name,is_del) values(?,'ga',?,0)", db,db);
             for (int i=0;i<count;i++) f.jdbc.update("insert into db_table_t(tid,tenant_id,datasource_id,asset_status,is_del,table_name,table_name_cn,business_type,field_count,access_request_status) values(?,'ga','db',1,0,?,'测试表','业务表',4,0)","s"+i,"s"+i);
             f.jdbc.update("insert into db_table_t(tid,tenant_id,datasource_id,asset_status,is_del,table_name,business_type) values('target','ga','target',2,0,'target','业务表'),('foreign','other','db',2,0,'foreign','业务表'),('wrong-source','ga','other-source',2,0,'wrong','业务表')");
             f.db.setSqlInterceptors(List.of(counter));
+            bindings.put("tableRead",TaskRuntimeMagicFixture.structuredReads(f.jdbc,counter::record));
+            bindings.put("JSONUtil",cn.hutool.json.JSONUtil.class);
             bindings.put("db",f.db); bindings.put("tenantRuntime",scope); bindings.put("dataScope",scope);
             bindings.put("metadataAsset",new Completion()); bindings.put("StpUtil",new Actor());
         }
@@ -42,7 +45,7 @@ class RegistrationAccessMagicTest {
             return MagicScript.create("var registrationAccessSummary = payload => {\n"+summary+"\n};\n"+api,null).execute(new MagicScriptContext(bindings));
         }
         void task(String status) {
-            f.jdbc.update("insert into nifi_pipeline_t values('p','ga',0,?,'hash',current_timestamp,'pg')",status);
+            f.jdbc.update("insert into nifi_pipeline_t values('p','ga',0,?,'hash',current_timestamp,'pg',null)",status);
             f.jdbc.update("insert into data_access_agg_task_t(tid,source_table_id,target_table_id,pipeline_id,task_name,schedule_cycle,tenant_id,is_del,created_time) values('task','s0','target','p','已配置任务',1,'ga',0,current_timestamp)");
         }
     }
@@ -77,6 +80,30 @@ class RegistrationAccessMagicTest {
     }
     static Map<String,Object> deploymentRequired(){return Map.of("accepted",false,"status",409,"body",Map.of("error","deployment-required"));}
     static Map<String,Object> body(String... ids){return Map.of("datasourceId","db","tableIds",List.of(ids));}
+    @Test void summaryCountsAndActionsUseEachBoundNodeWhenAnotherNodeIsOffline() throws Exception {
+        var f=new Fixture(2);f.task("DEPLOYED");
+        f.f.jdbc.update("update nifi_pipeline_t set node_mapping_json='{\"runtimeNodeId\":\"second\"}'");
+        f.f.jdbc.update("insert into nifi_pipeline_t values('p2','ga',0,'DEPLOYED','hash',current_timestamp,'pg','{\"runtimeNodeId\":\"offline\"}')");
+        f.f.jdbc.update("insert into data_access_agg_task_t(tid,source_table_id,target_table_id,pipeline_id,task_name,tenant_id,is_del) values('task2','s1','target','p2','离线节点任务','ga',0)");
+        var running=(com.fasterxml.jackson.databind.node.ObjectNode)TaskRuntimeMagicFixture.emptyRootStatus();
+        running.withObject("/processGroupStatus/aggregateSnapshot").putArray("processGroupStatusSnapshots")
+            .addObject().putObject("processGroupStatusSnapshot").put("id","pg").putArray("processorStatusSnapshots")
+            .addObject().putObject("processorStatusSnapshot").put("runStatus","Running");
+        try(var runtime=new TaskRuntimeMagicFixture("ga")) {
+            runtime.addNode("second",running);runtime.addNode("offline",null);
+            var result=(Map<?,?>)f.execute("summary",body("s0","s1"),runtime);
+            assertThat(result.get("runtimePartial")).isEqualTo(true);
+            var rows=(List<?>)result.get("list");
+            var healthy=(Map<?,?>)rows.get(0);var offline=(Map<?,?>)rows.get(1);
+            assertThat(healthy.get("accessStatus")).isEqualTo("1");
+            assertThat(((Map<?,?>)((List<?>)healthy.get("tasks")).getFirst()).get("canStop")).isEqualTo(true);
+            assertThat(offline.get("accessStatus")).isEqualTo("");
+            var totals=(Map<?,?>)result.get("totals");
+            assertThat(((Number)totals.get("running")).intValue()).isEqualTo(1);
+            assertThat(((Number)totals.get("ready")).intValue()).isZero();
+            assertThat(f.counter.reads).isEqualTo(4);
+        }
+    }
     @Test void fixedBatchReadsAndPerIdScope() throws Exception {
         for(int count:List.of(20,100)) {
             var f = new Fixture(count);
@@ -102,6 +129,7 @@ class RegistrationAccessMagicTest {
             assertThat(f.f.jdbc.queryForObject("select access_requested_at from db_table_t where tid='s0'",java.sql.Timestamp.class)).isEqualTo(time);
             assertThat(((Map<?,?>)((List<?>)result.get("list")).getFirst()).get("accessStatus")).isEqualTo("2");
             f.task("SAVED");
+            f.f.jdbc.update("update nifi_pipeline_t set nifi_process_group_id=null,last_deployed_hash=null");
             result=(Map<?,?>)f.execute("summary",body("s0"),runtime);
             assertThat(((Map<?,?>)((List<?>)result.get("list")).getFirst()).get("accessStatus")).isEqualTo("3");
             f.f.jdbc.update("update db_table_t set access_request_status=2 where tid='s0'");

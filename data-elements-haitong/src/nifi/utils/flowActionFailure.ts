@@ -49,7 +49,7 @@ export function flowActionFailure(error: unknown, action: FlowAction): FlowError
   ].map(diagnosticText).filter(Boolean);
   return {
     id: typeof stored?.id === 'string' ? stored.id : `request-${Date.now()}-${++sequence}`,
-    level: 'ERROR', phase: stored?.phase === 'VALIDATION' ? 'VALIDATION' : action === 'save' ? 'VALIDATION' : 'DEPLOYMENT',
+    level: 'ERROR', phase: stored?.phase ?? (action === 'save' ? 'VALIDATION' : action === 'start' || action === 'stop' ? 'RUNTIME' : 'DEPLOYMENT'),
     nodeId: stored?.nodeId, nodeLabel: stored?.nodeLabel, fieldKey: stored?.fieldKey,
     message, detail: [...new Set(details)].join('\n'),
     suggestion: diagnosticText(stored?.suggestion) || (timeout || network

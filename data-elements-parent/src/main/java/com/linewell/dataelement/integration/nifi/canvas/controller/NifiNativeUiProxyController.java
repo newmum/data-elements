@@ -1,13 +1,11 @@
 package com.linewell.dataelement.integration.nifi.canvas.controller;
 
-import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient;
+import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiNativeView;
 import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiException;
 import com.linewell.dataelement.platform.web.security.ProtocolAccess;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.PropertySource;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -19,25 +17,25 @@ import java.util.Map;
 
 /**
  * Same-origin proxy for the native NiFi application. Authentication is supplied
- * by {@link NifiClient}, so NiFi credentials never reach the browser.
+ * by the session-bound native view, so NiFi credentials never reach the browser.
  */
 @RestController
 @ProtocolAccess(bindTenant = false)
 @PropertySource("classpath:nifi-native-proxy.properties")
 public class NifiNativeUiProxyController {
 
-    private final NifiClient nifi;
+    private final NifiNativeView nativeView;
     private final String uiPath;
     private final String apiPath;
     private final String upstreamUiPath;
     private final String upstreamApiPath;
 
-    public NifiNativeUiProxyController(NifiClient nifi,
+    public NifiNativeUiProxyController(NifiNativeView nativeView,
                                       @Value("${nifi.native-proxy.ui-path}") String uiPath,
                                       @Value("${nifi.native-proxy.api-path}") String apiPath,
                                       @Value("${nifi.native-proxy.upstream-ui-path}") String upstreamUiPath,
                                       @Value("${nifi.native-proxy.upstream-api-path}") String upstreamApiPath) {
-        this.nifi = nifi;
+        this.nativeView = nativeView;
         this.uiPath = protocolPath(uiPath);
         this.apiPath = protocolPath(apiPath);
         this.upstreamUiPath = protocolPath(upstreamUiPath);
@@ -68,14 +66,12 @@ public class NifiNativeUiProxyController {
         } else if (path.equals(apiPath) || path.startsWith(apiPath + "/")) {
             path = upstreamApiPath + path.substring(apiPath.length());
         }
-        if (request.getQueryString() != null && !request.getQueryString().isBlank()) {
-            path += "?" + request.getQueryString();
-        }
         try {
-            HttpHeaders headers = new HttpHeaders();
-            request.getHeaderNames().asIterator().forEachRemaining(name ->
-                    request.getHeaders(name).asIterator().forEachRemaining(value -> headers.add(name, value)));
-            return nifi.proxy(HttpMethod.valueOf(request.getMethod()), path, headers, body);
+            return nativeView.proxy(request, path, path.equals(upstreamUiPath) || path.startsWith(upstreamUiPath + "/"));
+        } catch (org.springframework.web.server.ResponseStatusException rejected) {
+            return ResponseEntity.status(rejected.getStatusCode()).contentType(MediaType.APPLICATION_JSON)
+                    .body(Map.of("error", rejected.getReason() == null ? "原生详情访问被拒绝" : rejected.getReason(),
+                            "status", rejected.getStatusCode().value()));
         } catch (NifiException e) {
             int status = e.status() > 0 ? e.status() : 502;
             return ResponseEntity.status(status)

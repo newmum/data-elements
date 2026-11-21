@@ -28,6 +28,12 @@
   } ]
 }
 ================================
+import tenantRuntime
+import dataScope
+import taskRuntime
+import tableRead
+import cn.hutool.json.JSONUtil
+
 /*
  * 功能：第五步当前页登记表的申请、直接接入任务及运行摘要；管理员创建任务即代表受理。
  * 输入：payload.datasourceId 必填；tableIds 为1～100个去重表ID，全部须属于该数据源。
@@ -38,9 +44,6 @@
  * 并发：每批固定SQL和一次NiFi快照，无逐表数据库或外部请求；无写入副作用。
  * 异常：无权、混入其他数据源ID及超限直接拒绝；NiFi不可用返回待确认，不伪造停止。
  */
-import tenantRuntime
-import dataScope
-import taskRuntime
 var text = value => value == null ? '' : value + ''
 var first = (row, names) => {
     if (row == null) { return null }
@@ -70,7 +73,7 @@ var tasks = db.select("""
            target.table_name AS target_table_name,target.table_name_cn AS target_table_name_cn,
            target_db.db_name AS target_datasource_name,
            pipeline.id AS active_pipeline_id,pipeline.status AS lifecycle_status,pipeline.last_deployed_hash AS deployed_hash,
-           pipeline.last_deployed_at AS deployed_at,
+           pipeline.last_deployed_at AS deployed_at,pipeline.node_mapping_json AS runtime_node_mapping,
            CASE WHEN pipeline.id IS NOT NULL THEN pipeline.nifi_process_group_id ELSE task.process_group_id END AS runtime_process_group_id
     FROM data_access_agg_task_t task
     JOIN db_table_t target ON target.tid=task.target_table_id AND target.tenant_id=#{tenantId} AND target.is_del=0
@@ -80,6 +83,13 @@ var tasks = db.select("""
       AND task.source_table_id IN <foreach collection="ids" item="id" open="(" close=")" separator=",">#{id}</foreach>
     ORDER BY task.created_time ASC,task.tid ASC
 """)
+for (task in tasks) {
+    var mapping = {}
+    try { mapping = JSONUtil.parseObj(text(first(task,['runtimeNodeMapping','runtime_node_mapping']))) } catch (ignored) {}
+    task.runtimeNodeId = text(mapping?.runtimeNodeId)
+    task.remove('runtimeNodeMapping')
+    task.remove('runtime_node_mapping')
+}
 var live = taskRuntime.snapshot()
 taskRuntime.decorate(tasks,live)
 var formatFrequency = value => {
@@ -104,11 +114,11 @@ for (task in tasks) {
     var configured = text(first(task,['activePipelineId','active_pipeline_id'])) != ''
     var busy = ['DEPLOYING','STARTING','STOPPING'].contains(lifecycle) || state == 'STOPPING'
     task.requiresDeployment = !deployed || lifecycle == 'SAVED'
-    task.canStart = configured && pipelineId != '' && live.fresh == true && !busy && task.running != true
+    task.canStart = configured && pipelineId != '' && task.runtimeFresh == true && !busy && task.running != true
         && (['STOPPED','UNDEPLOYED'].contains(state) || (state == 'INVALID' && !deployed))
-    task.canStop = pipelineId != '' && live.fresh == true && task.running == true && state != 'STOPPING'
+    task.canStop = pipelineId != '' && task.runtimeFresh == true && task.running == true && state != 'STOPPING'
     task.actionHint = !configured ? '任务配置缺失，请完善接入配置后重试'
-        : live.fresh != true ? '运行状态暂时无法确认，请稍后重试'
+        : task.runtimeFresh != true ? '运行状态暂时无法确认，请稍后重试'
         : busy ? '任务正在处理，请等待状态更新'
         : task.canStart ? task.requiresDeployment ? '启动时自动部署已保存配置，部署完成后开始同步' : '按已保存配置启动；需要更新部署时将自动处理'
         : task.canStop ? '停止后保留已同步数据，可再次启动'
@@ -155,57 +165,60 @@ for (id in ids) {
         frequency:frequency,lastExecutedAt:lastExecutedAt,lastDataUpdatedAt:lastDataUpdatedAt,lastBusinessTime:null})
 }
 // 顶部卡片按当前数据源全部有效核心表聚合，绝不使用当前页长度充当全量统计。
-var runningChunks = []
-var invalidChunks = []
-var runningIds = []
-var invalidIds = []
-if (live.fresh == true && live.index != null) {
-    for (groupId, group in live.index.groups()) {
-        if (group.running()) {
-            runningIds.add(groupId)
-            if (runningIds.size() == 500) { runningChunks.add(runningIds); runningIds = [] }
-        }
-        if (['INVALID','RUN_ERROR'].contains(group.state())) {
-            invalidIds.add(groupId)
-            if (invalidIds.size() == 500) { invalidChunks.add(invalidIds); invalidIds = [] }
-        }
+var col = (alias,name,type) => tableRead.column(alias,name,type)
+var txt = (alias,name) => col(alias,name,'TEXT')
+var num = (alias,name) => col(alias,name,'NUMBER')
+var active = alias => tableRead.equal(num(alias,'is_del'),0)
+var present = value => tableRead.not(tableRead.isNull(value))
+var query = tableRead.from('db_table_t','t',tenantId)
+query.where(tableRead.all([active('t'),tableRead.equal(txt('t','datasource_id'),datasourceId),
+    tableRead.greaterThan(num('t','asset_status'),0),tableRead.in(txt('t','business_type'),['业务表','字典表','日志表'])]))
+var taskQuery = tableRead.from('data_access_agg_task_t','task',tenantId)
+taskQuery.leftJoin('db_table_t','source','tid','source_table_id',[active('source'),tableRead.equal(txt('source','datasource_id'),datasourceId)])
+taskQuery.leftJoin('db_table_t','target','tid','target_table_id',[active('target')])
+taskQuery.leftJoin('db_datasource_t','target_db','tenant_id','tenant_id',[
+    active('target_db'),tableRead.equal(txt('target_db','tid'),txt('target','datasource_id'))])
+taskQuery.leftJoin('nifi_pipeline_t','p','id','pipeline_id',[active('p')])
+taskQuery.where(tableRead.all([active('task'),present(txt('source','tid')),present(txt('target','tid')),present(txt('target_db','tid'))]))
+var effectiveGroup = tableRead.when(present(txt('p','id')),txt('p','nifi_process_group_id'),txt('task','process_group_id'))
+var effectiveNode = tableRead.coalesce([tableRead.blankAsNull(tableRead.jsonText(col('p','node_mapping_json','LOB'),'runtimeNodeId')),live.defaultNodeId])
+var runningMatches = []
+var invalidMatches = []
+var knownMatches = []
+// 每个已连通节点独立匹配其组集合，SQL参数由方言适配层绑定。
+for (node in live.nodes || []) {
+    if (node.fresh != true) { continue }
+    var nodeMatches = tableRead.equal(effectiveNode,node.nodeId)
+    for (batch in node.groups0 || []) { knownMatches.add(tableRead.all([nodeMatches,tableRead.in(effectiveGroup,batch)])) }
+    for (batch in node.groups1 || []) { knownMatches.add(tableRead.all([nodeMatches,tableRead.in(effectiveGroup,batch)])) }
+    for (batch in node.groups2 || []) {
+        var match = tableRead.all([nodeMatches,tableRead.in(effectiveGroup,batch)])
+        knownMatches.add(match);invalidMatches.add(match)
     }
-    if (runningIds.size() > 0) { runningChunks.add(runningIds) }
-    if (invalidIds.size() > 0) { invalidChunks.add(invalidIds) }
+    for (batch in node.groups3 || []) { knownMatches.add(tableRead.all([nodeMatches,tableRead.in(effectiveGroup,batch)])) }
+    var batch = []
+    for (id in node.runningGroups || []) {
+        batch.add(id)
+        if (batch.size() == 500) { runningMatches.add(tableRead.all([nodeMatches,tableRead.in(effectiveGroup,batch)]));batch = [] }
+    }
+    if (batch.size() > 0) { runningMatches.add(tableRead.all([nodeMatches,tableRead.in(effectiveGroup,batch)])) }
 }
-var effectiveGroup = '(CASE WHEN p.id IS NOT NULL THEN p.nifi_process_group_id ELSE task.process_group_id END)'
-var runningCondition = runningChunks.size() == 0 ? '1=0' : '<foreach collection="runningChunks" item="batch" open="(" close=")" separator=" OR ">'
-    + effectiveGroup + ' IN <foreach collection="batch" item="g" open="(" close=")" separator=",">#{g}</foreach></foreach>'
-var invalidCondition = invalidChunks.size() == 0 ? '1=0' : '<foreach collection="invalidChunks" item="batch" open="(" close=")" separator=" OR ">'
-    + effectiveGroup + ' IN <foreach collection="batch" item="g" open="(" close=")" separator=",">#{g}</foreach></foreach>'
-var freshFlag = live.fresh == true ? 1 : 0
-var totals = db.selectOne("""
-    SELECT COUNT(*) AS total,
-           COALESCE(SUM(CASE WHEN x.taskCount IS NULL AND COALESCE(t.access_request_status,0)<>1 THEN 1 ELSE 0 END),0) AS pending,
-           COALESCE(SUM(CASE WHEN x.taskCount IS NULL AND t.access_request_status=1 THEN 1 ELSE 0 END),0) AS pending_approval,
-           COALESCE(SUM(CASE WHEN x.taskCount>0 THEN 1 ELSE 0 END),0) AS configured,
-           COALESCE(SUM(CASE WHEN x.isRunning=1 THEN 1 ELSE 0 END),0) AS running,
-           COALESCE(SUM(CASE WHEN x.taskCount>0 AND x.isRunning=0 AND (#{freshFlag}=1 OR x.hasDeployed=0) THEN 1 ELSE 0 END),0) AS ready,
-           COALESCE(SUM(CASE WHEN x.isInvalid=1 THEN 1 ELSE 0 END),0) AS problem,
-           COALESCE(SUM(CASE WHEN x.isDelayed=1 THEN 1 ELSE 0 END),0) AS delayed_count
-    FROM db_table_t t
-    LEFT JOIN (
-        SELECT task.source_table_id,COUNT(*) AS taskCount,
-               MAX(CASE WHEN (""" + runningCondition + """) THEN 1 ELSE 0 END) AS isRunning,
-               MAX(CASE WHEN (""" + invalidCondition + """) THEN 1 ELSE 0 END) AS isInvalid,
-               MAX(CASE WHEN task.is_timeout=1 THEN 1 ELSE 0 END) AS isDelayed,
-               MAX(CASE WHEN NULLIF(${effectiveGroup},'') IS NOT NULL THEN 1 ELSE 0 END) AS hasDeployed
-        FROM data_access_agg_task_t task
-        JOIN db_table_t source ON source.tid=task.source_table_id AND source.tenant_id=#{tenantId} AND source.is_del=0 AND source.datasource_id=#{datasourceId}
-        JOIN db_table_t target ON target.tid=task.target_table_id AND target.tenant_id=#{tenantId} AND target.is_del=0
-        JOIN db_datasource_t target_db ON target_db.tid=target.datasource_id AND target_db.tenant_id=#{tenantId} AND target_db.is_del=0
-        LEFT JOIN nifi_pipeline_t p ON p.id=task.pipeline_id AND p.tenant_id=#{tenantId} AND p.is_del=0
-        WHERE task.tenant_id=#{tenantId} AND task.is_del=0
-        GROUP BY task.source_table_id
-    ) x ON x.source_table_id=t.tid
-    WHERE t.tenant_id=#{tenantId} AND t.datasource_id=#{datasourceId} AND t.is_del=0 AND t.asset_status>0
-      AND t.business_type IN ('业务表','字典表','日志表')
-""")
-totals.delayed = first(totals,['delayedCount','delayed_count']) || 0
-return {list:rows,totals:totals,runtimeRevision:live.revision,runtimeFresh:live.fresh,
+var sourceId = txt('task','source_table_id')
+var hasGroup = present(tableRead.blankAsNull(effectiveGroup))
+query.leftJoinGrouped(taskQuery,'x','source_id','tid',{
+    source_id:sourceId,task_count:tableRead.count(),running_count:tableRead.countIf(tableRead.any(runningMatches)),
+    invalid_count:tableRead.countIf(tableRead.any(invalidMatches)),
+    unknown_count:tableRead.countIf(tableRead.all([hasGroup,tableRead.not(tableRead.any(knownMatches))])),
+    delayed_count:tableRead.countIf(tableRead.equal(num('task','is_timeout'),1))},[sourceId])
+var configured = present(txt('x','source_id'))
+var isRunning = tableRead.greaterThan(num('x','running_count'),0)
+var requested = tableRead.equal(tableRead.coalesce([num('t','access_request_status'),0]),1)
+var totals = query.grouped({total:tableRead.count(),
+    pending:tableRead.countIf(tableRead.all([tableRead.not(configured),tableRead.not(requested)])),
+    pending_approval:tableRead.countIf(tableRead.all([tableRead.not(configured),requested])),
+    configured:tableRead.countIf(configured),running:tableRead.countIf(isRunning),
+    ready:tableRead.countIf(tableRead.all([configured,tableRead.not(isRunning),tableRead.equal(num('x','unknown_count'),0)])),
+    problem:tableRead.countIf(tableRead.greaterThan(num('x','invalid_count'),0)),
+    delayed:tableRead.countIf(tableRead.greaterThan(num('x','delayed_count'),0))},[])[0]
+return {list:rows,totals:totals,runtimeRevision:live.revision,runtimeFresh:live.fresh,runtimePartial:live.partial,
     runtimeObservedAt:live.observedAt,runtimeMessage:live.message}

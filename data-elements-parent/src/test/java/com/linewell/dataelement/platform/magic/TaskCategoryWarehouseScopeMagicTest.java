@@ -21,6 +21,32 @@ import org.ssssssss.script.runtime.ExitValue;
 
 /** Executes the editable resources against real SQL, including mixed tenant IDs and legacy menu scope. */
 class TaskCategoryWarehouseScopeMagicTest {
+    @ParameterizedTest @ValueSource(ints={20,100})
+    void ingestionCombinesNodeAndGroupBeforeCountingAndPaging(int count) throws Exception {
+        var f=fixture(count);
+        var response=(com.fasterxml.jackson.databind.node.ObjectNode)TaskRuntimeMagicFixture.emptyRootStatus();
+        response.withObject("/processGroupStatus/aggregateSnapshot").putArray("processGroupStatusSnapshots")
+            .addObject().putObject("processGroupStatusSnapshot").put("id","shared-group").putArray("processorStatusSnapshots")
+            .addObject().putObject("processorStatusSnapshot").put("runStatus","Stopped");
+        var running=response.deepCopy();
+        ((com.fasterxml.jackson.databind.node.ObjectNode)running.at("/processGroupStatus/aggregateSnapshot/processGroupStatusSnapshots/0/processGroupStatusSnapshot/processorStatusSnapshots/0/processorStatusSnapshot")).put("runStatus","Running");
+        for(int i=0;i<count;i++) {
+            insertTask(f,"node-task-"+i,"table-"+i,"warehouse-"+i,List.of("warehouse-"+i));
+            String binding=i%4==0?"second":i%4==1?"offline":i%4==2?"test-node":"deleted-node";
+            f.jdbc.update("update nifi_pipeline_t set nifi_process_group_id='shared-group',node_mapping_json=? where id=?",
+                "{\"runtimeNodeId\":\""+binding+"\"}","pipe-node-task-"+i);
+        }
+        var counter=f.countQueries();
+        for(String state:List.of("1","3","all")) {
+            counter.reads=0;
+            var result=(Map<?,?>)runValue(f,INGEST_PAGE,Map.of("viewLevel","table","pageSize",count,"datasourceIds",List.of("db"),"accessStatus",state),response,
+                runtime->{runtime.addNode("second",running);runtime.addNode("offline",null);});
+            assertThat(((Number)result.get("total")).intValue()).isEqualTo(state.equals("all")?count:count/4);
+            assertThat(result.get("runtimePartial")).isEqualTo(true);
+            if(!state.equals("all")) assertThat((List<?>)result.get("list")).allSatisfy(row->assertThat(((Map<?,?>)row).get("accessStatus")).isEqualTo(state));
+            assertThat(counter.reads).isEqualTo(11);
+        }
+    }
     private static final String INGEST_PAGE = "76fd211790f54164947f276824d19c1d";
     private static final String DISTRIBUTE_PAGE = "1f475a245fda4ba4a885b3ac4f8e2d59";
     private static final String INGEST_TREE = "ods_data_agg_tree_statistics_01";
@@ -628,6 +654,7 @@ class TaskCategoryWarehouseScopeMagicTest {
         createDistributionColumns(f.jdbc);
         f.jdbc.execute("create table data_access_agg_task_t(tid varchar(64),source_table_id varchar(64),target_table_id varchar(64),pipeline_id varchar(64),tenant_id varchar(32),is_del int,updated_time timestamp,process_group_id varchar(64))");
         f.jdbc.execute("create table nifi_pipeline_t(id varchar(64),tenant_id varchar(32),is_del int,dsl_json clob,status varchar(32),nifi_process_group_id varchar(64),updated_at bigint)");
+        TaskRuntimeMagicFixture.bindingColumns(f.jdbc);
         DataIngestionRegistrationScopeTest.createTaskLookupIndexes(f);
         f.jdbc.execute("create table rm_org_t(tenant_id varchar(32),id varchar(64),name varchar(100),deleted int)");
         f.jdbc.update("insert into rm_org_t values('ga','org','当前租户部门',0),('other','org','其他租户部门',0)");
@@ -705,6 +732,10 @@ class TaskCategoryWarehouseScopeMagicTest {
     }
     private static Object runValue(CategoryFixture f, String id, Map<String, Object> body,
             com.fasterxml.jackson.databind.JsonNode response) throws Exception {
+        return runValue(f,id,body,response,runtime -> {});
+    }
+    private static Object runValue(CategoryFixture f, String id, Map<String, Object> body,
+            com.fasterxml.jackson.databind.JsonNode response,java.util.function.Consumer<TaskRuntimeMagicFixture> configure) throws Exception {
         String script = CanonicalMagicSources.byId(id).replaceAll("(?m)^import (?!cn\\.hutool\\.)[^\\r\\n]*\\r?\\n", "");
         var scope = new DataIngestionRegistrationScopeTest.VisibleScope();
         var inputs = new LinkedHashMap<String, Object>(); inputs.put("db", f.db); inputs.put("body", body);
@@ -718,6 +749,7 @@ class TaskCategoryWarehouseScopeMagicTest {
         inputs.put("odsSourceClassifier", (Function<Object[], Object>) arguments -> classifierScript.execute(
                 new MagicScriptContext(Map.of("tableRead", f.tableRead, "tenantRuntime", scope))));
         try (var runtime = new TaskRuntimeMagicFixture(scope.id(), response); var ignored = TenantContext.use(scope.id())) {
+            configure.accept(runtime);
             inputs.put("taskRuntime", runtime.module);
             Object result = MagicScript.create(script, null).execute(new MagicScriptContext(inputs));
             if (result instanceof Map<?, ?> page && page.containsKey("runtimeRevision")) runtime.verifySingleRootRead();

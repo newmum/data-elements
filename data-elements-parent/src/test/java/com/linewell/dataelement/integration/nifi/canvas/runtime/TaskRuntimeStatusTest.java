@@ -27,6 +27,46 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 class TaskRuntimeStatusTest {
+    @Test void multipleNodesUseIndependentKeysAndOfflineNodesDoNotHideHealthyTasks() throws Exception {
+        var resolver = mock(NifiNodeRuntimeResolver.class);
+        var nifi = mock(NifiClient.class);
+        var first = new RuntimeNode("tenant-a", "a", "a", "http://a.invalid", "", "", false, "root");
+        var second = new RuntimeNode("tenant-a", "b", "b", "http://b.invalid", "", "", false, "root");
+        when(resolver.samplingConfigurations()).thenReturn(List.of(Map.of("tid", "a"), Map.of("tid", "b")));
+        when(resolver.runtimeNode(anyMap())).thenAnswer(call ->
+                "a".equals(((Map<?, ?>) call.getArgument(0)).get("tid")) ? first : second);
+        when(nifi.getRuntimeRootStatus(first)).thenReturn(MAPPER.readTree(response("Stopped")));
+        when(nifi.getRuntimeRootStatus(second)).thenReturn(MAPPER.readTree(response("Running")));
+        var service = new TaskRuntimeStatusService(resolver, nifi);
+        try (var tenant = TenantContext.use("tenant-a")) {
+            var module = new TaskRuntimeMagicModule(service);
+            for (int count : List.of(20, 100)) {
+                var snapshot = module.snapshot();
+                List<Map<String, Object>> rows = new ArrayList<>();
+                for (int i = 0; i < count; i++) rows.add(new HashMap<>(Map.of(
+                        "runtimeNodeId", i % 2 == 0 ? "a" : "b", "runtimeProcessGroupId", "child")));
+                module.decorate(rows, snapshot);
+                for (int i = 0; i < count; i++)
+                    assertThat(rows.get(i)).containsEntry("taskStatus", i % 2 == 0 ? 0 : 1);
+            }
+            verify(nifi, times(1)).getRuntimeRootStatus(first);
+            verify(nifi, times(1)).getRuntimeRootStatus(second);
+            service.invalidateTenant();
+            when(nifi.getRuntimeRootStatus(first)).thenThrow(new IllegalStateException("offline"));
+            var partial = module.snapshot();
+            assertThat(partial).containsEntry("partial", true);
+            var healthy = new HashMap<String, Object>(Map.of("runtimeNodeId", "b", "runtimeProcessGroupId", "child"));
+            var offline = new HashMap<String, Object>(Map.of("runtimeNodeId", "a", "runtimeProcessGroupId", "child"));
+            var deleted = new HashMap<String, Object>(Map.of("runtimeNodeId", "foreign", "runtimeProcessGroupId", "child"));
+            var legacy = new HashMap<String, Object>(Map.of("runtimeProcessGroupId", "child"));
+            module.decorate(List.of(healthy, offline, deleted, legacy), partial);
+            assertThat(healthy).containsEntry("runtimeState", "RUNNING");
+            assertThat(offline).containsEntry("runtimeState", "UNKNOWN").containsEntry("running", false);
+            assertThat(deleted).containsEntry("runtimeState", "UNKNOWN");
+            assertThat(legacy).containsEntry("nifiNodeId", "a").containsEntry("runtimeLegacyNode", true);
+        } finally { service.close(); }
+        assertThatThrownBy(service::snapshotAll).isInstanceOf(com.linewell.dataelement.platform.tenant.domain.TenantAccessException.class);
+    }
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static String response(String state) { return """
         {"processGroupStatus":{"aggregateSnapshot":{"id":"root","processGroupStatusSnapshots":[

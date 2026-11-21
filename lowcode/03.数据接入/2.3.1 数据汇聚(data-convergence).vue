@@ -5,7 +5,7 @@
         <div class="left-panel">
           <div class="panel-header">
           <h3>{{ taskName }}</h3>
-          <el-tooltip :content="runtimeHint" placement="bottom"><el-tag :type="runtimeConnection === 'live' ? 'success' : runtimeConnection === 'connecting' ? 'info' : 'warning'" size="small" effect="plain">{{ runtimeConnection === 'live' ? '实时状态' : runtimeConnection === 'connecting' ? '连接中' : '状态待确认' }}</el-tag></el-tooltip>
+          <el-tooltip :content="runtimeHint" placement="bottom"><el-tag :type="runtimeConnection === 'live' ? 'success' : runtimeConnection === 'connecting' ? 'info' : 'warning'" size="small" effect="plain">{{ runtimeConnection === 'live' ? '实时状态' : runtimeConnection === 'connecting' ? '连接中' : runtimeConnection === 'partial' ? '部分节点待确认' : '状态待确认' }}</el-tag></el-tooltip>
           </div>
 
           <div class="tree-container">
@@ -399,7 +399,7 @@ const refreshRuntimePage = () => {
   statusRefreshTimer = setTimeout(() => { statusRefreshTimer = null; if (runtimeActive && !document.hidden) tableRef.value?.refresh?.(false); }, 150);
 };
 const acceptRuntimeEvent = (payload) => {
-  runtimeConnection.value = payload.fresh ? 'live' : 'unavailable';
+  runtimeConnection.value = payload.fresh ? 'live' : payload.partial ? 'partial' : 'unavailable';
   runtimeWarning.value = payload.message || '';
   runtimeReadAt.value = Number(payload.observedAt || 0);
   if (runtimeRevision && runtimeRevision !== payload.revision) refreshRuntimePage();
@@ -918,7 +918,7 @@ const fetchSources = async ({ pageNo = 1, pageSize = 20 } = {}) => {
         refreshRuntimePage();
       } else {
         runtimeRevision = page.runtimeRevision; runtimeReadAt.value = Number(page.runtimeObservedAt || 0);
-        runtimeConnection.value = page.runtimeFresh ? 'live' : 'unavailable'; runtimeWarning.value = page.runtimeMessage || '';
+        runtimeConnection.value = page.runtimeFresh ? 'live' : page.runtimePartial ? 'partial' : 'unavailable'; runtimeWarning.value = page.runtimeMessage || '';
       }
     }
     const list = (page.list || []).map((item) => ({

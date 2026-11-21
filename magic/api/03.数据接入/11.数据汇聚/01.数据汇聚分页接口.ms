@@ -329,13 +329,6 @@ if (viewLevel == 'table') {
     // 运行状态筛选使用同一次快照，避免计数、分页和任务展示观察到不同版本。
     var needsRuntimeFilter = requestedAccessStatus == '1' || requestedAccessStatus == '3'
     var tableRuntimeSnapshot = needsRuntimeFilter ? taskRuntime.snapshot() : null
-    var freshRuntime = tableRuntimeSnapshot?.fresh == true
-    var runningGroupIds = []
-    if (freshRuntime && tableRuntimeSnapshot.index != null) {
-        for (groupId, runtimeGroup in tableRuntimeSnapshot.index.groups()) {
-            if (runtimeGroup.running()) { runningGroupIds.add(groupId) }
-        }
-    }
 
     if (tableKeyword.length() > 100) { exit 400, '搜索词过长' }
     var textColumn = (alias, name) => tableRead.column(alias, name, 'TEXT')
@@ -386,9 +379,34 @@ if (viewLevel == 'table') {
             tasks.leftJoin('nifi_pipeline_t', 'status_pipeline', 'id', 'pipeline_id', [active('status_pipeline')])
             var effectiveGroup = tableRead.when(present(textColumn('status_pipeline', 'id')),
                 textColumn('status_pipeline', 'nifi_process_group_id'), textColumn('task', 'process_group_id'))
-            // 快照不可用时，只能判定无 PG 的任务待启动。带 PG 的旧任务继续待确认。
-            var excluded = freshRuntime ? tableRead.in(effectiveGroup, runningGroupIds)
-                : present(tableRead.blankAsNull(tableRead.trim(effectiveGroup)))
+            // 节点与流程组联合匹配。离线节点保留待确认，不能混用其他节点的同名组。
+            var boundNode = tableRead.jsonText(tableRead.column('status_pipeline', 'node_mapping_json', 'LOB'), 'runtimeNodeId')
+            var effectiveNode = tableRead.coalesce([tableRead.blankAsNull(boundNode), tableRuntimeSnapshot.defaultNodeId])
+            var runningConditions = []
+            var knownConditions = []
+            for (node in tableRuntimeSnapshot.nodes || []) {
+                var matchesNode = tableRead.equal(effectiveNode, node.nodeId)
+                if (node.fresh == true) {
+                    for (state in [0,1,2,3]) {
+                        for (knownBatch in node.get('groups' + state) || []) {
+                            knownConditions.add(tableRead.all([matchesNode,tableRead.in(effectiveGroup,knownBatch)]))
+                        }
+                    }
+                    var batch = []
+                    for (id in node.runningGroups || []) {
+                        batch.add(id)
+                        if (batch.size() == 500) {
+                            runningConditions.add(tableRead.all([matchesNode, tableRead.in(effectiveGroup, batch)]))
+                            batch = []
+                        }
+                    }
+                    if (batch.size() > 0) { runningConditions.add(tableRead.all([matchesNode, tableRead.in(effectiveGroup, batch)])) }
+                }
+            }
+            var hasGroup = present(tableRead.blankAsNull(tableRead.trim(effectiveGroup)))
+            var running = tableRead.any(runningConditions)
+            var unknown = tableRead.all([hasGroup, tableRead.not(tableRead.any(knownConditions))])
+            var excluded = requestedAccessStatus == '1' ? running : tableRead.any([running, unknown])
             statusProjection.excluded_count = tableRead.countIf(excluded)
         }
         query.leftJoinGrouped(tasks, 'direct_access', 'source_id', 'tid', statusProjection, [taskSource])
@@ -401,7 +419,7 @@ if (viewLevel == 'table') {
             var hasExcluded = tableRead.greaterThan(numberColumn('direct_access', 'excluded_count'), 0)
             if (requestedAccessStatus == '1') {
                 // 过期快照中的 PG 不能判断任务正在运行。
-                query.where(freshRuntime ? hasExcluded : tableRead.in(textColumn('t', 'tid'), []))
+                query.where(hasExcluded)
             } else {
                 query.where(tableRead.all([present(directSource), tableRead.not(hasExcluded)]))
             }
@@ -536,11 +554,16 @@ if (viewLevel == 'table') {
     var pipelineChainOrder = {}
     var pipelineStatuses = {}
     var pipelineGroups = {}
-    var taskPipelines = taskPipelineIds.size() == 0 ? [] : db.table('nifi_pipeline_t').columns('id', 'dsl_json', 'status', 'nifi_process_group_id').where()
+    var pipelineNodes = {}
+    var taskPipelines = taskPipelineIds.size() == 0 ? [] : db.table('nifi_pipeline_t').columns('id', 'dsl_json', 'status', 'nifi_process_group_id', 'node_mapping_json').where()
         .eq('tenant_id', tenantId).in('id', taskPipelineIds).eq('is_del', 0).select()
     for (pipeline in taskPipelines) {
         pipelineStatuses[text(pipeline.id)] = text(pipeline.status).trim().toUpperCase()
         pipelineGroups[text(pipeline.id)] = text(first(pipeline, ['nifiProcessGroupId', 'nifi_process_group_id']))
+        var nodeMapping = {}
+        try { nodeMapping = JSONUtil.parseObj(text(first(pipeline, ['nodeMappingJson', 'node_mapping_json']))) } catch (ignored) {}
+        pipelineNodes[text(pipeline.id)] = text(nodeMapping?.runtimeNodeId)
+
         var ids = []
         var dsl = {}
         try { dsl = JSONUtil.parseObj(text(first(pipeline, ['dslJson', 'dsl_json']))) } catch (ignored) {}
@@ -651,6 +674,7 @@ if (viewLevel == 'table') {
                 lastRunning: first(rawTask, ['lastRunning', 'last_running', 'updatedTime', 'updated_time']),
                 endRunning: first(rawTask, ['endRunning', 'end_running']),
                 runtimeProcessGroupId: runtimeGroup,
+                runtimeNodeId: pipelineNodes[taskPipelineId] || '',
                 lifecycleStatus: pipelineStatuses[taskPipelineId] || '',
                 taskStatus: first(rawTask, ['taskStatus', 'task_status']),
                 scheduleStrategy: first(rawTask, ['scheduleStrategy', 'schedule_strategy']),
@@ -771,6 +795,7 @@ if (viewLevel == 'table') {
         datasourceTypeStatistics: datasourceTypeStatistics,
         runtimeRevision: live.revision,
         runtimeFresh: live.fresh,
+        runtimePartial: live.partial == true,
         runtimeObservedAt: live.observedAt,
         runtimeMessage: live.message,
         viewLevel: 'table',

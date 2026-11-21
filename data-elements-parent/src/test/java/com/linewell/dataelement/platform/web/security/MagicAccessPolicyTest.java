@@ -11,6 +11,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
@@ -219,12 +221,12 @@ class MagicAccessPolicyTest {
 
     @Test
     void nativeNifiProxyUsesMatchedProtocolAndConfiguredUpstreamPaths() throws Exception {
-        var nifi = mock(NifiClient.class);
-        when(nifi.proxy(any(), any(), any(), isNull())).thenReturn(ResponseEntity.ok(new byte[] {1, 2}));
+        var view = mock(com.linewell.dataelement.integration.nifi.canvas.nifi.NifiNativeView.class);
+        when(view.proxy(any(), anyString(), anyBoolean())).thenReturn(ResponseEntity.ok(new byte[] {1, 2}));
         var tenants = mock(TenantAccessService.class);
         var accounts = mock(TenantIdentityQueryService.class);
         var tenant = new TenantWebInterceptor(tenants, new TenantProperties(), accounts, functions);
-        var proxy = new NifiNativeUiProxyController(nifi, "/node-ui", "/node-api", "/native-ui", "/native-api");
+        var proxy = new NifiNativeUiProxyController(view, "/node-ui", "/node-api", "/native-ui", "/native-api");
         var mvc = MockMvcBuilders.standaloneSetup(proxy)
                 .addPlaceholderValue("nifi.native-proxy.ui-path", "/node-ui")
                 .addPlaceholderValue("nifi.native-proxy.api-path", "/node-api")
@@ -241,9 +243,9 @@ class MagicAccessPolicyTest {
         } finally {
             TenantContext.clear();
         }
-        verify(nifi).proxy(eq(HttpMethod.GET), eq("/native-ui/asset?version=1"), any(), isNull());
-        verify(nifi).proxy(eq(HttpMethod.GET), eq("/native-api/flow/about"), any(), isNull());
-        verify(nifi).proxy(eq(HttpMethod.GET), eq("/native-ui"), any(), isNull());
+        verify(view).proxy(any(), eq("/native-ui/asset"), eq(true));
+        verify(view).proxy(any(), eq("/native-api/flow/about"), eq(false));
+        verify(view).proxy(any(), eq("/native-ui"), eq(true));
     }
 
     @Test

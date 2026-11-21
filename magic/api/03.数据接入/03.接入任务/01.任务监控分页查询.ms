@@ -85,21 +85,9 @@ if (blank(tenantId)) {
     exit 401, '当前登录租户无效，请重新登录后查看接入任务'
 }
 
-// 当前运行态由租户默认的数据接入节点负责。历史任务尚未记录独立节点时，
-// 按该实际运行节点过滤，避免树形筛选出现“选了节点却仍混入其他节点任务”。
+// 节点选项只缩小当前租户和角色可见的任务，默认节点仅用于历史未绑定任务。
 var selectedNetworkCode = text(body?.nifiNetworkCode)
 var selectedNodeId = text(body?.nifiNodeId)
-var runtimeNode = db.table('nifi_node_t')
-    .columns('tid', 'network_code', 'node_code', 'node_name')
-    .where().eq('tenant_id', tenantId).eq('is_del', 0).eq('enabled', 1)
-    .orderBy('is_default', 'desc').orderBy('updated_time', 'desc').selectOne()
-var runtimeNodeId = runtimeNode == null ? '' : text(runtimeNode.tid)
-var runtimeNetworkCode = runtimeNode == null ? '' : text(runtimeNode.networkCode)
-var matchesRuntimeNode = (blank(selectedNetworkCode) || selectedNetworkCode == runtimeNetworkCode)
-    && (blank(selectedNodeId) || selectedNodeId == runtimeNodeId)
-if (!matchesRuntimeNode) {
-    return { pageNum: pageNum, pageSize: pageSize, total: 0, list: [] }
-}
 var live = taskRuntime.snapshot()
 var scope = dataScope.dataSource()
 var scopeMode = text(scope?.scope)
@@ -117,15 +105,26 @@ var numberColumn = (alias, name) => tableRead.column(alias, name, 'NUMBER')
 var timeColumn = (alias, name) => tableRead.column(alias, name, 'TIME')
 var active = alias => tableRead.equal(numberColumn(alias, 'is_del'), 0)
 
-var groupMatches = (processGroup, groupStatus) => {
+var groupMatches = (processGroup, nodeExpression, groupStatus) => {
     var batches = []
-    for (batch in live.get('groups' + groupStatus) || []) {
-        batches.add(tableRead.in(processGroup, batch))
+    for (node in live.nodes || []) {
+        for (batch in node.get('groups' + groupStatus) || []) {
+            batches.add(tableRead.all([tableRead.equal(nodeExpression, node.nodeId), tableRead.in(processGroup, batch)]))
+        }
     }
     return tableRead.any(batches)
 }
 
 var statusFilter = (query, processGroup, lifecycle) => {
+    var nodeExpression = tableRead.coalesce([
+        tableRead.blankAsNull(tableRead.jsonText(tableRead.column('p', 'node_mapping_json', 'LOB'), 'runtimeNodeId')),
+        live.defaultNodeId])
+    if (selectedNodeId != '' || selectedNetworkCode != '') {
+        var nodeIds = (live.nodes || []).filter(node =>
+            (selectedNodeId == '' || node.nodeId == selectedNodeId)
+            && (selectedNetworkCode == '' || node.networkCode == selectedNetworkCode)).map(node => node.nodeId)
+        query.where(tableRead.in(nodeExpression, nodeIds))
+    }
     if (status == '' || status == 'all') {
         return
     }
@@ -136,14 +135,14 @@ var statusFilter = (query, processGroup, lifecycle) => {
     var failed = tableRead.equal(lifecycle, 'DEPLOY_FAILED')
     if (status == '0') {
         var undeployed = tableRead.any([tableRead.isNull(lifecycle), tableRead.not(tableRead.any([running, failed]))])
-        query.where(tableRead.any([groupMatches(processGroup, 0), tableRead.all([noGroup, undeployed])]))
+        query.where(tableRead.any([groupMatches(processGroup, nodeExpression, 0), tableRead.all([noGroup, undeployed])]))
     } else if (status == '1') {
-        query.where(groupMatches(processGroup, 1))
+        query.where(groupMatches(processGroup, nodeExpression, 1))
     } else if (status == '2') {
-        query.where(tableRead.any([groupMatches(processGroup, 2), tableRead.all([noGroup, failed])]))
+        query.where(tableRead.any([groupMatches(processGroup, nodeExpression, 2), tableRead.all([noGroup, failed])]))
     } else {
         var knownGroup = tableRead.any([
-            groupMatches(processGroup, 0), groupMatches(processGroup, 1), groupMatches(processGroup, 2)
+            groupMatches(processGroup, nodeExpression, 0), groupMatches(processGroup, nodeExpression, 1), groupMatches(processGroup, nodeExpression, 2)
         ])
         query.where(tableRead.any([
             tableRead.all([hasGroup, tableRead.not(knownGroup)]), tableRead.all([noGroup, running])
@@ -167,9 +166,16 @@ var response = (total, list) => {
         list: list,
         runtimeRevision: live.revision,
         runtimeFresh: live.fresh,
+        runtimePartial: live.partial == true,
         runtimeObservedAt: live.observedAt,
         runtimeMessage: live.message
     }
+}
+
+if ((selectedNodeId != '' || selectedNetworkCode != '')
+    && (live.nodes || []).filter(node => (selectedNodeId == '' || selectedNodeId == node.nodeId)
+        && (selectedNetworkCode == '' || selectedNetworkCode == node.networkCode)).isEmpty()) {
+    return response(0, [])
 }
 
 // 运行状态归一：0 未启用，1 运行中，2 运行异常。
@@ -236,9 +242,6 @@ var decorateTaskRow = row => {
     row.sourceTableSummary = row.sourceTableName
     row.targetTableSummary = row.targetTableName
     row.scheduleFrequency = scheduleText(row)
-    row.nifiNodeId = runtimeNodeId
-    row.nifiNetworkCode = runtimeNetworkCode
-    row.nifiNodeName = runtimeNode == null ? null : runtimeNode.nodeName
     row.syncTables = [{
         tid: row.tid,
         taskId: row.tid,
@@ -299,7 +302,8 @@ var taskSorts = {
 }
 var taskPage = pageResult(tasks, number => tasks.pageRootRows({
     lifecycle_status: lifecycle,
-    runtime_process_group_id: processGroup
+    runtime_process_group_id: processGroup,
+    runtime_node_id: tableRead.jsonText(tableRead.column('p', 'node_mapping_json', 'LOB'), 'runtimeNodeId')
 }, taskSorts[sortField], sortDirection, 'tid', number, pageSize))
 
 // 沿用 Magic API 的列名映射，保留不同部署中的全部任务列及其驼峰键名。
@@ -414,6 +418,7 @@ var extractDslInfo = pipeline => {
 
 // 无来源归属的历史流水线仅在 ALL 范围可见。历史时间排序沿用各数据库的空值顺序。
 var pipelineFields = {
+    runtimeNodeId: tableRead.jsonText(tableRead.column('p', 'node_mapping_json', 'LOB'), 'runtimeNodeId'),
     id: textColumn('p', 'id'),
     name: textColumn('p', 'name'),
     description: textColumn('p', 'description'),
@@ -456,6 +461,7 @@ for (pipeline in pipelinePage.rows) {
         pipelineId: pipeline.id,
         processGroupId: pipeline.nifiProcessGroupId,
         runtimeProcessGroupId: pipeline.nifiProcessGroupId,
+        runtimeNodeId: pipeline.runtimeNodeId,
         lifecycleStatus: pipeline.status,
         recordSource: 'pipeline',
         taskName: pipeline.name,

@@ -35,6 +35,7 @@ public class TaskRuntimeStatusService {
         volatile RuntimeStatusIndex index;
         volatile long observedAt, attemptedAt, nextRead, lastAccess = System.currentTimeMillis(), generation, readyGeneration = -1;
         volatile String error = "";
+        volatile String name = "", networkCode = "";
         int failures;
         final AtomicBoolean queued = new AtomicBoolean();
         Entry(RuntimeNode node) { this.node = node; }
@@ -46,9 +47,18 @@ public class TaskRuntimeStatusService {
         volatile ScheduledFuture<?> renewal;
         volatile ScheduledFuture<?> heartbeat;
         volatile boolean disconnected;
+        List<Entry> sources;
+        String defaultNodeId;
         Subscriber(Entry entry) {
+            this(List.of(entry), null);
+        }
+        Subscriber(List<Entry> sources, String defaultNodeId) {
+            this.sources = sources;
+            this.defaultNodeId = defaultNodeId;
             Runnable remove = () -> {
-                if (entry.subscribers.remove(this)) connections.release();
+                boolean removed = false;
+                for (Entry entry : sources) removed |= entry.subscribers.remove(this);
+                if (removed) connections.release();
                 unconfigured.remove(this);
                 if (renewal != null) renewal.cancel(false);
                 if (heartbeat != null) heartbeat.cancel(false);
@@ -76,8 +86,11 @@ public class TaskRuntimeStatusService {
         TenantContext.requireTenantId();
         RuntimeNode node = assignedNodeId == null || assignedNodeId.isBlank()
                 ? resolver.resolve() : resolver.resolveAssignedNode(assignedNodeId);
+        return currentNode(node);
+    }
+    private synchronized Entry currentNode(RuntimeNode node) {
         entries.entrySet().removeIf(e -> e.getValue().subscribers.isEmpty() && System.currentTimeMillis() - e.getValue().lastAccess > 60000);
-        if (!entries.containsKey(node.tokenCacheKey()) && entries.size() >= 16) throw new IllegalStateException("实时状态节点繁忙，请稍后重试");
+        if (!entries.containsKey(node.tokenCacheKey()) && entries.size() >= 512) throw new IllegalStateException("实时状态节点繁忙，请稍后重试");
         Entry entry = entries.computeIfAbsent(node.tokenCacheKey(), key -> new Entry(node));
         if (!entry.node.equals(node)) { entry.node = node; entry.generation++; entry.nextRead = 0; }
         entry.lastAccess = System.currentTimeMillis();
@@ -117,7 +130,10 @@ public class TaskRuntimeStatusService {
             }
         } catch (Exception ignored) { /* One disconnected viewer must not terminate shared sampling. */ }
     }
-    private void broadcast(Entry entry) { Map<String, Object> event = event(entry); entry.subscribers.forEach(s -> s.offer(event)); }
+    private void broadcast(Entry entry) {
+        entry.subscribers.forEach(s -> s.offer(s.defaultNodeId == null ? event(entry)
+                : aggregateEvent(s.sources)));
+    }
     private Map<String, Object> event(Entry entry) {
         // Invalidation metadata only: never send the root tree or another role's task IDs.
         return Map.of("revision", revision(entry), "fresh", fresh(entry), "observedAt", entry.observedAt,
@@ -130,6 +146,9 @@ public class TaskRuntimeStatusService {
     }
     public Map<String, Object> snapshotForNode(String assignedNodeId) {
         Entry entry = current(assignedNodeId); refresh(entry);
+        return snapshot(entry);
+    }
+    private Map<String, Object> snapshot(Entry entry) {
         Map<String, Object> result = new HashMap<>(event(entry));
         result.put("index", entry.index); result.put("nodeId", entry.node.id());
         for (int status = 0; status <= 3; status++) {
@@ -142,6 +161,94 @@ public class TaskRuntimeStatusService {
             result.put("groups" + status, chunks);
         }
         return result;
+    }
+
+    private List<Entry> samplingEntries() {
+        var configurations = resolver.samplingConfigurations();
+        var result = new ArrayList<Entry>();
+        for (var row : configurations) {
+            RuntimeNode node = resolver.runtimeNode(row);
+            Entry entry = currentNode(node);
+            entry.name = Objects.toString(row.get("node_name"), node.code());
+            entry.networkCode = Objects.toString(row.get("network_code"), "");
+            entry.lastAccess = System.currentTimeMillis();
+            result.add(entry);
+        }
+        return result;
+    }
+
+    private CompletableFuture<Void> scheduleRead(Entry entry) {
+        if (System.currentTimeMillis() < entry.nextRead || !entry.queued.compareAndSet(false, true))
+            return CompletableFuture.completedFuture(null);
+        var done = new CompletableFuture<Void>();
+        try {
+            readers.submit(() -> {
+                try { refresh(entry); broadcast(entry); done.complete(null); }
+                catch (RuntimeException failure) { done.completeExceptionally(failure); }
+                finally { entry.queued.set(false); }
+            });
+        } catch (RejectedExecutionException busy) { entry.queued.set(false); done.complete(null); }
+        return done;
+    }
+
+    private Map<String, Object> aggregateEvent(List<Entry> sources) {
+        int available = (int) sources.stream().filter(this::fresh).count();
+        String revision = sources.stream().map(e -> e.node.id() + "=" + revision(e)).sorted()
+                .collect(java.util.stream.Collectors.joining("|"));
+        long observed = sources.stream().mapToLong(e -> e.observedAt).filter(t -> t > 0).min().orElse(0);
+        return Map.of("revision", revision.isEmpty() ? "unavailable" : revision,
+                "fresh", !sources.isEmpty() && available == sources.size(),
+                "partial", available > 0 && available < sources.size(),
+                "observedAt", observed, "checkedAt", sources.stream().mapToLong(e -> e.attemptedAt).max().orElse(0),
+                "message", sources.isEmpty() ? "当前租户尚未配置 NiFi 节点，请在节点管理中配置并启用后查看实时状态"
+                        : available == sources.size() ? "" : "部分节点状态待确认，已连通节点的任务继续显示");
+    }
+
+    /** Read each configured node once, with a bounded first-response wait and shared backoff. */
+    public Map<String, Object> snapshotAll() {
+        TenantContext.requireTenantId();
+        List<Entry> sources = samplingEntries();
+        CompletableFuture<?>[] pending = sources.stream().map(this::scheduleRead).toArray(CompletableFuture[]::new);
+        try { CompletableFuture.allOf(pending).get(1200, TimeUnit.MILLISECONDS); }
+        catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); }
+        catch (ExecutionException | TimeoutException ignored) { /* Slow nodes complete independently. */ }
+        var result = new HashMap<String, Object>(aggregateEvent(sources));
+        var nodes = new ArrayList<Map<String, Object>>();
+        var configurations = new LinkedHashMap<String, Object>();
+        for (Entry entry : sources) {
+            var node = snapshot(entry);
+            node.put("nodeName", entry.name);
+            node.put("networkCode", entry.networkCode);
+            node.put("runningGroups", fresh(entry) ? entry.index.groups().entrySet().stream()
+                    .filter(e -> e.getValue().running()).map(Map.Entry::getKey).toList() : List.of());
+            nodes.add(node);
+            configurations.put(entry.node.id(), node);
+        }
+        result.put("nodes", nodes);
+        result.put("byNode", configurations);
+        result.put("defaultNodeId", sources.isEmpty() ? "" : sources.getFirst().node.id());
+        return result;
+    }
+
+    public SseEmitter subscribeAll() {
+        var sources = samplingEntries();
+        if (sources.isEmpty()) {
+            Entry empty = new Entry(null);
+            empty.error = "当前租户尚未配置 NiFi 节点，请在节点管理中配置并启用后查看实时状态";
+            sources = List.of(empty);
+        }
+        if (!connections.tryAcquire()) throw new org.springframework.web.server.ResponseStatusException(
+                org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE, "实时状态连接繁忙，请稍后重试");
+        String defaultId = sources.getFirst().node == null ? null : sources.getFirst().node.id();
+        var subscriber = new Subscriber(sources, defaultId);
+        sources.forEach(e -> e.subscribers.add(subscriber));
+        if (defaultId == null) {
+            unconfigured.add(subscriber);
+            subscriber.heartbeat = clock.scheduleAtFixedRate(() -> subscriber.offer(event(subscriber.sources.getFirst())), 15, 15, TimeUnit.SECONDS);
+            subscriber.offer(event(sources.getFirst()));
+        } else subscriber.offer(aggregateEvent(sources));
+        subscriber.renewal = clock.schedule(subscriber.emitter::complete, 55, TimeUnit.SECONDS);
+        return subscriber.emitter;
     }
     public SseEmitter subscribe() {
         Entry entry;
@@ -181,7 +288,8 @@ public class TaskRuntimeStatusService {
         String label = switch (state) { case "RUNNING" -> "运行中"; case "STOPPING" -> "停止中"; case "STOPPED" -> "已停止"; case "EMPTY" -> "空流程"; case "INVALID", "RUN_ERROR" -> "运行异常"; case "MISSING" -> "流程不存在"; case "UNDEPLOYED" -> "未部署"; default -> "状态待确认"; };
         Map<String, Object> value = new HashMap<>();
         value.put("taskStatus", taskStatus); value.put("runtimeState", state); value.put("runtimeLabel", label);
-        value.put("running", group != null && group.running()); value.put("runtimeFresh", Boolean.TRUE.equals(snapshot.get("fresh")));
+        value.put("running", group != null && group.running() && Boolean.TRUE.equals(snapshot.get("fresh")));
+        value.put("runtimeFresh", Boolean.TRUE.equals(snapshot.get("fresh")) && (!deployed || group != null));
         value.put("runtimeObservedAt", snapshot.get("observedAt")); value.put("runtimeMessage", snapshot.get("message"));
         value.put("invalidProcessorCount", group == null ? 0 : group.invalidCount());
         return value;

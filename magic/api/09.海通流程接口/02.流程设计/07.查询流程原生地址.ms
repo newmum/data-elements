@@ -35,14 +35,16 @@
 ================================
 import '@/common/nifiFindCanvas' as findCanvas
 import '@/common/nifiPipelineReadHttp' as withHttpResponse
-import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient as nifi
+import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiNativeView as nativeView
+import org.springframework.http.HttpHeaders
+import dataScope
 import com.linewell.dataelement.platform.tenant.domain.TenantAccessException
 import com.linewell.dataelement.platform.tenant.domain.TenantContext
 import org.springframework.http.ResponseEntity
 import tenantRuntime
 
 // 按查询参数 id 返回当前行业租户已部署流程的 NiFi 原生链接。
-// 已绑定节点返回该节点原生地址，历史画布沿用原有的原生页面代理。
+// 通过当前平台会话签发十分钟只读详情，按任务绑定节点访问，凭据留在服务端。
 
 var flowId = param.id
 
@@ -56,16 +58,16 @@ return withHttpResponse((parameterValues, textParameter, rootCause) => {
     if (canvas == null) {
         return ResponseEntity.notFound().build()
     }
+    if (dataScope.dataSource().scope != 'ALL') {
+        return ResponseEntity.status(403).body({error: '当前角色请通过海通画布查看流程详情'})
+    }
     // 检查已关联的原生组。新草稿或失败的替换部署不会隐藏旧的已部署流程。
     var groupId = canvas.nifiProcessGroupId()
     if (groupId == null || groupId.isBlank()) {
         return ResponseEntity.badRequest().body({error: '当前任务尚未部署到 NiFi，请先部署流程'})
     }
     var nodeId = canvas.nodeMapping()?.runtimeNodeId()
-    if (nodeId != null && !nodeId.isBlank()) {
-        return ResponseEntity.ok({url: nifi.assignedNodeUiUrl(nodeId, groupId), processGroupId: groupId,
-            reusesBrowserSession: false, authenticatedByBackend: false, directNode: true})
-    }
-    return ResponseEntity.ok({url: '/nifi-ui/#/process-groups/' + groupId, processGroupId: groupId,
-        reusesBrowserSession: true, authenticatedByBackend: true})
+    return ResponseEntity.ok().header(HttpHeaders.SET_COOKIE, nativeView.open(nodeId, groupId)).body({
+        url: '/nifi-ui/#/process-groups/' + groupId, processGroupId: groupId,
+        reusesBrowserSession: true, authenticatedByBackend: true, readOnly: true})
 })

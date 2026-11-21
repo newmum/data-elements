@@ -885,7 +885,41 @@ public class NifiClient {
         body.put("id", pgId);
         body.put("state", state);
         body.put("disconnectedNodeAcknowledged", false);
-        return put("/flow/process-groups/" + pgId, body, JsonNode.class);
+        try {
+            return put("/flow/process-groups/" + pgId, body, JsonNode.class);
+        } catch (NifiException failure) {
+            if (failure.status() < 500) throw failure;
+            // A cluster response may fail after scheduling succeeded. Never repeat the write.
+            try {
+                JsonNode observed = observeProcessGroupState(pgId);
+                if (state.equals(observed.path("state").asText())) {
+                    log.info("NiFi group {} {} confirmed by readback after HTTP {}", pgId, state, failure.status());
+                    return observed;
+                }
+            } catch (RuntimeException unavailable) { /* Preserve the scheduling failure when readback is unavailable. */ }
+            throw failure;
+        }
+    }
+
+    /** Read every descendant processor once; running threads alone do not prove the whole graph started. */
+    public JsonNode observeProcessGroupState(String groupId) {
+        JsonNode graph = get("/process-groups/" + groupId + "/processors?includeDescendantGroups=true", JsonNode.class);
+        JsonNode processors = graph.path("processors");
+        if (!processors.isArray() || processors.isEmpty()) throw new NifiException("NiFi 未返回可核验的处理器清单", 502, null);
+        int running = 0, stopped = 0, invalid = 0, active = 0;
+        for (JsonNode processor : processors) {
+            JsonNode component = processor.path("component");
+            String state = component.path("state").asText();
+            active += processor.path("status").path("aggregateSnapshot").path("activeThreadCount").asInt();
+            if ("DISABLED".equals(state)) continue;
+            if ("RUNNING".equals(state)) running++;
+            else if ("STOPPED".equals(state)) stopped++;
+            else invalid++;
+        }
+        String state = running > 0 && stopped == 0 && invalid == 0 ? "RUNNING"
+                : running == 0 && active == 0 ? "STOPPED" : "PARTIAL";
+        return mapper.createObjectNode().put("state", state).put("running", running).put("stopped", stopped)
+                .put("invalid", invalid).put("activeThreads", active).put("confirmedByReadback", true);
     }
 
     /** Start downstream in bulk and run full-table sources once, independently of the browser lifetime. */

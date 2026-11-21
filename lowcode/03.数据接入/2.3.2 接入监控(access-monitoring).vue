@@ -56,7 +56,7 @@
         <section class="access-monitor-content">
     <div class="access-toolbar">
       <el-segmented v-model="activeTab" :options="tabs" @change="handleTabChange" />
-      <el-tooltip :content="runtimeHint" placement="bottom"><el-tag class="runtime-channel" :type="runtimeConnection === 'live' ? 'success' : runtimeConnection === 'connecting' ? 'info' : 'warning'" size="small" effect="plain">{{ runtimeConnection === 'live' ? '实时状态' : runtimeConnection === 'connecting' ? '连接中' : '状态待确认' }}</el-tag></el-tooltip>
+      <el-tooltip :content="runtimeHint" placement="bottom"><el-tag class="runtime-channel" :type="runtimeConnection === 'live' ? 'success' : runtimeConnection === 'connecting' ? 'info' : 'warning'" size="small" effect="plain">{{ runtimeConnection === 'live' ? '实时状态' : runtimeConnection === 'connecting' ? '连接中' : runtimeConnection === 'partial' ? '部分节点待确认' : '状态待确认' }}</el-tag></el-tooltip>
 
       <div class="toolbar-actions">
         <el-input
@@ -373,7 +373,7 @@ const refreshRuntimePage = () => {
   statusRefreshTimer = setTimeout(() => { statusRefreshTimer = null; if (runtimeActive && !document.hidden) tableRef.value?.refresh?.(activeTab.value !== 'all'); }, 150);
 };
 const acceptRuntimeEvent = (payload) => {
-  runtimeConnection.value = payload.fresh ? 'live' : 'unavailable';
+  runtimeConnection.value = payload.fresh ? 'live' : payload.partial ? 'partial' : 'unavailable';
   runtimeWarning.value = payload.message || '';
   runtimeReadAt.value = Number(payload.observedAt || 0);
   if (runtimeRevision && runtimeRevision !== payload.revision) refreshRuntimePage();
@@ -502,7 +502,7 @@ const fetchTasks = async ({ pageNo = 1, pageSize = 20, sortField, sortDir } = {}
   const payload = response?.data || response || {};
   if (sequence === taskFetchSequence && payload.runtimeRevision) {
     runtimeRevision = payload.runtimeRevision; runtimeReadAt.value = Number(payload.runtimeObservedAt || 0);
-    runtimeConnection.value = payload.runtimeFresh ? 'live' : 'unavailable'; runtimeWarning.value = payload.runtimeMessage || '';
+    runtimeConnection.value = payload.runtimeFresh ? 'live' : payload.runtimePartial ? 'partial' : 'unavailable'; runtimeWarning.value = payload.runtimeMessage || '';
   }
   return {
     list: data.list.map((item) => {

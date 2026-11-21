@@ -197,7 +197,7 @@
         "kind": "magic",
         "id": "a3b59b1dfb2c4c3989bf0a8a0e1f91cc",
         "file": "magic/api/07.系统管理/08.组件管理/01.页面组件管理.ms",
-        "reviewedSha256": "21d46306479a6b309b2527dad03e1646ca47557f1e93a95d354ec1be9700ece0"
+        "reviewedSha256": "842f0c05ebec48273ddcbfa82167e869311815a4630d743b27da112fab00b8ef"
       },
       "request": {
         "type": "object"
@@ -205,7 +205,7 @@
       "response": {
         "type": "any"
       },
-      "review": "使用已认证行业会话读取组件。action=refresh 重建共享组件缓存，返回新的 version 和当前 count。数据汇聚的编译摘要随 NiFi 事件流直调更新，runtimeBatch 的请求和返回契约沿用现行实现。Mock 使用当前内存组件集合。"
+      "review": "使用已认证行业会话读取组件。action=refresh 重建共享组件缓存，返回新的 version 和当前 count。数据汇聚的编译摘要随 NiFi 事件流直调更新，runtimeBatch 的请求和返回契约沿用现行实现。Mock 使用当前内存组件集合。 多节点运行状态改造仅更新数据汇聚组件入口包的编译摘要；组件管理的请求、响应、访问范围和Mock行为保持现行契约。"
     },
     {
       "operation": "POST /sym/form/config",

@@ -569,11 +569,16 @@ if (viewLevel == 'table') {
     var pipelineChainOrder = {}
     var pipelineStatuses = {}
     var pipelineGroups = {}
-    var taskPipelines = taskPipelineIds.size() == 0 ? [] : db.table('nifi_pipeline_t').columns('id', 'dsl_json', 'status', 'nifi_process_group_id').where()
+    var pipelineNodes = {}
+    var taskPipelines = taskPipelineIds.size() == 0 ? [] : db.table('nifi_pipeline_t').columns('id', 'dsl_json', 'status', 'nifi_process_group_id', 'node_mapping_json').where()
         .eq('tenant_id', tenantId).in('id', taskPipelineIds).eq('is_del', 0).select()
     for (pipeline in taskPipelines) {
         pipelineStatuses[text(pipeline.id)] = text(pipeline.status).trim().toUpperCase()
         pipelineGroups[text(pipeline.id)] = text(first(pipeline, ['nifiProcessGroupId', 'nifi_process_group_id']))
+        var nodeMapping = {}
+        try { nodeMapping = JSONUtil.parseObj(text(first(pipeline, ['nodeMappingJson', 'node_mapping_json']))) } catch (ignored) {}
+        pipelineNodes[text(pipeline.id)] = text(nodeMapping?.runtimeNodeId)
+
         var ids = []
         var dsl = {}
         try { dsl = JSONUtil.parseObj(text(first(pipeline, ['dslJson', 'dsl_json']))) } catch (ignored) {}
@@ -684,6 +689,7 @@ if (viewLevel == 'table') {
                 lastRunning: first(rawTask, ['lastRunning', 'last_running', 'updatedTime', 'updated_time']),
                 endRunning: first(rawTask, ['endRunning', 'end_running']),
                 runtimeProcessGroupId: runtimeGroup,
+                runtimeNodeId: pipelineNodes[taskPipelineId] || '',
                 lifecycleStatus: pipelineStatuses[taskPipelineId] || '',
                 taskStatus: first(rawTask, ['taskStatus', 'task_status']),
                 scheduleStrategy: first(rawTask, ['scheduleStrategy', 'schedule_strategy']),
@@ -794,6 +800,7 @@ if (viewLevel == 'table') {
         datasourceTypeStatistics: datasourceTypeStatistics,
         runtimeRevision: live.revision,
         runtimeFresh: live.fresh,
+        runtimePartial: live.partial == true,
         runtimeObservedAt: live.observedAt,
         runtimeMessage: live.message,
         viewLevel: 'table',

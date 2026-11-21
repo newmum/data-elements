@@ -79,16 +79,18 @@ var isRunning = (localStatus, raw, groupId) => {
     if (raw == null) { return localStatus == PipelineStatus.RUNNING }
     var count = raw.path('processGroupStatus').path('aggregateSnapshot').path('activeThreadCount')
     var stoppedProcessor = false
+    var runningProcessor = false
     try {
         var flow = nifi.get('/flow/process-groups/' + groupId, JsonNode)
         var processors = flow.path('processGroupFlow').path('flow').path('processors')
         if (processors.isArray()) {
             for (processor in processors.elements()) {
                 var state = processor.path('component').path('state').asText('')
-                if ('RUNNING'.equalsIgnoreCase(state) || 'STARTING'.equalsIgnoreCase(state)) { return true }
+                runningProcessor = runningProcessor || 'RUNNING'.equalsIgnoreCase(state) || 'STARTING'.equalsIgnoreCase(state)
                 stoppedProcessor = stoppedProcessor || 'STOPPED'.equalsIgnoreCase(state)
                     || 'DISABLED'.equalsIgnoreCase(state) || 'INVALID'.equalsIgnoreCase(state)
             }
+            if (runningProcessor) { return !stoppedProcessor }
         }
     } catch (unavailable) {
         // 流程图暂时不可读时，仍以已经取得的活跃线程信号判断是否需要重新启动。
@@ -200,11 +202,24 @@ return respond(rootCause => mutation.withMutationLock(() => {
         } catch (failure) {
             var cause = rootCause(failure)
             if (cause instanceof NifiException) {
-                update({status: PipelineStatus.DEPLOY_FAILED})
+                var observed = null
+                try { observed = nifi.observeProcessGroupState(groupId) } catch (unavailable) { }
+                var state = observed == null ? 'UNCONFIRMED' : observed.path('state').asText('UNCONFIRMED')
+                var running = state == 'RUNNING'
+                var updated = update({status: running ? PipelineStatus.RUNNING : PipelineStatus.RUN_ERROR})
+                if (running) {
+                    syncTask(pipelineId, 'started', null)
+                    return ResponseEntity.ok({pipeline: updated, processGroupId: groupId, started: true,
+                        mode: 'start-confirmed-by-readback', observed: observed})
+                }
                 syncTask(pipelineId, 'status', 2)
-                errorStore.add(pipelineId, new FlowError(null, ErrorLevel.ERROR, ErrorPhase.DEPLOYMENT,
-                    null, null, null, '快速启动失败', FlowFailureDetails.describe(cause), null, Instant.now()))
-                return nifiFailure(cause)
+                var suggestion = state == 'PARTIAL' ? '部分组件已经启动，请核对停止或异常组件后操作。'
+                    : state == 'STOPPED' ? '流程尚未完整启动，请检查 NiFi 节点日志及组件校验。'
+                    : 'NiFi 尚未确认执行结果，请刷新状态后核对，避免重复启动。'
+                errorStore.add(pipelineId, new FlowError(null, ErrorLevel.ERROR, ErrorPhase.RUNTIME,
+                    null, null, null, '启动结果需要核对', FlowFailureDetails.describe(cause), suggestion, Instant.now()))
+                return ResponseEntity.status(409).body({error: 'start-unconfirmed', message: suggestion,
+                    detail: FlowFailureDetails.describe(cause), observedState: state, observed: observed})
             }
             if (cause instanceof IllegalStateException) {
                 update({status: canvas.status()})

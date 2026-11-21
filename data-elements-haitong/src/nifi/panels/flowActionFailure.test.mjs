@@ -8,6 +8,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { compiler } from '../../../scripts/compiler.mjs';
 import { flowActionFailure, mergeFlowErrors, diagnosticText } from '../utils/flowActionFailure.ts';
 import { visibleFlowErrors, visibleFlowBulletins } from '../runtime/dismissedFlowErrors.ts';
+import { recoverDeployment, uncertainDeployment } from '../utils/deploymentRecovery.ts';
 
 const failure = (count = 20) => ({ response: { status: 422, data: { code: 'MAPPING_PREFLIGHT_FAILED',
   error: 'MAPPING_PREFLIGHT_FAILED', message: '字段映射发布前检查失败', detail: `${count} 个字段：NiFi 缺少 1.1.12 扩展`, traceId: 'trace-fixture' } },
@@ -49,12 +50,14 @@ function harness(post) {
   const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
   vm.runInNewContext(compiled, { exports, require(id) {
     if (id === '@tanstack/react-query') return { useMutation: options => options, useQueryClient: () => ({ getQueryData: () => undefined }) };
-    if (id === './client') return { apiClient: { post: async (path, body, config) => { requests.push(path); return post(path, body, config); } } };
+    if (id === './client') return { apiClient: { get: async () => ({ data: { id: 'p', designHash: 'saved' } }),
+      post: async (path, body, config) => { requests.push(path); return post(path, body, config); } } };
     if (id === './bridgeSession') return { getSessionRevision: () => revision };
     if (id === '../stores/canvasStore') return { useCanvasStore: { getState: () => state } };
     if (id === '../stores/taskChainStore') return { useTaskChainStore: { getState: () => ({ chain: null }) } };
     if (id === '../stores/errorPanelStore') return { useErrorPanelStore: { getState: () => ({ record: (...args) => failures.push(args), clearFailures: (...args) => clears.push(args) }) } };
     if (id === '../utils/flowActionFailure') return { flowActionFailure };
+    if (id === '../utils/deploymentRecovery') return { recoverDeployment, uncertainDeployment };
     if (id === '../utils/incrementalFields') return { incrementalConfigurationError: () => undefined };
     return {};
   } });
@@ -64,7 +67,7 @@ function harness(post) {
 test('20/100 mapping fields both make one deploy request and no per-row diagnostic reads', async () => {
   for (const count of [20, 100]) {
     const h = harness(async (_path, _body, config) => {
-      assert.equal(config.timeout, 120_000);
+      assert.equal(config.timeout, 300_000);
       throw failure(count);
     });
     await assert.rejects(h.hooks.useDeployPipeline().mutationFn({ id: 'p' }));

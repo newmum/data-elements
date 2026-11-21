@@ -26,24 +26,46 @@ import org.ssssssss.script.MagicScriptContext;
 
 /** 脚本测试使用真实运行状态模块，只替换 NiFi 网络边界；关闭时释放采样线程和租户上下文。 */
 final class TaskRuntimeMagicFixture implements AutoCloseable {
+    static void bindingColumns(JdbcTemplate jdbc) {
+        jdbc.execute("alter table nifi_pipeline_t add if not exists node_mapping_json clob");
+        String functions = DatasourceTypeFacetsMagicTest.JsonFunctions.class.getName();
+        jdbc.execute("create alias if not exists JSON_VALID for '" + functions + ".jsonValid'");
+        jdbc.execute("create alias if not exists JSON_EXTRACT for '" + functions + ".jsonExtract'");
+        jdbc.execute("create alias if not exists JSON_UNQUOTE for '" + functions + ".jsonUnquote'");
+    }
     final TaskRuntimeMagicModule module;
     private final TaskRuntimeStatusService service;
     private final TenantContext.Scope tenant;
     private final NifiClient nifi = mock(NifiClient.class);
     private final RuntimeNode node;
+    private final NifiNodeRuntimeResolver resolver = mock(NifiNodeRuntimeResolver.class);
+    private final java.util.List<Map<String,Object>> configurations = new java.util.ArrayList<>();
+    private final Map<String,RuntimeNode> nodes = new java.util.HashMap<>();
 
     TaskRuntimeMagicFixture(String tenantId) {
         this(tenantId, emptyRootStatus());
     }
 
     TaskRuntimeMagicFixture(String tenantId, JsonNode response) {
-        var resolver = mock(NifiNodeRuntimeResolver.class);
-        node = new RuntimeNode(tenantId, "test-node", "test-node", "https://test.invalid", "", "", false, "root");
+        String id = "tenant-a".equals(tenantId) ? "node-default" : "test-node";
+        node = new RuntimeNode(tenantId, id, "test-node", "https://test.invalid", "", "", false, "root");
         when(resolver.resolve()).thenReturn(node);
+        configurations.add(Map.of("tid", id, "network_code", "network-a", "node_name", "默认节点"));
+        nodes.put(id,node);
+        when(resolver.samplingConfigurations()).thenReturn(configurations);
+        when(resolver.runtimeNode(anyMap())).thenAnswer(call -> nodes.get(((Map<?,?>)call.getArgument(0)).get("tid")));
         when(nifi.getRuntimeRootStatus(node)).thenReturn(response);
         service = new TaskRuntimeStatusService(resolver, nifi);
         module = new TaskRuntimeMagicModule(service);
         tenant = TenantContext.use(tenantId);
+    }
+
+    void addNode(String id, JsonNode response) {
+        var added = new RuntimeNode(node.tenantId(),id,id,"https://"+id+".invalid","","",false,"root");
+        nodes.put(id,added);
+        configurations.add(Map.of("tid",id,"network_code","network-b","node_name",id));
+        if (response == null) when(nifi.getRuntimeRootStatus(added)).thenThrow(new IllegalStateException("offline"));
+        else when(nifi.getRuntimeRootStatus(added)).thenReturn(response);
     }
 
     static JsonNode emptyRootStatus() {

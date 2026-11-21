@@ -30,6 +30,7 @@ class DataIngestionRegistrationScopeTest {
         f.jdbc.execute("alter table db_table_t add updated_time timestamp");
         f.jdbc.execute("create table data_access_agg_task_t(tid varchar(64),source_table_id varchar(64),target_table_id varchar(64),pipeline_id varchar(64),tenant_id varchar(32),is_del int,updated_time timestamp)");
         f.jdbc.execute("create table nifi_pipeline_t(id varchar(64),tenant_id varchar(32),is_del int,updated_at bigint)");
+        TaskRuntimeMagicFixture.bindingColumns(f.jdbc);
         createTaskLookupIndexes(f);
         f.jdbc.execute("create table rm_org_t(tenant_id varchar(32),id varchar(64),name varchar(100),deleted int)");
         f.jdbc.update("insert into rm_org_t values('ga','org','来源部门',0),('other','org','其他租户同名ID部门',0),('ga','completed-org','完成库部门',0),('ga','denied-org','无权部门',0)");
@@ -94,6 +95,7 @@ class DataIngestionRegistrationScopeTest {
         f.jdbc.execute("alter table db_table_t add updated_time timestamp");
         f.jdbc.execute("create table data_access_agg_task_t(tid varchar(64),source_table_id varchar(64),target_table_id varchar(64),pipeline_id varchar(64),tenant_id varchar(32),is_del int,updated_time timestamp,process_group_id varchar(64))");
         f.jdbc.execute("create table nifi_pipeline_t(id varchar(64),tenant_id varchar(32),is_del int,dsl_json clob,status varchar(32),nifi_process_group_id varchar(64),updated_at bigint)");
+        TaskRuntimeMagicFixture.bindingColumns(f.jdbc);
         createTaskLookupIndexes(f);
         f.jdbc.update("update db_datasource_t set asset_status=1,db_name='来源库'");
         f.jdbc.update("update db_table_t set asset_status=1,business_type='业务表',table_name=tid,schema_name='public',updated_time=current_timestamp");

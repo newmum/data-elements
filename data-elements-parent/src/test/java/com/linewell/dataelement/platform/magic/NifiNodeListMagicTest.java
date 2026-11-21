@@ -52,6 +52,21 @@ import org.ssssssss.script.runtime.function.MagicScriptLambdaFunction;
 
 /** Execute the editable script against the actual Magic SQL module, including pagination. */
 class NifiNodeListMagicTest {
+    @ParameterizedTest @ValueSource(ints={20,100})
+    void samplingConfigurationsUseOneTenantScopedRead(int size) throws Exception {
+        var fixture=new Fixture(size);
+        fixture.jdbc.update("update nifi_node_t set enabled=1");
+        fixture.jdbc.update("insert into nifi_node_t(tid,tenant_id,is_del,enabled) values('disabled','police',0,0)");
+        try(var tenant=TenantContext.use("police")) {
+            var rows=fixture.runtimeResolver().samplingConfigurations();
+            assertEquals(size,rows.size());assertEquals(1,fixture.configurationReads);
+            assertTrue(rows.stream().allMatch(row->row.get("tid").toString().startsWith("own-")));
+        }
+        fixture.jdbc.update("insert into nifi_node_t(tid,tenant_id,is_del,enabled) select 'overflow-'||node_index,'police',0,1 from system_range(1,101) generated_nodes(node_index)");
+        try(var tenant=TenantContext.use("police")) {
+            assertThrows(RuntimeException.class,()->fixture.runtimeResolver().samplingConfigurations());
+        }
+    }
     @ParameterizedTest
     @ValueSource(ints = {20, 100})
     void boundedListPreservesAllCurrentTenantNodesWithFixedSql(int size) throws Exception {
@@ -283,7 +298,7 @@ class NifiNodeListMagicTest {
             var bridge = mock(RegisteredMagicFunctionInvoker.class);
             when(bridge.invoke(eq("nifi_runtime_node_read_v1"), anyMap())).thenAnswer(invocation -> {
                 Map<String, Object> inputs = invocation.getArgument(1);
-                return readConfiguration(inputs.get("nodeId"), inputs.get("consume"));
+                return readConfiguration(inputs.get("nodeId"), inputs.get("consume"),inputs.get("allNodes"));
             });
             var properties = new TenantProperties();
             properties.setDefaultTenantId("police");
@@ -291,10 +306,14 @@ class NifiNodeListMagicTest {
         }
 
         Object readConfiguration(Object id, Object consume) throws Exception {
+            return readConfiguration(id,consume,false);
+        }
+        Object readConfiguration(Object id, Object consume,Object allNodes) throws Exception {
             var actual = CanonicalMagicSources.byPath("function/01.通用函数/78.读取NiFi运行节点配置.ms",
                     "nifi_runtime_node_read_v1").replaceAll("(?m)^import (?:tableRead|tenantRuntime)\\R", "");
             var bindings = new LinkedHashMap<String, Object>();
             bindings.put("nodeId", id);
+            bindings.put("allNodes",allNodes);
             bindings.put("consume", consume);
             bindings.put("tenantRuntime", new com.linewell.dataelement.platform.tenant.api.TenantMagicModule(null));
             bindings.put("tableRead", TaskRuntimeMagicFixture.structuredReads(jdbc, sql -> configurationReads++));

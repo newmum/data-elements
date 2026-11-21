@@ -6,6 +6,7 @@ import com.linewell.dataelement.platform.tenant.domain.TenantContext;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.List;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -76,8 +77,19 @@ public class NifiNodeRuntimeResolver {
     private Map<String, Object> readConfiguration(String nodeId) {
         var inputs = new LinkedHashMap<String, Object>();
         inputs.put("nodeId", nodeId);
+        inputs.put("allNodes", false);
         inputs.put("consume", (MagicScriptLambdaFunction) (context, arguments) -> arguments[0]);
         return magic.invoke(NODE_CONFIGURATION, inputs);
+    }
+
+    /** One tenant-scoped configuration query for all sampling nodes, default first. */
+    public List<Map<String, Object>> samplingConfigurations() {
+        TenantContext.requireTenantId();
+        if (TenantContext.usesControlDatabase() || TenantContext.isIgnored()) {
+            throw new IllegalStateException("运行状态需要行业租户上下文");
+        }
+        return magic.invoke(NODE_CONFIGURATION, Map.of("allNodes", true,
+                "consume", (MagicScriptLambdaFunction) (context, arguments) -> arguments[0]));
     }
 
     /** Converts a trusted configuration row into the protocol client input. */

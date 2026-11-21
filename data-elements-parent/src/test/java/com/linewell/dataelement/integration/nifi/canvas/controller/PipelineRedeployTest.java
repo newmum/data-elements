@@ -497,6 +497,20 @@ class PipelineRedeployTest {
         assertThat(stored.get().nifiProcessGroupId()).isEqualTo("new-group");
     }
 
+    @ParameterizedTest @ValueSource(strings={"RUNNING","PARTIAL","UNCONFIRMED"})
+    void failedStartResponseReconcilesActualStateAndNeverMarksAnExistingGraphAsDeploymentFailed(String actual) {
+        when(nifi.setProcessGroupState("old-group","RUNNING"))
+                .thenThrow(new NifiException("replication failed",500,"WebClientServiceException"));
+        if(!actual.equals("UNCONFIRMED")) when(nifi.observeProcessGroupState("old-group"))
+                .thenReturn(JsonNodeFactory.instance.objectNode().put("state",actual));
+        var response=deployment.start("p1");
+        assertThat(response.getStatusCode().value()).isEqualTo(actual.equals("RUNNING")?200:409);
+        assertThat(stored.get().status()).isEqualTo(actual.equals("RUNNING")?PipelineStatus.RUNNING:PipelineStatus.RUN_ERROR);
+        assertThat(stored.get().nifiProcessGroupId()).isEqualTo("old-group");
+        verify(nifi,times(1)).setProcessGroupState("old-group","RUNNING");
+        verify(compiler,never()).compile(any(),any(),any());
+    }
+
     private void setFullLoad(String mode, boolean delete) {
         var source = new Pipeline.Node("source", "source.jdbc", "来源", "source", 0, 0,
                 Map.of("syncMode", mode, "deleteTargetData", delete));

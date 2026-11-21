@@ -34,6 +34,32 @@ import org.ssssssss.script.MagicScriptContext;
 import org.ssssssss.script.runtime.ExitValue;
 
 class AccessTaskPageMagicTest {
+    @Test void nodeBindingFiltersBeforePagingAndKeepsTenantAndOwnerScope() throws Exception {
+        var f = new Fixture();
+        f.pipeline("p-default",TENANT,0,"默认节点任务","DEPLOYED","same-pg",DSL);
+        f.pipeline("p-second",TENANT,0,"第二节点任务","DEPLOYED","same-pg",DSL);
+        f.pipeline("p-foreign","other",0,"其他租户","DEPLOYED","same-pg",DSL);
+        f.jdbc.update("update nifi_pipeline_t set node_mapping_json=? where id='p-second'","{\"runtimeNodeId\":\"second\"}");
+        f.task("a",TENANT,0,"默认节点任务","source-a","p-default","same-pg",0);
+        f.task("b",TENANT,0,"第二节点任务","source-a","p-second","same-pg",0);
+        f.task("c","other",0,"其他租户","source-a","p-foreign","same-pg",0);
+        f.addGroup("same-pg","Stopped",true);
+        var second = (ObjectNode)TaskRuntimeMagicFixture.emptyRootStatus();
+        second.withObject("/processGroupStatus/aggregateSnapshot").putArray("processGroupStatusSnapshots")
+                .addObject().putObject("processGroupStatusSnapshot").put("id","same-pg")
+                .putArray("processorStatusSnapshots").addObject().putObject("processorStatusSnapshot").put("runStatus","Running");
+        for (int size : List.of(20,100)) {
+            try (var runtime = new TaskRuntimeMagicFixture(TENANT,f.runtimeResponse)) {
+                runtime.addNode("second",second);
+                var page = f.pageWithRuntime(ALL,Map.of("pageNum",1,"pageSize",size,"taskStatus",1),runtime);
+                assertThat(page.get("total")).isEqualTo(1L);
+                assertThat(page.get("list").toString()).contains("第二节点任务").doesNotContain("其他租户");
+                assertThat(f.counter.reads).isEqualTo(3);
+                var filtered = f.pageWithRuntime(ALL,Map.of("pageNum",1,"pageSize",size,"nifiNodeId","node-default","taskStatus",1),runtime);
+                assertThat(filtered.get("total")).isEqualTo(0L);
+            }
+        }
+    }
     private static final String RESOURCE = "1155bcd0ccad47b49a6c4a94251cf52c";
     private static final String TENANT = "tenant-a";
     private static final Scope ALL = new Scope("ALL", "owner-a", List.of());
@@ -98,7 +124,7 @@ class AccessTaskPageMagicTest {
         var page = fixture.page(OWNER, filters);
         assertEnvelope(page, 1, size, 105);
         assertThat(ids(page)).hasSize(size).startsWith("task-001").endsWith("task-%03d".formatted(size));
-        assertThat(fixture.counter.reads).isEqualTo(5);
+        assertThat(fixture.counter.reads).isEqualTo(4);
         var row = rows(page).getFirst();
         assertThat(row).containsEntry("taskName", "validation-job").containsEntry("tenantId", TENANT)
                 .containsEntry("dataCatalogId", "catalog-a").containsEntry("storedTaskStatus", 1)
@@ -116,7 +142,7 @@ class AccessTaskPageMagicTest {
         var second = fixture.page(OWNER, Map.of("pageNum", 2, "pageSize", size));
         assertEnvelope(second, 2, size, 105);
         assertThat(ids(second)).hasSize(Math.min(size, 105 - size)).startsWith("task-%03d".formatted(size + 1));
-        assertThat(fixture.counter.reads).isEqualTo(5);
+        assertThat(fixture.counter.reads).isEqualTo(4);
         System.out.printf("Access primary page size=%d, SQL reads=%d%n", size, fixture.counter.reads);
     }
 
@@ -138,7 +164,7 @@ class AccessTaskPageMagicTest {
         var page = fixture.page(ALL, Map.of("pageSize", size, "taskName", "legacy-_ob", "sortField", "flowFilesIn"));
         assertEnvelope(page, 1, size, 105);
         assertThat(ids(page)).hasSize(size).startsWith("pipe-001").endsWith("pipe-%03d".formatted(size));
-        assertThat(fixture.counter.reads).isEqualTo(5);
+        assertThat(fixture.counter.reads).isEqualTo(4);
         var row = rows(page).getFirst();
         assertThat(row).containsEntry("recordSource", "pipeline").containsEntry("id", "pipe-001")
                 .containsEntry("pipelineId", "pipe-001").containsEntry("lifecycleStatus", "STOPPED")
@@ -150,12 +176,12 @@ class AccessTaskPageMagicTest {
                 assertThat(table).containsEntry("taskId", "pipe-001").containsEntry("syncStatusText", "未部署"));
         assertThat(ids(fixture.page(ALL, Map.of("pageNum", 2, "pageSize", size))))
                 .hasSize(Math.min(size, 105 - size)).startsWith("pipe-%03d".formatted(size + 1));
-        assertThat(fixture.counter.reads).isEqualTo(5);
+        assertThat(fixture.counter.reads).isEqualTo(4);
         for (Scope scope : List.of(ORG, OWNER)) {
             var restricted = fixture.page(scope, Map.of("pageSize", size));
             assertEnvelope(restricted, 1, size, 0);
             assertThat(ids(restricted)).isEmpty();
-            assertThat(fixture.counter.reads).isEqualTo(2);
+            assertThat(fixture.counter.reads).isEqualTo(1);
         }
         System.out.printf("Access fallback page size=%d, populated SQL reads=5%n", size);
     }
@@ -187,20 +213,20 @@ class AccessTaskPageMagicTest {
                 .containsEntry("targetTableName", null).containsEntry("targetPhysicalTableName", null);
 
         assertEnvelope(fixture.page(ALL, Map.of("pageNum", 2, "pageSize", 20)), 2, 20, 6);
-        assertThat(fixture.counter.reads).isEqualTo(2);
+        assertThat(fixture.counter.reads).isEqualTo(1);
         var distantPage = fixture.page(ALL, Map.of("pageNum", 2_147_483_648L));
         assertThat(((Number) distantPage.get("pageNum")).longValue()).isEqualTo(2_147_483_648L);
         assertThat(((Number) distantPage.get("total")).longValue()).isEqualTo(6);
         assertThat(ids(distantPage)).isEmpty();
-        assertThat(fixture.counter.reads).isEqualTo(2);
+        assertThat(fixture.counter.reads).isEqualTo(1);
         assertEnvelope(fixture.page(ALL, Map.of("taskName", "find-legacy")), 1, 20, 0);
-        assertThat(fixture.counter.reads).isEqualTo(3);
-        assertEnvelope(fixture.page(new Scope("ORG", "owner-a", List.of()), Map.of()), 1, 20, 0);
         assertThat(fixture.counter.reads).isEqualTo(2);
+        assertEnvelope(fixture.page(new Scope("ORG", "owner-a", List.of()), Map.of()), 1, 20, 0);
+        assertThat(fixture.counter.reads).isEqualTo(1);
 
         fixture.jdbc.update("UPDATE data_access_agg_task_t SET is_del=1 WHERE tid='own'");
         assertEnvelope(fixture.page(OWNER, Map.of()), 1, 20, 0);
-        assertThat(fixture.counter.reads).isEqualTo(2);
+        assertThat(fixture.counter.reads).isEqualTo(1);
     }
 
     @Test
@@ -260,7 +286,7 @@ class AccessTaskPageMagicTest {
         assertThat(ids(fixture.page(ALL, Map.of("taskStatus", "2")))).containsExactly("b-invalid");
         assertThat(ids(fixture.page(ALL, Map.of("taskStatus", "3")))).containsExactly("c-unknown");
         assertThat(ids(fixture.page(ALL, Map.of("nifiNodeId", "foreign-default", "pageSize", 101)))).isEmpty();
-        assertThat(fixture.counter.reads).isOne();
+        assertThat(fixture.counter.reads).isZero();
         assertThat(assertInstanceOf(ExitValue.class, fixture.run(ALL, Map.of("taskStatus", "invalid"))).getValues()[0]).isEqualTo(400);
         assertThat(assertInstanceOf(ExitValue.class, fixture.run(new Scope("UNKNOWN", "owner-a", List.of()), Map.of())).getValues()[0]).isEqualTo(403);
         assertThatThrownBy(() -> fixture.run(ALL, Map.of("sortField", "invalid")))
@@ -277,7 +303,7 @@ class AccessTaskPageMagicTest {
 
     private static void assertEnvelope(Map<String, Object> page, int pageNumber, int size, long total) {
         assertThat(page).containsOnlyKeys("pageNum", "pageSize", "total", "list", "runtimeRevision", "runtimeFresh",
-                "runtimeObservedAt", "runtimeMessage").containsEntry("runtimeFresh", true);
+                "runtimeObservedAt", "runtimeMessage", "runtimePartial").containsEntry("runtimeFresh", true);
         assertThat(((Number) page.get("pageNum")).intValue()).isEqualTo(pageNumber);
         assertThat(((Number) page.get("pageSize")).intValue()).isEqualTo(size);
         assertThat(((Number) page.get("total")).longValue()).isEqualTo(total);
@@ -341,6 +367,7 @@ class AccessTaskPageMagicTest {
                         ('node-deleted','tenant-a',1,1,1,TIMESTAMP '2026-11-01 13:00:00','network-b','deleted','已删除节点'),
                         ('foreign-default','tenant-b',0,1,1,TIMESTAMP '2026-11-01 13:00:00','network-b','foreign','其他租户节点');
                     """);
+            TaskRuntimeMagicFixture.bindingColumns(jdbc);
             var sources = new MagicDynamicDataSource();
             sources.setDefault(source);
             db = new SQLModule(sources);
@@ -394,6 +421,13 @@ class AccessTaskPageMagicTest {
 
         Map<String, Object> page(Scope scope, Map<String, Object> body) {
             return StructuredValues.objectMap(assertInstanceOf(Map.class, run(scope, body)));
+        }
+
+        Map<String,Object> pageWithRuntime(Scope scope,Map<String,Object> body,TaskRuntimeMagicFixture runtime) {
+            counter.reads=0;counter.sql.clear();
+            return StructuredValues.objectMap(assertInstanceOf(Map.class,script.execute(new MagicScriptContext(Map.of(
+                "db",db,"body",body,"tableRead",tableRead,"tableSort",new TableSortMagicModule(),
+                "taskRuntime",runtime.module,"jsons",new JsonModule(),"tenantRuntime",new Session(TENANT),"dataScope",scope)))));
         }
     }
 }

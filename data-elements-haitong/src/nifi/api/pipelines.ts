@@ -17,6 +17,7 @@ import { withHiveHdfsMergeDefaults } from '../utils/hiveSinkPolicy';
 import { useTaskChainStore } from '../stores/taskChainStore';
 import { useErrorPanelStore } from '../stores/errorPanelStore';
 import { flowActionFailure, type FlowAction } from '../utils/flowActionFailure';
+import { recoverDeployment, uncertainDeployment } from '../utils/deploymentRecovery';
 
 async function performFlowAction<T>(id: string | null, action: FlowAction, execute: () => Promise<T>): Promise<T> {
   const revision = getSessionRevision();
@@ -281,10 +282,21 @@ export function useDeployPipeline() {
     }) => {
       requireEditableTask(id);
       return performFlowAction(id, 'deploy', async () => {
-        // A rebuild waits for NiFi queue checks, cleanup and compilation on the same request.
-        const result = (await api.post<DeploymentResult>(`/life/deploy?id=${encodeURIComponent(id)}`, {
-          catalogTid, preserveExisting, forceRebuild,
-        }, { timeout: 120_000, params: discardQueueFor ? { discardQueueFor } : undefined })).data;
+        const revision = getSessionRevision();
+        const before = (await api.get<Pipeline>(`/flow/detail?id=${encodeURIComponent(id)}`, BACKGROUND_REQUEST_OPTIONS)).data;
+        if (revision !== getSessionRevision()) throw new Error('登录会话已切换，请重新打开流程后部署');
+        let result: DeploymentResult | undefined;
+        try {
+          result = (await api.post<DeploymentResult>(`/life/deploy?id=${encodeURIComponent(id)}`, {
+            catalogTid, preserveExisting, forceRebuild,
+          }, { timeout: 300_000, params: discardQueueFor ? { discardQueueFor } : undefined })).data;
+        } catch (error) {
+          if (!uncertainDeployment(error)) throw error;
+          result = await recoverDeployment(before,
+            async () => (await api.get<Pipeline>(`/flow/detail?id=${encodeURIComponent(id)}`, BACKGROUND_REQUEST_OPTIONS)).data,
+            () => revision === getSessionRevision(), () => new Promise(resolve => setTimeout(resolve, 2000)));
+          if (!result) throw error;
+        }
         if (!result || result.pipeline?.id !== id) {
           throw Object.assign(new Error('部署接口未返回有效的流程结果，请刷新状态确认执行结果'), { payload: result });
         }
