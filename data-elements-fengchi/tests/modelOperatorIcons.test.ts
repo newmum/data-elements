@@ -56,13 +56,15 @@ describe('complete semantic operator icon set',()=>{
 
 describe('matching panes and the full two-column palette',()=>{
  const palette=workspace.split('<aside id="modeling-palette"')[1].split('</aside>')[0];
+ const cards=workspace.split('const paletteItems=useMemo(')[1].split(' async function run')[0];
  it('shares header height, divider, typography and directional accessible toggles',()=>{
   expect(workspace).toContain('className="modeling-palette-title modeling-panel-heading"');
   expect(workspace).toContain('className="modeling-properties-heading modeling-panel-heading"');
   expect(styles).toMatch(/\.modeling-panel-heading\{[^}]*height:47px[^}]*border-bottom:1px solid var\(--model-line\)/);
   expect(styles).toContain('.modeling-panel-heading>strong{font-size:13px;font-weight:600;line-height:20px}');
   expect(workspace.match(/<PaneToggleIcon side="right" expanded=\{propertiesOpen\}\/>/g)).toHaveLength(2);
-  expect(workspace.match(/<PaneToggleIcon side="left" expanded=\{paletteOpen\}\/>/g)).toHaveLength(2);
+  expect(workspace.match(/icon=\{paletteOpen\?<MenuFoldOutlined\/>:<MenuUnfoldOutlined\/>\}/g)).toHaveLength(2);
+  expect(workspace).not.toContain('<PaneToggleIcon side="left" expanded={paletteOpen}/>');
   expect(paneToggleDirection('left',true)).toBe('left');
   expect(paneToggleDirection('left',false)).toBe('right');
   expect(paneToggleDirection('right',true)).toBe('right');
@@ -72,23 +74,23 @@ describe('matching panes and the full two-column palette',()=>{
   expect(workspace).toContain('propertiesOpen?"收起属性面板":"展开属性面板"');
  });
  it('uses the same two-column card grid for every category and preserves interaction wiring',()=>{
-  expect(palette).toContain('className="modeling-operator-list modeling-operator-grid"');
+  expect(cards).toContain('className="modeling-operator-list modeling-operator-grid"');
   expect(palette).not.toContain("group==='输入连接器'");
   expect(styles).toContain('.modeling-operator-list.modeling-operator-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))');
   expect(styles).not.toContain('.modeling-operator-list.modeling-operator-grid{grid-template-columns:1fr}');
   expect(palette).toContain('onChange={e=>setOperatorSearch(e.target.value)}');
   expect(palette).toContain('activeKey={operatorSearch.trim()?operatorGroups:operatorGroups.filter(g=>!collapsedGroups.includes(g))}');
   expect(palette).toContain('onChange={keys=>setCollapsedGroups(operatorGroups.filter(g=>!keys.includes(g)))}');
-  expect(palette).toContain('onDragStart=');
-  expect(palette).toContain("e.dataTransfer.setData('application/x-fengchi-model-node',kind)");
-  expect(palette).toContain('onClick={()=>{if(kind)add(kind)}}');
+  expect(cards).toContain('onDragStart=');
+  expect(cards).toContain("e.dataTransfer.setData('application/x-fengchi-model-node',kind)");
+  expect(cards).toContain('onClick={()=>{if(kind)addOperatorRef.current(kind)}}');
   expect(workspace).toContain('onClick={()=>setPropertiesOpen(v=>!v)}');
   expect(workspace).toContain('onClick={()=>setPaletteOpen(v=>!v)}');
  });
  it('shows business names and icons without capability marks, hints or muted variants',()=>{
-  expect(palette).toContain('title={item.label} aria-label={item.label}');
-  expect(palette).toContain('disabled={nodes.length>=MODEL_NODE_LIMIT}');
-  expect(palette).not.toMatch(/仅配置|待支持|未接入|当前不可执行|configuration|item\.description|modeling-unavailable/);
+  expect(cards).toContain('title={item.label} aria-label={item.label}');
+  expect(cards).toContain('disabled={nodes.length>=MODEL_NODE_LIMIT}');
+  expect(cards+palette).not.toMatch(/仅配置|待支持|未接入|当前不可执行|configuration|item\.description|modeling-unavailable/);
   expect(workspace).toContain("validateExecution(nodes,executionSettings).filter(i=>i.level==='error')");
  });
 });
