@@ -15,11 +15,11 @@ describe('model workspace integration',()=>{
 });
 
 describe('expanded modeling editor controls',()=>{
- it('offers typed controls and a safe default icon for every registered kind',()=>{
+ it('offers typed controls and semantic icons for every registered kind',()=>{
   expect(editor).toContain('const enumFields:');
   expect(editor).toContain("{value:'multiply',label:'乘'}");
   expect(editor).toContain("['join','union','intersection','difference','lookup','exists','crossJoin','fuzzy','dimensionLookup','mergeFlow'].includes(node.kind)");
-  expect(editor).toContain('icons[n.kind]||<FunctionOutlined/>');
+  expect(editor).toContain('<ModelOperatorIcon kind={n.kind}/>');
  });
 });
 
@@ -74,7 +74,7 @@ describe('operator library refinement',()=>{it('uses collapsible categories and 
 
 describe('compact modeling workspace',()=>{it('keeps equal default panels and inline preview status',()=>{expect(editor).toContain('[paletteWidth,setPaletteWidth]=useState(250),[propertiesWidth,setPropertiesWidth]=useState(250)');expect(editor).toContain('<strong>属性配置</strong>');expect(editor).toContain('modeling-collapsed-rail');expect(editor).toContain('modeling-preview-tab-status');expect(editor).toContain("scroll={{x:'max-content'}}");expect(editor).not.toContain("y:Math.max(70,previewHeight-130)");});});
 
-describe('modeling task entry',()=>{it('opens the isolated mock task panel without replacing the canvas',()=>{expect(startNode).toContain('aria-label="开始：配置任务"');expect(editor).toContain('onConfigure={()=>setExecutionOpen(true)}');expect(editor).toContain('open={executionOpen}');expect(editor).toContain('<ModelingExecutionPanel nodes={nodes} tables={effectiveTables} settings={executionSettings} onSettingsChange={setExecutionSettings}/>');expect(editor).toContain('forceRender');});});
+describe('modeling task entry',()=>{it('opens the isolated mock task panel without replacing the canvas',()=>{expect(startNode).toContain('aria-label="启动：配置任务"');expect(editor).toContain('onConfigure={()=>setExecutionOpen(true)}');expect(editor).toContain('open={executionOpen}');expect(editor).toContain('<ModelingExecutionPanel nodes={nodes} tables={effectiveTables} settings={executionSettings} onSettingsChange={setExecutionSettings}/>');expect(editor).toContain('forceRender');});});
 
 describe("inline model catalog",()=>{it("ports only the catalog into the original workbench and retains the editor",()=>{expect(source).toContain('className="model-catalog-workbench"');expect(editor).toContain('createPortal(<ModelingCatalog');expect(editor).toContain('props.catalogTarget');expect(editor).toContain('返回模型列表');expect(editor).toContain('d.sourceId===props.sourceId')})});
 
@@ -91,3 +91,30 @@ it('keeps save run start as the three right-hand actions',()=>{const actions=edi
 it('separates run from start with the existing toolbar divider',()=>{expect(editor).toContain('>运行</Button><i/>{localRunning?')});
 
 it('uses a back arrow and retains mounted draft editors on return',()=>{expect(editor).toContain('icon={<ArrowLeftOutlined/>} aria-label="返回模型列表"');expect(editor).toContain('disabled={localRunning} onClick={onClose}');expect(editor).toContain("display:!catalog&&active===doc.id?'block':'none'");expect(editor).toContain("window.addEventListener('beforeunload',warn)")});
+
+
+describe('per-model preview visibility',()=>{
+ it('starts each newly mounted editor collapsed while retaining other mounted editors',()=>{
+  const localEditor=editor.split('function ModelingEditor(')[1];
+  expect(localEditor).toContain('[previewOpen,setPreviewOpen]=useState(false)');
+  expect(editor).toContain('opened.map(doc=><div key={doc.id}');
+  expect(editor).toContain("display:!catalog&&active===doc.id?'block':'none'");
+  expect(editor.split('function ModelingEditor(')[0]).not.toContain('setPreviewOpen');
+  expect(localEditor.split(' return <ConfigProvider')[0]).not.toContain('setPreviewOpen(false)');
+ });
+ it('preserves manual expansion and the accessible collapsed-edge controls',()=>{
+  expect(editor).toContain('if(!edgeMoved.current)setPreviewOpen(v=>!v)');
+  expect(editor).toContain('aria-expanded={previewOpen}');
+  expect(editor).toContain('onClick={()=>setPreviewOpen(false)}');
+  expect(editor).toContain('previewOpen?"收起数据预览":"展开数据预览"');
+  expect(editor).toContain("if(e.key==='Enter'||e.key===' '){e.preventDefault();setPreviewOpen(v=>!v)");
+ });
+ it('automatically opens the preview for local execution results and necessary run errors',()=>{
+  const run=editor.split('async function run(')[1].split('function stopLocalRun')[0];
+  expect(run.indexOf('setPreviewOpen(true)')).toBeLessThan(run.indexOf('validateExecution('));
+  expect(run).toContain('setResult(shown.result)');
+  expect(run).toContain('setSelected(shown.node.id)');
+  expect(editor).toContain('onStart={()=>void run(true)}');
+  expect(editor).toContain('{previewOpen&&<>');
+ });
+});

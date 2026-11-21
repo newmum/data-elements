@@ -1,5 +1,6 @@
 import ConnectionTreeLabel from './ConnectionTreeLabel';
 import NativeIcon from './NativeIcon';
+import {objectRowHandlers,openObjectControl} from './objectListInteractions';
 import {createPortal} from 'react-dom';
 import ConnectionSearchHeader from './ConnectionSearchHeader';
 import PaneResizeHandle from './PaneResizeHandle';
@@ -7,13 +8,14 @@ import {useMemo,useState} from 'react';
 import {Alert,Button,Dropdown,Empty,Form,Input,Modal,Table,Tag,Tree} from 'antd';
 import {PlusOutlined,SearchOutlined,DownOutlined,CloseOutlined,InfoCircleOutlined} from '@ant-design/icons';
 import type {ModelDocument} from './modelCatalogStore';
+import {modelCatalogCategories,filterModelCatalog} from './modelCatalogView';
 export type ModelingCatalogProps={docs:ModelDocument[];sidebarTarget?:HTMLElement|null;inspector?:{open:boolean;width:number;max:number;onResize:(width:number)=>void;onClose:()=>void};sourceLabel?:string;onCreate:(value:{name:string;category:string})=>void|Promise<void>;onOpen:(id:string)=>void;onRename:(id:string,name:string)=>void|Promise<void>;onCategoryChange:(id:string,category:string)=>void|Promise<void>;onBack?:()=>void;error?:string;busy?:boolean};
 export default function ModelingCatalog({docs,sidebarTarget,inspector,onCreate,onOpen,onRename,onCategoryChange,error,busy=false}:ModelingCatalogProps){
  const [contextId,setContextId]=useState(''),[renaming,setRenaming]=useState(false);const contextDoc=docs.find(d=>d.id===contextId);
  const [expandedCategories,setExpandedCategories]=useState<React.Key[]>(['__all']);
  const [selectedId,setSelectedId]=useState(''),[categorySearch,setCategorySearch]=useState('');
  const [search,setSearch]=useState(''),[category,setCategory]=useState<string>(),[creating,setCreating]=useState(false),[editing,setEditing]=useState<ModelDocument|null>(null),[saving,setSaving]=useState(false),[localError,setLocalError]=useState('');const [form]=Form.useForm<{name:string;category:string}>();
- const categories=useMemo(()=>[...new Set(docs.map(d=>d.category))].sort(),[docs]);const visible=docs.filter(d=>(!category||d.category===category)&&`${d.name} ${d.category}`.toLowerCase().includes(search.trim().toLowerCase()));
+ const categories=useMemo(()=>modelCatalogCategories(docs),[docs]);const visible=filterModelCatalog(docs,category,search);
  const selected=visible.find(d=>d.id===selectedId)||visible[0];
  function showCreate(){setRenaming(false);setEditing(null);setLocalError('');form.setFieldsValue({name:'',category:category||'未分类'});setCreating(true)}
  function showCategory(d:ModelDocument){setRenaming(false);setEditing(d);setLocalError('');form.setFieldsValue({name:d.name,category:d.category});setCreating(true)}
@@ -24,7 +26,7 @@ export default function ModelingCatalog({docs,sidebarTarget,inspector,onCreate,o
  {(error||localError)&&<Alert type="error" showIcon message={error||localError}/>}
  <div className="object-list-toolbar"><Button size="small" icon={<PlusOutlined/>} onClick={showCreate} disabled={busy}>新建模型</Button><Input size="small" aria-label="搜索模型" prefix={<SearchOutlined/>} placeholder="筛选模型" allowClear value={search} onChange={e=>setSearch(e.target.value)}/></div>
  <Dropdown trigger={['contextMenu']} menu={{items:contextDoc?[{key:'open',label:'打开模型'},{key:'rename',label:'重命名',disabled:contextDoc.revision===0},{key:'category',label:'修改业务分类',disabled:contextDoc.revision===0}]:[],onClick:({key,domEvent})=>{domEvent.stopPropagation();if(!contextDoc)return;if(key==='open')onOpen(contextDoc.id);if(key==='rename')showRename(contextDoc);if(key==='category')showCategory(contextDoc)}}}><div className={`model-catalog-table ${visible.length?'':'is-empty'}`} onContextMenu={e=>{const id=(e.target as HTMLElement).closest('tr[data-row-key]')?.getAttribute('data-row-key')||'';setContextId(id);if(id)setSelectedId(id)}}>
- <Table<ModelDocument> size="small" scroll={{x:760}} rowKey="id" loading={busy} dataSource={visible} rowClassName={d=>d.id===selected?.id?'ant-table-row-selected':''} onRow={d=>({onClick:()=>{setSelectedId(d.id);onOpen(d.id)},tabIndex:0,onKeyDown:e=>{if(e.key==='Enter'&&e.target===e.currentTarget){e.preventDefault();onOpen(d.id)}}})} pagination={false} locale={{emptyText:<Empty description={search||category?'没有匹配的模型':'尚无已保存模型，点击新建模型开始'}/>}} columns={[{title:'名称',width:180,dataIndex:'name',render:(name,d)=><button className="object-open" onClick={e=>{e.stopPropagation();onOpen(d.id)}}><NativeIcon name="model" size={15}/>{name}</button>},{title:'业务分类',width:110,dataIndex:'category'},{title:'引擎',width:75,render:(_,d)=>d.executionSettings.engine==='flink'?'Flink':'Spark'},{title:'模式',width:75,render:(_,d)=>d.executionSettings.mode==='batch'?'批处理':'实时'},{title:'状态',width:80,render:()=> '未部署'},{title:'最近保存',width:160,dataIndex:'updatedAt',render:value=>new Date(value).toLocaleString()}]}/>
+ <Table<ModelDocument> size="small" scroll={{x:760}} rowKey="id" loading={busy} dataSource={visible} rowClassName={d=>d.id===selected?.id?'ant-table-row-selected':''} onRow={d=>objectRowHandlers(()=>onOpen(d.id),()=>setSelectedId(d.id))} pagination={false} locale={{emptyText:<Empty description={search||category?'没有匹配的模型':'尚无已保存模型，点击新建模型开始'}/>}} columns={[{title:'名称',width:180,dataIndex:'name',render:(name,d)=><button className="object-open" onClick={e=>openObjectControl(e,()=>onOpen(d.id))}><NativeIcon name="model" size={15}/>{name}</button>},{title:'业务分类',width:110,dataIndex:'category'},{title:'引擎',width:75,render:(_,d)=>d.executionSettings.engine==='flink'?'Flink':'Spark'},{title:'模式',width:75,render:(_,d)=>d.executionSettings.mode==='batch'?'批处理':'实时'},{title:'状态',width:80,render:()=> '未部署'},{title:'最近保存',width:160,dataIndex:'updatedAt',render:value=>new Date(value).toLocaleString()}]}/>
  </div></Dropdown>
  <div className="objects-bottom">{visible.length} 个模型 · 当前浏览器保存 · 未关联的旧模型保留可见</div>
  <Modal title={editing?(renaming?'重命名模型':'修改业务分类'):'新建模型'} open={creating} onCancel={()=>{if(!saving)setCreating(false)}} onOk={()=>void submit()} confirmLoading={saving} destroyOnHidden>

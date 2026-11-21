@@ -115,13 +115,12 @@
 
 .modeling-start-label{display:grid;gap:2px;text-align:left}.modeling-start-label .modeling-start-configure:hover{color:#428267}.modeling-preview-running{display:flex;align-items:center;justify-content:center;gap:10px;min-height:80px;color:var(--model-text)}
 
-/* Dense, two-column source cards and legible result metadata. */
+/* All operator categories share the same two-column card grid. */
 .modeling-palette{container-type:inline-size}
-.modeling-operator-list.modeling-input-connectors{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
-.modeling-operator-list.modeling-input-connectors .modeling-palette-item{width:100%;min-width:0;min-height:58px;height:auto;padding:7px 4px;flex-direction:column;align-items:center;justify-content:center;gap:5px;white-space:normal;text-align:center}
-.modeling-input-connectors .modeling-palette-item>.modeling-operator-icon{width:25px;height:22px;font-size:16px}
-.modeling-input-connectors .modeling-palette-item>.modeling-operator-label{flex:initial;line-height:1.2;white-space:normal;overflow-wrap:anywhere;text-overflow:clip}
-@container(max-width:125px){.modeling-operator-list.modeling-input-connectors{grid-template-columns:1fr}}
+.modeling-operator-list.modeling-operator-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.modeling-operator-list.modeling-operator-grid .modeling-palette-item{width:100%;min-width:0;min-height:58px;height:auto;padding:7px 4px;flex-direction:column;align-items:center;justify-content:center;gap:5px;white-space:normal;text-align:center}
+.modeling-operator-grid .modeling-palette-item>.modeling-operator-icon{width:25px;height:22px;font-size:16px}
+.modeling-operator-grid .modeling-palette-item>.modeling-operator-label{flex:initial;line-height:1.2;white-space:normal;overflow-wrap:anywhere;text-overflow:clip}
 .modeling-preview-column{display:grid;gap:2px;min-width:90px;line-height:1.2}
 .modeling-preview-column-comment{color:var(--model-text);font-size:12px}
 .modeling-preview-column-name,.modeling-preview-column-type{color:var(--model-muted);font-size:11px;font-weight:400}
@@ -130,3 +129,13 @@
 .modeling-preview-column-type>b.preview-type-text{color:var(--field-type-text,#4b6f9b)}
 .modeling-preview-column-name.is-primary{color:var(--model-text);font-weight:600}
 .modeling-preview-column-type>.anticon{color:var(--field-type-temporal,#8b642e)}
+
+/* Matching pane headers put titles, toggles and divider lines on the same baseline. */
+.modeling-palette{padding:0 12px 14px}
+.modeling-panel-heading{box-sizing:border-box;position:sticky;top:0;z-index:2;display:flex;align-items:center;justify-content:space-between;height:47px;min-height:47px;padding:8px 14px;margin:0;border-bottom:1px solid var(--model-line);background:var(--model-bg);color:var(--model-text)}
+.modeling-palette-title.modeling-panel-heading{margin-inline:-12px}
+.modeling-panel-heading>strong{font-size:13px;font-weight:600;line-height:20px}
+.modeling-palette>.modeling-operator-search{margin-top:10px}
+.modeling-operator-list.modeling-operator-grid .modeling-palette-item{min-height:64px}
+.modeling-semantic-icon{display:inline-flex;align-items:center;justify-content:center;line-height:1;flex-shrink:0}
+.modeling-semantic-icon>svg,.modeling-semantic-icon>.anticon{width:1em;height:1em}
