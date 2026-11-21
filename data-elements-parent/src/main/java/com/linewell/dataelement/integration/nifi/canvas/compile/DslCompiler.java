@@ -535,20 +535,9 @@ public class DslCompiler {
         Set<String> allCs = new LinkedHashSet<>(sharedGlobalCs.values());
         compiled.values().forEach(nc -> allCs.addAll(nc.csIds.values()));
         allCs.removeAll(globalJson.ids());
-        for (String csId : allCs) {
-            try {
-                nifi.setControllerServiceRunStatus(csId, "ENABLED");
-            } catch (Exception e) {
-                log.warn("Enable CS {} failed: {}", csId, e.getMessage());
-            }
-        }
-        for (String csId : allCs) {
-            // 若 CS 因校验失败回落到 DISABLED，这里会抛出带 validationErrors 的异常。
-            nifi.waitForControllerServiceEnabled(csId, 30_000L);
-        }
-        if (hiveCsvWriterId != null) {
-            nifi.waitForControllerServiceEnabled(hiveCsvWriterId, 30_000L);
-        }
+        // 受管服务按所属流程组批量启用，共用一次就绪期限；公共CSV Writer只核验状态。
+        nifi.enableControllerServices(pgId, allCs,
+                hiveCsvWriterId == null ? Set.of() : Set.of(hiveCsvWriterId), 30_000L);
 
         // ---- PHASE 3：创建处理器，并建立节点内部连线。----
         for (Pipeline.Node n : pipeline.dsl().nodes()) {

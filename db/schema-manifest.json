@@ -54,9 +54,9 @@
       "dialect": "dameng",
       "file": "baseline_beijing_gd/init.sql",
       "objects": {
-        "tables": 207,
+        "tables": 208,
         "views": 4,
-        "indexes": 876,
+        "indexes": 877,
         "explicitIndexes": 456,
         "foreignKeys": 2,
         "triggers": 20,
@@ -64,7 +64,7 @@
         "functions": 0,
         "sequences": 0
       },
-      "sha256": "a6d91bda1db4eabc014f9a0a062aa6a0b8777f09e1ddd74f269934acab79f0fc",
+      "sha256": "2796e8961f496c0f639f10ef094dcec3a9dad9e2261cbfd18c2285730d9b4b85",
       "exportNotes": {
         "definitions": "DBMS_METADATA.GET_DDL",
         "comments": "DBA_TAB_COMMENTS/DBA_COL_COMMENTS",
@@ -77,16 +77,16 @@
       "dialect": "kingbase",
       "file": "baseline_ct/init.sql",
       "objects": {
-        "tables": 164,
+        "tables": 165,
         "views": 0,
-        "indexes": 592,
+        "indexes": 593,
         "foreignKeys": 2,
         "triggers": 20,
         "functions": 49,
         "procedures": 0,
         "events": 0
       },
-      "sha256": "ca10b556bf6c0f995f49c7ad0474b37b7d4c04eb3d77f66b06d4b4683ad7dee8",
+      "sha256": "0248bc8a7dc5736437da8f33c47ab0d72d4d1b9e8a52a3b300c12db906a7033e",
       "exportNotes": {
         "definitions": "Kingbase native catalogs and pg_get_*def",
         "sqlSchema": "public",
@@ -99,7 +99,7 @@
       "dialect": "mysql",
       "file": "baseline_ga/init.sql",
       "objects": {
-        "tables": 207,
+        "tables": 208,
         "views": 4,
         "indexes": 748,
         "foreignKeys": 2,
@@ -108,7 +108,7 @@
         "functions": 0,
         "events": 0
       },
-      "sha256": "1d10b2ae30f5c02257cfc85b0e9bd087b1ffdd7ffc2c421e38c9a7133bf345bd",
+      "sha256": "80bcf906c4a4362426ff2068b39908439e650fe2ede61bb4c2048f341041688e",
       "exportNotes": {
         "definitions": "SHOW CREATE",
         "routineDefiners": "omitted",
@@ -121,7 +121,7 @@
       "dialect": "mysql",
       "file": "baseline_sea_fishery/init.sql",
       "objects": {
-        "tables": 207,
+        "tables": 208,
         "views": 4,
         "indexes": 748,
         "foreignKeys": 2,
@@ -130,7 +130,7 @@
         "functions": 0,
         "events": 0
       },
-      "sha256": "c4edfe2ba696a346f0c42e185b6bb61a6faf3ded281868a9f1220317c9ae551b",
+      "sha256": "6684846e1de9e93068bf94bc78d84b4c1a59a4bcf31fac39b463e71313f3f0d7",
       "exportNotes": {
         "definitions": "SHOW CREATE",
         "routineDefiners": "omitted",

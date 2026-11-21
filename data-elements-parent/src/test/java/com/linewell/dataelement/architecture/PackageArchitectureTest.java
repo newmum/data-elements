@@ -26,11 +26,25 @@ class PackageArchitectureTest {
 
     @Test
     void logMagicAdapterUsesItsModulePackageAndComponentQueriesStayInMagic() {
+        assertThat(JAVA_ROOT.resolve("magic/module/AuditMagicModule.java")).exists();
+        assertThat(JAVA_ROOT.resolve("platform/audit/AuditMagicModule.java")).doesNotExist();
         assertThat(JAVA_ROOT.resolve("magic/module/LogManagementMagicModule.java")).exists();
         assertThat(JAVA_ROOT.resolve("feature/logmanagement/LogManagementMagicModule.java")).doesNotExist();
         assertThat(JAVA_ROOT.resolve("feature/logmanagement/LogComponentService.java")).doesNotExist();
         assertThat(JAVA_ROOT.resolve("platform/web/download/LogDownloadController.java")).doesNotExist();
         assertThat(JAVA_ROOT.resolve("feature/logmanagement/PlatformLogDownloadController.java")).doesNotExist();
+    }
+
+    @Test
+    void logWorkersAndQueriesUseThePlatformAuditPackage() throws Exception {
+        assertThat(javaFiles(JAVA_ROOT.resolve("platform/audit/management")))
+                .extracting(path -> path.getFileName().toString())
+                .containsExactlyInAnyOrder("LogAccessService.java", "LogArchiveService.java",
+                        "LogJobLeases.java", "LogLifecycleService.java", "LogQueryService.java");
+        // Existing Magic scripts import the scope value by its fully qualified name.
+        assertThat(javaFiles(JAVA_ROOT.resolve("feature/logmanagement")))
+                .extracting(path -> path.getFileName().toString())
+                .containsExactly("LogScope.java");
     }
 
     @Test

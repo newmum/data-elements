@@ -1,4 +1,6 @@
-package com.linewell.dataelement.feature.logmanagement;
+package com.linewell.dataelement.platform.audit.management;
+
+import com.linewell.dataelement.feature.logmanagement.LogScope;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.linewell.dataelement.magic.runtime.route.RegisteredMagicFunctionInvoker;

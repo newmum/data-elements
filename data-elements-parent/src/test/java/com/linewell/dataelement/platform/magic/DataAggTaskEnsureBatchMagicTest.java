@@ -1273,7 +1273,8 @@ class DataAggTaskEnsureBatchMagicTest {
 
         Object run(Map<String, Object> body) throws Exception {
             String script = CanonicalMagicSources.byId(SOURCE_ID)
-                    .replaceAll("(?m)^import (jsons|metadataAsset|targetTableSchema|tenantRuntime|dataScope|tableRead|tableWrite|com\\.linewell\\.dataelement\\.metautil\\.structured\\.StructuredSourceProbeService as structuredFileProbe)\\r?\\n", "");
+                    .replaceAll("(?m)^import (jsons|metadataAsset|targetTableSchema|tenantRuntime|dataScope|tableRead|tableWrite|com\\.linewell\\.dataelement\\.metautil\\.structured\\.StructuredSourceProbeService as structuredFileProbe)\\r?\\n", "")
+                    .replace("import '@/common/accesstemplate' as resolveAccessTemplate", "");
             Map<String, Object> inputs = new LinkedHashMap<>();
             inputs.put("db", db);
             inputs.put("body", body);
@@ -1283,6 +1284,16 @@ class DataAggTaskEnsureBatchMagicTest {
             inputs.put("structuredFileProbe", fileProbe);
             inputs.put("tableRead", tableRead);
             inputs.put("tableWrite", tableWrite);
+            inputs.put("resolveAccessTemplate", (Function<Object[],Object>) arguments -> {
+                try {
+                    String binding=CanonicalMagicSources.byPath("function/01.通用函数/79.读取接入模板版本.ms",
+                            "069cbc99613b42c0b6805199f45a4d58")
+                            .replaceAll("(?m)^import (tenantRuntime|dataScope|tableRead)\\R", "");
+                    var nested=new LinkedHashMap<String,Object>(inputs);
+                    nested.put("versionId",arguments[0]);nested.put("source",arguments[1]);nested.put("targets",arguments[2]);
+                    return MagicScript.create(binding,null).execute(new MagicScriptContext(nested));
+                } catch(Exception error) {throw new IllegalStateException(error);}
+            });
             resetCounter();
             try (var tenant = TenantContext.use(scope.id())) {
                 return MagicScript.create(script, null).execute(new MagicScriptContext(inputs));

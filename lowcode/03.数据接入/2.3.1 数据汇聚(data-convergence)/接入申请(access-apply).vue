@@ -90,6 +90,7 @@
       </section>
       <div v-show="!ddlMode && !loadError" class="materialization-form-view">
       <u-title name="建表信息" />
+      <el-alert v-if="accessTemplatesNotice" :title="accessTemplatesNotice" type="info" :closable="false" show-icon class="mb-2" />
       <el-alert v-for="message in templateWarnings" :key="message" :title="message" type="warning" :closable="false" show-icon class="mb-2" />
       <div v-if="knownTargets.length" class="existing-target-panel">
         <strong>已有目标表</strong>
@@ -107,6 +108,17 @@
         bordered
         class="mb-2"
       ></JsonForm>
+      <el-alert v-if="editable && accessTemplatesError" :title="accessTemplatesError" type="warning"
+        :closable="false" show-icon class="mb-2">
+        <el-button text type="primary" @click="openTemplateManagement">前往模板管理</el-button>
+      </el-alert>
+      <div v-if="editable && accessTemplatesTotal > 20" class="template-page-controls">
+        <el-button text :disabled="accessTemplatesLoading || accessTemplatesPage <= 1"
+          @click="loadAccessTemplates(accessTemplatesPage - 1)">上一页</el-button>
+        <span>{{ accessTemplatesPage }} / {{ Math.ceil(accessTemplatesTotal / 20) }}</span>
+        <el-button text :disabled="accessTemplatesLoading || accessTemplatesPage * 20 >= accessTemplatesTotal"
+          @click="loadAccessTemplates(accessTemplatesPage + 1)">下一页</el-button>
+      </div>
       <div class="materialization-field-toolbar">
         <el-button type="primary" :disabled="!editable || ddlMode" @click="handleAddField">＋ 新增数据项</el-button>
         <el-button type="primary" plain :disabled="!editable || ddlMode" @click="handleOpenDefaultFieldsDrawer">默认字段</el-button>
@@ -225,7 +237,7 @@
           v-if="editable"
           type="primary"
           :loading="isSaveing"
-          :disabled="templateLoading || isSaveing || !!loadError"
+          :disabled="templateLoading || isSaveing || !!loadError || templateBindingIncomplete"
           @click="handleSave"
         >
           <Icon v-if="!isSaveing" icon="save" class="mr-1" />
@@ -287,6 +299,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, computed, watch, nextTick, h } from "vue";
 import { FormUtils } from "@/utils/form";
+import { capabilityCenterBases } from "@/utils/capabilityCenters";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { useDictStore } from "@/store";
 
@@ -843,6 +856,131 @@ const defaultFieldsData = ref([
   },
 ]);
 const editable = computed(() => props.type === "add");
+
+type AccessTemplateOption = {
+  tid: string;
+  name: string;
+  version: number;
+  spec: { topology: string; targets: string[]; targetDatasourceIds?: string[]; sourceType?: string; engine?: string; hasFlow?: boolean; flow?: unknown };
+};
+const accessTemplateId = ref('');
+
+const accessTemplates = ref<AccessTemplateOption[]>([]);
+const selectedAccessTemplate = ref<AccessTemplateOption>();
+const templateBindingIncomplete = computed(() => editable.value && (
+  !accessTemplateId.value || !selectedAccessTemplate.value || accessTemplatesLoading.value
+  || !selectedAccessTemplate.value.spec.targetDatasourceIds?.length
+));
+const accessTemplatesLoading = ref(false);
+const accessTemplatesError = ref('');
+const accessTemplatesNotice = ref('');
+const needsCommittedFile = () => ['receive','push'].includes(String(formData.value.sourceAccessModeCode || formData.value.accessMode || '').toLowerCase());
+const compatibleAccessTemplate = (item: AccessTemplateOption) => !needsCommittedFile() || (
+  item.spec.targets[0] !== 'HIVE' && (item.spec.targets.length === 1
+    || (item.spec.topology === 'SERIAL' && item.spec.engine === 'GENERATED'))
+);
+const accessTemplatesPage = ref(1);
+const accessTemplatesTotal = ref(0);
+let accessTemplatesKeyword = '';
+let accessTemplatesRequest = 0;
+const templateLabel = (item: AccessTemplateOption) => item.name;
+const loadAccessTemplates = async (pageNum = 1) => {
+  const request = ++accessTemplatesRequest;
+  accessTemplatesLoading.value = true;
+  accessTemplatesError.value = '';
+  try {
+    const response = await $common.post('/nifi/canvas/templates', {
+      pageNum, pageSize: 20, keyword: accessTemplatesKeyword,
+    }, { _hiddenErrorMsg: true });
+    if (request !== accessTemplatesRequest) return;
+    const page = response?.data || response;
+    if (!Array.isArray(page?.list)) throw new Error('接入模板列表返回不完整');
+    accessTemplates.value = page.list;
+    accessTemplatesTotal.value = Number(page.total || 0);
+    accessTemplatesPage.value = pageNum;
+    const options = page.list.map((item: AccessTemplateOption) => ({label: templateLabel(item), value: item.tid, disabled: !compatibleAccessTemplate(item)}));
+    if (selectedAccessTemplate.value && !page.list.some((item: AccessTemplateOption) => item.tid === selectedAccessTemplate.value?.tid)) {
+      options.push({label: templateLabel(selectedAccessTemplate.value), value: selectedAccessTemplate.value.tid});
+    }
+    jsonFormRef.value?.updateFieldOptions?.('accessTemplateSelection', options);
+    if (!accessTemplateId.value && page.defaultVersionId) {
+      let chosen = String(page.defaultVersionId);
+      const preferred = page.list.find((item: AccessTemplateOption) => item.tid === chosen);
+      if (needsCommittedFile() && (!preferred || !compatibleAccessTemplate(preferred))) {
+        const chain = page.list.find((item: AccessTemplateOption) => item.spec.targets.length === 1 && item.spec.targets[0] === 'OCEANBASE_ORACLE');
+        if (chain) {
+          chosen = chain.tid;
+          accessTemplatesNotice.value = '推送文件须先在关系库提交后确认，已自动选用“' + chain.name + '”。';
+        }
+      }
+      await chooseAccessTemplate(chosen);
+    }
+    if (!accessTemplateId.value && !page.defaultVersionId) {
+      accessTemplatesError.value = '尚未设置默认模板，请在模板管理中配置，也可以直接选择已发布模板';
+    }
+  } catch (error: any) {
+    if (request === accessTemplatesRequest) accessTemplatesError.value = String(error?.message || '接入模板加载失败');
+  } finally {
+    if (request === accessTemplatesRequest) accessTemplatesLoading.value = false;
+  }
+};
+const searchAccessTemplates = (keyword: string) => {
+  accessTemplatesKeyword = keyword;
+  void loadAccessTemplates();
+};
+const openAccessTemplates = (visible: boolean) => {
+  if (visible) searchAccessTemplates('');
+};
+let templateSelectionRun = 0;
+const chooseAccessTemplate = async (requestedId: string) => {
+  const id = String(requestedId || '');
+  if (id === accessTemplateId.value && selectedAccessTemplate.value) return;
+  const run = ++templateSelectionRun;
+  accessTemplateId.value = id;
+  selectedAccessTemplate.value = undefined;
+  accessTemplatesError.value = '';
+  completedMaterializations.clear();
+  materializationResults.value = [];
+  jsonFormRef.value?.setValue({dbId: []});
+  syncTargetDatasourceSelection([]);
+  if (!id) return;
+  try {
+    const response = await $common.post('/nifi/canvas/templatedetail', {tid: id}, { _hiddenErrorMsg: true });
+    if (run !== templateSelectionRun || !open.value) return;
+    const item = response?.data || response;
+    if (item?.spec && !compatibleAccessTemplate(item)) throw new Error('推送落地文件需先写入关系库，请选择串行接入或关系库单目标模板');
+    if (!item?.tid || !Array.isArray(item.targets) || !Array.isArray(item.spec?.targetDatasourceIds)
+      || item.targets.length !== item.spec.targets.length || !item.targets.length) {
+      throw new Error('此模板尚未配置全部目标库，请先在海通模板管理中完成配置');
+    }
+    const ids = item.spec.targetDatasourceIds.map(String);
+    const map = {...datasourceMap.value};
+    const paths = {...datasourcePathMap.value};
+    for (const target of item.targets) {
+      const key = String(target.tid);
+      map[key] = {...map[key], ...target};
+      paths[key] = paths[key] || ['TEMPLATE', key];
+    }
+    datasourceMap.value = map;
+    datasourcePathMap.value = paths;
+    datasourceLeafIds.value = [...new Set([...datasourceLeafIds.value, ...ids])];
+    selectedAccessTemplate.value = item;
+    if (!accessTemplates.value.some(value => value.tid === item.tid)) accessTemplates.value.push(item);
+    jsonFormRef.value?.updateFieldOptions?.('accessTemplateSelection',
+      accessTemplates.value.map(value => ({label: value.name, value: value.tid, disabled: !compatibleAccessTemplate(value)})));
+    const values = ids.map((key: string) => paths[key]);
+    jsonFormRef.value?.setValue({accessTemplateSelection: id, dbId: values});
+    syncTargetDatasourceSelection(values);
+  } catch (error: any) {
+    if (run === templateSelectionRun) accessTemplatesError.value = String(error?.message || '模板目标库读取失败');
+  }
+};
+const openTemplateManagement = () => {
+  // 复用平台已配置的海通入口，认证由既有跨应用会话桥处理。
+  const url = new URL(capabilityCenterBases.haitong, window.location.origin)
+  url.hash = '/development/templates' + (accessTemplateId.value ? '?version=' + encodeURIComponent(accessTemplateId.value) : '');
+  window.location.assign(url.href);
+};
 const selectedDefaultFields = ref<any[]>([]);
 const defaultFieldsTableRef = ref();
 const createFormRules = () => FormUtils.fixJson([
@@ -872,6 +1010,25 @@ const createFormRules = () => FormUtils.fixJson([
       emptyText: "--",
     },
   },
+  ...(editable.value ? [
+    {
+      field: "accessTemplateSelection",
+      title: "目标数据源名称",
+      $required: true,
+      type: "select",
+      value: "",
+      col: { span: 12 },
+      options: [],
+      props: {
+        filterable: true,
+        filterMethod: searchAccessTemplates,
+        placeholder: "请选择目标数据源名称",
+        noDataText: "暂无已发布模板，请在海通模板管理发布",
+      },
+      on: { change: chooseAccessTemplate, visibleChange: openAccessTemplates },
+    },
+    {field: "dbId", type: "input", hidden: true},
+  ] : [
   {
     field: "dbId",
     title: "目标数据源名称",
@@ -900,7 +1057,8 @@ const createFormRules = () => FormUtils.fixJson([
       // formData so the drawer header recalculates before the form is saved.
       change: (value: any) => syncTargetDatasourceSelection(value),
     },
-  },
+  }
+  ]),
   {
     field: "nifiNodePath",
     title: "数据接入节点",
@@ -1130,23 +1288,6 @@ const orderTargetDatasourceIds = (value: any) => {
   const selected = new Set(ids);
   const ordered = [...new Set(datasourceLeafIds.value.filter((id) => selected.has(id)))];
   return [...ordered, ...ids.filter((id) => !ordered.includes(id))];
-};
-
-const getDefaultDatasourcePaths = () => {
-  if (props.taskCategory === "distribution") return [];
-  const paths: any[][] = [];
-  const selectedIds = new Set<string>();
-  // 只勾选 huiju / yuanshi，排列遵循管理员保存的分域顺序。
-  for (const dbId of datasourceLeafIds.value) {
-    const datasource = datasourceMap.value[dbId] || {};
-    const path = datasourcePathMap.value[dbId];
-    if (normalizeCode(datasource.layerCode) !== "ods"
-      || !["huiju", "yuanshi"].includes(normalizeCode(datasource.domainCode ?? datasource.domain_code))
-      || !path?.length || selectedIds.has(dbId)) continue;
-    selectedIds.add(dbId);
-    paths.push([...path]);
-  }
-  return paths;
 };
 
 const nodeEnabled = (item: any) => {
@@ -1525,7 +1666,12 @@ const init = async () => {
     sourceTableName.value = String(propList.sourceTableName || propList.tableName || "").trim();
     if (props.type === "add") {
       propList.tableName = buildTargetTableName();
-      propList.dbId = getDefaultDatasourcePaths();
+      propList.dbId = [];
+      propList.accessTemplateSelection = '';
+      accessTemplateId.value = '';
+      selectedAccessTemplate.value = undefined;
+      accessTemplatesNotice.value = '';
+
     } else if (propList.dbId) {
       propList.dbId = normalizeDatasourcePaths(propList.dbId);
     }
@@ -1557,6 +1703,7 @@ const init = async () => {
     if (!isCurrentInit(runId)) return false;
     jsonFormRef.value?.setValue(formData.value);
     syncTargetDatasourceSelection(propList.dbId);
+    if (props.type === 'add') void loadAccessTemplates();
     // 设置表格数据(字段列表)。即使字段为空也明确清空上一张来源表的数据，
     // 避免复用抽屉时残留旧内容；非空时由 loadTemplateTableItems 等待 Grid
     // 就绪后再写入，避免首次打开偶发的空表竞态。
@@ -1606,6 +1753,9 @@ const currentDdlInput = async () => {
   await jsonFormRef.value?.validate();
   await tableRef.value?.validate();
   const data = normalizeFormPayload(await jsonFormRef.value?.getFormData());
+  if (templateBindingIncomplete.value) {
+    throw new Error('请选择已在模板管理中配置好目标库的模板');
+  }
   if (!data.nifiNodeId) throw new Error("请选择可用的数据接入节点");
   if (!data.targetDbIds.length) throw new Error("请至少选择一个目标数据源");
   if (data.targetDbIds.length > 20) throw new Error("一次最多选择 20 个目标数据源");
@@ -1821,7 +1971,8 @@ const readMaterializationBatch = (
 const finishMaterialization = (targetTables: MaterializedTable[]) => {
   const reused = targetTables.filter((table) => table.reusedExisting).length;
   ElMessage.success(`已处理 ${targetTables.length} 个目标表（复用 ${reused} 个），正在准备任务画布`);
-  emit('save', { ...targetTables[0], targetTables, sourceFileConfig: sourceFileConfig.value });
+  emit('save', { ...targetTables[0], targetTables, sourceFileConfig: sourceFileConfig.value,
+    templateVersionId: accessTemplateId.value });
 };
 
 const handleSave = async () => {
@@ -1875,6 +2026,10 @@ const handleSave = async () => {
     }
     const preparedTargets: ReturnType<typeof prepareMaterializationTarget>[] = ddlInput.targets.map((target: MaterializationTarget) =>
       prepareMaterializationTarget(target, ddlInput.tableItems));
+    const templateBinding = accessTemplateId.value ? {
+      templateVersionId: accessTemplateId.value,
+      templateTargetDbIds: preparedTargets.map(({ target }) => String(target.dbId)),
+    } : {};
     const pending = preparedTargets.filter(({ target, fingerprint }) => {
       const id = String(target.dbId);
       if (completedMaterializations.get(id)?.fingerprint === fingerprint) return false;
@@ -1900,7 +2055,7 @@ const handleSave = async () => {
       targets: (ReturnType<typeof batchTargets>[number] & { pendingTargetCleanup?: boolean })[],
     ) => {
       const response = await $common.post('/ods/target/create', {
-        tid: props.id, targets, dryRun: true,
+        tid: props.id, targets, dryRun: true, ...templateBinding,
       }, { _hiddenErrorMsg: true }, 120 * 1000);
       const validation = response?.data || response;
       if (validation?.batch !== true || validation.complete !== true || validation.sideEffectsApplied !== false
@@ -2155,6 +2310,7 @@ const handleSave = async () => {
     const response = await $common.post('/ods/target/create', {
       tid: props.id,
       targets: batchTargets(),
+      ...templateBinding,
     }, { _hiddenErrorMsg: true }, Math.min(pending.length, 5) * 120 * 1000);
     const outcomes = readMaterializationBatch(response, pending, previousTables);
     if ((response?.data || response).registrationStatusRefreshed === false) {
@@ -2368,7 +2524,15 @@ onMounted(() => {
 });
 watch(() => props.modelValue, (visible, previous) => {
   if (visible && !previous && props.id) init();
-  if (!visible && previous) cancelPendingInit();
+  if (!visible && previous) {
+    cancelPendingInit();
+    accessTemplatesRequest++;
+    accessTemplatesLoading.value = false;
+    accessTemplateId.value = '';
+    accessTemplates.value = [];
+    selectedAccessTemplate.value = undefined;
+    templateSelectionRun++;
+  }
 });
 onBeforeUnmount(cancelPendingInit);
 onBeforeUnmount(stopMaterializationProgress);
@@ -2623,4 +2787,5 @@ onBeforeUnmount(stopDdlEditorSizing);
   width: 100%;
 }
 .ddl-inline-panel :deep(.ace_editor) { min-height: 200px !important; }
+  .template-page-controls { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; }
 </style>

@@ -1,4 +1,4 @@
-package com.linewell.dataelement.feature.logmanagement;
+package com.linewell.dataelement.platform.audit.management;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;

@@ -35,7 +35,9 @@ import com.linewell.dataelement.dataassets.runtime.DataSourceConnectionPropertyR
 import com.linewell.dataelement.shared.error.ErrorDetailSanitizer
 import com.linewell.dataelement.elasticsearch.EsCommonService as esCommonService
 import '@post:/dst/db/ddl' as getCreateTableDDL
+import java.util.List
 import '@post:/dst/db/create' as createTable
+import '@/common/accesstemplate' as resolveAccessTemplate
 
 // POST /ods/target/create 数据接入物化建表。
 // POST /ods/target/create：复用现有物理建表与登记逻辑；批量入口先完整验证，再顺序执行。
@@ -645,8 +647,31 @@ var runMaterialization = () => {
         exit 422, '文件登记项用于非结构化文件上传，不能物化为结构化数据库表'
     }
 
+    var templateVersionId = text(body?.templateVersionId).trim()
+    var boundTargetIds = targetDbIds
+    if (templateVersionId != '' && body?.templateTargetDbIds != null) {
+        if (!(body.templateTargetDbIds instanceof List) || body.templateTargetDbIds.size() > 8) {
+            exit 400, '模板目标最多绑定8个数据源'
+        }
+        boundTargetIds = []
+        for (candidateId in body.templateTargetDbIds) {
+            var bindingId = text(candidateId).trim()
+            if (blank(bindingId) || bindingId.length() > 64 || boundTargetIds.contains(bindingId)) {
+                exit 400, '模板目标数据源标识无效或重复'
+            }
+            boundTargetIds.add(bindingId)
+        }
+        if (!boundTargetIds.containsAll(targetDbIds)) { exit 400, '待物化目标不属于本次模板绑定' }
+        var remainingIds = boundTargetIds.filter(id => !targetDbIds.contains(id))
+        if (!remainingIds.isEmpty()) {
+            var completed = db.table('db_table_t').column('datasource_id').where().eq('tenant_id', tenantId)
+                .eq('source_table_id', sourceTableId).eq('is_del', 0).in('datasource_id', remainingIds)
+                .groupBy('datasource_id').select()
+            if (completed.size() != remainingIds.size()) { exit 409, '尚有模板目标未物化，请保留全部待处理目标' }
+        }
+    }
     var allDbIds = [text(sourceTable.datasourceId)]
-    for (id in targetDbIds) { if (!allDbIds.contains(id)) { allDbIds.add(id) } }
+    for (id in boundTargetIds) { if (!allDbIds.contains(id)) { allDbIds.add(id) } }
     var datasources = db.table('db_datasource_t').where().eq('tenant_id', tenantId).in('tid', allDbIds).eq('is_del', 0).select()
     var datasourceById = {}
     for (row in datasources) { datasourceById[text(row.tid)] = row }
@@ -655,6 +680,13 @@ var runMaterialization = () => {
     for (plan in plans) {
         plan.datasource = datasourceById[plan.propList.dbId]
         if (plan.datasource == null) { exit 404, '目标数据源不存在或不属于当前租户' }
+    }
+    var template = null
+    if (templateVersionId != '') {
+        template = resolveAccessTemplate(templateVersionId, sourceDatasource, boundTargetIds.map(id => datasourceById[id]))
+        if (template.spec.topology == 'PARALLEL' && requestedNodeIds.size() > 1) {
+            exit 400, '并行模板的所有目标须使用同一个接入节点'
+        }
     }
     if (batch && ((first(sourceTable, ['assetStatus', 'asset_status']) || 0)::int <= 0
             || (first(sourceDatasource, ['assetStatus', 'asset_status']) || 0)::int <= 0)) {
@@ -747,8 +779,9 @@ var runMaterialization = () => {
         if (target.showConnect == 0) { exit 400, '目标数据源未提供连接信息' }
         if (batch && blank(targetType)) { exit 400, '目标数据源未配置数据库类型' }
         if (!['1', '2'].contains(text(first(target, ['assetStatus', 'asset_status'])))
-                && odsRankByDb[plan.propList.dbId] == null) {
-            exit 400, '目标数据源未完成登记且未配置为贴源层 ODS 分域的数据源，不能用于物化建表'
+                && odsRankByDb[plan.propList.dbId] == null
+                && !(template != null && template.spec.targetDatasourceIds.contains(plan.propList.dbId))) {
+            exit 400, '目标数据源须完成登记，或在ODS分域、接入模板中明确配置后用于物化建表'
         }
         if (plan.hive && plan.pendingCleanup) { exit 400, 'Hive 目标只能明确复用，不能通过物化自动删除' }
         plan.propList.tableName = normalizePhysicalTargetName(plan.propList.tableName, targetType)

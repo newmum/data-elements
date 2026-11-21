@@ -728,6 +728,49 @@ export class ChengtianMockRuntime {
       return this.tenant().available[0];
     }
     if (key === "POST /sym/user/me") return this.user();
+    if (key === "POST /nifi/canvas/templates") {
+      const pageNum = Math.max(1, Math.trunc(Number(body.pageNum) || 1));
+      const pageSize = Math.min(100, Math.max(1, Math.trunc(Number(body.pageSize) || 20)));
+      const keyword = String(body.keyword || "").trim().toLowerCase();
+      assert(body.manage !== true, 403, "当前角色无权管理接入模板");
+      assert(keyword.length <= 96, 400, "模板关键字最多96个字符");
+      const sortField = String(body.sortField || "updatedAt"), sortDir = String(body.sortDir || "desc").toLowerCase();
+      assert(["name","version","updatedAt"].includes(sortField) && ["asc","desc"].includes(sortDir),400,"模板排序参数无效");
+      const rows = (this.database.accessTemplates || []).filter(row =>
+        row.tenantId === this.session.tenantId && row.status === "PUBLISHED" &&
+        row.name.toLowerCase().includes(keyword))
+        .sort((left, right) => {
+          const order = sortField === "name" ? left.name.localeCompare(right.name)
+            : Number(left[sortField] || 0) - Number(right[sortField] || 0);
+          return (sortDir === "asc" ? order : -order) || left.tid.localeCompare(right.tid);
+        });
+      const start = (pageNum - 1) * pageSize;
+      const defaultVersionId = this.database.defaultAccessTemplateId || "";
+      return { list: rows.slice(start, start + pageSize).map(({ tenantId, ...row }) => {
+        const { flow, nativeSnapshot, previewImage, ...spec } = row.spec || {};
+        return { ...row, isDefault: row.tid === defaultVersionId,
+          spec: { ...spec, hasFlow: Boolean(flow), hasNative: Boolean(nativeSnapshot) } };
+      }),
+        total: rows.length, pageNum, pageSize, defaultVersionId };
+    }
+    if (key === "POST /nifi/canvas/templatedetail") {
+      const id = String(body.tid || "").trim();
+      assert(/^[A-Za-z0-9_-]{1,32}$/.test(id), 400, "模板版本标识无效");
+      const template = (this.database.accessTemplates || []).find(row =>
+        row.tenantId === this.session.tenantId && row.status === "PUBLISHED" && row.tid === id);
+      assert(template, 404, "模板不存在或无访问权限");
+      const { tenantId, ...detail } = template;
+      const ids = template.spec?.targetDatasourceIds || [];
+      const visible = visibleSources(this.database, this.session);
+      const byId = new Map(visible.map(row => [row.tid, row]));
+      assert(ids.every(id => byId.has(id)), 403, "模板绑定的目标库不存在或超出当前数据范围，请联系模板维护人员");
+      const targets = ids.map(id => {
+        const row = byId.get(id);
+        return { tid: id, value: id, label: row.dbName, dbName: row.dbName, dbType: row.dbType,
+          layerCode: "ODS", tablePrefix: "ODS", parentValue: "TEMPLATE" };
+      });
+      return clone({ ...detail, targets, isDefault: template.tid === this.database.defaultAccessTemplateId });
+    }
     if (key === "GET /sym/menu/routes") return this.routes();
     if (key === "GET /sym/dict/query") return query.code ? [] : {};
     if (key === "POST /dws/cart/page") {

@@ -10,7 +10,7 @@ import static org.mockito.Mockito.when;
 
 import cn.dev33.satoken.session.SaSession;
 import cn.dev33.satoken.stp.StpUtil;
-import com.linewell.dataelement.feature.logmanagement.LogAccessService;
+import com.linewell.dataelement.platform.audit.management.LogAccessService;
 import com.linewell.dataelement.model.common.CommonResponse;
 import com.linewell.dataelement.platform.tenant.domain.TenantContext;
 import java.lang.reflect.InvocationTargetException;

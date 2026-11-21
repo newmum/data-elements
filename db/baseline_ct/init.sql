@@ -7181,6 +7181,45 @@ COMMENT ON COLUMN "public"."metadata_table_collection_job_t"."finished_time" IS 
 
 COMMENT ON COLUMN "public"."metadata_table_collection_job_t"."is_del" IS '逻辑删除标志，0未删除、1已删除';
 
+CREATE TABLE "public"."nifi_access_template_t" (
+  "tid" character varying(32 char) NOT NULL,
+  "tenant_id" character varying(32 char) NOT NULL,
+  "family_id" character varying(32 char) NOT NULL,
+  "revision_no" integer NOT NULL,
+  "display_name" character varying(96 char) NOT NULL,
+  "status" character varying(16 char) NOT NULL,
+  "definition" text NOT NULL,
+  "created_by" character varying(64 char) NOT NULL,
+  "created_at" bigint NOT NULL,
+  "updated_at" bigint NOT NULL,
+  CONSTRAINT "nifi_access_template_t_pkey" PRIMARY KEY (tid),
+  CONSTRAINT "uk_access_template_version" UNIQUE (tenant_id, family_id, revision_no)
+);
+
+COMMENT ON TABLE "public"."nifi_access_template_t" IS '数据接入-NiFi接入模板版本';
+
+COMMENT ON COLUMN "public"."nifi_access_template_t"."tid" IS '模板版本标识';
+
+COMMENT ON COLUMN "public"."nifi_access_template_t"."tenant_id" IS '所属行业租户标识';
+
+COMMENT ON COLUMN "public"."nifi_access_template_t"."family_id" IS '模板标识';
+
+COMMENT ON COLUMN "public"."nifi_access_template_t"."revision_no" IS '模板内递增版本号';
+
+COMMENT ON COLUMN "public"."nifi_access_template_t"."display_name" IS '模板显示名称';
+
+COMMENT ON COLUMN "public"."nifi_access_template_t"."status" IS '版本状态：DRAFT草稿、PUBLISHED已发布、RETIRED已停用';
+
+COMMENT ON COLUMN "public"."nifi_access_template_t"."definition" IS '接入拓扑、目标类型及处理器默认配置，不含连接凭据';
+
+COMMENT ON COLUMN "public"."nifi_access_template_t"."created_by" IS '创建人标识';
+
+COMMENT ON COLUMN "public"."nifi_access_template_t"."created_at" IS '创建时间戳，Unix毫秒';
+
+COMMENT ON COLUMN "public"."nifi_access_template_t"."updated_at" IS '更新时间戳，Unix毫秒';
+
+CREATE INDEX idx_access_template_list ON public.nifi_access_template_t USING btree (tenant_id, status, updated_at, tid);
+
 CREATE TABLE "public"."nifi_node_t" (
   "tid" character varying(32 char) NOT NULL,
   "tenant_id" character varying(32 char) NOT NULL,

@@ -34,9 +34,11 @@ class DslCompilerHiveTemporalWriterTest {
     DslCompilerHiveTemporalWriterTest() throws Exception {
         ManifestRegistry registry = mock(ManifestRegistry.class);
         ObjectMapper json = new ObjectMapper();
-        for (String name : List.of("hive", "mysql", "oracle", "oceanbase")) {
-            try (var stream = getClass().getResourceAsStream("/manifests/sources/" + name + ".json")) {
-                when(registry.get("source." + name)).thenReturn(json.readValue(stream, ComponentManifest.class));
+        for (var file : new org.springframework.core.io.support.PathMatchingResourcePatternResolver()
+                .getResources("classpath:manifests/sources/*.json")) {
+            try (var stream = file.getInputStream()) {
+                var manifest = json.readValue(stream,ComponentManifest.class);
+                when(registry.get(manifest.key())).thenReturn(manifest);
             }
         }
         try (var stream = getClass().getResourceAsStream("/manifests/transforms/sql.json")) {
@@ -44,6 +46,9 @@ class DslCompilerHiveTemporalWriterTest {
         }
         try (var stream = getClass().getResourceAsStream("/manifests/transforms/field-mapping.json")) {
             when(registry.get("transform.field-mapping")).thenReturn(json.readValue(stream, ComponentManifest.class));
+        }
+        try (var stream = getClass().getResourceAsStream("/manifests/transforms/field-enrichment.json")) {
+            when(registry.get("transform.field-enrichment")).thenReturn(json.readValue(stream,ComponentManifest.class));
         }
         try (var stream = getClass().getResourceAsStream("/manifests/sinks/hive-sink.json")) {
             when(registry.get("sink.hive")).thenReturn(json.readValue(stream, ComponentManifest.class));
@@ -90,6 +95,50 @@ class DslCompilerHiveTemporalWriterTest {
         var versions=mock(MappingVersionStore.class);
         when(versions.archive(any(),anyMap())).thenReturn(Map.of("mapping","plan-version"));
         compiler.setMappingVersions(versions);
+    }
+
+    static java.util.stream.Stream<String> sourceManifests() throws Exception {
+        return java.util.Arrays.stream(new org.springframework.core.io.support.PathMatchingResourcePatternResolver()
+                .getResources("classpath:manifests/sources/*.json"))
+                .map(resource -> resource.getFilename().replace(".json",""));
+    }
+
+    @ParameterizedTest @org.junit.jupiter.params.provider.MethodSource("sourceManifests")
+    void everySourceCompilesTheSharedGovernanceTemplateWithObAndHiveTargets(String type) {
+        var cfg=new LinkedHashMap<String,Object>();
+        cfg.putAll(Map.of("host","validation.invalid","hostname","validation.invalid","database","business",
+                "username","validation","password","validation-only","compatibleMode","ORACLE",
+                "driverLocations","/lib/validation.jar","syncMode","FULL"));
+        cfg.putAll(Map.of("remotePath","/validation","sourceFileName","EVENT_LOG.csv","fileFormat","csv",
+                "fileFilterRegex","EVENT_LOG\\.csv","csvEncoding","UTF-8","csvDelimiter",",",
+                "fileHeaderMode","physical","protocol",type.equals("sftp")?"sftp":"ftp"));
+        cfg.putAll(Map.of("url","http://validation.invalid/data","method","GET","responsePath","rows",
+                "bootstrapServers","validation.invalid:9092","topic","validation-events","groupId","validation",
+                "securityProtocol","PLAINTEXT","messageFormat","JSON"));
+        cfg.putAll(Map.of("minioEndpoint","http://validation.invalid:9000","minioBucket","validation",
+                "minioAccessKey","validation","minioSecretKey","validation-only","minioObjectKey","EVENT_LOG.csv",
+                "path","/validation","clientConfigDir","/opt/validation-client","zookeeperQuorum","validation.invalid:2181"));
+        cfg.putAll(Map.of("nodes","validation.invalid:9200","defaultIndex","validation-events","authMethod","NONE",
+                "queryJson","{\"query\":{\"match_all\":{}}}","hiveConnectionMode","open-source","schedulingPeriod","60 sec"));
+        if(type.equals("elasticsearch"))cfg.put("protocol","http");
+        if(type.equals("kafka"))cfg.put("schedulingPeriod","0 sec");
+        cfg.put("dbType",RegisteredDatasourceType.configType(type,Map.of("compatibleMode","ORACLE")));
+        cfg.put("sourceColumns",List.of(Map.of("columnName","ID","dataType","BIGINT"),Map.of("columnName","EVENT_TIME","dataType","TIMESTAMP")));
+        var origin=source("source",type,cfg);
+        var ob=new Pipeline.Node("ob","sink.jdbc","OB目标","sink",1000,0,Map.of("dbType","OCEANBASE_ORACLE",
+                "jdbcUrl","jdbc:oceanbase:oracle://validation.invalid:2881/business","username","validation",
+                "password","validation-only","table","EVENT_LOG","driverLocations","/lib/validation.jar",
+                "statementType","UPSERT","updateKeys","ID","targetColumns",List.of(Map.of("columnName","ID","dataType","BIGINT","primaryKey",true))));
+        var hive=hiveSink("hive");
+        var first=new Pipeline.Node("map-ob","transform.field-enrichment","OB字段治理","transform",500,0,mapping().config());
+        var second=new Pipeline.Node("map-hive","transform.field-enrichment","Hive字段治理","transform",500,200,mapping().config());
+        var result=compiler.compile(hiveTargetFlow(List.of(origin,first,second,ob,hive),List.of(
+                new Pipeline.Edge("a","source","map-ob","default"),new Pipeline.Edge("b","map-ob","ob","default"),
+                new Pipeline.Edge("c","source","map-hive","default"),new Pipeline.Edge("d","map-hive","hive","default"))));
+        assertThat(result.nodes().keySet()).contains("source","map-ob","map-hive","ob","hive");
+        assertThat(processors).anyMatch(processor->processor.type().endsWith(".LinewellPutDatabaseRecord"))
+                .anyMatch(processor->processor.type().endsWith(".PutHwHDFS"));
+        verify(nifi,times(1)).listControllerServices("root");
     }
 
     @ParameterizedTest @ValueSource(strings={"MySQL","Oracle","OCEANBASE_ORACLE"})

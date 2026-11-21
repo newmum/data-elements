@@ -3395,6 +3395,23 @@ CREATE TABLE `metadata_table_collection_job_t` (
   KEY `idx_metadata_collection_running` (`tenant_id`,`datasource_id`,`status`,`is_del`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='数据资源登记-登记第二步数据表异步采集任务';
 
+-- TABLE nifi_access_template_t
+CREATE TABLE `nifi_access_template_t` (
+  `tid` varchar(32) COLLATE utf8mb4_general_ci NOT NULL COMMENT '模板版本标识',
+  `tenant_id` varchar(32) COLLATE utf8mb4_general_ci NOT NULL COMMENT '所属行业租户标识',
+  `family_id` varchar(32) COLLATE utf8mb4_general_ci NOT NULL COMMENT '模板标识',
+  `revision_no` int NOT NULL COMMENT '模板内递增版本号',
+  `display_name` varchar(96) COLLATE utf8mb4_general_ci NOT NULL COMMENT '模板显示名称',
+  `status` varchar(16) COLLATE utf8mb4_general_ci NOT NULL COMMENT '版本状态：DRAFT草稿、PUBLISHED已发布、RETIRED已停用',
+  `definition` longtext COLLATE utf8mb4_general_ci NOT NULL COMMENT '接入拓扑、目标类型及处理器默认配置，不含连接凭据',
+  `created_by` varchar(64) COLLATE utf8mb4_general_ci NOT NULL COMMENT '创建人标识',
+  `created_at` bigint NOT NULL COMMENT '创建时间戳，Unix毫秒',
+  `updated_at` bigint NOT NULL COMMENT '更新时间戳，Unix毫秒',
+  PRIMARY KEY (`tid`),
+  UNIQUE KEY `uk_access_template_version` (`tenant_id`,`family_id`,`revision_no`),
+  KEY `idx_access_template_list` (`tenant_id`,`status`,`updated_at`,`tid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='数据接入-NiFi接入模板版本';
+
 -- TABLE nifi_node_t
 CREATE TABLE `nifi_node_t` (
   `tid` varchar(32) NOT NULL COMMENT '主键标识',

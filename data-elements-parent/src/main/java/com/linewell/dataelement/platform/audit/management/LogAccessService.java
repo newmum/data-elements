@@ -1,4 +1,6 @@
-package com.linewell.dataelement.feature.logmanagement;
+package com.linewell.dataelement.platform.audit.management;
+
+import com.linewell.dataelement.feature.logmanagement.LogScope;
 
 import cn.dev33.satoken.stp.StpUtil;
 import com.linewell.dataelement.platform.tenant.domain.TenantContext;

@@ -16,6 +16,18 @@ import org.junit.jupiter.params.provider.CsvSource;
 /** Exercises the public, connection-free DDL path used by materialization preview. */
 class NativeMaterializationDdlTest {
     @ParameterizedTest
+    @CsvSource({"smallint,SMALLINT", "int,INT", "bigint,BIGINT", "int8,BIGINT"})
+    void damengIdentityUsesNativeIntegerAndSupportsPreservedSourceIds(String sourceType, String expected) {
+        var id = column("id", sourceType, 0);
+        id.setSourceDatabaseType("postgresql");id.setPrimaryKey(true);id.setNullable(false);id.setAutoIncrement(true);
+        id.setDefaultValue("nextval('source_id_seq'::regclass)");
+        String ddl = new MySqlMetadataExplorer().generateCreateTableDdl(config(DatabaseType.DAMENG),"validation_identity",List.of(id),null);
+        assertThat(ddl).contains("id " + expected + " AUTO_INCREMENT NOT NULL","PRIMARY KEY (id)")
+                .doesNotContain("GENERATED", "nextval", "source_id_seq");
+        assertThat(id.getColumnType()).isEqualTo(sourceType);
+    }
+
+    @ParameterizedTest
     @CsvSource({"ORACLE", "OCEANBASE_ORACLE"})
     void postgresStringKeyAndSerialKeepTheirDistinctSemantics(DatabaseType target) {
         var businessKey = column("zybh", "varchar(32)", 32);

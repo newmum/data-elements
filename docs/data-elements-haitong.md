@@ -3075,6 +3075,28 @@ MongoDB 使用万象原有的绿色叶片标识 `mongodb.svg`，Vertica 使用�
 - 官网资源及产品商标归各自权利人所有，本系统仅用于标识实际连接的数据源；保留厂商／项目原色和品牌造型。
 - 新增数据源时同时补充本地图标及来源，在浅色、深色和支持的最低浏览器版本检查清晰度。不要在运行时引用在线 CDN。
 
+## 接入模板管理
+
+海通「任务开发 → 模板管理」按当前行业展示模板，默认隐藏停用版本。点击名称或「查看」进入「流程图」与「流程定义」。流程图由当前模板的节点、位置、连线自动生成，支持缩放、平移和查看组件配置；也可在模板草稿中上传500KB以内的PNG/JPEG流程截图作为预览。流程定义复用海通现有CodeMirror JSON编辑器，支持语法高亮、行号和折叠；导入的原始NiFi文件在同页作为参考定义查看，不再以两张含义不同的流程图并列展示。
+
+创建任务弹框保留必填字段「目标数据源名称」，其候选统一来自模板管理中的已发布模板，显示模板名称，不追加版本号。默认模板由维护人员在列表点击「设为默认」配置，创建任务时自动选中。旧生成流程曾登记为「标准接入流程」，其原先的达梦、金仓串行版本已停用，保留历史引用；当前同族发布版本为单目标「达梦接入」，金仓使用独立单目标模板。页面不再额外创建数据库中不存在的默认选项。当前行业默认选择保存于现有`sym_config_t`的`NIFI/access_default_template`，确定记录ID为`nifiaccessdefault<tenantId>`，与模板发布、停用共用事务行锁。默认模板不能直接停用，同族新版本发布时默认选择随版本切换。没有默认配置时要求明确选择已发布模板。
+
+模板配置中按每个目标类型选择真实目标库，候选从当前行业数据源管理读取，和资源中心绑定库使用同一数据源主表。候选支持服务器搜索、分页和批量ID回显，不返回连接凭据。已发布模板的名称和环境目标绑定可通过「配置目标库」修改，更新带时间校验，既有任务仍保留其生成快照。任务弹框不再显示「模板与目标绑定」区，也不再重复选择连接；读取模板时一次取得所有绑定目标，物化与创建任务再次逐ID校验范围、类型、数量及与模板预设ID一致。绑定库失效或无权访问时阻止提交并提供模板管理入口。搜索与翻页均在服务器执行，每页20条，管理列表支持20、50、100条。
+
+模板的`flow`保存完整海通画布DSL，包含节点、默认配置和连线。来源通过`config.templateBinding=source`绑定登记来源；目标使用`target:0`、`target:1`等槽位；字段治理使用`governance:0`等槽位，默认采用本次登记字段映射。预设字段规则时设置`useRegisteredMappings=false`，并填写`mappings`。来源组件实际类型、连接和资产标识由服务端从已授权登记快照取得。实例化克隆模板、重建标识，保留其他处理组件和默认配置，生成任务独立保存完整画布。
+
+完整多目标画布使用同源并行分支，全部目标使用同一NiFi节点。历史「标准接入流程」使用`engine=GENERATED`保存原有生成策略和预绑定目标，详情按目标顺序自动绘制链路概览；新的推荐模板除OB/Hive并行外均采用单目标。其流程组件随来源实例化，来源类型`ANY`表示沿用登记来源的既有生成能力。模板保存会清除密码、token、私钥和属性描述声明的敏感值，连接凭据从当前租户运行配置解析。
+
+模板复用以目标组合为主，不为每种来源复制相同流程。当前推荐目录包含默认的「OB Oracle 与 Hive 并行接入」以及「OB Oracle 接入」「Hive 接入」「达梦接入」「金仓接入」四个单目标模板，全部绑定当前行业实际配置的目标库。来源`ANY`按登记类型替换真实组件，数据库、FTP/SFTP/FTPS、API、Kafka、MongoDB、Elasticsearch、MinIO及现有HDFS/HBase来源复用同一套治理和写入编排。具体来源类型仍可在自定义模板中限制，`JDBC`覆盖当前所有已具备采集组件的数据库产品及登记别名；未知类型、MaxCompute等没有现用来源组件的类型明确拒绝，不能靠模板名称宣称可用。
+
+`sourceSchedule=REGISTERED`沿用登记来源的调度，`TEMPLATE`采用模板间隔，Kafka始终保持实时轮询。实例化保留来源的连接、精确文件定位、格式/表头、接口分页、主题/消费组、对象定位及提交确认策略，模板占位组件不能覆盖这些登记绑定。FTP目录采集及上传报送不要求独立模板。`receive/push`推送落地文件采用成功提交后删除策略，目前仅支持单个JDBC目标；并行多目标和Hive直写在物化之前拒绝。任务弹框对这类来源禁用不兼容模板，并从当前页推荐配置中自动选用OB单目标模板，显示原因，行业默认仍为OB/Hive并行模板。继续写Hive须另建后续任务。非结构化文件通过原数据上报流程处理，不伪装为可物化的结构化数据表。
+
+`data-elements-parent/src/main/resources/manifests/`中的JSON是组件定义，提供表单字段、默认值、处理器/服务类型、属性映射及组件内部连线；`ManifestRegistry`读取它们供配置页和编译器使用。接入模板保存组件组合、跨组件连线和默认配置，通过`manifestKey`引用这些定义，业务记录保存在当前行业`nifi_access_template_t`，不复制到`manifests/`。新增来源或写入组件时才补充组件定义及对应编译能力。两者不存在替代关系，新增整条流程模板不需要复制一套组件定义。
+
+接口为`POST /nifi/canvas/templates`、`POST /nifi/canvas/templatedetail`、`POST /nifi/canvas/templateversion`及`POST /nifi/canvas/targets`。列表一次统计、一次分页、一次默认配置读取，20/100条均三次SQL，无逐行补查；目标候选20/100条均两次SQL，ID回显一次批量读取。管理沿用数据源全量权限，业务角色仅能读取本行业已发布模板及可见目标。保存校验组件类型、唯一绑定、断链、环路及可达性，画布模板缺少完整流程或任何模板缺少目标绑定时不能发布或设为默认。
+
+数据库结构沿用`nifi_access_template_t.definition`和现有`sym_config_t`，本次优化无需结构增量。初次安装升级见[接入模板数据库增量](../db/increments/000012_nifi_access_template.mysql.sql)。验证临时版本按明确授权物理删除，业务页面保留可用模板。实际落库验收需在隔离来源与目标表执行，分别核对OceanBase和Hive的行数、字段结果和失败重试。
+
 ## NiFi 流程轻量安装包
 
 海通独立部署保留完整前后端，仅精简数据库。从仓库根目录执行 `mvn -f data-elements-parent/pom.xml install` 构建标准后端，在 `data-elements-haitong` 执行 `pnpm run build`。回到仓库根目录执行 `python tools/package-haitong-deployment.py --bundle --nacos --jar data-elements-parent/target/data-element.jar --frontend data-elements-haitong/dist` 生成依赖 Nacos 的部署 ZIP。启动配置 `config/application.yml` 导入 Nacos 的海通 Data ID，配置模板位于 `nacos/haitong-data-element.yml`。若构建无 Nacos 版，Maven 参数使用 `"-Ddata-elements.without-nacos=true"`（PowerShell 中保留引号），打包工具省略 `--nacos`。

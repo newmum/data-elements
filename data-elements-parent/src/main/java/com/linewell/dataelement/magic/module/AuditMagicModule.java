@@ -1,4 +1,12 @@
-package com.linewell.dataelement.platform.audit;
+package com.linewell.dataelement.magic.module;
+
+import com.linewell.dataelement.platform.audit.AuditFingerprint;
+import com.linewell.dataelement.platform.audit.AuditIdentity;
+import com.linewell.dataelement.platform.audit.AuditIdentityResolver;
+import com.linewell.dataelement.platform.audit.AuditRecorder;
+import com.linewell.dataelement.platform.audit.AuditRequestParameters;
+import com.linewell.dataelement.platform.audit.AuditSanitizer;
+import com.linewell.dataelement.platform.audit.AuditTrace;
 
 import java.util.*;
 import org.springframework.stereotype.Component;

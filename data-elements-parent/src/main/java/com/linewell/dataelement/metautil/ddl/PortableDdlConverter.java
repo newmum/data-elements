@@ -112,6 +112,22 @@ public class PortableDdlConverter {
                     defaultValue = null;
                 }
             }
+            // 达梦 AUTO_INCREMENT 使用原生整数类型，既保留自增，也允许同步写入来源主键。
+            if (target == DatabaseType.DAMENG && Boolean.TRUE.equals(column.getAutoIncrement())) {
+                String integer = switch (kind) {
+                    case SMALLINT -> "SMALLINT";
+                    case INTEGER -> "INT";
+                    case BIGINT -> "BIGINT";
+                    default -> null;
+                };
+                if (integer == null) {
+                    column.setAutoIncrement(false);
+                    warnings.add(Map.of("field",source.getColumnName(),"message",
+                            "达梦AUTO_INCREMENT要求整数类型，已保留字段容量，请确认目标自增策略","requiresEdit",true));
+                } else {
+                    column.setColumnType(integer);column.setDataType(integer);
+                }
+            }
             var value = PortableDefaultExpression.convert(defaultValue, source.getSourceDatabaseType(), target);
             column.setDefaultValue(value.value());
             if (value.warning() != null) warnings.add(Map.of("field", source.getColumnName(), "message", value.warning(), "requiresEdit", value.unresolved()));

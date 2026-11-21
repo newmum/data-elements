@@ -1,9 +1,9 @@
 package com.linewell.dataelement.magic.module;
 
-import com.linewell.dataelement.feature.logmanagement.LogAccessService;
-import com.linewell.dataelement.feature.logmanagement.LogArchiveService;
-import com.linewell.dataelement.feature.logmanagement.LogLifecycleService;
-import com.linewell.dataelement.feature.logmanagement.LogQueryService;
+import com.linewell.dataelement.platform.audit.management.LogAccessService;
+import com.linewell.dataelement.platform.audit.management.LogArchiveService;
+import com.linewell.dataelement.platform.audit.management.LogLifecycleService;
+import com.linewell.dataelement.platform.audit.management.LogQueryService;
 
 import java.util.*;
 import org.springframework.stereotype.Component;

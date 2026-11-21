@@ -1,4 +1,6 @@
-package com.linewell.dataelement.feature.logmanagement;
+package com.linewell.dataelement.platform.audit.management;
+
+import com.linewell.dataelement.feature.logmanagement.LogScope;
 
 import com.linewell.dataelement.platform.audit.*;
 import com.linewell.dataelement.platform.tenant.config.TenantDatabaseProperties;

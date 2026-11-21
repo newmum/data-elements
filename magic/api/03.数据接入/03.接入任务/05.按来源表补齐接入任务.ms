@@ -40,6 +40,7 @@ import java.lang.Integer
 import java.util.Locale
 import java.util.Objects
 import java.net.URI
+import '@/common/accesstemplate' as resolveAccessTemplate
 
 // POST /ods/job/fill 按来源表补齐接入任务。
 /**
@@ -619,7 +620,8 @@ var pushAccessMode = (datasource, cfg) => {
         var pool = parseGovernanceConfig(first(datasource, ['poolCfg', 'pool_cfg']))
         mode = first(pool, ['accessMode', 'access_mode', 'dataAccessMode', 'data_access_mode'])
     }
-    return text(mode).trim().toLowerCase()
+    var value = text(mode).trim().toLowerCase()
+    return value == 'report' ? 'upload' : value
 }
 var trimSlashes = (value) => {
     var result = text(value).trim()
@@ -1119,6 +1121,72 @@ var applyIndexAndTopicSourceConfig = (manifestKey, sourceNodeConfig, sourceCfg, 
     }
 }
 
+// 通用模板保留来源自身的调度与消费语义，Kafka始终实时轮询。
+var applyTemplateSourceDefaults = (template, manifestKey, config) => {
+    config.batchSize = template.spec.fetchSize
+    if (manifestKey == 'source.kafka') { config.schedulingPeriod = '0 sec' }
+    else if (template.spec.sourceSchedule == 'TEMPLATE'
+        || (template.spec.sourceSchedule == null && template.spec.sourceType != 'ANY')) {
+        config.schedulingPeriod = template.spec.intervalSeconds + ' sec'
+    }
+}
+
+// 完整画布实例化供本入口调用，来源和目标配置来自本次已授权的批量登记快照。
+var instantiateTemplateFlow = (template, pipelineRows, taskRows) => {
+    var runtimeByBinding = {}
+    for (branchIndex, pipeline in pipelineRows) {
+        var generated = parseGovernanceConfig(pipeline.dsl_json)
+        for (node in generated.nodes) {
+            if (node.category == 'source' && runtimeByBinding.source == null) { runtimeByBinding.source = node }
+            if (node.category == 'sink') { runtimeByBinding['target:' + branchIndex] = node }
+            if (node.manifestKey == 'transform.field-enrichment') { runtimeByBinding['governance:' + branchIndex] = node }
+        }
+    }
+    // 模板树包含原生JSON空值，克隆与写出统一使用同一JSON实现。
+    var definition = poolJsons.parseObj(poolJsons.toJsonStr(template.spec.flow))
+    var remappedIds = {}
+    for (node in definition.nodes) { remappedIds[node.id] = 'template-' + taskRows[0].tid + '-' + node.id }
+    var protectedFields = ['dbType','registeredDatasourceId','sourceDbId','targetDbId','sourceTableId','targetTableId',
+        'sourceDbName','targetDbName','sourceTableName','targetTableName','table','schema','defaultSchema','database',
+        'sid','serviceName','host','port','jdbcUrl','jdbcURL','username','password','sourceColumns','targetColumns',
+        'incrementalColumn','hiveProfile','metadataAccessMode','hiveConnectionMode','accessChain','accessTemplate','updateKeys',
+        'protocol','hostname','remotePath','fileFilterRegex','sourceFileName','fileFormat','csvEncoding','csvDelimiter',
+        'excelSheetName','jsonRecordPath','passiveMode','fileHeaderMode','fileConsumptionPolicy',
+        'logicalSourceDatasourceId','pushStorageDomain','minioEndpoint','minioAccessKey','minioSecretKey','minioBucket',
+        'minioPrefix','minioFilePattern','minioObjectKey','url','method','requestBody','authHeader','requestHeaders',
+        'pagination','paginationMode','pageParam','pageSizeParam','responsePath','bootstrapServers','topic','groupId',
+        'securityProtocol','saslMechanism','saslUsername','saslPassword','credentialRef','principal','keytabPath',
+        'nodes','defaultIndex','queryJson','zookeeperQuorum','clientConfigDir','kerberosPrincipal','path','rowStart','rowStop']
+    for (node in definition.nodes) {
+        var preset = node.config
+        var binding = text(preset.templateBinding)
+        var runtime = runtimeByBinding[binding]
+        var config = {}
+        if (runtime != null) { config.putAll(runtime.config) }
+        config.putAll(preset)
+        if (runtime != null) {
+            for (field in protectedFields) { config[field] = runtime.config[field] }
+            if (binding.startsWith('governance:') && preset.useRegisteredMappings != false) {
+                config.mappings = runtime.config.mappings
+            }
+            if (binding == 'source') {
+                node.manifestKey = runtime.manifestKey
+                // 注册来源的轮询、文件提交确认和接口分页不能被占位节点覆盖。
+                config.schedulingPeriod = runtime.config.schedulingPeriod
+                applyTemplateSourceDefaults(template,node.manifestKey,config)
+            }
+        }
+        node.config = config
+        node.id = remappedIds[node.id]
+    }
+    for (edge in definition.edges) {
+        edge.id = 'template-' + taskRows[0].tid + '-' + edge.id
+        edge.source = remappedIds[edge.source]
+        edge.target = remappedIds[edge.target]
+    }
+    return definition
+}
+
 return db.transaction(() => {
 var sourceTableId = text(body?.tableId || body?.sourceTableId || body?.tid).trim()
 if (blank(tenantId)) { exit 401, '当前登录租户无效，请重新登录' }
@@ -1542,13 +1610,28 @@ var rootSourceDb = sourceDb
 var rootSourceColumns = sourceColumns
 var rootSourceTableId = sourceTableId
 var rootSourceRequestPending = text(first(rootSourceTable, ['accessRequestStatus', 'access_request_status'])) == '1'
+var template = resolveAccessTemplate(body?.templateVersionId, rootSourceDb,
+    targetTables.map(target => targetDatasourceById[text(first(target, ['datasourceId','datasource_id']))]))
+if (template?.spec?.flow != null) {
+    var tableByDatasource = {}
+    for (target in targetTables) { tableByDatasource[text(first(target, ['datasourceId','datasource_id']))] = target }
+    targetTables = template.targetDatasourceOrder.map(id => tableByDatasource[id])
+    targetTableIds = targetTables.map(target => text(target.tid))
+}
+var templateParallel = (template?.spec?.topology == 'PARALLEL' || template?.spec?.flow != null) && targetTables.size() > 1
+if (templateParallel && targetDatasourceIds.size() != targetTables.size()) {
+    exit 400, '并行模板的每个目标需要独立的数据源'
+}
+if (templateParallel && requestedNodeIds.size() > 1) {
+    exit 400, '并行模板的所有目标须使用同一个接入节点'
+}
 var hopSourceByTarget = {}
 var chainSourceIds = [rootSourceTableId]
 var previousTable = rootSourceTable
 for (target in targetTables) {
     hopSourceByTarget[text(target.tid)] = previousTable
     if (!chainSourceIds.contains(text(target.tid))) { chainSourceIds.add(text(target.tid)) }
-    previousTable = target
+    if (!templateParallel) { previousTable = target }
 }
 var originalSourceTemporalMappings = sourceTemporalMappings
 var originalDictionaryRelations = dictionaryRelations(rootSourceTable)
@@ -1598,7 +1681,21 @@ for (existingTask in existingTasks) {
     var intersects = targetTableIds.contains(primaryTargetId)
     for (coveredId in coveredIds) { if (targetTableIds.contains(coveredId)) { intersects = true } }
     if (!intersects) { continue }
-    var legacyMultiTarget = coveredIds.size() > 1
+    var savedTemplateId = ''
+    for (existingNode in (existingDslObject.nodes || [])) {
+        if (existingNode.category == 'source') {
+            savedTemplateId = text(existingNode.config?.accessTemplate?.versionId)
+            break
+        }
+    }
+    var templateMatches = template != null && text(template.tid) == savedTemplateId
+    var sameParallelTargets = templateMatches && templateParallel
+        && coveredIds.size() == targetTableIds.size() && coveredIds.containsAll(targetTableIds)
+    if (!blank(savedTemplateId) && template == null
+        && (forceRebuild || (coveredIds.size() > 1 && !coveredIds.containsAll(targetTableIds)))) {
+        exit 409, '已有任务使用接入模板，请选择原模板版本及完整目标后重建'
+    }
+    var legacyMultiTarget = coveredIds.size() > 1 && blank(savedTemplateId)
     var expectedSource = hopSourceByTarget[primaryTargetId]
     var wrongHopSource = expectedSource != null && text(first(existingTask, ['sourceTableId', 'source_table_id'])) != text(expectedSource.tid)
     var existingGroupId = text(first(pipeline, ['nifiProcessGroupId', 'nifi_process_group_id']))
@@ -1611,6 +1708,9 @@ for (existingTask in existingTasks) {
         exit 409, '已有任务包含部署关联。请先处理旧流程，再保留物化目标表并按所选节点创建任务'
     }
     if (forceRebuild) {
+        if (coveredIds.size() > 1 && !targetTableIds.containsAll(coveredIds)) {
+            exit 409, '重建多目标任务须选择该任务的全部物化目标表'
+        }
         if (hasNativeGroup || ['RUNNING', 'DEPLOYED', 'STARTING', 'DEPLOYING'].contains(text(pipeline?.status).toUpperCase())) {
             exit 409, '所选历史任务已部署，请先停止并删除该任务，再按新链路创建，目标表及数据可保留'
         }
@@ -1629,9 +1729,12 @@ for (existingTask in existingTasks) {
     if (changedNode && !hasNativeGroup) { taskReasons.add('已有草稿绑定的接入节点与本次选择不同，需确认后按所选节点重建') }
     taskReasons.addAll(sourceRepairReasons(existingDslObject))
     if (wrongHopSource) { taskReasons.add('已有任务的来源与所选目标顺序不一致，需确认后按级联链路重建') }
+    if (template != null && (!templateMatches || (templateParallel && !sameParallelTargets))) {
+        taskReasons.add('所选接入模板版本或目标与已有任务不同，需确认后重建')
+    }
     if (legacyMultiTarget) { taskReasons.add('历史任务包含多个目标库，需确认后拆分为独立任务') }
     if (pipeline == null || blank(existingDsl)) { taskReasons.add('关联流程不存在或没有画布定义') }
-    if (sinkIds.size() != 1 || !sinkIds.contains(primaryTargetId)) { taskReasons.add('画布目标表关联需要显式确认重建') }
+    if ((sinkIds.size() != 1 && blank(savedTemplateId)) || !sinkIds.contains(primaryTargetId)) { taskReasons.add('画布目标表关联需要显式确认重建') }
     if (targetColumnsById[primaryTargetId] != null
         && (mappingCountByTask[text(existingTask.tid)] == null ? 0 : mappingCountByTask[text(existingTask.tid)]) < targetColumnsById[primaryTargetId].size()) {
         taskReasons.add('字段映射少于目标表字段，请确认后显式修复')
@@ -1867,6 +1970,7 @@ var pipelineRows = []
 var taskRows = []
 var allMappings = []
 var allTargetSummaries = []
+var parallelDsl = null
 var originalSourceNodeConfig = sourceNodeConfig
 var originalSourceManifestKey = sourceManifestKey
 var originalSourceDbId = sourceDbId
@@ -2011,7 +2115,11 @@ var sourcePrimaryKeys = primarySourceKeys.join(',')
 var targetPrimaryKeys = primaryTargetKeys.join(',')
 var canUpsert = !blank(sourcePrimaryKeys) && !blank(targetPrimaryKeys)
 
-// 每个独立任务生成来源、自己的字段治理和唯一目标节点。
+if (template != null) {
+    applyTemplateSourceDefaults(template,sourceManifestKey,sourceNodeConfig)
+    sourceNodeConfig.accessTemplate = {versionId: template.tid, name: template.name, revision: template.version}
+}
+// 生成来源、字段治理和目标节点。并行模板共用来源，分别保留每个目标的治理配置。
 var sourceNodeId = 'source-' + sourceTableId
 var mapNodeId = 'map-' + taskId
 var dslNodes = [
@@ -2102,6 +2210,9 @@ for (targetIndex, targetCandidate in [targetTable]) {
             statementType: 'INSERT',
             updateKeys: ''
         }
+        if (template?.spec?.hiveMergeMaxAgeSeconds != null) {
+            candidateSinkConfig.mergeMaxBinAge = template.spec.hiveMergeMaxAgeSeconds + ' sec'
+        }
     } else if (candidateIsMongo) {
         candidateSinkConfig = {
             dbType: 'MONGODB',
@@ -2185,7 +2296,23 @@ for (targetIndex, targetCandidate in [targetTable]) {
     })
 }
 var dsl = { version: 1, nodes: dslNodes, edges: dslEdges, accessChain: {rootSourceTableId: rootSourceTableId, targetTableIds: targetTableIds} }
-var selectedNodeId = nodeIdByTarget[targetTableId]
+if (templateParallel) {
+    if (parallelDsl == null) { parallelDsl = dsl }
+    else {
+        var branchOffset = pipelineRows.size() * 300
+        for (node in dslNodes) {
+            if (node.category == 'source') { continue }
+            node.y = node.y + branchOffset
+            parallelDsl.nodes.add(node)
+        }
+        for (edge in dslEdges) {
+            if (edge.source == sourceNodeId) { edge.id = edge.id + '-' + targetTableId }
+            parallelDsl.edges.add(edge)
+        }
+    }
+}
+var selectedNodeId = templateParallel && requestedNodeIds.size() == 1
+    ? requestedNodeIds[0] : nodeIdByTarget[targetTableId]
 pipelineRows.add({
     id: pipelineId,
     tenant_id: tenantId,
@@ -2379,8 +2506,22 @@ var appendFieldMappings = () => {
 appendFieldMappings()
 for (summary in targetSummaries) { allTargetSummaries.add(summary) }
 }
+if (template?.spec?.flow != null && pipelineRows.size() > 0) {
+    parallelDsl = instantiateTemplateFlow(template, pipelineRows, taskRows)
+    pipelineRows[0].dsl_json = poolJsons.toJsonStr(parallelDsl)
+}
 // 完整规则不截断；一次检查当前租户真实列容量，dryRun同样执行且不写入。
 var capacityError = null
+if (templateParallel && pipelineRows.size() > 0) {
+    var primary = taskRows[0]
+    primary.task_desc = '接入模板生成的并行多目标任务'
+    var primaryPipeline = pipelineRows[0]
+    primaryPipeline.description = primary.task_desc
+    primaryPipeline.dsl_json = template?.spec?.flow != null ? poolJsons.toJsonStr(parallelDsl) : jsons.toJSONStr(parallelDsl)
+    pipelineRows = [primaryPipeline]
+    taskRows = [primary]
+    allMappings = allMappings.filter(mapping => mapping.task_id == primary.tid)
+}
 try { capacityError = mappingStorage.validate(db, tenantId, allMappings) }
 catch (e) { exit 503, '暂时无法检查当前租户的字段映射存储结构，任务未保存，请稍后重试' }
 if (!blank(capacityError)) { exit 422, capacityError }

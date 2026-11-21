@@ -1077,6 +1077,7 @@ const ensureAccessTask = async (row, forceRebuild = false) => {
       ? { targetTableIds: row.targetTableIds }
       : (row?.targetTableId ? { targetTableId: row.targetTableId } : {})),
     ...(forceRebuild ? { forceRebuild: true } : {}),
+    ...(row?.templateVersionId ? { templateVersionId: row.templateVersionId } : {}),
     ...(row?.sourceFileConfig ? { sourceFileConfig: row.sourceFileConfig } : {}),
   };
   if (!payload.tableId) {
@@ -1394,7 +1395,9 @@ const handleApplySave = async (materializedTarget = null) => {
       throw new Error(`目标表未创建成功，不能继续创建${taskName}`);
     }
     const sourceFileConfig = materializedTarget?.sourceFileConfig;
-    let task = await ensureAccessTask({ ...row, targetTableIds, sourceFileConfig });
+    const templateVersionId = materializedTarget?.templateVersionId;
+    const taskBinding = { ...row, targetTableIds, sourceFileConfig, templateVersionId };
+    let task = await ensureAccessTask(taskBinding);
     if (task?.tid) {
       if (task.repairRequired) {
         const reasons = task.repairReasons.length
@@ -1402,7 +1405,7 @@ const handleApplySave = async (materializedTarget = null) => {
           : `已有${taskPage.canvasName}需要更新`;
         try {
           await ElMessageBox.confirm(
-            `目标表已物化，但已有${taskPage.canvasName}需要更新：${reasons}。重新生成会按每个目标表创建独立任务，并替换所选旧画布的人工配置；目标表及数据会保留。是否重新生成？`,
+            `目标表已物化，但已有${taskPage.canvasName}需要更新：${reasons}。重新生成会按本次接入设置替换所选旧画布的人工配置；目标表及数据会保留。是否重新生成？`,
             `${taskPage.canvasName}需要更新`,
             { type: "warning", confirmButtonText: "重新生成", cancelButtonText: "保留旧画布" },
           );
@@ -1411,7 +1414,7 @@ const handleApplySave = async (materializedTarget = null) => {
           tableRef.value?.refresh?.();
           return;
         }
-        const rebuilt = await ensureAccessTask({ ...row, targetTableIds, sourceFileConfig }, true);
+        const rebuilt = await ensureAccessTask(taskBinding, true);
         if (!rebuilt?.tid || rebuilt.repairRequired) {
           throw new Error(`${taskPage.canvasName}重新生成失败，请在任务设置中检查后重试`);
         }

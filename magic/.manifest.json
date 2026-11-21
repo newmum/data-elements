@@ -1331,7 +1331,7 @@
         "ods_data_agg_task_ensure_01"
       ],
       "kind": "api",
-      "baseSha256": "628aa0f96c207f32accf0ca06f288c618690ef60faab2ed474d8a6234ca4a107",
+      "baseSha256": "4d25635644321a564bff30a4b65fb261ca4520e69135b69ef46b926c0f68fcfb",
       "metadataId": "ods_data_agg_task_ensure_01"
     },
     {
@@ -1932,7 +1932,7 @@
         "e3320ec899a24426adf5f77e2dab36f9"
       ],
       "kind": null,
-      "baseSha256": "ecc360b3b38e419aec387c4655fe6d237679d62543a67924d554392e8b66cc61",
+      "baseSha256": "fe4fcc06e0c23b64b585774df8c89412587708af39906844e25a3d3ea7460945",
       "metadataId": "e3320ec899a24426adf5f77e2dab36f9"
     },
     {
@@ -7583,6 +7583,46 @@
       "metadataId": "2e2c144806278f8c48faf98938ca63f5"
     },
     {
+      "path": "api/09.海通流程接口/03.画布模板/03.分页查询接入模板.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/03.画布模板/03.分页查询接入模板.ms",
+      "rowIds": [
+        "ab983b1eaf85488ebd9e9a71e577bf1b"
+      ],
+      "kind": "api",
+      "baseSha256": "dbe5b71e65e1b615eef314d73af07310a7d63a880b970e84c97d8e49a4323cdf",
+      "metadataId": "50319b91bfff4fe3b19f24db5aa7c8a4"
+    },
+    {
+      "path": "api/09.海通流程接口/03.画布模板/04.管理接入模板版本.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/03.画布模板/04.管理接入模板版本.ms",
+      "rowIds": [
+        "12d140ad77734d74804fb7e046d92b75"
+      ],
+      "kind": "api",
+      "baseSha256": "d297c660646e875d17471bc815b32ed14451ba9b33ef87f258c09802cd8c1754",
+      "metadataId": "6138f2d3794847a78cb00dd1c8c14385"
+    },
+    {
+      "path": "api/09.海通流程接口/03.画布模板/05.读取接入模板详情.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/03.画布模板/05.读取接入模板详情.ms",
+      "rowIds": [
+        "a016be79186e464885b057ae909fd88b"
+      ],
+      "kind": "api",
+      "metadataId": "2ef3373371f9445280a1b5ca8d18efcb",
+      "baseSha256": "c78513370fb3e528799af5b7264002bcef06f49b38f9cd4f517a58823c3c0738"
+    },
+    {
+      "path": "api/09.海通流程接口/03.画布模板/06.模板目标数据源选项.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/03.画布模板/06.模板目标数据源选项.ms",
+      "rowIds": [
+        "7cfa4ad2ca9e47dc9556152f86c5e0cf"
+      ],
+      "kind": "api",
+      "metadataId": "83bfdc9a5b1e4ae5a53335b6942213f3",
+      "baseSha256": "5fc2952e9609105f723b9adb1853cc3de748e2a772f81c2b1a902dd5cfca37b3"
+    },
+    {
       "path": "api/09.海通流程接口/03.画布模板/group.json",
       "databasePath": "/magic-api/api/09.海通流程接口/03.画布模板/group.json",
       "rowIds": [
@@ -9111,6 +9151,16 @@
       "kind": "function",
       "metadataId": "nifi_runtime_node_read_v1",
       "baseSha256": "6c202b72fc32789acdce45bef10e454945fae2672bd23293f6248a24602b3a32"
+    },
+    {
+      "path": "function/01.通用函数/79.读取接入模板版本.ms",
+      "databasePath": "/magic-api/function/01.通用函数/79.读取接入模板版本.ms",
+      "rowIds": [
+        "4e80111be325447ebec198cc8b0ed3c3"
+      ],
+      "kind": "function",
+      "baseSha256": "fb062a90561bdedee8e76d8611fa37f92371a316bff2c2bfa57c9994b3058a59",
+      "metadataId": "069cbc99613b42c0b6805199f45a4d58"
     },
     {
       "path": "function/01.通用函数/group.json",

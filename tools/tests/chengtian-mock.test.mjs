@@ -41,8 +41,39 @@ function setup(role = "admin", code = "police") {
 
 test("澄天契约指向真实实现及当前审阅版本", async () => {
   const result = await checkContracts();
-  assert.equal(result.interfaces, 89);
+  assert.equal(result.interfaces, 91);
   assert.deepEqual(result.errors, []);
+});
+
+test("接入模板下拉按行业、发布状态和名称分页", async () => {
+  const { runtime } = setup("registrar");
+  const tenantId = runtime.session.tenantId;
+  const published = { tenantId, tid: "validation-template", name: "并行接入", status: "PUBLISHED", updatedAt: 1 };
+  runtime.database.accessTemplates = [
+    published,
+    { ...published, tid: "validation-draft", status: "DRAFT" },
+    { ...published, tid: "validation-foreign", tenantId: "different-tenant" },
+  ];
+  runtime.database.defaultAccessTemplateId = published.tid;
+  runtime.persist(runtime.database);
+  const path = "/nifi/canvas/templates";
+  const result = (await request(runtime, path, { keyword: "并行", pageSize: 20 })).body.data;
+  const { tenantId: ignored, ...expected } = published;
+  assert.deepEqual(result, { list: [{ ...expected, isDefault: true, spec: { hasFlow: false, hasNative: false } }],
+    total: 1, pageNum: 1, pageSize: 20, defaultVersionId: published.tid });
+  assert.equal((await request(runtime, path, { keyword: "其他" })).body.data.total, 0);
+  assert.equal((await request(runtime, "/nifi/canvas/templatedetail", { tid: published.tid })).body.data.name, published.name);
+  assert.equal((await request(runtime, "/nifi/canvas/templatedetail", { tid: "validation-foreign" })).body.code, 404);
+  const own = runtime.database.sources.find(row => row.createdBy === runtime.session.userId);
+  const other = runtime.database.sources.find(row => row.createdBy !== runtime.session.userId);
+  runtime.database.accessTemplates.find(row => row.tid === published.tid).spec = { targetDatasourceIds: [own.tid] };
+  runtime.persist(runtime.database);
+  const detail = (await request(runtime, "/nifi/canvas/templatedetail", { tid: published.tid })).body.data;
+  assert.equal(detail.isDefault, true);
+  assert.equal(detail.targets[0].tid, own.tid);
+  runtime.database.accessTemplates.find(row => row.tid === published.tid).spec.targetDatasourceIds.push(other.tid);
+  runtime.persist(runtime.database);
+  assert.equal((await request(runtime, "/nifi/canvas/templatedetail", { tid: published.tid })).body.code, 403);
 });
 
 test("采集启动预检、旧 POST 地址、任务轮询和改名拒绝使用同一来源范围", async () => {

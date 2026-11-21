@@ -1,4 +1,4 @@
-package com.linewell.dataelement.feature.logmanagement;
+package com.linewell.dataelement.platform.audit.management;
 
 import com.linewell.dataelement.model.common.CommonResponse;
 import com.linewell.dataelement.platform.magic.CanonicalMagicSources;

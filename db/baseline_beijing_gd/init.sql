@@ -3034,6 +3034,24 @@ CREATE TABLE "baseline_beijing_gd"."metadata_table_collection_job_t"
 "is_del" SMALLINT DEFAULT 0 NOT NULL,
 CONSTRAINT "pk_metadata_table_collection_job_t" NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
+-- TABLE nifi_access_template_t
+CREATE TABLE "baseline_beijing_gd"."nifi_access_template_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32) NOT NULL,
+"family_id" VARCHAR(32) NOT NULL,
+"revision_no" INT NOT NULL,
+"display_name" VARCHAR(96) NOT NULL,
+"status" VARCHAR(16) NOT NULL,
+"definition" CLOB NOT NULL,
+"created_by" VARCHAR(64) NOT NULL,
+"created_at" BIGINT NOT NULL,
+"updated_at" BIGINT NOT NULL,
+NOT CLUSTER PRIMARY KEY("tid"),
+CONSTRAINT "uk_access_template_version" UNIQUE("tenant_id", "family_id", "revision_no")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "idx_access_template_list" ON "baseline_beijing_gd"."nifi_access_template_t"("tenant_id" ASC,"status" ASC,"updated_at" ASC,"tid" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
 -- TABLE nifi_node_t
 CREATE TABLE "baseline_beijing_gd"."nifi_node_t"
 (

@@ -105,7 +105,12 @@ public class NifiClient {
         return binding.node();
     }
 
-    private record RuntimeBinding(RuntimeNode node, String tenantId, Map<String, JsonNode> extensionTypes) {}
+    private record RuntimeBinding(RuntimeNode node, String tenantId, Map<String, JsonNode> extensionTypes,
+                                  Map<RuntimeNode, RestClient> clients) {
+        RuntimeBinding(RuntimeNode node, String tenantId, Map<String, JsonNode> extensionTypes) {
+            this(node, tenantId, extensionTypes, new java.util.HashMap<>());
+        }
+    }
 
     public void requireDailyScheduleZone() {
         String zone = extensionTypes("/flow/about", "about").path("timezone").asText("");
@@ -309,7 +314,7 @@ public class NifiClient {
         form.add("username", node.username());
         form.add("password", node.password());
         try {
-            String t = runtimeResolver.restClient(node).post()
+            String t = http(node).post()
                     .uri(API_PREFIX + "/access/token")
                     .contentType(MediaType.APPLICATION_FORM_URLENCODED)
                     .body(form)
@@ -329,11 +334,74 @@ public class NifiClient {
     }
 
     private RestClient http() {
-        return runtimeResolver.restClient(selectedRuntimeNode());
+        return http(selectedRuntimeNode());
     }
 
     private RestClient http(RuntimeNode node) {
+        RuntimeBinding binding = runtimeBinding.get();
+        if (binding != null) {
+            selectedRuntimeNode();
+            if (!binding.node().equals(node)) throw new IllegalStateException("NiFi 请求节点与当前发布范围不一致");
+            return binding.clients().computeIfAbsent(node, runtimeResolver::restClient);
+        }
         return runtimeResolver.restClient(node);
+    }
+
+    /** One visible-service snapshot per poll; enable only the requested services, never public codecs. */
+    public void enableControllerServices(String groupId, java.util.Set<String> requested,
+                                         java.util.Set<String> observeOnly, long timeoutMs) {
+        var pending = new java.util.LinkedHashSet<>(requested);
+        pending.addAll(observeOnly);
+        if (pending.isEmpty()) return;
+        if (pending.size() > 256) throw new IllegalArgumentException("一次发布最多核验256个控制器服务");
+        var sent = new java.util.HashSet<String>();
+        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(timeoutMs);
+        while (true) {
+            JsonNode response = get("/flow/process-groups/" + groupId
+                    + "/controller-services?includeAncestorGroups=true&includeDescendantGroups=false", JsonNode.class);
+            JsonNode services = response.path("controllerServices");
+            if (!services.isArray()) throw new NifiException("NiFi 未返回控制器服务清单", 502, null);
+            var found = new java.util.HashSet<String>();
+            var activate = new java.util.LinkedHashMap<String, ObjectNode>();
+            var ready = new java.util.HashSet<String>();
+            for (JsonNode service : services) {
+                JsonNode component = service.path("component");
+                String id = component.path("id").asText(service.path("id").asText());
+                if (!pending.contains(id)) continue;
+                found.add(id);
+                String state = component.path("state").asText();
+                if ("ENABLED".equals(state)) { ready.add(id); continue; }
+                if (sent.contains(id) && "DISABLED".equals(state) && component.path("validationErrors").isArray()
+                        && !component.path("validationErrors").isEmpty()) {
+                    throw new NifiException("控制器服务配置无效：" + component.path("name").asText(id),
+                            400, component.path("validationErrors").toString());
+                }
+                if (requested.contains(id) && !sent.contains(id) && "DISABLED".equals(state)) {
+                    if (!service.path("revision").path("version").canConvertToLong())
+                        throw new NifiException("NiFi 未返回控制器服务版本", 502, null);
+                    String owner = component.path("parentGroupId").asText();
+                    if (owner.isBlank()) throw new NifiException("NiFi 未返回控制器服务所属流程组", 502, null);
+                    activate.computeIfAbsent(owner, ignored -> mapper.createObjectNode()).set(id, service.path("revision"));
+                }
+            }
+            if (!found.containsAll(pending)) throw new NifiException("部分控制器服务已移除或不在当前流程可见范围", 409, null);
+            pending.removeAll(ready);
+            if (pending.isEmpty()) return;
+            for (var entry : activate.entrySet()) {
+                ObjectNode body = mapper.createObjectNode().put("id", entry.getKey()).put("state", "ENABLED")
+                        .put("disconnectedNodeAcknowledged", false);
+                body.set("components", entry.getValue());
+                put("/flow/process-groups/" + entry.getKey() + "/controller-services", body, JsonNode.class);
+                entry.getValue().fieldNames().forEachRemaining(sent::add);
+            }
+            if (System.nanoTime() >= deadline)
+                throw new NifiException("控制器服务未在" + timeoutMs / 1000 + "秒内全部就绪，仍有" + pending.size() + "项", 504, null);
+            try { Thread.sleep(250L); }
+            catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                throw new NifiException("等待控制器服务就绪被中断", 503, null);
+            }
+        }
     }
 
     /**

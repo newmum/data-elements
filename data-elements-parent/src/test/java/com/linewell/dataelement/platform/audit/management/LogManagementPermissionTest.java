@@ -1,4 +1,4 @@
-package com.linewell.dataelement.feature.logmanagement;
+package com.linewell.dataelement.platform.audit.management;
 
 import com.linewell.dataelement.magic.module.LogManagementMagicModule;
 import java.util.Map;
