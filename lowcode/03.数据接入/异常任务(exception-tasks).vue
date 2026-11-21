@@ -1,12 +1,5 @@
 <template>
   <div class="exception-task-page">
-    <section class="exception-summary" aria-label="异常概览">
-      <article v-for="item in summary" :key="item.label" class="summary-item">
-        <span class="summary-icon" :class="item.tone"><Icon :icon="item.icon" :size="23" /></span>
-        <div><span class="summary-label">{{ item.label }}</span><strong>{{ number(item.value) }}<small>{{ item.unit }}</small></strong></div>
-      </article>
-    </section>
-
     <section class="exception-workbench">
       <div class="exception-toolbar">
         <el-segmented v-model="kind" :options="tabs" aria-label="异常类型" />
@@ -81,7 +74,6 @@ const tabs = [{ label: '全部异常', value: 'all' }, { label: '无效数据', 
 const departments = [...new Set(rows.map(row => row.department))];
 const sources = computed(() => [...new Set(rows.filter(row => !department.value || row.department === department.value).map(row => row.source))]);
 const scoped = computed(() => rows.filter(row => (!department.value || row.department === department.value) && (!source.value || row.source === source.value) && (!search.value || [row.task, row.table, row.source, row.reason].some(value => value.toLowerCase().includes(search.value.toLowerCase())))));
-const summary = computed(() => [{ label: '异常任务', value: scoped.value.length, unit: '个', icon: 'el-icon-WarnTriangleFilled', tone: 'blue' }, { label: '无效记录', value: scoped.value.reduce((sum, row) => sum + (row.invalid || 0), 0), unit: '条', icon: 'el-icon-Document', tone: 'orange' }, { label: '执行失败任务', value: scoped.value.filter(row => row.kind === 'failure').length, unit: '个', icon: 'el-icon-WarningFilled', tone: 'red' }, { label: '影响数据表', value: new Set(scoped.value.map(row => row.table)).size, unit: '张', icon: 'el-icon-Grid', tone: 'purple' }]);
 const filtered = computed(() => scoped.value.filter(row => kind.value === 'all' || row.kind === kind.value));
 const pageRows = computed(() => filtered.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value));
 const drawerWidth = 'min(880px, 96vw)';
@@ -95,17 +87,12 @@ watch(department, () => { if (!sources.value.includes(source.value)) source.valu
 <style scoped>
 .exception-task-page { height: 100%; min-height: 0; min-width: 0; display: flex; flex-direction: column; gap: 16px; color: #303d51; overflow: hidden; }
 .exception-cause :deep(.el-alert__description) { line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
-.exception-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
-.summary-item { display: flex; align-items: center; gap: 15px; padding: 20px; border-radius: 12px; background: white; border: 1px solid #e9edf4; min-width: 0; }
-.summary-icon { display: grid; place-items: center; flex-shrink: 0; width: 48px; height: 48px; border-radius: 13px; }
-.summary-icon.blue { background: #eff5ff; color: #2774ff; }.summary-icon.orange { background: #fff6e9; color: #ee9a21; }.summary-icon.red { background: #fff0f0; color: #f06464; }.summary-icon.purple { background: #f4f0ff; color: #8a68e5; }
-.summary-label { display: block; margin-bottom: 8px; color: #7a879c; font-size: 13px; }.summary-item strong { display: block; color: #283448; font-size: 28px; font-weight: 600; line-height: 1; }.summary-item small { margin-left: 5px; font-size: 12px; font-weight: 400; color: #7c8b9e; }
 .exception-workbench { display: flex; flex: 1; flex-direction: column; min-height: 210px; min-width: 0; padding: 20px 20px 8px; border: 1px solid #e9edf4; border-radius: 12px; background: #fff; overflow: hidden; }
 .exception-toolbar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }.exception-filters { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; min-width: 0; flex: 1; }.exception-filters .el-select { width: 145px; }.exception-filters .el-input { width: 270px; max-width: 100%; }.query-icon { color: #1964ff; cursor: pointer; }
 .exception-result-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 13px; padding-bottom: 14px; font-size: 14px; }.exception-result-heading span { color: #8a98ad; font-size: 12px; }.heading-divider { margin: 0 10px; color: #d6deeb !important; }
 .exception-table { flex: 1; min-height: 120px; width: 100%; --el-table-header-bg-color: #f5f7fc; --el-table-header-text-color: #587aa8; --el-table-border-color: #edf0f6; font-size: 13px; }.exception-table :deep(th.el-table__cell) { height: 42px; font-weight: 600; }.exception-table :deep(td.el-table__cell) { height: 62px; }.exception-table :deep(.el-table-fixed-column--right .cell) { padding: 0 12px; text-align: center; }.invalid-number { font-weight: 600; color: #df8b1c; }.muted { color: #99a6b8; }
 .exception-pagination { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding-top: 10px; color: #8795a9; font-size: 12px; min-width: 0; }.exception-pagination :deep(.el-pagination) { flex-wrap: wrap; max-width: 100%; }
 .exception-detail-title { display: flex; align-items: center; gap: 12px; margin-bottom: 22px; }.exception-detail-title h3 { margin: 0 0 6px; font-size: 17px; color: #253348; }.exception-detail-title div > span { font-size: 12px; color: #8190a5; }.exception-detail-title > .el-tag { margin-left: auto; }.detail-type-icon { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 12px; font-size: 22px; flex-shrink: 0; }.detail-type-icon.invalid { color: #e39a2b; background: #fff5e7; }.detail-type-icon.failure { color: #ed6565; background: #fff0f0; }.exception-context { margin-bottom: 20px; }.exception-detail-tabs { margin-top: 20px; }.detail-section-heading { display: flex; justify-content: space-between; margin: 10px 0 14px; font-size: 14px; color: #36465d; }.detail-section-heading span { font-size: 12px; color: #8b99ad; }.raw-heading { margin-top: 24px; }.exception-record { padding: 18px; border-radius: 8px; background: #f5f7fc; border: 1px solid #e9edf5; color: #425675; font: 13px/1.8 Consolas, monospace; white-space: pre-wrap; word-break: break-word; }.queue-note { color: #8795a9; font-size: 13px; line-height: 1.8; margin-top: 18px; }
-@media (max-width: 1100px) { .exception-filters { justify-content: flex-start; flex-basis: 100%; }.summary-item { padding: 16px 12px; gap: 10px; }.summary-item strong { font-size: 25px; } }
-@media (max-width: 650px) { .exception-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }.exception-task-page { gap: 12px; overflow-y: auto; }.exception-workbench { flex: 1 0 430px; padding: 14px 12px 8px; }.exception-filters .el-select { flex: 1; min-width: 105px; }.exception-filters .el-input { width: 100%; }.exception-pagination > span { display: none; } }
+@media (max-width: 1100px) { .exception-filters { justify-content: flex-start; flex-basis: 100%; } }
+@media (max-width: 650px) { .exception-task-page { gap: 12px; overflow-y: auto; }.exception-workbench { flex: 1 0 430px; padding: 14px 12px 8px; }.exception-filters .el-select { flex: 1; min-width: 105px; }.exception-filters .el-input { width: 100%; }.exception-pagination > span { display: none; } }
 </style>
