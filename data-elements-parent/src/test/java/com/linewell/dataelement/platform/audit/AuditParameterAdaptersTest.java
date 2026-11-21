@@ -1,13 +1,21 @@
 package com.linewell.dataelement.platform.audit;
 
+import cn.dev33.satoken.session.SaSession;
+import cn.dev33.satoken.stp.StpUtil;
+import com.linewell.dataelement.magic.runtime.security.MagicAccessPolicy;
+import com.linewell.dataelement.magic.runtime.security.PolicyAwareApiResourceStorage;
+import com.linewell.dataelement.platform.tenant.protocol.IdentityConsentController;
 import com.linewell.dataelement.platform.web.security.GlobalInterceptor;
 import java.io.InputStream;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.MethodParameter;
 import org.springframework.http.*;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.bind.annotation.*;
@@ -15,6 +23,9 @@ import org.springframework.web.context.request.*;
 import org.springframework.web.method.HandlerMethod;
 import org.springframework.web.servlet.HandlerMapping;
 import org.ssssssss.magicapi.core.context.RequestEntity;
+import org.ssssssss.magicapi.core.config.MagicAPIProperties;
+import org.ssssssss.magicapi.core.model.ApiInfo;
+import org.ssssssss.magicapi.core.model.Option;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -34,8 +45,10 @@ class AuditParameterAdaptersTest {
             @Override public java.io.BufferedReader getReader() { throw new AssertionError("must not read"); }
         };
         RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
-        RequestEntity entity = mock(RequestEntity.class, RETURNS_DEEP_STUBS);
-        when(entity.getApiInfo().getName()).thenReturn("验证接口");
+        RequestEntity entity = mock(RequestEntity.class);
+        var resource = new ApiInfo();
+        resource.setName("验证接口");
+        when(entity.getApiInfo()).thenReturn(resource);
         when(entity.getParameters()).thenReturn(Map.of("keyword", "查询中文"));
         when(entity.getPathVariables()).thenReturn(Map.of("id", "validation-id"));
         when(entity.getRequestBody()).thenReturn(Map.of("enabled", false));
@@ -50,16 +63,121 @@ class AuditParameterAdaptersTest {
 
     @Test void magicDebugAndTestDoNotCollectParameters() {
         var request = bind();
-        RequestEntity entity = mock(RequestEntity.class, RETURNS_DEEP_STUBS);
+        RequestEntity entity = mock(RequestEntity.class);
+        when(entity.getApiInfo()).thenReturn(new ApiInfo());
         when(entity.isRequestedFromDebug()).thenReturn(true);
         new AuditMagicRequestInterceptor().preHandle(entity);
         assertEquals("LEGACY", AuditRequestParameters.safeSnapshot(request).status());
         verify(entity, never()).getRequestBody();
     }
 
+    @Test void logReaderDeclarationStaysWithTheResourceAndKeepsOnlyTheRequestEvent() {
+        var scope = new PolicyAwareApiResourceStorage("");
+        var api = new ApiInfo();
+        api.setId("audit-resource");
+        api.setMethod("GET");
+        api.setOption(List.of(new Option("auditMode", "LOG_READER")));
+        scope.write(api);
+        api.setMethod("POST");
+        assertThrows(IllegalArgumentException.class, () -> scope.write(api));
+        api.setMethod("GET");
+        api.setOption(List.of(new Option("auditMode", "LOG_READER"), new Option("auditMode", "LOG_READER")));
+        assertThrows(IllegalArgumentException.class, () -> scope.write(api));
+        api.setOption(List.of(new Option("auditMode", "LOG_READER")));
+
+        var request = new MockHttpServletRequest("HEAD", "/validation/relocated-log-reader");
+        request.setQueryString("taskId=validation-id");
+        var response = new MockHttpServletResponse();
+        var auth = mock(GlobalInterceptor.class);
+        var recorder = mock(AuditRecorder.class);
+        var handler = new Object();
+        when(auth.matchedMagicResource(request, handler)).thenReturn(api);
+        var audit = new AuditWebInterceptor(mock(AuditIdentityResolver.class), recorder, auth, new MagicAPIProperties());
+        assertTrue(audit.preHandle(request, response, handler));
+        assertFalse(AuditRequestParameters.eligible(request));
+        assertTrue(AuditRequestParameters.snapshot(request).isEmpty());
+        var actor = new AuditIdentity("validation", "TENANT_USER", "user", null, null, null, null, null, null, null);
+        request.setAttribute(AuditIdentityResolver.ATTRIBUTE, actor);
+        request.setAttribute(AuditWebInterceptor.BUSINESS_RESULT, "DENIED");
+        audit.afterCompletion(request, response, handler, null);
+        verify(recorder).request(eq(actor), eq(200), isNull(), eq("DENIED"), anyLong());
+        verifyNoMoreInteractions(recorder);
+
+        var ordinary = new MockHttpServletRequest("GET", "/sym/logs/unrelated");
+        assertTrue(AuditRequestParameters.eligible(ordinary));
+    }
+
+    @Test void actualLogReaderSuppressesParametersAlreadyCapturedByMvc() {
+        var request = bind();
+        AuditRequestParameters.capture(request, Map.of("taskId", "validation-id"), null, null);
+        assertFalse(AuditRequestParameters.snapshot(request).isEmpty());
+        var api = new ApiInfo();
+        api.setMethod("GET");
+        api.setOption(List.of(new Option("auditMode", "LOG_READER")));
+        new AuditMagicRequestInterceptor().preHandle(RequestEntity.create().info(api));
+        assertFalse(AuditRequestParameters.eligible(request));
+        assertTrue(AuditRequestParameters.snapshot(request).isEmpty());
+        assertFalse(AuditRequestParameters.safeSnapshot(request).json().contains("validation-id"));
+    }
+
+    @Test void declaredSessionChoosesAuditRealmBeforeCapturingParameters() {
+        var industry = new MockHttpServletRequest("GET", "/idaas/validation-industry-action");
+        var store = mock(AuditStore.class);
+        when(store.jdbc("validation-tenant")).thenReturn(mock(JdbcTemplate.class));
+        var resolver = new AuditIdentityResolver(store);
+        AuditIdentityResolver.selectRealm(industry, MagicAccessPolicy.TENANT_SESSION, true);
+        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(industry));
+        try (var tokens = mockStatic(StpUtil.class)) {
+            var session = new SaSession("validation-session").set("tenantId", "validation-tenant");
+            tokens.when(StpUtil::isLogin).thenReturn(true);
+            tokens.when(StpUtil::getTokenSession).thenReturn(session);
+            tokens.when(StpUtil::getLoginIdAsString).thenReturn("validation-user");
+            assertEquals("validation-tenant", resolver.current().tenantId());
+            verify(store).jdbc("validation-tenant");
+        }
+        var platform = new MockHttpServletRequest("GET", "/validation/relocated-operator-resource");
+        AuditIdentityResolver.selectRealm(platform, MagicAccessPolicy.IDAAS_PLATFORM_SESSION, false);
+        assertFalse(AuditRequestParameters.eligible(platform));
+        AuditIdentityResolver.selectRealm(platform, MagicAccessPolicy.IDAAS_ACCOUNT_SESSION, false);
+        assertFalse(AuditRequestParameters.eligible(platform));
+        AuditIdentityResolver.selectRealm(platform, null, true);
+        assertFalse(AuditRequestParameters.eligible(platform));
+    }
+
+    @Test void consentParametersArePrivateAtItsConfiguredControllerRegardlessOfThePath() throws Exception {
+        var request = new MockHttpServletRequest("GET", "/validation/relocated-consent");
+        request.setQueryString("keyword=validation-consent-fallback");
+        var handler = new HandlerMethod(new IdentityConsentController(null, null, null, null),
+                "consent", String.class, String.class, jakarta.servlet.http.HttpServletRequest.class,
+                jakarta.servlet.http.HttpServletResponse.class);
+        var audit = new AuditWebInterceptor(mock(AuditIdentityResolver.class), mock(AuditRecorder.class),
+                mock(GlobalInterceptor.class), new MagicAPIProperties());
+        assertTrue(audit.preHandle(request, new MockHttpServletResponse(), handler));
+        assertFalse(AuditRequestParameters.eligible(request));
+        assertFalse(AuditRequestParameters.safeSnapshot(request).json().contains("validation-consent-fallback"));
+    }
+
+    @Test void privateResourceKeepsWriteAuditWhileItsDefaultReadOnlyWritesRequestAudit() {
+        var reader = new ApiInfo();
+        reader.setMethod("POST");
+        reader.setOption(List.of(new Option("auditMode", "PRIVATE_PARAMETERS"), new Option("auditReadAction", "read")));
+        var request = bind();
+        new AuditMagicRequestInterceptor().preHandle(RequestEntity.create().info(reader).setRequestBody(Map.of("taskId", "validation")));
+        assertFalse(AuditRequestParameters.eligible(request));
+        assertTrue(AuditRequestParameters.isReadAction(request));
+        assertFalse(AuditRequestParameters.isLogReaderRequest(request));
+
+        var write = bind();
+        new AuditMagicRequestInterceptor().preHandle(RequestEntity.create().info(reader).setRequestBody(Map.of("action", "save")));
+        assertFalse(AuditRequestParameters.eligible(write));
+        assertFalse(AuditRequestParameters.isReadAction(write));
+        assertFalse(AuditRequestParameters.isLogReaderRequest(write));
+    }
+
     @Test void magicCaptureErrorsNeverReplaceBusinessExecutionOrRetainExceptionMessages() {
         var request = bind();
-        RequestEntity entity = mock(RequestEntity.class, RETURNS_DEEP_STUBS);
+        RequestEntity entity = mock(RequestEntity.class);
+        when(entity.getApiInfo()).thenReturn(new ApiInfo());
         when(entity.getRequestBody()).thenThrow(new IllegalStateException("raw-body-error-value"));
         assertDoesNotThrow(() -> new AuditMagicRequestInterceptor().preHandle(entity));
         var safe = AuditRequestParameters.safeSnapshot(request);
@@ -71,7 +189,8 @@ class AuditParameterAdaptersTest {
         var request = bind(); request.setQueryString("tag=first&tag=second");
         request.setContentType(MediaType.APPLICATION_JSON_VALUE); request.setContent("{broken".getBytes(java.nio.charset.StandardCharsets.UTF_8));
         AuditRequestParameters.captureMvc(request, null);
-        RequestEntity entity = mock(RequestEntity.class, RETURNS_DEEP_STUBS);
+        RequestEntity entity = mock(RequestEntity.class);
+        when(entity.getApiInfo()).thenReturn(new ApiInfo());
         when(entity.getParameters()).thenReturn(Map.of("tag", "first"));
         when(entity.getRequestBody()).thenReturn(null);
         new AuditMagicRequestInterceptor().preHandle(entity);
@@ -204,10 +323,27 @@ class AuditParameterAdaptersTest {
         assertTrue(AuditRequestParameters.safeSnapshot(request).searchText().contains("query.name=中文"));
     }
 
+    @Test void configuredEditorSuppressesAuditBodyEvenWithServletContext() throws Exception {
+        var properties = new MagicAPIProperties();
+        properties.setWeb("/validation/**");
+        var recorder = mock(AuditRecorder.class);
+        var mvc = mvc(recorder, properties);
+        var result = mvc.perform(post("/host/validation/test").contextPath("/host")
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"validation\"}"))
+                .andExpect(status().isOk()).andReturn();
+        assertFalse(AuditRequestParameters.eligible(result.getRequest()));
+        assertEquals("LEGACY", AuditRequestParameters.safeSnapshot(result.getRequest()).status());
+        verifyNoInteractions(recorder);
+    }
+
     private MockMvc mvc() {
+        return mvc(mock(AuditRecorder.class), new MagicAPIProperties());
+    }
+
+    private MockMvc mvc(AuditRecorder recorder, MagicAPIProperties properties) {
         return MockMvcBuilders.standaloneSetup(new Controller()).setControllerAdvice(new AuditRequestBodyAdvice(), new AuditResponseAdvice())
-                .addInterceptors(new AuditWebInterceptor(mock(AuditIdentityResolver.class), mock(AuditRecorder.class),
-                        mock(GlobalInterceptor.class))).build();
+                .addInterceptors(new AuditWebInterceptor(mock(AuditIdentityResolver.class), recorder,
+                        mock(GlobalInterceptor.class), properties)).build();
     }
 
     @RestController

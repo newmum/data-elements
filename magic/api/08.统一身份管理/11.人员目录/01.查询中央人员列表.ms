@@ -13,7 +13,12 @@
   "description": "读取符合请求筛选条件的中央人员，应用权限及身份域过滤后返回可展示字段；不发生写入。处理控制库的中央人员资料，保持人员资料与租户本地账号隔离；仅显式下发时才影响租户。",
   "parameters": [],
   "method": "GET",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

@@ -13,7 +13,7 @@
   "description": "校验注册策略、账号唯一性和密码强度，在独立认证账号表创建账号与安全记录；不创建平台操作账号或租户账号。",
   "parameters": [],
   "method": "POST",
-  "options": [],
+  "options": [{"name": "access", "value": "PUBLIC_ACTION"}],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

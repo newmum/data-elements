@@ -1,5 +1,6 @@
 package com.linewell.dataelement.platform.tenant.protocol;
 
+import java.net.URI;
 import java.nio.file.*;
 import java.time.Instant;
 import java.util.*;
@@ -10,6 +11,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.*;
 import org.springframework.core.annotation.Order;
+import org.springframework.core.env.Environment;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.web.SecurityFilterChain;
@@ -20,21 +22,21 @@ import org.springframework.security.oauth2.server.authorization.config.annotatio
 import org.springframework.security.oauth2.server.authorization.config.annotation.web.configurers.OAuth2AuthorizationServerConfigurer;
 import org.springframework.security.oauth2.server.authorization.settings.AuthorizationServerSettings;
 import org.springframework.security.oauth2.server.authorization.token.*;
+import org.springframework.web.filter.RequestContextFilter;
 
 /** Standards protocol only; all editable account, qualification, audience and client rules delegate to Magic. */
 @Configuration
 @ConditionalOnProperty(prefix="idaas.protocol",name="enabled",havingValue="true")
+@PropertySource("classpath:idaas-protocol.properties")
 public class IdaasProtocolConfiguration {
- @Bean public org.springframework.boot.web.servlet.FilterRegistrationBean<org.springframework.web.filter.RequestContextFilter> idaasProtocolRequestContext(){
-  var registration=new org.springframework.boot.web.servlet.FilterRegistrationBean<>(new org.springframework.web.filter.RequestContextFilter());
-  registration.setName("idaasProtocolRequestContext");registration.setOrder(org.springframework.core.Ordered.HIGHEST_PRECEDENCE+30);registration.addUrlPatterns("/idaas/*","/.well-known/*");return registration;
- }
- @Bean @Order(1) public SecurityFilterChain idaasProtocol(HttpSecurity http,IdentityProtocolBridge bridge,@Value("${idaas.protocol.login-url:http://localhost:3005/#/auth/identity/login}")String loginUrl)throws Exception{
+ @Bean @Order(1) public SecurityFilterChain idaasProtocol(HttpSecurity http, IdentityProtocolBridge bridge,
+         @Value("${idaas.protocol.login-url}") String loginUrl, @Value("${idaas.protocol.consent-path}") String consentPath) throws Exception {
   OAuth2AuthorizationServerConfiguration.applyDefaultSecurity(http);
-  http.getConfigurer(OAuth2AuthorizationServerConfigurer.class).oidc(Customizer.withDefaults()).authorizationEndpoint(c->c.consentPage("/idaas/oauth2/consent"));
-  // The authorization endpoint runs before AnonymousAuthenticationFilter.
-  // Resolve the independent account before the protocol endpoint examines it.
-  http.addFilterBefore(new IdaasPrincipalFilter(bridge),org.springframework.security.web.authentication.logout.LogoutFilter.class);
+  http.getConfigurer(OAuth2AuthorizationServerConfigurer.class).oidc(Customizer.withDefaults())
+          .authorizationEndpoint(customizer -> customizer.consentPage(consentPath));
+  // Bind the request before Magic callbacks, only for requests owned by this protocol chain.
+  http.addFilterBefore(new IdaasPrincipalFilter(bridge), org.springframework.security.web.authentication.logout.LogoutFilter.class);
+  http.addFilterBefore(new RequestContextFilter(), IdaasPrincipalFilter.class);
   // Authentication is checked through Magic on every request; a previous
   // servlet session must not preserve an account after logout or revocation.
   http.securityContext(c->c.securityContextRepository(new org.springframework.security.web.context.NullSecurityContextRepository()));
@@ -42,9 +44,24 @@ public class IdaasProtocolConfiguration {
   http.oauth2ResourceServer(o->o.jwt(Customizer.withDefaults()));
   return http.build();
  }
- @Bean public AuthorizationServerSettings authorizationSettings(@Value("${idaas.protocol.issuer:http://localhost:8088}")String issuer){
-  if(!issuer.startsWith("https://") && !issuer.equals("http://localhost:8088"))throw new IllegalArgumentException("认证签发地址须使用HTTPS");
-  return AuthorizationServerSettings.builder().issuer(issuer).authorizationEndpoint("/idaas/oauth2/authorize").tokenEndpoint("/idaas/oauth2/token").tokenIntrospectionEndpoint("/idaas/oauth2/introspect").tokenRevocationEndpoint("/idaas/oauth2/revoke").jwkSetEndpoint("/idaas/oauth2/jwks").oidcUserInfoEndpoint("/idaas/connect/userinfo").oidcLogoutEndpoint("/idaas/connect/logout").build();
+ @Bean public AuthorizationServerSettings authorizationSettings(Environment environment, @Value("${idaas.protocol.issuer}") String issuer) {
+  URI address = URI.create(issuer);
+  boolean local = "http".equals(address.getScheme()) && "localhost".equals(address.getHost())
+          && address.getPort() == 8088 && address.getRawPath().isEmpty();
+  if (address.getHost() == null || address.getRawUserInfo() != null || address.getRawQuery() != null
+          || address.getRawFragment() != null || (!"https".equals(address.getScheme()) && !local)) {
+   throw new IllegalArgumentException("认证签发地址须使用HTTPS");
+  }
+  String prefix = "idaas.protocol.endpoints.";
+  return AuthorizationServerSettings.builder().issuer(issuer)
+          .authorizationEndpoint(environment.getRequiredProperty(prefix + "authorization"))
+          .tokenEndpoint(environment.getRequiredProperty(prefix + "token"))
+          .tokenIntrospectionEndpoint(environment.getRequiredProperty(prefix + "introspection"))
+          .tokenRevocationEndpoint(environment.getRequiredProperty(prefix + "revocation"))
+          .jwkSetEndpoint(environment.getRequiredProperty(prefix + "jwks"))
+          .oidcUserInfoEndpoint(environment.getRequiredProperty(prefix + "userinfo"))
+          .oidcLogoutEndpoint(environment.getRequiredProperty(prefix + "logout"))
+          .build();
  }
  @Bean public JWKSource<SecurityContext> identitySigningKeys(@Value("${idaas.protocol.jwk-file:${IDAAS_PROTOCOL_JWK_FILE:${user.home}/.data-elements/idaas/keys/protocol-signing.jwk}}")String location)throws Exception{
   if(location.isBlank())throw new IllegalStateException("请配置 IDAAS_PROTOCOL_JWK_FILE 或 idaas.protocol.jwk-file 指向独立持久 RSA 私钥 JWK 文件");
@@ -59,7 +76,7 @@ public class IdaasProtocolConfiguration {
  @Bean public JwtDecoder identityJwtDecoder(JWKSource<SecurityContext> source){return OAuth2AuthorizationServerConfiguration.jwtDecoder(source);}
  @Bean public OAuth2TokenCustomizer<JwtEncodingContext> identityClaims(IdentityProtocolBridge bridge){return context->{
   boolean machine=AuthorizationGrantType.CLIENT_CREDENTIALS.equals(context.getAuthorizationGrantType());
-  var result=bridge.call("protocol-access",Map.of("operation","issue","clientId",context.getRegisteredClient().getId(),"principalName",context.getPrincipal().getName(),"machine",machine));
+  var result=bridge.access(Map.of("operation","issue","clientId",context.getRegisteredClient().getId(),"principalName",context.getPrincipal().getName(),"machine",machine));
   if(result==null || !Boolean.TRUE.equals(result.get("allowed")))throw new OAuth2AuthenticationException(new OAuth2Error("access_denied","当前主体没有此应用的有效授权",null));
   if(org.springframework.security.oauth2.server.authorization.OAuth2TokenType.ACCESS_TOKEN.equals(context.getTokenType()))context.getClaims().audience(List.of((String)result.get("appId")));
   context.getClaims().claim("identity_domain",result.get("domain")).claim("principal_kind",machine?"CLIENT":"AUTH_ACCOUNT").claim("roles",result.get("roleIds")).claim("resources",result.get("resourceIds"));

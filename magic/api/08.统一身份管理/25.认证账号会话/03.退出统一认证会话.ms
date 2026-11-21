@@ -13,7 +13,7 @@
   "description": "定位当前统一认证账号会话并撤销令牌，记录退出事件；不影响平台控制台或租户本地会话。",
   "parameters": [],
   "method": "POST",
-  "options": [],
+  "options": [{"name": "access", "value": "SESSION_LOGOUT"}],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

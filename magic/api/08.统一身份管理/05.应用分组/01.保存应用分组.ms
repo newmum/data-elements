@@ -13,7 +13,12 @@
   "description": "校验请求字段、所属范围和版本；新建或更新应用分组及必要关联记录，写入审计并返回保存结果。只操作控制库的应用分组，并维护排序和软删除状态；关联应用仍按独立应用记录管理。",
   "parameters": [],
   "method": "POST",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

@@ -6,21 +6,20 @@ import com.linewell.dataelement.platform.persistence.jdbc.StructuredContainsPred
 import java.sql.Timestamp;
 import java.time.*;
 import java.util.*;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
-import org.ssssssss.magicapi.core.service.MagicAPIService;
+import com.linewell.dataelement.magic.runtime.route.RegisteredMagicFunctionInvoker;
 
 /** One count + one page; names and departments are stored snapshots, never row-by-row lookups. */
 @Service
 public class LogQueryService {
     public static final int QUERY_TIMEOUT_SECONDS = 15;
-    public static final String PARAMETER_CONDITION_FUNCTION = "/common/log-parameter-keyword-condition";
+    public static final String PARAMETER_CONDITION_FUNCTION_ID = "log_parameter_condition_v1";
     private final AuditStore store;
     private final AuditSanitizer sanitizer;
-    private final ObjectProvider<MagicAPIService> magic;
+    private final RegisteredMagicFunctionInvoker magic;
     private final StructuredContainsPredicateAdapter predicates;
-    public LogQueryService(AuditStore store,AuditSanitizer sanitizer,ObjectProvider<MagicAPIService> magic,
+    public LogQueryService(AuditStore store,AuditSanitizer sanitizer,RegisteredMagicFunctionInvoker magic,
             StructuredContainsPredicateAdapter predicates) {
         this.store=store; this.sanitizer=sanitizer; this.magic=magic; this.predicates=predicates;
     }
@@ -77,7 +76,7 @@ public class LogQueryService {
         context.put("tenantId", scope.tenantId());
         context.put("kind", kind);
         context.put("keyword", input.get("parameterKeyword"));
-        Object condition = magic.getObject().invoke(PARAMETER_CONDITION_FUNCTION, context);
+        Object condition = magic.invoke(PARAMETER_CONDITION_FUNCTION_ID, context);
         if (condition != null) {
             if (!(condition instanceof Map<?,?> predicate)) throw new IllegalStateException("日志参数条件格式无效");
             var compiled = predicates.compile(store.dataSource(scope.tenantId()), predicate,

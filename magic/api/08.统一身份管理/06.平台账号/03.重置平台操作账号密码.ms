@@ -13,7 +13,12 @@
   "description": "核验平台账号管理范围与密码策略，更新独立安全凭据并提升安全版本，使旧会话失效并记录审计。",
   "parameters": [],
   "method": "POST",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

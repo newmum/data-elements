@@ -13,7 +13,12 @@
   "description": "校验配置类别、允许字段和版本后写入控制库平台策略，记录操作者及审计；不自动覆盖租户配置。",
   "parameters": [],
   "method": "POST",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

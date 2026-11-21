@@ -4,7 +4,6 @@ import com.linewell.dataelement.integration.nifi.canvas.pipeline.Pipeline;
 import com.linewell.dataelement.integration.nifi.canvas.compile.DslCompiler;
 import com.linewell.dataelement.integration.nifi.canvas.errors.ErrorService;
 import com.linewell.dataelement.integration.nifi.canvas.lifecycle.PipelineGroupOrganizer;
-import com.linewell.dataelement.integration.nifi.canvas.lifecycle.PipelineTaskLifecycleSynchronizer;
 import com.linewell.dataelement.integration.nifi.canvas.lifecycle.TargetTableCleanupService;
 import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient;
 import com.linewell.dataelement.integration.nifi.canvas.pipeline.PipelineRepository;
@@ -17,7 +16,7 @@ import static org.mockito.Mockito.*;
 
 class PipelineIncrementalConfigurationTest {
     private final PipelineRepository repository = mock(PipelineRepository.class);
-    private final PipelineTaskLifecycleSynchronizer tasks = mock(PipelineTaskLifecycleSynchronizer.class);
+    private final NifiDeploymentMagicFixture.TaskOperations tasks = mock(NifiDeploymentMagicFixture.TaskOperations.class);
     private final PipelineGroupOrganizer groups = mock(PipelineGroupOrganizer.class);
     private final NifiDeploymentMagicFixture deployment = new NifiDeploymentMagicFixture(repository, mock(DslCompiler.class),
             mock(NifiClient.class), mock(ErrorService.class), tasks, groups, mock(TargetTableCleanupService.class));
@@ -42,7 +41,7 @@ class PipelineIncrementalConfigurationTest {
     @Test void savedManualFieldIsKeptExactlyWithoutRegistrationReads() {
         var original = design("MANUAL_VERSION", "FULL_THEN_INCR");
         assertThat(deploy(original).getBody().toString()).contains("validation complete");
-        verify(tasks).ensureCatalogAccessTask(null, original);
+        verify(tasks).associate(null, original.id(), original.name(), original.dsl());
         assertThat(original.dsl().nodes().getFirst().config()).containsEntry("incrementalColumn", "MANUAL_VERSION");
     }
     @Test void fullModesAllowAnEmptyIncrementalField() {

@@ -19,6 +19,14 @@
     {
       "name": "wrap_request_parameter",
       "value": "param"
+    },
+    {
+      "name": "access",
+      "value": "TENANT_SESSION"
+    },
+    {
+      "name": "head",
+      "value": "true"
     }
   ],
   "headers": [],
@@ -27,8 +35,6 @@
 ================================
 import '@/common/nifiAccessTaskChainHttp' as taskChain
 
-// GET /nifi/chain/flow 按流程查询接入链路。 查询参数 id。
-// GET /nifi/chain/flow 接收路径 id，从当前行业租户的流程定位其接入链路。
-// 使用原画布响应格式，按流程定位，无写入或 NiFi 请求。
+// GET /nifi/chain/flow。按已保存画布定位当前行业链路，与按任务查询及原生入口共用链路校验。
 
 return taskChain(param.id, true, false)

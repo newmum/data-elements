@@ -32,7 +32,6 @@ import org.ssssssss.script.runtime.ExitValue;
 class CatalogDirectoryDetailMagicTest {
     private static final String DETAIL = "datapd_catalog_detail_compat_01";
     private static final String READ = "084a92c02bd05f8bb8507cc4c4660e40";
-    private static final String COMMAND = "0454d01c38ab5d66aafdaf02d9b547d6";
     private static final String GATEWAY = "b6aaff9e31925977b94369d347e7c32a";
 
     @ParameterizedTest
@@ -209,7 +208,7 @@ class CatalogDirectoryDetailMagicTest {
             catalog("foreign", "tenant-b", "person-a", "org-a", "table-a", 0);
             catalog("deleted", "tenant-a", "person-a", "org-a", "table-a", 1);
 
-            for (String id : List.of(DETAIL, READ, COMMAND, GATEWAY)) {
+            for (String id : List.of(DETAIL, READ, GATEWAY)) {
                 scripts.put(id, CanonicalMagicSources.byId(id)
                         .replaceAll("(?m)^import (?!java\\.|cn\\.hutool\\.|cn\\.dev33\\.)[^\\r\\n]*\\r?\\n", ""));
             }
@@ -247,7 +246,7 @@ class CatalogDirectoryDetailMagicTest {
             context.put("dataScope", scope);
             context.put("tableSort", new TableSortMagicModule());
             context.put("readCatalog", function(READ));
-            context.put("catalogCommand", function(COMMAND));
+            context.put("catalogRead", function(READ));
             return MagicScript.create(scripts.get(scriptId), null).execute(new MagicScriptContext(context));
         }
 

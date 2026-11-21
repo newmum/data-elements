@@ -13,7 +13,12 @@
   "description": "逐项核验被授予的功能及对象范围不超过当前操作人权限，更新平台角色分配并记录审计。",
   "parameters": [],
   "method": "POST",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

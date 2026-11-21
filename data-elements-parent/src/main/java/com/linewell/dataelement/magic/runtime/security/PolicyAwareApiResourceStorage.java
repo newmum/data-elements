@@ -1,6 +1,8 @@
 package com.linewell.dataelement.magic.runtime.security;
 
 import com.linewell.dataelement.magic.runtime.route.HeadFallbackMagicRegistry;
+import com.linewell.dataelement.magic.runtime.route.MagicJsonBody;
+import com.linewell.dataelement.platform.audit.AuditRequestParameters;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.ssssssss.magicapi.core.model.ApiInfo;
@@ -19,6 +21,8 @@ public class PolicyAwareApiResourceStorage extends ApiInfoMagicResourceStorage {
         super.validate(api);
         MagicAccessPolicy.declared(api);
         HeadFallbackMagicRegistry.acceptsHead(api);
+        MagicJsonBody.declared(api);
+        AuditRequestParameters.validateResourceOptions(api);
     }
 
     @Override
@@ -26,6 +30,8 @@ public class PolicyAwareApiResourceStorage extends ApiInfoMagicResourceStorage {
         if (entity instanceof ApiInfo api) {
             MagicAccessPolicy policy = MagicAccessPolicy.declared(api);
             HeadFallbackMagicRegistry.acceptsHead(api);
+            MagicJsonBody.declared(api);
+            AuditRequestParameters.validateResourceOptions(api);
             LOG.info("Magic API save request resourceId={} method={} policy={}",
                     api.getId(), api.getMethod(), policy);
         }

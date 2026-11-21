@@ -5,11 +5,13 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
+import cn.hutool.extra.spring.SpringUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.linewell.dataelement.feature.identity.application.DataScopeAuthorizationService;
 import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient;
@@ -639,7 +641,6 @@ class AccessTaskChainMagicTest {
         Fixture() {
             MagicResourceLoader.addModule("tenantRuntime", new TenantMagicModule(null));
             MagicResourceLoader.addModule("tableRead", new StructuredTableReadMagicModule(jdbc));
-            MagicResourceLoader.addModule("nifiTaskChainRuntime", new NifiTaskChainRuntime(json, nifi));
             MagicResourceLoader.addModule("request", request);
             jdbc.execute("create table db_datasource_t(tid varchar(64) primary key, tenant_id varchar(64), db_name varchar(128), created_by varchar(64), org_id varchar(64), is_del int)");
             jdbc.execute("create table db_table_t(tid varchar(64) primary key, tenant_id varchar(64), datasource_id varchar(64), source_table_id varchar(64), table_name varchar(128), table_name_cn varchar(128), is_del int)");
@@ -660,8 +661,12 @@ class AccessTaskChainMagicTest {
 
         ResponseEntity<?> route(MagicScript script, String id, List<String> parameters) {
             when(request.getValues("accessTaskId")).thenReturn(parameters);
-            return (ResponseEntity<?>) script.execute(new MagicScriptContext(
-                    id == null ? Map.of() : Map.of("param", Map.of("id", id))));
+            try (var spring = mockStatic(SpringUtil.class)) {
+                spring.when(() -> SpringUtil.getBean(ObjectMapper.class)).thenReturn(json);
+                spring.when(() -> SpringUtil.getBean(NifiClient.class)).thenReturn(nifi);
+                return (ResponseEntity<?>) script.execute(new MagicScriptContext(
+                        id == null ? Map.of() : Map.of("param", Map.of("id", id))));
+            }
         }
 
         ResponseEntity<?> taskResponse(String id) {

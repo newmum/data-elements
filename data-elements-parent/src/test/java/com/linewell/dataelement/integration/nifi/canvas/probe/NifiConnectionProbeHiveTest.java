@@ -289,8 +289,8 @@ class NifiConnectionProbeHiveTest {
                 return prepare.execute(new MagicScriptContext(vars));
             };
             String source = CanonicalMagicSources.byId(id)
-                    .replaceAll("(?m)^import ('@/common/|nifiConnectionProbe)[^\\r\\n]*\\R", "")
-                    .replace("return withHttp(() => {", "var execute = () => {");
+                    .replaceAll("(?m)^import ('@/common/|nifiConnectionProbe|tenantRuntime|com\\.linewell\\.dataelement\\.dataassets\\.runtime\\.DataSourceConnectionPropertyResolver)[^\\r\\n]*\\R", "")
+                    .replaceFirst("return withHttp\\(\\([^)]*\\) => \\{", "var execute = () => {");
             source = source.stripTrailing();
             assertThat(source).endsWith("})");
             source = source.substring(0, source.length() - 1) + "\nreturn execute()";
@@ -306,7 +306,17 @@ class NifiConnectionProbeHiveTest {
                 return connectivity.execute(new MagicScriptContext(vars));
             };
             var context = new MagicScriptContext(Map.of("body", body, "nifiConnectionProbe", probe,
-                    "probeSettings", prepareSettings, "readBody", readBody, "probeHealth", probeHealth));
+                    "probeSettings", prepareSettings, "readBody", readBody, "probeHealth", probeHealth,
+                    "connectionProperties", resolver, "tenantRuntime", new ProbeTenant(),
+                    "rootCause", (java.util.function.Function<Object[], Object>) arguments -> {
+                        Throwable failure = (Throwable) arguments[0];
+                        while ((failure instanceof org.ssssssss.script.exception.MagicScriptException
+                                || failure instanceof org.ssssssss.script.exception.MagicScriptRuntimeException)
+                                && failure.getCause() != null) {
+                            failure = failure.getCause();
+                        }
+                        return failure;
+                    }));
             return (org.springframework.http.ResponseEntity<?>) MagicScript.create(source, null).execute(context);
         } catch (java.io.IOException failure) {
             throw new java.io.UncheckedIOException(failure);

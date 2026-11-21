@@ -13,7 +13,12 @@
   "description": "按目标应用和 sync:write 权限分页列出中央人员或机构，供手动下发选择。",
   "parameters": [],
   "method": "GET",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

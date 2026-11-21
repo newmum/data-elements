@@ -37,7 +37,7 @@ import org.ssssssss.script.MagicScript;
 import org.ssssssss.script.MagicScriptContext;
 
 class MaterializationPrecheckMagicTest {
-    private static final String COMMAND_ID = "2ebdc2a6af4b5e2989cd8add98c849fa";
+    private static final String COMMAND_ID = "b6aaff9e31925977b94369d347e7c32a";
 
     @ParameterizedTest
     @ValueSource(strings = {"MySQL", "PostgreSQL"})
@@ -200,9 +200,9 @@ class MaterializationPrecheckMagicTest {
                     "databases", List.of(Map.of("id", "validation-domain", "mode", "MANAGED", "state", "ACTIVE")));
             Function<Object[], Object> preview = args -> preview(StructuredValues.objectMap(args[0]));
             var variables = Map.of("db", db, "tableRead", tableRead, "tenantRuntime", session, "connectionProperties", session,
-                    "jsons", new JsonModule(), "readPlanning", planning, "validateModel", validateModel, "preview", preview,
-                    "input", Map.of("id", "validation-plan", "method", "POST", "action", "precheck", "version", 1),
-                    "body", Map.of("validation", true));
+                    "jsons", new JsonModule(), "planningRead", planning, "validateModel", validateModel, "preview", preview,
+                    "body", Map.of("kind", "materializations", "id", "validation-plan", "method", "POST",
+                            "action", "precheck", "version", 1, "body", Map.of("validation", true)));
             return StructuredValues.objectMap(TenantContext.call("tenant-a", () -> script.execute(new MagicScriptContext(variables))));
         }
 

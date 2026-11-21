@@ -8,7 +8,12 @@
   "description": "人工创建人员并完成下发后，以一次性签名事件为目标租户新账号设置初始密码；不在中央人员或任务表保存密码。",
   "parameters": [],
   "method": "POST",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

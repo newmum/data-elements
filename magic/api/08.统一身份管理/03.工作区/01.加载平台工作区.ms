@@ -13,7 +13,12 @@
   "description": "按当前会话的身份域和应用范围汇总工作区指标、应用和目录数据，返回页面初始化所需资料；不读取租户本地账号。",
   "parameters": [],
   "method": "GET",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

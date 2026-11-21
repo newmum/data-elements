@@ -17,6 +17,7 @@
 ================================
 import tableSort
 import tenantRuntime
+import '@/common/nifiruntime' as readConfiguration
 import cn.hutool.http.HttpRequest
 import com.fasterxml.jackson.databind.ObjectMapper
 import java.util.Map
@@ -32,6 +33,7 @@ import org.springframework.http.ResponseEntity
 // health 和 diagnostics 只访问当前行业保存的节点，NiFi 客户端从该节点取得连接配置。
 
 var text = value => value == null ? '' : value + ''
+var nodeRevision = value => value instanceof Timestamp ? value.toLocalDateTime().toString() : text(value).trim().replace(' ', 'T')
 // 读取请求中的业务标识与筛选条件，供下面的校验和查询使用。
 var keyword = text(body?.keyword).trim()
 // 业务租户从当前会话读取，不采用请求体中的租户标识。
@@ -93,6 +95,7 @@ if (text(body?.nodeType) == 'push') {
 var action = text(body?.action)
 if (action == 'health' || action == 'diagnostics') {
     var nodeId = text(body?.nodeId).trim()
+    var started = new Date().getTime()
     var respond = data => ResponseEntity.ok(CommonResponse.success(data))
     var rootMessage = error => {
         var cause = error
@@ -101,12 +104,28 @@ if (action == 'health' || action == 'diagnostics') {
         }
         return cause.getMessage() == null ? cause.getClass().getSimpleName() : cause.getMessage()
     }
-    if (action == 'diagnostics') {
-        if (nodeId == '') {
-            exit 400, '请选择需要查询的 NiFi 节点'
+    if (action == 'diagnostics' && nodeId == '') {
+        exit 400, '请选择需要查询的 NiFi 节点'
+    }
+    var healthFailure = message => respond({success:false, status:0, latencyMs:new Date().getTime()-started,
+        message:message, url:''})
+    if (nodeId == '') { return healthFailure('请选择需要检测的数据同步节点') }
+    var configuration = null
+    var node = null
+    try {
+        configuration = readConfiguration(nodeId, row => row)
+        if (configuration == null) {
+            var missing = '数据同步节点不存在或不属于当前租户'
+            return action == 'health' ? healthFailure(missing) : respond({success:false, message:missing})
         }
+        node = nodeResolver.runtimeNode(configuration)
+    } catch (error) {
+        var message = rootMessage(error)
+        return action == 'health' ? healthFailure(message) : respond({success:false, message:message})
+    }
+    if (action == 'diagnostics') {
         try {
-            var snapshot = nifi.systemDiagnostics(nodeId).path('systemDiagnostics').path('aggregateSnapshot')
+            var snapshot = nifi.systemDiagnostics(node).path('systemDiagnostics').path('aggregateSnapshot')
             if (snapshot.isMissingNode() || snapshot.isNull()) {
                 return respond({success:false, message:'NiFi 未返回系统诊断快照'})
             }
@@ -126,14 +145,6 @@ if (action == 'health' || action == 'diagnostics') {
             return respond({success:false, message:rootMessage(error)})
         }
     }
-    var started = new Date().getTime()
-    var configured = null
-    try {
-        configured = nodeResolver.configuredNodeById(nodeId)
-    } catch (error) {
-        return respond({success:false, status:0, latencyMs:new Date().getTime()-started, message:rootMessage(error), url:''})
-    }
-    var node = configured.runtimeNode()
     var success = true
     var message = 'NiFi 节点根流程组访问正常'
     try {
@@ -148,7 +159,7 @@ if (action == 'health' || action == 'diagnostics') {
         healthTime:new SimpleDateFormat('yyyy-MM-dd HH:mm:ss').format(new Date())
     }
     // 只回显此探活实际使用的配置版本。保存新配置后，旧结果自然失效。
-    var key = 'nifi-node-health:' + tenantId + ':' + node.id() + ':' + configured.revision()
+    var key = 'nifi-node-health:' + tenantId + ':' + node.id() + ':' + nodeRevision(configuration.updated_time)
     LocalCache.put(key, new ObjectMapper().writeValueAsString({
         success:result.success, message:result.message, healthTime:result.healthTime, latencyMs:result.latencyMs
     }))
@@ -195,7 +206,7 @@ for (row in (rows == null ? [] : rows)) {
     }
     // 仅为已通过租户筛选的节点读取内存结果，与检测时的配置版本一致才显示。
     var updatedTime = row.updatedTime == null ? row.updated_time : row.updatedTime
-    var revision = updatedTime instanceof Timestamp ? updatedTime.toLocalDateTime().toString() : text(updatedTime).trim().replace(' ', 'T')
+    var revision = nodeRevision(updatedTime)
     var healthJson = LocalCache.get('nifi-node-health:' + tenantId + ':' + text(row.tid) + ':' + revision)
     var checked = healthJson == null ? null : mapper.readValue(healthJson, Map)
     list.add({

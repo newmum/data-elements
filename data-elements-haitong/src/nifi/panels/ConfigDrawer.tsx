@@ -26,13 +26,13 @@ import { json } from '@codemirror/lang-json';
 import type { ComponentCategory, ComponentManifest, FieldSchema } from '@/types/manifest';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useComponentManifests } from '@/api/manifests';
-import { probeColumns, probeTables, testConnection, type ColumnsProbeResult, type MetadataTable, type ProbedColumn } from '@/api/pipelines';
+import { probeColumns, probeRegisteredMysqlColumns, probeTables, testConnection, type ColumnsProbeResult, type MetadataTable, type ProbedColumn } from '@/api/pipelines';
 import { getApiErrorMessage, hiveMetadataConfigError } from '@/api/response';
 import { fetchDatabases, fetchDatabaseDetail, type ApiPullItem, type DbDictItem, type MaterializeTarget } from '@/api/dataassets';
 import FieldMappingEditor from './FieldMappingEditor';
 import MaterializeTableModal from './MaterializeTableModal';
 import { getNifiOverlayContainer } from './overlayContainer';
-import { resolveDatasourceId } from '@/api/datasourceIdentity';
+import { registeredDatasourceId, resolveDatasourceId } from '@/api/datasourceIdentity';
 import { upstreamTableSources } from './materializeSources';
 import { columnLabels, columnsForMapping, mappingColumnNodes, missingMappingColumnProbes, mappingTableReference, mappingTableSelectionPatch } from './fieldMappingColumns';
 import CustomSqlEditor, { type CustomSqlEditorHandle } from './CustomSqlEditor';
@@ -1538,7 +1538,7 @@ export default function ConfigDrawer() {
     if (!node || !manifest) return;
     const isElasticsearch = manifest.key === 'source.elasticsearch';
     const index = isElasticsearch ? String(node.config.defaultIndex || node.config.table || node.config.tableName || '').trim() : '';
-    const tables = isElasticsearch ? (index ? [index] : []) : tableListFromConfig(node.config, manifest.category);
+    const tables = [...new Set(isElasticsearch ? (index ? [index] : []) : tableListFromConfig(node.config, manifest.category))];
     if (tables.length === 0) {
       message.error(isElasticsearch ? '请先填写 Elasticsearch 索引名' : manifest.category === 'sink' ? '请先填写目标表名' : '请先填写来源表名');
       return;
@@ -1547,7 +1547,10 @@ export default function ConfigDrawer() {
     setProbing(true);
     const hide = message.loading('正在探查字段...', 0);
     try {
-      const results: ColumnsProbeResult[] = [];
+      const datasourceId = registeredDatasourceId(node.config);
+      const batchMysql = import.meta.env.MODE !== 'flow-lite' && tables.length > 1 && datasourceId
+        && manifest.key === 'source.mysql' && String(node.config.dbType ?? 'MYSQL').toUpperCase() === 'MYSQL';
+      if (batchMysql && tables.length > 100) throw new Error('单次最多探查 100 张表');
       const isFtpSource = manifest.category === 'source'
         && (manifest.key === 'source.ftp' || manifest.key === 'source.sftp');
       const registeredColumns = isFtpSource
@@ -1558,7 +1561,8 @@ export default function ConfigDrawer() {
       // upstream system starts delivering files.  Its registered table schema
       // is still the intended access contract, so show it without treating an
       // empty delivery directory as a field-probe failure.
-      for (const table of tables) {
+      const results = batchMysql ? await probeRegisteredMysqlColumns(datasourceId, tables) : [];
+      for (const table of batchMysql ? [] : tables) {
         const columns = registeredColumns.get(table);
         if (columns) {
           results.push({ success: true, table, columns });

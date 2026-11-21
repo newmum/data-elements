@@ -13,7 +13,12 @@
   "description": "按标识加载应用业务角色并检查所属范围与版本；执行软删除或撤销关联，保留审计历史。只管理业务应用角色及其资源关联；平台控制台角色由平台角色接口独立维护。",
   "parameters": [],
   "method": "POST",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

@@ -42,39 +42,6 @@ public class MetadataGovernanceService {
         this.physical = physical;
     }
 
-    public Map<String, Object> catalog() {
-        String tenantId = tenantId();
-        List<Map<String, Object>> sources = jdbc.queryForList("""
-            SELECT d.tid, d.db_name, COALESCE(NULLIF(d.db_type,''), d.database_type, 'mysql') AS db_type,
-                   d.jdbc_url, d.is_enable, COUNT(t.tid) AS table_count
-              FROM db_datasource_t d
-              LEFT JOIN db_table_t t ON t.datasource_id=d.tid AND t.tenant_id=? AND t.is_del=0
-             WHERE d.tenant_id=? AND d.is_del=0
-             GROUP BY d.tid,d.db_name,d.db_type,d.database_type,d.jdbc_url,d.is_enable
-             ORDER BY d.db_name,d.tid
-            """, tenantId, tenantId);
-        List<Map<String, Object>> tables = jdbc.queryForList("""
-            SELECT t.tid, t.datasource_id, t.table_name, t.table_name_cn, t.table_comment,
-                   t.table_type, t.field_count, t.record_count, t.annotated, t.updated_time,
-                   COALESCE(d.db_name,'未命名数据源') AS datasource_name,
-                   COALESCE(NULLIF(d.db_type,''), d.database_type, 'mysql') AS datasource_type
-              FROM db_table_t t
-              JOIN db_datasource_t d ON d.tid=t.datasource_id AND d.tenant_id=? AND d.is_del=0
-             WHERE t.tenant_id=? AND t.is_del=0
-             ORDER BY d.db_name, COALESCE(t.table_name_cn,t.table_comment,t.table_name), t.table_name
-            """, tenantId, tenantId);
-        List<Map<String, Object>> columns = jdbc.queryForList("""
-            SELECT c.tid, c.table_id, c.column_name, c.column_comment, c.data_type, c.column_type,
-                   c.length, c.nullable, c.primary_key, c.is_unique, c.indexed, c.ordinal_position,
-                   c.updated_time
-              FROM db_table_column_t c
-             WHERE c.tenant_id=? AND c.is_del=0
-             ORDER BY c.table_id,c.ordinal_position,c.column_name
-            """, tenantId);
-        return Map.of("tenantId", tenantId, "sources", sources, "tables", tables,
-                "columns", columns, "relations", relations(tenantId));
-    }
-
     /** Structure-only discovery against the latest collected physical snapshots. */
     public Map<String, Object> discover(Map<String, Object> body) {
         String tenantId = tenantId();

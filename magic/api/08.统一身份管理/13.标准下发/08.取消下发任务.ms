@@ -13,7 +13,12 @@
   "description": "校验任务所属应用及当前状态，取消尚未完成的手动下发任务并记录操作者。",
   "parameters": [],
   "method": "POST",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

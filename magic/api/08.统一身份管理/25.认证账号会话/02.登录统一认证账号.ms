@@ -13,7 +13,7 @@
   "description": "校验账号状态、密码、锁定和多因子策略，签发统一认证会话并记录认证事件；该会话不能登录管理控制台。",
   "parameters": [],
   "method": "POST",
-  "options": [],
+  "options": [{"name": "access", "value": "SESSION_LOGIN"}],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

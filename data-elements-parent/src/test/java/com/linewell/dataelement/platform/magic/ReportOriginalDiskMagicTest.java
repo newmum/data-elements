@@ -126,7 +126,7 @@ class ReportOriginalDiskMagicTest {
     }
 
     private MagicScript storageScript() throws Exception {
-        var script = resourceScript("function/01.通用函数/85.数据上报原件磁盘存储.ms")
+        var script = resourceScript("function/01.通用函数/64.数据上报原件磁盘存储.ms")
                 .replace("import org.springframework.core.env.Environment as environment", "");
         return MagicScript.create(script, null);
     }

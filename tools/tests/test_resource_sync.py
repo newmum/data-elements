@@ -53,13 +53,45 @@ class EditorParameterDefaultsTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Invalid or duplicate'):
             sync.magic_access_policy(dict(resource, options=resource['options'] * 2))
 
-    def test_relay_and_session_lifecycle_access_require_post(self):
-        for policy in ('HAITONG_RELAY', 'SESSION_LOGIN', 'SESSION_LOGOUT'):
+    def test_actions_signature_and_session_lifecycle_access_require_post(self):
+        for policy in ('PUBLIC_ACTION', 'SESSION_LOGIN', 'SESSION_LOGOUT', 'MFA_SESSION',
+                       'MFA_LOGIN_CHALLENGE', 'IDAAS_RECEIVER_SIGNATURE'):
             with self.subTest(policy=policy):
                 resource = {'method': 'POST', 'options': [{'name': 'access', 'value': policy}]}
                 self.assertEqual(sync.magic_access_policy(resource), policy)
                 with self.assertRaisesRegex(ValueError, 'does not match the HTTP method'):
                     sync.magic_access_policy(dict(resource, method='GET'))
+
+    def test_identity_account_policy_is_supported_for_reads_and_writes(self):
+        for method in ('GET', 'POST'):
+            resource = {'method': method, 'options': [{'name': 'access', 'value': 'IDAAS_ACCOUNT_SESSION'}]}
+            self.assertEqual(sync.magic_access_policy(resource), 'IDAAS_ACCOUNT_SESSION')
+
+    def test_bearer_policy_is_read_only(self):
+        resource = {'method': 'GET', 'options': [{'name': 'access', 'value': 'IDAAS_API_BEARER'}]}
+        self.assertEqual(sync.magic_access_policy(resource), 'IDAAS_API_BEARER')
+        self.assertEqual(sync.magic_access_policy(dict(resource, method='HEAD')), 'IDAAS_API_BEARER')
+        with self.assertRaisesRegex(ValueError, 'does not match the HTTP method'):
+            sync.magic_access_policy(dict(resource, method='POST'))
+
+    def test_legacy_sso_policies_only_allow_get(self):
+        for policy in ('LEGACY_SSO_TICKET', 'LEGACY_SSO_REDEEM'):
+            resource = {'method': 'GET', 'options': [{'name': 'access', 'value': policy}]}
+            self.assertEqual(sync.magic_access_policy(resource), policy)
+            for method in ('HEAD', 'POST'):
+                with self.assertRaisesRegex(ValueError, 'does not match the HTTP method'):
+                    sync.magic_access_policy(dict(resource, method=method))
+
+    def test_tenant_session_message_is_validated_and_detects_runtime_drift(self):
+        access = {'name': 'access', 'value': 'TENANT_SESSION'}
+        message = {'name': 'sessionRequiredMessage', 'value': '请重新登录'}
+        resource = {'id': 'validation', 'method': 'POST', 'options': [access, message]}
+        self.assertEqual(sync.magic_access_policy(resource), 'TENANT_SESSION')
+        with self.assertRaisesRegex(ValueError, 'Runtime access policy differs'):
+            sync.verify_runtime_magic(dict(resource, options=[access], script='return true;'), resource, 'return true;')
+        for options in ([message], [access, message, message], [access, dict(message, value='  ')]):
+            with self.subTest(options=options), self.assertRaisesRegex(ValueError, 'session-required message'):
+                sync.magic_access_policy(dict(resource, options=options))
 
     def test_rejects_malformed_api_option_shapes(self):
         for options in ({'access': 'PUBLIC'}, '', True, ['PUBLIC'], [12]):

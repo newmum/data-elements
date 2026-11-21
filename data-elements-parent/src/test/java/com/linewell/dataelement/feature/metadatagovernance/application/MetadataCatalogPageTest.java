@@ -268,20 +268,20 @@ class MetadataCatalogPageTest {
     }
 
     @Test
-    void publicRegistrationRetainsMvcBindingAndHeadEnvelope() {
+    void registrationRetainsMvcBindingForUnifiedReaders() {
         TenantContext.call("a", () -> {
             var missing = service.run("07.元数据目录/01.目录关联服务分页.ms", Map.of(), null);
             assertThat(missing.getStatusCode().value()).isEqualTo(200);
             assertThat(((CommonResponse<?>) missing.getBody()).getCode()).isEqualTo(20001);
-            var wrongPage = service.run("07.元数据目录/05.采集表分页.ms", Map.of("pageSize","wrong"), null);
+            var wrongPage = service.run("07.元数据目录/03.采集表分页.ms", Map.of("pageSize","wrong"), null);
             assertThat(((CommonResponse<?>) wrongPage.getBody()).getCode()).isEqualTo(20002);
             var input = Map.<String,Object>of("sourceIds", List.of("s1", "s2"), "pageSize", 20);
-            var get = service.run("07.元数据目录/05.采集表分页.ms", input, null);
-            var head = service.run("07.元数据目录/06.核验采集表分页.ms", input, null);
-            assertThat(head).isEqualTo(get);
-            var malformed = service.run("08.采集字段/05.批量读取采集字段.ms", Map.of(), "{".getBytes(StandardCharsets.UTF_8));
+            var get = service.run("07.元数据目录/03.采集表分页.ms", input, null);
+            assertThat(get.getStatusCode().value()).isEqualTo(200);
+            assertThat(((Map<?,?>) get.getBody()).get("code")).isEqualTo(0);
+            var malformed = service.run("08.采集字段/03.批量读取采集字段.ms", Map.of(), "{".getBytes(StandardCharsets.UTF_8));
             assertThat(((CommonResponse<?>) malformed.getBody()).getMsg()).startsWith("JSON parse error:");
-            var one = service.run("08.采集字段/05.批量读取采集字段.ms", Map.of(),
+            var one = service.run("08.采集字段/03.批量读取采集字段.ms", Map.of(),
                     "{\"tableIds\":\"t1\"}".getBytes(StandardCharsets.UTF_8));
             assertThat(((Map<?,?>) one.getBody()).get("code")).isEqualTo(0);
             return null;
@@ -300,14 +300,18 @@ class MetadataCatalogPageTest {
             try {
                 // The editor format preserves optional fields; the runtime binds only FunctionInfo properties.
                 var metadataMapper = new ObjectMapper().disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
-                var magic = Path.of("..", "magic");
+                var magic = Path.of(System.getProperty("magic.sourceRoot", "../magic"));
                 if (!Files.isDirectory(magic)) magic = Path.of("magic");
                 try (var files = Files.list(magic.resolve("function/01.通用函数"))) {
-                    for (var file : files.filter(p -> p.getFileName().toString().matches("(76|77|78|79|80|81|82|83)\\..*\\.ms")).toList()) {
+                    for (var file : files.filter(p -> p.getFileName().toString().endsWith(".ms")).toList()) {
                         var split = Files.readString(file).split("================================\\R", 2);
-                        var metadata = metadataMapper.readValue(split[0], FunctionInfo.class);
+                        var header = metadataMapper.readTree(split[0]);
+                        var path = header.path("path").asText();
+                        if (!path.startsWith("/metadataCatalog") && !path.equals("/metadataColumnsScope")) continue;
+                        var metadata = metadataMapper.treeToValue(header, FunctionInfo.class);
                         var names = metadata.getParameters().stream().map(Parameter::getName).toList();
-                        queries.put(metadata.getPath().substring(1), compile(split[1], names));
+                        var source = split.length == 2 ? split[1] : header.path("script").asText();
+                        queries.put(path.substring(1), compile(source, names));
                     }
                 }
                 var api = magic.resolve("api/04.数据治理");
@@ -397,7 +401,7 @@ class MetadataCatalogPageTest {
 
         Map<String,Object> catalogTablesPage(List<String> ids, String kind, String keyword, int page, int size,
                                              String id, String sort, String direction) {
-            return data("07.元数据目录/05.采集表分页.ms", query("sourceIds",ids,"kind",kind,"keyword",keyword,
+            return data("07.元数据目录/03.采集表分页.ms", query("sourceIds",ids,"kind",kind,"keyword",keyword,
                     "pageNo",page,"pageSize",size,"tableId",id,"sortField",sort,"sortDir",direction), null);
         }
 
@@ -410,11 +414,11 @@ class MetadataCatalogPageTest {
         }
 
         Map<String,Object> catalogColumnsPage(String id, int page, int size, String sort, String direction) {
-            return data("08.采集字段/03.采集字段分页.ms", query("tableId",id,"page",page,"size",size,"sortField",sort,"sortDir",direction), null);
+            return data("08.采集字段/02.采集字段分页.ms", query("tableId",id,"page",page,"size",size,"sortField",sort,"sortDir",direction), null);
         }
 
         Map<String,List<Map<String,Object>>> catalogColumnsBatch(List<String> ids) {
-            return data("08.采集字段/05.批量读取采集字段.ms", Map.of(), Map.of("tableIds", ids));
+            return data("08.采集字段/03.批量读取采集字段.ms", Map.of(), Map.of("tableIds", ids));
         }
 
         Map<String,Object> catalogServices(String id, int page, int size, String sort, String direction) {
@@ -422,7 +426,7 @@ class MetadataCatalogPageTest {
         }
 
         Map<String,Object> catalogResources(String id, int page, int size, String sort, String direction) {
-            return data("07.元数据目录/03.目录关联表资源.ms", query("catalogId",id,"pageNo",page,"pageSize",size,"sortField",sort,"sortDir",direction), null);
+            return data("07.元数据目录/02.目录关联表资源.ms", query("catalogId",id,"pageNo",page,"pageSize",size,"sortField",sort,"sortDir",direction), null);
         }
     }
 

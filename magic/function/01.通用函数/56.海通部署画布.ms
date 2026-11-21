@@ -51,7 +51,7 @@ import com.linewell.dataelement.integration.nifi.canvas.errors.FlowFailureDetail
 import com.linewell.dataelement.integration.nifi.canvas.lifecycle.NifiAttributeSync
 import com.linewell.dataelement.integration.nifi.canvas.lifecycle.NifiMutationAspect as mutation
 import com.linewell.dataelement.integration.nifi.canvas.lifecycle.PipelineGroupOrganizer as groups
-import com.linewell.dataelement.integration.nifi.canvas.lifecycle.PipelineTaskLifecycleSynchronizer as tasks
+import '@/common/ensureNifiCatalogAccessTask' as associateTask
 import com.linewell.dataelement.integration.nifi.canvas.lifecycle.TargetTableCleanupService as targetCleanup
 import com.linewell.dataelement.integration.nifi.canvas.mapping.AccessTaskFieldMappingBinder as mappingBinder
 import com.linewell.dataelement.integration.nifi.canvas.mapping.MappingVersionStore as versions
@@ -216,7 +216,7 @@ return respond(rootCause => {
                         }
                     }
                 }
-                tasks.ensureCatalogAccessTask(options.catalogTid, saved)
+                associateTask(options.catalogTid, saved.id(), saved.name(), saved.dsl())
                 var design = mappingBinder.bind(saved)
                 var layout = groups.prepareCandidate(design)
                 var compiled = compiler.compile(design, groupId => { pending.groupId = groupId }, layout)
@@ -254,7 +254,7 @@ return respond(rootCause => {
         var runtime = null
         try {
             if (nodeId != null) { runtime = nifi.bindAssignedNode(nodeId) }
-            tasks.ensureCatalogAccessTask(options?.catalogTid, design)
+            associateTask(options?.catalogTid, design.id(), design.name(), design.dsl())
             var bound = mappingBinder.bind(design)
             if (bound != design) {
                 design = update({expectedDesignHash: design.designHash(), dsl: bound.dsl()})

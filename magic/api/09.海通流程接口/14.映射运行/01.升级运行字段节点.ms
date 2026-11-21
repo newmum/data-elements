@@ -7,7 +7,12 @@
   "path": "/upgrade",
   "description": "按版本和原生边界更新选定字段节点。",
   "parameters": [],
-  "options": [],
+  "options": [
+    {
+      "name": "jsonBody",
+      "value": "EXACT_TREE"
+    }
+  ],
   "method": "POST",
   "headers": [],
   "paths": []

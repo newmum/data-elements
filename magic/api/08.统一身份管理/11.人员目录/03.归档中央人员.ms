@@ -13,7 +13,12 @@
   "description": "按标识加载中央人员并检查所属范围与版本；执行软删除或撤销关联，保留审计历史。处理控制库的中央人员资料，保持人员资料与租户本地账号隔离；仅显式下发时才影响租户。",
   "parameters": [],
   "method": "POST",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

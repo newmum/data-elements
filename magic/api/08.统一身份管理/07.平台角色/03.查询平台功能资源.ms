@@ -13,7 +13,12 @@
   "description": "读取平台角色可配置的功能资源树，按当前操作人可授予范围过滤，供角色授权界面使用。",
   "parameters": [],
   "method": "GET",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

@@ -7,7 +7,12 @@
   "path": "/order",
   "method": "POST",
   "parameters": [],
-  "options": [],
+  "options": [
+    {
+      "name": "jsonBody",
+      "value": "CACHED"
+    }
+  ],
   "headers": [],
   "paths": [],
   "description": "校验行业登录会话后，调用 @/common/previewDraftOrder 对浏览器提交的草稿项排序分页。返回标识和总数，无业务数据读写。"

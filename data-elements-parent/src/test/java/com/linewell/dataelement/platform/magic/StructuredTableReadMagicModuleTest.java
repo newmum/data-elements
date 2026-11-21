@@ -5,7 +5,12 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockStatic;
 
+import cn.dev33.satoken.session.SaSession;
+import cn.dev33.satoken.stp.StpUtil;
+import com.linewell.dataelement.platform.tenant.api.TenantMagicModule;
 import com.linewell.dataelement.platform.tenant.domain.TenantContext;
 import com.linewell.dataelement.platform.magic.StructuredTableReadMagicModule.Expression;
 import com.linewell.dataelement.platform.persistence.KingbaseSql;
@@ -15,6 +20,8 @@ import java.lang.reflect.Proxy;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.SQLException;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -22,10 +29,76 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.ssssssss.script.MagicScript;
+import org.ssssssss.script.MagicScriptContext;
+import org.ssssssss.script.runtime.function.MagicScriptLambdaFunction;
 
 class StructuredTableReadMagicModuleTest {
     private static final String TENANT = "validation-a";
     private static final String OTHER_TENANT = "validation-b";
+
+    @Test
+    void logExportDateFilterUsesSubmitCutoffAndKeepsBothPageSizesAndOwnershipBounded() throws Exception {
+        var fixture = new Fixture();
+        var jdbc = new JdbcTemplate(fixture.source());
+        jdbc.execute("""
+                CREATE TABLE log_export_job_t (tid VARCHAR, tenant_id VARCHAR, scope_kind VARCHAR, scope_id VARCHAR,
+                    identity_domain VARCHAR, owner_id VARCHAR, actor_name VARCHAR, actor_account VARCHAR,
+                    actor_org_name VARCHAR, status VARCHAR, format_code VARCHAR, last_error_code VARCHAR,
+                    created_time TIMESTAMP, cutoff_time TIMESTAMP, finished_at TIMESTAMP, expires_at TIMESTAMP,
+                    row_count BIGINT, row_limit BIGINT)
+                """);
+        String insert = """
+                INSERT INTO log_export_job_t (tid, tenant_id, scope_kind, scope_id, identity_domain, owner_id,
+                    status, format_code, created_time, cutoff_time) VALUES (?, ?, 'TENANT', ?, ?, ?, 'SUCCESS', 'CSV', ?, ?)
+                """;
+        var start = LocalDateTime.parse("2026-11-20T23:00:00");
+        var end = start.plusSeconds(105);
+        for (int i = 0; i < 105; i++) {
+            var cutoff = start.plusSeconds(i);
+            var created = i % 2 == 0 ? cutoff : cutoff.plusHours(8);
+            jdbc.update(insert, "job-" + i, TENANT, TENANT, "global", "validation-owner", created, cutoff);
+        }
+        jdbc.update(insert, "exclusive-end", TENANT, TENANT, "global", "validation-owner", end, end);
+        jdbc.update(insert, "foreign-tenant", OTHER_TENANT, TENANT, "global", "validation-owner", start, start);
+        jdbc.update(insert, "other-owner", TENANT, TENANT, "global", "validation-other", start, start);
+        jdbc.update(insert, "other-domain", TENANT, TENANT, "workforce", "validation-owner", start, start);
+
+        String source = CanonicalMagicSources.byId("log_tenant_lifecycle_page_v1")
+                .replace("import '@/common/loggrants' as grants\n", "")
+                .replace("import tableRead\n", "").replace("import tenantRuntime\n", "");
+        var script = MagicScript.create(source, null);
+        var grants = (MagicScriptLambdaFunction) (context, arguments) -> Map.of("modes", Map.of("exports", "ALL"));
+        try (var stp = mockStatic(StpUtil.class)) {
+            stp.when(StpUtil::getLoginIdAsString).thenReturn("validation-owner");
+            stp.when(StpUtil::getTokenSession).thenReturn(mock(SaSession.class));
+            TenantContext.run(TENANT, () -> {
+                for (int size : List.of(20, 100)) {
+                    fixture.source().reads = 0;
+                    var request = new TaskPageParameters(Map.of("startTime", start.toInstant(ZoneOffset.UTC).toString(),
+                            "endTime", end.toInstant(ZoneOffset.UTC).toString(), "size", Integer.toString(size)));
+                    var result = (Map<?, ?>) script.execute(new MagicScriptContext(Map.of(
+                            "kind", "exports", "http", request, "grants", grants, "tableRead", fixture.module(),
+                            "tenantRuntime", new TenantMagicModule(null))));
+                    assertEquals(105L, ((Number) result.get("total")).longValue());
+                    var rows = StructuredValues.objectRows(result.get("list"));
+                    assertEquals(size, rows.size());
+                    assertEquals(2, fixture.source().reads);
+                    for (int i = 0; i < size; i++) {
+                        assertEquals("job-" + (104 - i), rows.get(i).get("tid"));
+                        assertEquals(start.plusSeconds(104 - i).toInstant(ZoneOffset.UTC).toString(),
+                                rows.get(i).get("created_time"));
+                    }
+                }
+            });
+        }
+    }
+
+    public record TaskPageParameters(Map<String, String> values) {
+        public List<String> getValues(String key) {
+            return values.containsKey(key) ? List.of(values.get(key)) : null;
+        }
+    }
 
     @Test
     void aggregateJoinUsesScopedSnapshotAndSortsBeforeAConstantNumberOfReads() {

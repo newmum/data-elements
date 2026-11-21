@@ -13,7 +13,12 @@
   "description": "用户显式触发后领取指定任务，构造标准人员或机构报文，调用接收端并保存回执与失败原因。",
   "parameters": [],
   "method": "POST",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

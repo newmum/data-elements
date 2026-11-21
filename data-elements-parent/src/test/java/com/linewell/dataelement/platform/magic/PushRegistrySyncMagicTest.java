@@ -3,7 +3,7 @@ package com.linewell.dataelement.platform.magic;
 import cn.hutool.extra.spring.SpringUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.linewell.dataelement.config.DataPushRegistryProperties;
-import com.linewell.dataelement.integration.transfer.haitong.HaitongPushCredentialClient;
+import com.linewell.dataelement.integration.transfer.haitong.HaitongStandaloneRegistryClient;
 import com.linewell.dataelement.model.common.BizException;
 import com.linewell.dataelement.platform.tenant.domain.TenantContext;
 import com.linewell.dataelement.platform.web.error.GlobalExceptionHandler;
@@ -41,13 +41,18 @@ public class PushRegistrySyncMagicTest {
         boolean denied;String hidden="";public String id(){return "ga";}
         public List<Map<String,Object>> visibleDataSourcesFor(String resource,List<Map<String,Object>> rows){check(resource.equals("MENU:2081000000000000002"),"scope resource");return denied?List.of():rows.stream().filter(r->!hidden.equals(r.get("tid"))).toList();}
     }
-    public static class Relay {
+    public static class Relay extends HaitongStandaloneRegistryClient {
         int calls;
         Map<String, Object> last;
         boolean fail;
         int failOnCall;
         String digest;
 
+        Relay(DataPushRegistryProperties settings, ObjectMapper mapper) {
+            super(settings, mapper);
+        }
+
+        @Override
         public synchronized void synchronize(String id, Map<String, Object> snapshot) {
             calls++;
             if (fail || calls == failOnCall) throw new BizException(503, "test upstream failure");
@@ -72,49 +77,18 @@ public class PushRegistrySyncMagicTest {
     public static class LegacyIssuer {
         int calls;
 
-        public HaitongPushCredentialClient.IssuedCredential issue(String client, boolean rotate) {
+        public HaitongStandaloneRegistryClient.IssuedCredential issue(String client, boolean rotate) {
             check(rotate && "push-source".equals(client), "legacy credential scope");
             calls++;
-            return new HaitongPushCredentialClient.IssuedCredential(client, "validation-legacy-key", true);
+            return new HaitongStandaloneRegistryClient.IssuedCredential(client, "validation-legacy-key", true);
         }
     }
     public static class Log {public void warn(String text,Object id) {}}
-    public static class CallbackScope {
-        public Object control(Supplier<Object> action) {
-            check(TenantContext.usesControlDatabase(), "callback begins in verified control context");
-            return action.get();
-        }
-
-        public Object inTenant(String tenantId, Supplier<Object> action) {
-            check(TenantContext.usesControlDatabase(), "selected tenant follows the control lookup");
-            return TenantContext.call(tenantId, action);
-        }
-    }
-
-    public static class Delivery {
-        int attempts;
-        int targetChecks;
-
-        public void requireTarget(String tenant) {
-            check(tenant.equals(TenantContext.requireTenantId()) && !TenantContext.usesControlDatabase(),
-                    "target connection properties use the selected tenant database");
-            targetChecks++;
-        }
-
-        public Map<String, Object> deliver(String tenant, String source, String table, String delivery,
-                List<Map<String, Object>> records, long version) {
-            attempts++;
-            check("ga".equals(tenant) && "source".equals(source) && tenant.equals(TenantContext.requireTenantId())
-                    && !TenantContext.usesControlDatabase(), "delivery uses the registered tenant database and source");
-            return Map.of("deliveryId", delivery, "tableName", table, "schemaVersion", version, "records", records.size());
-        }
-    }
-
     static class Fixture {
-        final AtomicInteger reads=new AtomicInteger(),writes=new AtomicInteger();final JdbcTemplate jdbc;final SQLModule db;final Scope scope=new Scope();final Relay relay=new Relay();
+        final AtomicInteger reads=new AtomicInteger(),writes=new AtomicInteger();final JdbcTemplate jdbc;final SQLModule db;final Scope scope=new Scope();
         final DataPushRegistryProperties settings=new DataPushRegistryProperties();final ObjectMapper mapper=new ObjectMapper();final String script;
+        final Relay relay = new Relay(settings, mapper);
         final JdbcTemplate concurrentJdbc;
-        final Delivery delivery = new Delivery();
         final LegacyIssuer legacy = new LegacyIssuer();
         Runnable beforeSchemaGuard = () -> {};
         Runnable beforeCredentialInsert = () -> {};
@@ -170,13 +144,13 @@ public class PushRegistrySyncMagicTest {
             var dialects=new org.ssssssss.magicapi.modules.db.dialect.DialectAdapter();dialects.add(new org.ssssssss.magicapi.modules.db.dialect.MySQLDialect(){@Override public boolean match(String url){return url.contains(":h2:");}});db.setDialectAdapter(dialects);db.setResultProvider(new org.ssssssss.magicapi.core.interceptor.DefaultResultProvider("registry-test"));
             var columns=new ColumnMapperAdapter();columns.add(new DefaultColumnMapperProvider());columns.add(new CamelColumnMapperProvider());columns.setDefault("camel");db.setColumnMapperProvider(columns);db.setColumnMapRowMapper(columns.getDefaultColumnMapRowMapper());db.setRowMapColumnMapper(v->v);db.setSqlInterceptors(List.of());db.setNamedTableInterceptors(List.of());
             settings.setRelayBaseUrl("http://127.0.0.1:18083");
+            settings.setRegistrySyncPath("/api/v1/push");
             settings.setStandaloneSyncKey("test-only-service-key");
             var beans = new DefaultListableBeanFactory();
             beans.registerSingleton("mapper", mapper);
             beans.registerSingleton("data-element.push-registry-com.linewell.dataelement.config.DataPushRegistryProperties", settings);
             beans.registerSingleton("haitongStandaloneRegistryClient", relay);
             beans.registerSingleton("globalExceptionHandler", new GlobalExceptionHandler());
-            beans.registerSingleton("dataPushFjghccDeliveryService", delivery);
             beans.registerSingleton("haitongPushCredentialClient", legacy);
             new SpringUtil().postProcessBeanFactory(beans);
             script = CanonicalMagicSources.byId("c78db2b6d3b04a2ba5d0854d8171a106")
@@ -227,25 +201,13 @@ public class PushRegistrySyncMagicTest {
         }
 
         Object readContract(String method, String... ids) throws Exception {
-            boolean head = "HEAD".equals(method);
-            String file = head ? "05.核验已发布推送契约.ms" : "01.查询已发布推送契约.ms";
-            String id = head ? "dws_push_registry_head_v1" : "dws_push_registry_contracts_v1";
-            var entry = CanonicalMagicSources.byPath("api/05.数据服务/14.推送登记/" + file, id)
-                    .replaceFirst("(?m)^import '@/pushregistry/read'[^\\r\\n]*\\R", "");
-            check(entry.contains("import request"), "the live Magic request module must be imported");
-            entry = entry.replaceFirst("(?m)^import request\\R", "");
-            var contract = CanonicalMagicSources.byPath("function/15.推送登记/04.读取已发布推送契约.ms",
-                    "push_registry_schema_query_v1")
-                    .replaceAll("(?m)^import (tenantRuntime|dataScope|tableRead)[^\\r\\n]*\\R", "");
+            var source = CanonicalMagicSources.byId("dws_push_registry_contracts_v1");
+            check(source.contains("import request"), "the live Magic request module must be imported");
+            var entry = source.replaceAll("(?m)^import (request|tenantRuntime|dataScope|tableRead)\\R", "");
             var servletRequest = new MockHttpServletRequest(method, "/dws/push/contracts");
             if (ids.length > 0) servletRequest.setParameter("datasourceId", ids);
             var bindings = bindings();
             bindings.put("request", new RequestModule(new MagicJakartaRequestContextHolder(null)));
-            bindings.put("readContracts", (MagicScriptLambdaFunction) (ignored, args) -> {
-                var parameters = bindings();
-                parameters.put("supplied", args[0]);
-                return MagicScript.create(contract, null).execute(new MagicScriptContext(parameters));
-            });
             reads.set(0);
             writes.set(0);
             var script = MagicScript.create(entry, null);
@@ -257,47 +219,12 @@ public class PushRegistrySyncMagicTest {
             }
         }
 
-        ResponseEntity<?> callRelay(String action, String client, Map<String, Object> body) throws Exception {
-            boolean validate = "validate".equals(action);
-            String file = validate ? "03.校验海通推送批次.ms" : "04.投递海通推送文件.ms";
-            String id = validate ? "dws_push_registry_validate_v1" : "dws_push_registry_deliver_v1";
-            var entry = CanonicalMagicSources.byPath("api/05.数据服务/14.推送登记/" + file, id)
-                    .replaceFirst("(?m)^import '@/pushregistry/verifybatch'[^\\r\\n]*\\R", "");
-            check(entry.contains("import request"), "the live Magic request module must be imported");
-            entry = entry.replaceAll("(?m)^import (request|identityRuntime)\\R", "");
-            var function = CanonicalMagicSources.byPath("function/15.推送登记/03.校验海通回调数据.ms",
-                    "push_registry_relay_check_v1")
-                    .replaceAll("(?m)^import (identityRuntime|tableRead)[^\\r\\n]*\\R", "");
-            var servletRequest = new MockHttpServletRequest("POST", "/dws/push/" + action);
-            servletRequest.addHeader("X-Relay-Client-Id", client);
-            var bindings = bindings();
-            bindings.put("body", body);
-            bindings.put("identityRuntime", new CallbackScope());
-            bindings.put("request", new RequestModule(new MagicJakartaRequestContextHolder(null)));
-            bindings.put("verifyBatch", (MagicScriptLambdaFunction) (ignored, args) -> {
-                var parameters = bindings();
-                parameters.put("identityRuntime", new CallbackScope());
-                parameters.put("caller", args[0]);
-                parameters.put("batch", args[1]);
-                parameters.put("channel", args[2]);
-                return MagicScript.create(function, null).execute(new MagicScriptContext(parameters));
-            });
-            reads.set(0);
-            writes.set(0);
-            RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(servletRequest));
-            try (var context = TenantContext.control()) {
-                return (ResponseEntity<?>) MagicScript.create(entry, null).execute(new MagicScriptContext(bindings));
-            } finally {
-                RequestContextHolder.resetRequestAttributes();
-            }
-        }
-
         ResponseEntity<?> credential(String action, String source) throws Exception {
-            String file = "rotate".equals(action) ? "07.轮换业务推送密钥.ms" : "06.签发业务推送密钥.ms";
+            String file = "rotate".equals(action) ? "04.轮换业务推送密钥.ms" : "03.签发业务推送密钥.ms";
             var entry = CanonicalMagicSources.byPath("api/05.数据服务/14.推送登记/" + file,
                     "dws_push_registry_" + action + "_v1")
                     .replaceAll("(?m)^import (tenantRuntime|'@/pushregistry/)[^\\r\\n]*\\R", "");
-            var credential = CanonicalMagicSources.byPath("function/15.推送登记/05.签发与轮换业务密钥.ms", "push_registry_credential_v1")
+            var credential = CanonicalMagicSources.byPath("function/15.推送登记/03.签发与轮换业务密钥.ms", "push_registry_credential_v1")
                     .replaceAll("(?m)^import (tenantRuntime|dataScope|tableRead|identityRuntime|'@/pushregistry/)[^\\r\\n]*\\R", "");
             var bindings = bindings();
             bindings.put("body", Map.of("datasourceId", source, "tenantId", "ct"));
@@ -319,6 +246,7 @@ public class PushRegistrySyncMagicTest {
 
     static class BatchUpstream implements AutoCloseable {
         final java.net.ServerSocket server;final Thread worker;volatile int calls;boolean corruptReceipt,foreignStatus;Map<String,Object> last;final Map<String,Map<String,Object>> mirrors=new LinkedHashMap<>();
+        volatile String requestLine;
         BatchUpstream() throws Exception {
             server=new java.net.ServerSocket(0,10,java.net.InetAddress.getByName("127.0.0.1"));
             worker=Thread.ofPlatform().daemon().start(()->{
@@ -327,6 +255,7 @@ public class PushRegistrySyncMagicTest {
                     byte[] end={13,10,13,10};
                     while(matched<4){int ch=input.read();if(ch<0)break;head.write(ch);matched=ch==end[matched]?matched+1:0;}
                     String headers=head.toString(java.nio.charset.StandardCharsets.US_ASCII);int length=0;
+                    requestLine = headers.lines().findFirst().orElse("");
                     for(String line:headers.split("\r\n"))if(line.toLowerCase().startsWith("content-length:"))length=Integer.parseInt(line.substring(15).trim());
                     var json=new ObjectMapper();last=json.readValue(input.readNBytes(length),Map.class);calls++;
                     if("STATUS".equals(last.get("registryAction"))){
@@ -336,13 +265,17 @@ public class PushRegistrySyncMagicTest {
                         byte[] reply=json.writeValueAsBytes(Map.of("code","REGISTRY_STATUS","readOnly",true,"tables",found));var output=socket.getOutputStream();
                         output.write(("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: "+reply.length+"\r\nConnection: close\r\n\r\n").getBytes(java.nio.charset.StandardCharsets.US_ASCII));output.write(reply);output.flush();continue;
                     }
-                    var sources=(List<Map<String,Object>>)last.get("datasources");int tables=0,columns=0;
+                    var single = (Map<String, Object>) last.get("datasource");
+                    var sources = single == null ? (List<Map<String,Object>>)last.get("datasources") : List.of(single);
+                    int tables=0,columns=0;
                     for(var source:sources)for(var table:(List<Map<String,Object>>)source.get("tables")){tables++;columns+=((List<?>)table.get("columns")).size();
                         var fields=new ArrayList<List<Object>>();for(Map<String,Object> field:(List<Map<String,Object>>)table.get("columns"))fields.add(Arrays.asList(field.get("columnName"),field.get("columnComment"),field.get("dataType"),field.get("ordinal"),field.get("required"),field.get("enabled")));
                         String hash=cn.hutool.crypto.digest.DigestUtil.sha256Hex(json.writeValueAsBytes(Arrays.asList(table.get("tableId"),table.get("tableName"),table.get("tableComment"),table.get("schemaVersion"),table.get("enabled"),fields)));
                         mirrors.put(source.get("datasourceId")+":"+table.get("tableName"),Map.of("datasourceId",source.get("datasourceId"),"tableName",table.get("tableName"),"active",true,"definitionHash",hash,"syncedAt",1000L));
                     }
-                    byte[] reply=json.writeValueAsBytes(Map.of("datasourceIds",corruptReceipt?Collections.nCopies(sources.size(),sources.getFirst().get("datasourceId")):sources.stream().map(r->r.get("datasourceId")).toList(),"tableCount",tables,"columnCount",columns));
+                    byte[] reply=json.writeValueAsBytes(single == null
+                            ? Map.of("datasourceIds",corruptReceipt?Collections.nCopies(sources.size(),sources.getFirst().get("datasourceId")):sources.stream().map(r->r.get("datasourceId")).toList(),"tableCount",tables,"columnCount",columns)
+                            : Map.of("datasourceId", single.get("datasourceId")));
                     var output=socket.getOutputStream();output.write(("HTTP/1.1 201 Created\r\nContent-Type: application/json\r\nContent-Length: "+reply.length+"\r\nConnection: close\r\n\r\n").getBytes(java.nio.charset.StandardCharsets.US_ASCII));output.write(reply);output.flush();
                 }catch(Exception e){if(!server.isClosed())throw new RuntimeException(e);}
             });
@@ -454,51 +387,6 @@ public class PushRegistrySyncMagicTest {
         check("bigint".equals(fixture.jdbc.queryForObject("select data_type from data_push_schema_field_t where tid=?", String.class, fieldId)),
                 "field ID preserved across publication");
         System.out.println(size + " tables: publish=6 reads and 3 write invocations, republish=6 reads and 4 write invocations");
-    }
-
-    @ParameterizedTest
-    @ValueSource(ints = {20, 100})
-    void relayCallbacksResolveOnlyTheBoundTenantAndUseFiveReads(int size) throws Exception {
-        var fixture = new Fixture(1);
-        fixture.publishContract(Map.of("datasourceId", "source"));
-        fixture.jdbc.update("update data_push_schema_t set delivery_config=?,schema_version=3", """
-                {"kafka":{"topic":"validation-topic"}}
-                """);
-        fixture.jdbc.update("""
-                insert into data_push_relay_client_t (relay_client_id,tenant_id,datasource_id,is_enable,is_del)
-                values ('client','ct',null,1,0),('client','ga','source',1,0)
-                """);
-        var items = java.util.stream.IntStream.range(0, size).mapToObj(i -> Map.of("id", i)).toList();
-        var batch = Map.of("datasourceId", "source", "tableName", "TABLE_0", "records", items,
-                "schemaVersion", 1, "tenantId", "ct");
-        Map<String, Object> input = Map.of("batch", batch, "channel", "table-to-kafka", "deliveryId", "validation-delivery");
-
-        var checked = (Map<?, ?>) ((Map<?, ?>) fixture.callRelay("validate", "client", input).getBody()).get("data");
-        check(checked.get("schemaVersion").equals(3L) && checked.get("recordCount").equals(size), "server version and count");
-        check("validation-topic".equals(checked.get("destination")), "topic comes from the bound contract");
-        check(fixture.reads.get() == 5 && fixture.writes.get() == 0 && fixture.delivery.attempts == 0, "validation SQL and side effects");
-
-        var fileChecked = (Map<?, ?>) ((Map<?, ?>) fixture.callRelay("validate", "client",
-                Map.of("batch", batch, "channel", "table-to-ftp")).getBody()).get("data");
-        check("PLATFORM_FTP".equals(fileChecked.get("targetType")) && fixture.delivery.targetChecks == 1,
-                "signed validation resolves FTP properties inside the authorized tenant");
-
-        var delivered = (Map<?, ?>) ((Map<?, ?>) fixture.callRelay("deliver", "client", input).getBody()).get("data");
-        check(delivered.get("schemaVersion").equals(3L) && delivered.get("records").equals(size), "same batch reaches the adapter");
-        check(fixture.reads.get() == 5 && fixture.writes.get() == 0 && fixture.delivery.attempts == 1, "file transport called once");
-        fixture.jdbc.update("""
-                insert into data_push_relay_client_t (relay_client_id,tenant_id,datasource_id,is_enable,is_del)
-                values ('client','ct','source',1,0)
-                """);
-        var ambiguous = (com.linewell.dataelement.model.common.CommonResponse<?>) fixture.callRelay("deliver", "client", input).getBody();
-        check(ambiguous.getCode() == 500 && ambiguous.getMsg().contains("422"), "legacy envelope rejects ambiguous tenant");
-        check(fixture.reads.get() == 1 && fixture.delivery.attempts == 1, "ambiguous scope stops before accessing business data");
-        fixture.jdbc.update("delete from data_push_relay_client_t where tenant_id='ct' and datasource_id='source'");
-        var invalidBatch = Map.of("datasourceId", "source", "tableName", "table_0", "records", List.of(Map.of("id", "bad")));
-        var rejected = (com.linewell.dataelement.model.common.CommonResponse<?>) fixture.callRelay("deliver", "client",
-                Map.of("batch", invalidBatch, "deliveryId", "validation-pending")).getBody();
-        check(rejected.getMsg().contains("字段类型不匹配") && fixture.delivery.attempts == 1, "invalid field prevented delivery");
-        System.out.println(size + " relay records: 1 request, 5 contract reads, 0 business SQL writes");
     }
 
     private static Map<?, ?> credentialData(ResponseEntity<?> response) {
@@ -619,15 +507,24 @@ public class PushRegistrySyncMagicTest {
     }
     static void verifyRemotePreviewAndPlan(int size)throws Exception{
         try(BatchUpstream upstream=new BatchUpstream()){
-            Fixture f=new Fixture(size);f.jdbc.update("insert into push_node_t(tid,tenant_id,base_url,enabled,is_del) values('node','ga',?,1,0)",upstream.url());
+            Fixture f=new Fixture(size);f.jdbc.update("insert into push_node_t(tid,tenant_id,base_url,enabled,is_del) values('node','ga',?,1,0)",upstream.url() + "/gateway/");
+            f.settings.setRegistrySyncPath("/registration/sync");
             f.jdbc.update("update db_datasource_t set asset_status=2 where tid='source'");
             Map<?,?> preview=(Map<?,?>)f.call(Map.of("all",true,"nodeId","node","preview",true));
             List<Map<String,Object>> rows=(List<Map<String,Object>>)preview.get("rows");String plan=preview.get("planHash").toString();
             check(Boolean.TRUE.equals(preview.get("statusConfirmed"))&&rows.size()==size&&rows.stream().allMatch(r->"NEW".equals(r.get("syncStatus"))),"new tables confirmed from empty node mirror: "+preview);
             int previewReads=f.reads.get();check(f.writes.get()==0&&upstream.calls==1,"preview read only, one upstream call");
+            check((upstream.url() + "/gateway/registration/sync").equals(preview.get("targetUrl")), "plan reports the configured target");
+            check(upstream.requestLine.startsWith("POST /gateway/registration/sync "), "preview uses the configured target");
             Map<?,?> again=(Map<?,?>)f.call(Map.of("all",true,"nodeId","node","preview",true));check(plan.equals(again.get("planHash")),"plan stable across preview timestamps");
             Map<?,?> done=(Map<?,?>)f.call(Map.of("all",true,"nodeId","node","planHash",plan));
             check(Boolean.TRUE.equals(done.get("synced"))&&((List<Map<String,Object>>)done.get("rows")).stream().allMatch(r->"SUCCESS".equals(r.get("syncStatus"))),"ACK confirms precise successful rows");
+            check(upstream.requestLine.startsWith("POST /gateway/registration/sync "), "confirmation uses the preview target");
+            f.settings.setRegistrySyncPath("/registration/updated");
+            int beforePathChange = upstream.calls;
+            rejected(f.call(Map.of("all", true, "nodeId", "node", "planHash", plan)), 409);
+            check(f.writes.get() == 0 && upstream.calls == beforePathChange, "path change invalidates the plan before transport");
+            f.settings.setRegistrySyncPath("/registration/sync");
             preview=(Map<?,?>)f.call(Map.of("all",true,"nodeId","node","preview",true));rows=(List<Map<String,Object>>)preview.get("rows");
             check(rows.stream().allMatch(r->"SYNCED".equals(r.get("syncStatus"))),"actual remote fingerprints match published definitions: "+rows.getFirst());
             f.jdbc.update("update db_table_column_t set column_comment='changed comment' where tid='column_0'");
@@ -751,6 +648,23 @@ public class PushRegistrySyncMagicTest {
         var unavailable=new Fixture(1);rejected(unavailable.call(Map.of("datasourceId","source","dryRun","true")),400);
         unavailable.settings.setStandaloneSyncKey("");rejected(unavailable.call(Map.of("datasourceId","source")),503);check(unavailable.relay.calls==0,"missing setting transport");
         unavailable.settings.setStandaloneSyncKey("test-only-service-key");unavailable.relay.fail=true;rejected(unavailable.call(Map.of("datasourceId","source")),503);
+    }
+
+    @Test
+    void singleNodeSyncUsesTheConfiguredPathAndRejectsAnInvalidPathBeforeWrites() throws Exception {
+        try (var upstream = new BatchUpstream()) {
+            var fixture = new Fixture(1);
+            fixture.jdbc.update("insert into push_node_t(tid,tenant_id,base_url,enabled,is_del) values('node','ga',?,1,0)",
+                    upstream.url() + "/gateway/");
+            Map<String, Object> request = Map.of("datasourceId", "source", "nodeId", "node");
+            fixture.settings.setRegistrySyncPath("/registration?unexpected=true");
+            rejected(fixture.call(request), 503);
+            check(fixture.writes.get() == 0 && upstream.calls == 0, "invalid route rejected before local or external writes");
+            fixture.settings.setRegistrySyncPath("/registration/sync");
+            var result = (Map<?, ?>) fixture.call(request);
+            check(Boolean.TRUE.equals(result.get("synced")) && upstream.calls == 1, "single-source receipt confirmed");
+            check(upstream.requestLine.startsWith("POST /gateway/registration/sync "), "single-source request uses the configured target");
+        }
     }
 
     @Test

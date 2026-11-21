@@ -26,12 +26,11 @@ import java.util.function.Supplier;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
-import org.springframework.beans.factory.support.DefaultListableBeanFactory;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
-import org.ssssssss.magicapi.core.service.MagicAPIService;
+import com.linewell.dataelement.magic.runtime.route.RegisteredMagicFunctionInvoker;
 import org.ssssssss.script.MagicScript;
 import org.ssssssss.script.MagicScriptContext;
 import org.ssssssss.script.runtime.function.MagicScriptLambdaFunction;
@@ -41,7 +40,7 @@ class TenantLogCapabilitiesMagicTest {
     private static final String APPLICATION = "validation-app";
     private static final String ACTOR = "validation-user";
     private static final String API = "api/07.系统管理/18.日志管理/";
-    private static final String GRANTS = "function/01.通用函数/88.读取行业日志授权.ms";
+    private static final String GRANTS = "function/01.通用函数/67.读取行业日志授权.ms";
 
     @ParameterizedTest
     @ValueSource(ints = {20, 100})
@@ -72,7 +71,7 @@ class TenantLogCapabilitiesMagicTest {
             addMenu(jdbc, TENANT, APPLICATION, "nav-" + index, "root", "navigation-" + index, 0);
         }
 
-        String script = CanonicalMagicSources.byPath("function/01.通用函数/87.计算当前行业日志能力.ms",
+        String script = CanonicalMagicSources.byPath("function/01.通用函数/66.计算当前行业日志能力.ms",
                 "log_tenant_capabilities_v1");
         String grantScript = CanonicalMagicSources.byPath(GRANTS, "log_tenant_grants_v1");
         var session = mock(SaSession.class);
@@ -106,16 +105,14 @@ class TenantLogCapabilitiesMagicTest {
                 + " (?, ?, 'deleted-org'), (?, ?, 'other-org')", TENANT, ACTOR, TENANT, ACTOR,
                 TENANT, ACTOR, "other-tenant", ACTOR);
         String grantScript = CanonicalMagicSources.byPath(GRANTS, "log_tenant_grants_v1");
-        var magic = mock(MagicAPIService.class);
-        when(magic.invoke(eq("/common/loggrants"), anyMap())).thenAnswer(call -> {
+        var magic = mock(RegisteredMagicFunctionInvoker.class);
+        when(magic.invoke(eq("log_tenant_grants_v1"), anyMap())).thenAnswer(call -> {
             Map<String, String> parameters = call.getArgument(1);
             assertThat(TenantContext.requireTenantId()).isEqualTo(TENANT);
             assertThat(parameters).doesNotContainKey("tenantId");
             return grants(grantScript, jdbc, parameters.get("actor"), parameters.get("appId"), parameters.get("capability"));
         });
-        var beans = new DefaultListableBeanFactory();
-        beans.registerSingleton("magicAPIService", magic);
-        var access = new LogAccessService(beans.getBeanProvider(MagicAPIService.class));
+        var access = new LogAccessService(magic);
         try (var caller = TenantContext.use("other-tenant")) {
             sql.set(0);
             var scope = access.tenant(TENANT, ACTOR, APPLICATION, "requests");
@@ -145,12 +142,9 @@ class TenantLogCapabilitiesMagicTest {
         }
     }
 
-    @ParameterizedTest
-    @ValueSource(strings = {"GET", "HEAD"})
-    void onlyAuthorizedIndustryCallsEnterTheSharedBundleReader(String method) throws Exception {
-        String title = method.equals("GET") ? "03.读取行业日志组件" : "04.读取行业日志组件响应头";
-        String script = CanonicalMagicSources.byPath(API + title + ".ms",
-                "tenant_log_components_" + method.toLowerCase(java.util.Locale.ROOT) + "_v1");
+    @Test
+    void onlyAuthorizedIndustryCallsEnterTheSharedBundleReader() throws Exception {
+        String script = CanonicalMagicSources.byPath(API + "02.读取行业日志组件.ms", "tenant_log_components_get_v1");
         AtomicInteger reads = new AtomicInteger();
         MagicScriptLambdaFunction bundle = (context, values) -> {
             reads.incrementAndGet();
@@ -186,7 +180,7 @@ class TenantLogCapabilitiesMagicTest {
                 ('validation-other', 'other', '1', 0, 'other', 'other')
                 """);
         var runtime = new ControlFixture();
-        String script = CanonicalMagicSources.byPath("function/01.通用函数/86.读取现役日志组件.ms",
+        String script = CanonicalMagicSources.byPath("function/01.通用函数/65.读取现役日志组件.ms",
                 "log_component_bundle_v1");
         try (var tenant = TenantContext.use(TENANT)) {
             var result = execute(script, Map.of("identityRuntime", runtime,

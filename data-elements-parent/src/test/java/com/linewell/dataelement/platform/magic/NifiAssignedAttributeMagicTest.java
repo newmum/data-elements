@@ -48,9 +48,9 @@ class NifiAssignedAttributeMagicTest {
         bindings.put("findCanvas", (MagicScriptLambdaFunction) (context, args) -> pipeline);
         bindings.put("respond", (MagicScriptLambdaFunction) (context, args) ->
                 MagicScript.create("return action(null)", null).execute(new MagicScriptContext(Map.of("action", args[0]))));
-        bindings.put("pipelineId", "validation");
+        bindings.put("param", Map.of("id", "validation"));
         try (var tenant = TenantContext.use("police")) {
-            var preview = run("nifi_attribute_preview_v1", bindings);
+            var preview = run("nifi_attribute_sync_get_v1", bindings);
             assertThat(((ResponseEntity<?>) preview).getBody()).isInstanceOf(NifiAttributeSync.Preview.class);
             var selected = java.util.stream.IntStream.range(0, count).mapToObj(i ->
                     new NifiAttributeSync.Selection("source-" + i, "schedulingPeriod", "processor-" + i,
@@ -58,7 +58,6 @@ class NifiAssignedAttributeMagicTest {
             bindings.put("readBody", (MagicScriptLambdaFunction) (context, args) ->
                     new NifiAttributeSync.Request("selected-group", selected));
             bindings.put("mutation", new Mutation());
-            bindings.put("param", Map.of("id", "validation"));
             bindings.put("body", Map.of());
             bindings.put("AttributeRequest", NifiAttributeSync.Request.class);
             var saved = run("nifi_attribute_sync_post_v1", bindings);

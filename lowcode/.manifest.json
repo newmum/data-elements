@@ -82,7 +82,7 @@
       "type": "1",
       "sortOrder": 4,
       "path": "01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource)/04.登记内容审查(register-confirm).vue",
-      "baseSha256": "a6fbcd02c2d3061526039e6dd57a6db0e010c56fabb60e86584dc0d8ae4ea231"
+      "baseSha256": "8d35893cc556d69ac972b85c7c041526894db282614b12f4cd510215c828e2cf"
     },
     {
       "id": "2008087014782078976",
@@ -602,7 +602,7 @@
       "type": "1",
       "sortOrder": 3,
       "path": "03.数据接入/2.3.1 数据汇聚(data-convergence).vue",
-      "baseSha256": "32abc35a65d9756b106e79b7306ef37dd34d64f675999958812497b03b8e9072"
+      "baseSha256": "b88fd3c8f6cb9adb646700e905119cf0b21c0403ce88a2d8de3e7d92bbf848f8"
     },
     {
       "id": "2066782132212649984",
@@ -702,7 +702,7 @@
       "type": "1",
       "sortOrder": 4,
       "path": "03.数据接入/2.3.2 接入监控(access-monitoring).vue",
-      "baseSha256": "4f80829b0ed794106129e56ad621d2aba75ed61f21843147a8f12ab3d89e1441"
+      "baseSha256": "f95b714bc10c607145364b7815ecf58ee6ee1a77cdda489378bfd7a71e4617f0"
     },
     {
       "id": "2059545106555981824",
@@ -1332,7 +1332,7 @@
       "type": "1",
       "sortOrder": 1,
       "path": "09.系统管理/02.用户与权限/NiFi 节点配置(nifi-node-config).vue",
-      "baseSha256": "74f6b3eba10bd9a4844f485144d8ab659d956f447a37b47b36a20c72ed9c7d1b"
+      "baseSha256": "adb4b483fe76a4abfa3342274254df57a6068e900cd8866f044ab781b86ea1f4"
     },
     {
       "id": "178716197774800001",
@@ -1432,7 +1432,7 @@
       "type": "1",
       "sortOrder": 1,
       "path": "09.系统管理/08.审批中心/审批中心(approval-center).vue",
-      "baseSha256": "887d2d8c180b8b42bc8037a70055e9ea7f6fc248e4d6d6a17a98665d1539762d"
+      "baseSha256": "dd820c94a61c2ea7c4ebae61ddd681c8eb675e671b6fd09edd6aef9cd6690c79"
     },
     {
       "id": "2048677106957221888",
@@ -1472,7 +1472,7 @@
       "type": "1",
       "sortOrder": 1,
       "path": "09.系统管理/09.日志管理/日志管理(log-management).vue",
-      "baseSha256": "57c8786c36a6a34031b8cf5457e2e31ac6c091abde04a037f0a9a2730f637da8",
+      "baseSha256": "6ce8ce30753874c52edf5253822e88e535fbc52a88b814bed36f9e5c0751a429",
       "remark": "日志管理"
     },
     {

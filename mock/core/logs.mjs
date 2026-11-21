@@ -292,6 +292,7 @@ export class LogMockService {
     return { raw: true, status: 200, body: job.content, headers: {
       "Content-Type": job.format_code === "CSV" ? "text/csv;charset=UTF-8" : "application/x-ndjson;charset=UTF-8",
       "Content-Disposition": `attachment; filename="${job.tid}.${job.format_code.toLowerCase()}"`, "Cache-Control": "no-store",
+      "Content-Length": String(new TextEncoder().encode(job.content).byteLength),
     } };
   }
   async handle(key, query, body, database, session, components) {
@@ -309,8 +310,11 @@ export class LogMockService {
       return this.withJobs(database, () => key.startsWith("POST")
         ? this.createExport(database, session, body) : this.exportPage(database, session, query, !key.startsWith("HEAD")));
     }
-    const download = /^GET \/sym\/logs\/exports\/([a-f0-9]{32})\/download$/.exec(key);
-    if (download) { requireCapability(session, "exports"); return this.withJobs(database, () => this.download(database, session, download[1])); }
+    if (key === "GET /sym/logexport/download" || key === "HEAD /sym/logexport/download") {
+      assert(query.id != null, 20001, "缺少必要参数: id");
+      requireCapability(session, "exports");
+      return this.withJobs(database, () => this.download(database, session, String(query.id)));
+    }
     const event = /^(GET|HEAD|POST) \/sym\/(logauth|logops|logreq|logsec)\/(page|stats|detail|items|batch)$/.exec(key);
     if (event) {
       const [, method, group, action] = event;
@@ -343,7 +347,7 @@ export class LogMockService {
 /** 保持真实日志业务错误信封；未覆盖能力仍以明确 HTTP 501 拒绝。 */
 export function logErrorResponse(error) {
   const parameter = error.status === 400, state = error.status === 409;
-  return { status: parameter || state || error.status === 403 ? 200 : error.status,
+  return { status: parameter || state || error.status === 403 || error.status === 20001 ? 200 : error.status,
     body: { code: parameter || state ? 500 : error.status, success: false, msg: error.message, message: error.message, data: null,
       ...(parameter || state ? { error: { code: parameter ? "API-PARAM-001" : "MAGIC-RUNTIME-001", message: error.message, detail: null, traceId: null, type: parameter ? "IllegalArgumentException" : "IllegalStateException", method: "", path: "" } } : {}) } };
 }

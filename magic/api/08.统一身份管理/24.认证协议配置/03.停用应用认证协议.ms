@@ -13,7 +13,12 @@
   "description": "校验应用权限后关闭指定协议客户端或联邦配置，撤销其继续使用统一认证的能力。",
   "parameters": [],
   "method": "POST",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

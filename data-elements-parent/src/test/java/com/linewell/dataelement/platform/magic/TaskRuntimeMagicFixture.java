@@ -7,7 +7,7 @@ import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.linewell.dataelement.integration.nifi.canvas.config.NifiNodeRuntimeResolver;
 import com.linewell.dataelement.integration.nifi.canvas.config.NifiNodeRuntimeResolver.RuntimeNode;
 import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient;
-import com.linewell.dataelement.integration.nifi.canvas.runtime.TaskRuntimeMagicModule;
+import com.linewell.dataelement.magic.module.TaskRuntimeMagicModule;
 import com.linewell.dataelement.integration.nifi.canvas.runtime.TaskRuntimeStatusService;
 import com.linewell.dataelement.platform.tenant.domain.TenantContext;
 import java.io.IOException;

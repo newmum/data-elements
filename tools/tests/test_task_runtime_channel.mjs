@@ -18,7 +18,7 @@ const bytes = new TextEncoder().encode(text);
 const context = vm.createContext({
   ref: value => ({ value }), computed: get => ({ get value() { return get(); } }), AbortController, TextDecoder, Object, JSON, Date,
   setTimeout, clearTimeout, Math, document: { hidden: false }, tableRef: { value: { refresh: reset => refreshes.push(reset) } }, activeTab: { value: 'all' },
-  $request: { getUri: () => '/dev-api/nifi/api/task-runtime/events', get: async (url, config) => {
+  $request: { getUri: () => '/dev-api/nifi/run/events', get: async (url, config) => {
     requests.push(url); return config.adapter({ ...config, headers: { toJSON: () => ({ token: 'test-session' }) } });
   } },
   fetch: async (url, options) => {
@@ -53,7 +53,7 @@ const receivedA = [], receivedB = [];
 const canvasContext = vm.createContext({
   AbortController, TextDecoder, JSON, Math, Date, setTimeout, clearTimeout,
   document: { hidden: false, addEventListener() {}, removeEventListener() {} },
-  apiClient: { getUri: () => '/nifi/api/task-runtime/events' }, getBridgeToken: () => 'test-session', getSessionRevision: () => 7,
+  apiClient: { getUri: () => '/nifi/run/events' }, getBridgeToken: () => 'test-session', getSessionRevision: () => 7,
   fetch: async (url, options) => {
     connections++; assert.ok(!url.includes('test-session')); assert.equal(options.headers.token, 'test-session');
     let first = true;

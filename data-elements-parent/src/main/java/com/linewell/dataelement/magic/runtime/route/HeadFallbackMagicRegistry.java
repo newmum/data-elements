@@ -54,6 +54,7 @@ public final class HeadFallbackMagicRegistry extends RequestMagicDynamicRegistry
     @Override
     public ApiInfo getApiInfoFromRequest(MagicHttpServletRequest request) {
         ApiInfo resolved = super.getApiInfoFromRequest(request);
+        MagicJsonBody.select(request, resolved);
         if (resolved != null || !"HEAD".equals(request.getMethod())) {
             return resolved;
         }

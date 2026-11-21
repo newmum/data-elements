@@ -12,7 +12,6 @@ import org.ssssssss.script.annotation.Comment;
 public class MetadataGovernanceMagicModule {
     private final MetadataGovernanceService service;
     public MetadataGovernanceMagicModule(MetadataGovernanceService service) { this.service = service; }
-    @Comment("读取当前租户已采集元数据目录") public Map<String,Object> catalog() { return service.catalog(); }
     @Comment("基于已采集结构发现表关系") public Map<String,Object> discover(Map<String,Object> body) { return service.discover(safe(body)); }
     @Comment("验证逻辑关系字段映射、条件和租户归属，返回可持久化的结构定义") public Map<String,Object> prepareDefinition(Map<String,Object> body) { return service.prepareDefinition(safe(body)); }
     @Comment("读取业务键并验证逻辑关系，返回有范围的汇总") public Map<String,Object> validateRelation(Map<String,Object> body) { return service.validateRelationData(safe(body)); }

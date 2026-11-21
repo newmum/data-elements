@@ -4,13 +4,25 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.linewell.dataelement.integration.nifi.canvas.config.NifiNodeRuntimeResolver;
 import com.linewell.dataelement.integration.nifi.canvas.config.NifiNodeRuntimeResolver.RuntimeNode;
 import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient;
+import com.linewell.dataelement.magic.module.TaskRuntimeMagicModule;
+import com.linewell.dataelement.magic.runtime.result.MagicApiResultProvider;
+import com.linewell.dataelement.platform.magic.CanonicalMagicSources;
 import com.linewell.dataelement.platform.tenant.domain.TenantContext;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.RestController;
+import org.ssssssss.script.MagicScript;
+import org.ssssssss.script.MagicScriptContext;
 import java.util.*;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.head;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -27,9 +39,18 @@ class TaskRuntimeStatusTest {
         when(resolver.resolve()).thenThrow(new NifiNodeRuntimeResolver.NodeNotConfiguredException());
         var service = new TaskRuntimeStatusService(resolver, nifi);
         try (var tenant = TenantContext.use("tenant-new")) {
-            var mvc = MockMvcBuilders.standaloneSetup(new TaskRuntimeController(service)).build();
-            var result = mvc.perform(get("/nifi/api/task-runtime/events").accept("text/event-stream"))
-                    .andExpect(status().isOk()).andExpect(request().asyncStarted()).andReturn();
+            var module = spy(new TaskRuntimeMagicModule(service));
+            var mvc = MockMvcBuilders.standaloneSetup(new ScriptHandler(module)).build();
+            var response = mvc.perform(head("/nifi/run/events").accept("text/event-stream"))
+                    .andExpect(status().isOk()).andExpect(request().asyncNotStarted())
+                    .andExpect(header().string("Cache-Control", "no-cache, no-transform"))
+                    .andReturn().getResponse();
+            assertThat(response.getContentAsByteArray()).isEmpty();
+            verify(module, never()).eventStream();
+            var result = mvc.perform(get("/nifi/run/events").accept("text/event-stream"))
+                    .andExpect(status().isOk()).andExpect(request().asyncStarted())
+                    .andExpect(header().string("X-Accel-Buffering", "no")).andReturn();
+            assertThat(result.getRequest().getAttribute(MagicApiResultProvider.EVENT_STREAM)).isEqualTo(true);
             for (int retry = 0; retry < 100 && !result.getResponse().getContentAsString().contains("unavailable"); retry++) {
                 Thread.sleep(10);
             }
@@ -43,6 +64,31 @@ class TaskRuntimeStatusTest {
         } finally {
             service.close();
         }
+    }
+
+    @RestController
+    static class ScriptHandler {
+        private final TaskRuntimeMagicModule module;
+        private final MagicScript script;
+
+        ScriptHandler(TaskRuntimeMagicModule module) throws Exception {
+            this.module = module;
+            String source = CanonicalMagicSources.byPath("api/09.海通流程接口/05.运行状态/05.订阅实时状态事件.ms",
+                    "nifi_runtime_events_v1").replaceAll("(?m)^import (?:request|response|taskRuntime)\\R", "");
+            script = MagicScript.create(source, null);
+        }
+
+        @RequestMapping(value = "/nifi/run/events", method = {RequestMethod.GET, RequestMethod.HEAD})
+        public Object invoke(HttpServletRequest request, HttpServletResponse response) {
+            Object result = script.execute(new MagicScriptContext(Map.of("request", new ScriptRequest(request),
+                    "response", response, "taskRuntime", module)));
+            return result instanceof org.springframework.http.ResponseEntity<?> ? result
+                    : new MagicApiResultProvider().buildResult(null, 0, "success", result);
+        }
+    }
+
+    public record ScriptRequest(HttpServletRequest servlet) {
+        public HttpServletRequest get() { return servlet; }
     }
     @Test void idleScheduledProcessorIsRunningAndNestedStateIsIncluded() throws Exception {
         var index = RuntimeStatusIndex.parse(MAPPER.readTree(response("Running")));

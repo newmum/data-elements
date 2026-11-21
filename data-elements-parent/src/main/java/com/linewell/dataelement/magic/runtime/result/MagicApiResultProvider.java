@@ -1,8 +1,11 @@
 package com.linewell.dataelement.magic.runtime.result;
 
+import com.linewell.dataelement.platform.web.security.GlobalInterceptor;
 import com.linewell.dataelement.shared.error.ApiErrorDetails;
 import com.linewell.dataelement.shared.error.ApiErrorResolver;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Component;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import org.ssssssss.magicapi.core.context.RequestEntity;
 import org.ssssssss.magicapi.core.interceptor.ResultProvider;
 
@@ -23,8 +26,10 @@ import java.util.Set;
  * a stable error code, a user-friendly reason, a trace id and the complete technical detail.</p>
  */
 @Slf4j
+@Component
 public class MagicApiResultProvider implements ResultProvider {
 
+    public static final String EVENT_STREAM = MagicApiResultProvider.class.getName() + ".eventStream";
     private static final int SUCCESS_CODE = 0;
     private static final int ERROR_CODE = 500;
     private Map<String, Object> errorDetails(ApiErrorDetails error, RequestEntity request) {
@@ -38,13 +43,17 @@ public class MagicApiResultProvider implements ResultProvider {
         if(servletRequest!=null&&requestEntity!=null&&requestEntity.getApiInfo()!=null) servletRequest.setAttribute("audit.functionName",requestEntity.getApiInfo().getName());
         boolean success = code == 0 || code == 1 || code == 200;
         auditResult(code,success);
+        if (success && servletRequest != null && data instanceof SseEmitter) {
+            servletRequest.setAttribute(EVENT_STREAM, true);
+            return data;
+        }
         String displayMessage = success
                 ? defaultText(message, "success")
                 : friendlyBusinessMessage(message);
         // MagicScript 的 JSON.parse 会产生 Hutool JSONObject/JSONNull。先递归转换成标准
         // Java Map/List/null，避免 Jackson 在输出流程 DSL 等含空值的数据时序列化失败。
         Object serializableData = normalizeJsonValue(data);
-        if (success && isPublishedFlowService(requestEntity)
+        if (success && GlobalInterceptor.isPublishedFlowExecution(requestEntity)
                 && serializableData instanceof Map<?, ?> publishedResult
                 && publishedResult.containsKey("code")
                 && publishedResult.containsKey("data")) {
@@ -67,10 +76,6 @@ public class MagicApiResultProvider implements ResultProvider {
             result.put("error", errorDetails(error, requestEntity));
         }
         return result;
-    }
-
-    private boolean isPublishedFlowService(RequestEntity requestEntity) {
-        return requestPath(requestEntity).startsWith("/dws/flowserve/published/");
     }
 
     @Override

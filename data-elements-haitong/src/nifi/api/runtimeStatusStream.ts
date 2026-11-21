@@ -15,7 +15,7 @@ async function connect() {
   armWatchdog();
   active = controller;
   try {
-    const response = await fetch(apiClient.getUri({ url: '/api/task-runtime/events' }), {
+    const response = await fetch(apiClient.getUri({ url: '/run/events' }), {
       headers: { token: getBridgeToken()!, Accept: 'text/event-stream' }, signal: controller.signal, cache: 'no-store',
     });
     if (!response.ok || !response.headers.get('content-type')?.includes('text/event-stream') || !response.body) throw new Error('实时状态连接不可用');

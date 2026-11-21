@@ -1034,7 +1034,7 @@ class DataAggTaskEnsureBatchMagicTest {
                     var formatCycle = value => ''
                     """;
             Map<String,Object> inputs = new LinkedHashMap<>();
-            inputs.put("taskRuntime",new com.linewell.dataelement.integration.nifi.canvas.runtime.TaskRuntimeMagicModule(service));
+            inputs.put("taskRuntime",new com.linewell.dataelement.magic.module.TaskRuntimeMagicModule(service));
             inputs.put("tableRuntimeSnapshot",service.snapshot());
             inputs.put("db",f.db); inputs.put("tenantId","police"); inputs.put("dataScope",f.scope);
             inputs.put("tenantRuntime",f.scope);

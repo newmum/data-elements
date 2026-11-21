@@ -13,7 +13,12 @@
   "description": "校验请求字段、所属范围和版本；新建或更新统一认证账号及必要关联记录，写入审计并返回保存结果。统一认证账号与平台操作账号、租户本地账号是三套隔离的身份体系。",
   "parameters": [],
   "method": "POST",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

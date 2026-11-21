@@ -15,7 +15,7 @@ public class IdaasPrincipalFilter extends OncePerRequestFilter {
   var prior=SecurityContextHolder.getContext().getAuthentication();
   if(prior instanceof UsernamePasswordAuthenticationToken && prior.getAuthorities().stream().anyMatch(a->"IDAAS_AUTH_ACCOUNT".equals(a.getAuthority())))SecurityContextHolder.clearContext();
   String token=req.getHeader("idaas-auth-token");if(token==null && req.getCookies()!=null)for(Cookie cookie:req.getCookies())if("IDAAS_AUTH".equals(cookie.getName()))token=cookie.getValue();
-  if(token!=null){var result=bridge.call("protocol-access",Map.of("operation","principal","token",token));if(result!=null && Boolean.TRUE.equals(result.get("allowed"))){String id=(String)result.get("accountId");var user=User.withUsername(id).password("").authorities("IDAAS_AUTH_ACCOUNT").build();SecurityContextHolder.getContext().setAuthentication(UsernamePasswordAuthenticationToken.authenticated(user,null,user.getAuthorities()));}}
+  if(token!=null){var result=bridge.access(Map.of("operation","principal","token",token));if(result!=null && Boolean.TRUE.equals(result.get("allowed"))){String id=(String)result.get("accountId");var user=User.withUsername(id).password("").authorities("IDAAS_AUTH_ACCOUNT").build();SecurityContextHolder.getContext().setAuthentication(UsernamePasswordAuthenticationToken.authenticated(user,null,user.getAuthorities()));}}
   chain.doFilter(req,res);
  }
 }

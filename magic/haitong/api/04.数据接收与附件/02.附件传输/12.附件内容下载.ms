@@ -5,7 +5,7 @@
   "path": "/content",
   "method": "GET",
   "parameters": [{"name": "id", "required": false, "dataType": "String", "description": "必填查询参数 id"}],
-  "options": [],
+  "options": [{"name": "head", "value": "true"}],
   "headers": [],
   "paths": [],
   "description": "校验当前调用方权限后返回附件原始字节，支持范围读取。 沿用 /haitong/files 的附件授权和传输流程。"
@@ -15,7 +15,7 @@ import '@/haitong/common' as common
 import '@/haitong/files' as files
 import request
 
-// GET /api/file/content。校验当前调用方权限后返回附件原始字节，支持范围读取。
+// GET 与 HEAD /api/file/content 都校验附件权限和就绪状态，支持范围读取；仅 GET 传输文件字节。
 // 与其他附件入口共用 /haitong/files 的权限校验和传输逻辑。
 
 var context = common()

@@ -13,7 +13,12 @@
   "description": "按标识加载应用客户端并检查所属范围与版本；执行软删除或撤销关联，保留审计历史。维护应用接入客户端及其协议配置；客户端凭据不随普通列表接口明文返回。",
   "parameters": [],
   "method": "POST",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

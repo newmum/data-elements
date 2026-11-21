@@ -56,7 +56,7 @@ public class DataStandardPageMagicTest {
         modules.put("tableSort", new TableSortMagicModule());
         Path root = Path.of("..", "magic");
         if (!Files.isDirectory(root)) root = Path.of("magic");
-        String[] content = Files.readString(root.resolve("function/01.通用函数/84.数据标准代码集匹配.ms"))
+        String[] content = Files.readString(root.resolve("function/01.通用函数/73.数据标准代码集匹配.ms"))
                 .split("================================\\R", 2);
         var metadata = new ObjectMapper().disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
                 .readValue(content[0], FunctionInfo.class);

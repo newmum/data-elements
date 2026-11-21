@@ -233,13 +233,7 @@
       "path": "magic/haitong/api/04.数据接收与附件/02.附件传输/12.附件内容下载.ms",
       "id": "haitong-files-12",
       "databasePath": "/magic-api/api/04.数据接收与附件/02.附件传输/12.附件内容下载.ms",
-      "baseSha256": "347d10a09ac0cab75d61b293a62f99becaa96400ec017950c654f3213ad055db"
-    },
-    {
-      "path": "magic/haitong/api/04.数据接收与附件/02.附件传输/13.附件内容头.ms",
-      "id": "haitong-files-13",
-      "databasePath": "/magic-api/api/04.数据接收与附件/02.附件传输/13.附件内容头.ms",
-      "baseSha256": "21b4e7f60c46ea10e1d02abc3950091211b2fcac9542897476e3dd32674244b1"
+      "baseSha256": "8563abf586c251058e82389a212e228a371ee631bbc2127b4b5fdd712f4ed385"
     },
     {
       "path": "magic/haitong/api/04.数据接收与附件/02.附件传输/group.json",

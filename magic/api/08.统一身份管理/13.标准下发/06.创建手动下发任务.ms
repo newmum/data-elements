@@ -13,7 +13,12 @@
   "description": "核验应用与资料范围，生成待执行的下发任务及目标快照；创建记录本身不通过后台轮询执行。",
   "parameters": [],
   "method": "POST",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

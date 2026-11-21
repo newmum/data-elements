@@ -2,42 +2,44 @@ package com.linewell.dataelement.platform.tenant.web;
 
 import cn.dev33.satoken.stp.StpUtil;
 import com.linewell.dataelement.feature.identity.application.TenantIdentityQueryService;
+import com.linewell.dataelement.magic.runtime.route.RegisteredMagicFunctionInvoker;
 import com.linewell.dataelement.magic.runtime.security.MagicAccessPolicy;
-import com.linewell.dataelement.platform.tenant.api.IdentityPolicyInvoker;
 import com.linewell.dataelement.platform.tenant.application.TenantAccessService;
 import com.linewell.dataelement.platform.tenant.application.TenantSessions;
 import com.linewell.dataelement.platform.tenant.config.TenantProperties;
 import com.linewell.dataelement.platform.tenant.domain.TenantAccessException;
 import com.linewell.dataelement.platform.tenant.domain.TenantContext;
 import com.linewell.dataelement.platform.web.security.GlobalInterceptor;
+import com.linewell.dataelement.platform.web.security.ProtocolAccess;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.springframework.beans.factory.annotation.Autowired;
+import java.util.Map;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
-import org.springframework.web.servlet.HandlerInterceptor;
+import org.springframework.web.method.HandlerMethod;
+import org.springframework.web.servlet.AsyncHandlerInterceptor;
 
 @Component
-public class TenantWebInterceptor implements HandlerInterceptor {
+public class TenantWebInterceptor implements AsyncHandlerInterceptor {
 
     public static final String SESSION_TENANT_ID = "tenantId";
-    private static final String PUBLISHED_PREFIX = "/dws/flowserve/published/";
-    private static final String PUBLISHED_TENANT_PREFIX =
-            "/dws/flowserve/published/__tenant/";
+    private static final String RECEIVER_ACCOUNT_CHECK = "275494036ca45d1ea4eb856c7a5bef94";
 
     private final TenantAccessService tenantAccessService;
     private final TenantProperties properties;
     private final TenantIdentityQueryService accounts;
-    @Autowired(required=false)
-    private IdentityPolicyInvoker identityPolicy;
+    private final RegisteredMagicFunctionInvoker functions;
 
     public TenantWebInterceptor(
             TenantAccessService tenantAccessService,
             TenantProperties properties,
-            TenantIdentityQueryService accounts
+            TenantIdentityQueryService accounts,
+            @Lazy RegisteredMagicFunctionInvoker functions
     ) {
         this.tenantAccessService = tenantAccessService;
         this.properties = properties;
         this.accounts = accounts;
+        this.functions = functions;
     }
 
     @Override
@@ -47,14 +49,21 @@ public class TenantWebInterceptor implements HandlerInterceptor {
             Object handler
     ) {
         TenantContext.clear();
+        if (handler instanceof HandlerMethod method) {
+            var protocol = method.getBeanType().getAnnotation(ProtocolAccess.class);
+            if (protocol != null && !protocol.bindTenant()) {
+                return true;
+            }
+        }
         MagicAccessPolicy access = GlobalInterceptor.verifiedMagicAccess(request);
-        String path = request.getRequestURI();
         // Magic 已声明入口按通过鉴权的策略选库，登录脚本从控制库开始建立新会话。
         boolean control = access == null
-                ? path.startsWith("/idaas/")
+                ? GlobalInterceptor.verifiedIdentityGroup(request)
                 : switch (access) {
-                    case PUBLIC, SESSION_LOGIN, SESSION_LOGOUT, IDAAS_PLATFORM_SESSION, HAITONG_RELAY -> true;
-                    case TENANT_SESSION -> false;
+                    case PUBLIC, PUBLIC_ACTION, SESSION_LOGIN, SESSION_LOGOUT, IDAAS_PLATFORM_SESSION,
+                            IDAAS_ACCOUNT_SESSION, IDAAS_API_BEARER, IDAAS_RECEIVER_SIGNATURE, MFA_SESSION,
+                            MFA_LOGIN_CHALLENGE, LEGACY_SSO_REDEEM -> true;
+                    case TENANT_SESSION, LEGACY_SSO_TICKET -> false;
                 };
         if (control) {
             TenantContext.control();
@@ -64,11 +73,11 @@ public class TenantWebInterceptor implements HandlerInterceptor {
             return true;
         }
         // 旧发布协议可由地址选租户；显式行业会话只使用会话中的租户。
-        String publishedTenantId = access == null ? publishedTenantId(path) : null;
-        if (publishedTenantId != null || (access == null && path.startsWith(PUBLISHED_PREFIX))) {
+        var publishedFlow = access == null ? GlobalInterceptor.verifiedPublishedFlow(request) : null;
+        if (publishedFlow != null) {
             TenantAccessService.TenantIdentity identity =
-                    tenantAccessService.requireActiveTenant(publishedTenantId == null
-                            ? properties.getDefaultTenantId() : publishedTenantId);
+                    tenantAccessService.requireActiveTenant(publishedFlow.tenantId() == null
+                            ? properties.getDefaultTenantId() : publishedFlow.tenantId());
             TenantContext.use(identity.tenantId());
             return true;
         }
@@ -89,11 +98,14 @@ public class TenantWebInterceptor implements HandlerInterceptor {
             throw new TenantAccessException("TENANT-ACCOUNT-REALM-MISMATCH", "当前租户账号体系已变更，请重新登录");
         }
         if (local) {
-            var account = accounts.find(identity.tenantId(), String.valueOf(StpUtil.getLoginId()));
+            String userId = String.valueOf(StpUtil.getLoginId());
+            var account = accounts.find(identity.tenantId(), userId);
             if (account == null || !"0".equals(String.valueOf(account.get("status")))) {
                 throw new TenantAccessException("TENANT-ACCOUNT-UNAVAILABLE", "本地账号已停用或不存在，请重新登录");
             }
-            if (identityPolicy!=null && !identityPolicy.localAccountAllowed(identity.tenantId(),String.valueOf(StpUtil.getLoginId()))) {
+            Map<String, Object> decision = identity.tenantId().equals(TenantContext.getTenantId())
+                    ? functions.invoke(RECEIVER_ACCOUNT_CHECK, Map.of("userId", userId)) : null;
+            if (decision == null || !Boolean.TRUE.equals(decision.get("allowed"))) {
                 throw new TenantAccessException("TENANT-CENTRAL-SOURCE-REVOKED", "此账号的统一管理来源已停用，请联系管理员或办理脱管");
             }
         }
@@ -110,17 +122,9 @@ public class TenantWebInterceptor implements HandlerInterceptor {
         TenantContext.clear();
     }
 
-    static String publishedTenantId(String requestUri) {
-        int prefixIndex = requestUri.indexOf(PUBLISHED_TENANT_PREFIX);
-        if (prefixIndex < 0) {
-            return null;
-        }
-        int start = prefixIndex + PUBLISHED_TENANT_PREFIX.length();
-        int end = requestUri.indexOf('/', start);
-        String tenantId = end < 0
-                ? requestUri.substring(start)
-                : requestUri.substring(start, end);
-        return tenantId.isBlank() ? null : tenantId;
+    @Override
+    public void afterConcurrentHandlingStarted(HttpServletRequest request, HttpServletResponse response, Object handler) {
+        TenantContext.clear();
     }
 
 }

@@ -13,20 +13,25 @@
   "description": "按当前认证账号查询其申请或可办理的法人资料和审核状态，仅返回本人可见记录。",
   "parameters": [],
   "method": "GET",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_ACCOUNT_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],
   "responseBody": null
 }
 ================================
+import authSession;
 import db;
 import tableSort;
 import identityTransport;
 import cn.hutool.core.util.IdUtil;
 import cn.hutool.json.JSONUtil;
 import cn.hutool.crypto.digest.DigestUtil;
-import '@/idaas/auth-account-context' as context;
 import '@/idaas/audit' as audit;
 import identityRuntime;
 import request;
@@ -47,7 +52,7 @@ return identityRuntime.control(()=>apiCall(()=>{
     // 请求参数与本接口业务处理。
     var operation = 'mine';
 
-    var ctx=context();
+    var ctx=authSession.verifiedContext();
     // 获取当前身份域的数据库连接；租户接收流程在租户上下文内取得对应库。
     var sql=db.normal();
     var p=payload||{};

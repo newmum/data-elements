@@ -10,6 +10,10 @@
   "parameters": [],
   "options": [
     {
+      "name": "jsonBody",
+      "value": "CACHED"
+    },
+    {
       "name": "access",
       "value": "TENANT_SESSION"
     }

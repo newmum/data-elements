@@ -30,6 +30,11 @@ spring:
 # All runtime settings, including datasource, Redis, NiFi, and Magic API
 # options, are supplied from Nacos or explicitly injected deployment variables.
 data-element:
+  legacy-integration:
+    # Paths on the configured legacy SSO server. The credentials come from deployment settings.
+    sso-token-path: ${DATA_ELEMENT_LEGACY_SSO_TOKEN_PATH:/oauth/token}
+    sso-user-path: ${DATA_ELEMENT_LEGACY_SSO_USER_PATH:/user/current}
+    sso-ticket-path: ${DATA_ELEMENT_LEGACY_SSO_TICKET_PATH:/ticket/getTicket}
   magic:
     # MVC recovery route used by the publisher when the Magic registry is unavailable.
     resource-reload-path: ${DATA_ELEMENT_MAGIC_RESOURCE_RELOAD_PATH:/sym/node-config/magic-resource/refresh}

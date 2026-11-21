@@ -1543,9 +1543,7 @@ async function download(row: LogRow) {
       await bridge.download(row.tid);
       ElMessage.success("下载已开始");
     } else {
-      await $common.download(
-        "/sym/logs/exports/" + encodeURIComponent(row.tid) + "/download",
-      );
+      await $common.download("/sym/logexport/download", { id: row.tid });
     }
   } catch (error) {
     ElMessage.error(errorMessage(error));

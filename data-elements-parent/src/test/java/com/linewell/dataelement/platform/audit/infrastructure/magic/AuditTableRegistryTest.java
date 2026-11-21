@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.linewell.dataelement.platform.audit.infrastructure.magic.AuditTableRegistry.AuditColumns;
@@ -20,11 +21,28 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.ssssssss.magicapi.modules.db.model.SqlMode;
+import org.ssssssss.magicapi.modules.db.table.NamedTable;
 
 class AuditTableRegistryTest {
 
     private static final AuditColumns LEGACY = new AuditColumns(null, "create_time", null, "update_time");
     private static final AuditColumns MODERN = new AuditColumns("created_by", null, "updated_by", "updated_time");
+
+    @ParameterizedTest
+    @ValueSource(strings = {"log_export_job_t", "LOG_ARCHIVE_BATCH_T"})
+    void logJobWritesPreserveTheCallersUtcTimestamps(String table) {
+        var registry = mock(AuditTableRegistry.class);
+        var named = mock(NamedTable.class);
+        when(named.getTableName()).thenReturn(table);
+        var interceptor = new AuditNamedTableInterceptor(registry);
+
+        interceptor.preHandle(SqlMode.INSERT, named);
+        interceptor.preHandle(SqlMode.UPDATE, named);
+
+        verify(named, times(2)).getTableName();
+        verifyNoInteractions(registry);
+    }
 
     @Test
     void usesCurrentSchemaAndKeepsQualifiedTableSeparate() {

@@ -13,28 +13,33 @@
   "description": "验证标准报文、来源签名或凭据及幂等号，在租户上下文中更新中央来源拥有的人员、机构等字段并返回回执；保留本地密码、角色与停用状态。",
   "parameters": [],
   "method": "POST",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_RECEIVER_SIGNATURE"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],
   "responseBody": null
 }
 ================================
-// 接口：01.接收中央资料下发
-// 路由：POST /idaas/receiver/v2
-// 业务说明：验证标准报文、来源签名或凭据及幂等号，在租户上下文中更新中央来源拥有的人员、机构等字段并返回回执；保留本地密码、角色与停用状态。
 import db;
 import identityTransport;
+import identityReceiver;
 import cn.hutool.core.util.IdUtil;
 import cn.hutool.crypto.digest.DigestUtil;
 import cn.hutool.json.JSONUtil;
 import java.lang.Number;
 import systemConfig;
 import identityRuntime;
-import request;
 import com.linewell.dataelement.utils.PwdRuleUtil;
-import '@/idaas/api-call' as apiCall;
-return identityRuntime.control(()=>apiCall(()=>{
+
+// 处理已验签的中央资料。以部署绑定选择行业库，在同一事务内重新核对锁定的绑定并处理幂等回执。
+var p=identityReceiver.verifiedRequest();
+var route=p.route;
+return identityRuntime.inTenant(route.tenantId,()=>{
     // 34.receiver-apply：仅供本接收接口处理对应的下发对象。
     var apply=(binding, event, payloadHash)=>{
         // 本地持久化适配：只替换当前中央来源拥有的字段/关联。密码、本地角色和本地停用不在报文内。
@@ -625,63 +630,51 @@ where app_id=#{app}
             result:'APPLIED',localId:app,sourceEnabled:true,message:'公开界面配置已写入租户配置表'
         };
     };
-    var payload=body;
-    // 请求参数与本接口业务处理。
-    // 接收端只接受人工触发的标准下发；回执和随机数用于幂等与防重放。
-    var p=payload||{};
-    if(p.protocol!='IDAAS/2' || p.keyId==null) {
-        exit 400,'只接受IDAAS/2标准报文';
-    }
-    var route=identityRuntime.receiverRoute(p.keyId);
-    if(p.targetAppId!=route.appId || p.receiverInstanceId!=route.instanceId) {
-        exit 403,'接收应用或实例不一致';
-    }
-    // 按已核验的运行绑定进入目标租户库，避免把租户数据写入控制库。
-    return identityRuntime.inTenant(route.tenantId,()=>{
-        var sql=db.normal();
-        // 把读取校验和状态写入放在同一事务，防止并发覆盖。
-        var outcome=sql.transaction(()=>{
-            var binding=sql.selectOne("""
+    var sql=db.normal();
+    // 把读取校验和状态写入放在同一事务，防止并发覆盖。
+    var outcome=sql.transaction(()=>{
+        var binding=sql.selectOne("""
 select *
 from idaas_receiver_binding_t
 where key_id=#{p.keyId}
+    and tenant_id=#{route.tenantId}
     for update
 """);
-            // 核对接收端密钥、签名、时效和目标实例后才处理下发内容。
-            if(binding==null || binding.enabled!=1 || binding.app_id!=route.appId || binding.instance_id!=route.instanceId || binding.tenant_id!=route.tenantId || !identityTransport.verify2(binding.secret_cipher,p.keyId,route.appId,route.instanceId,p.timestamp,p.nonce,p.payload,p.signature)) {
-                exit 403,'接收签名、有效期或接入状态无效';
-            }
-            var event=identityTransport.parseJson(p.payload);
-            var hash=DigestUtil.sha256Hex(p.payload);
-            if(event.appId!=route.appId || event.receiverInstanceId!=route.instanceId) {
-                exit 400,'事件目标应用或实例不正确';
-            }
-            if(event.eventId==null || !event.eventId.matches('[A-Za-z0-9_-]{8,64}')) {
-                exit 400,'事件号格式不正确';
-            }
-            if(event.objectId==null || !event.objectId.matches('[A-Za-z0-9_.:-]{1,64}') || !['PING','ORG','SUBJECT','RESOURCE','ROLE','PORTAL_CONFIG','CREDENTIAL'].contains(event.objectType)) {
-                exit 400,'对象ID或类型不正确';
-            }
-            if(!['UPSERT','DISABLE','REMOVE','INITIALIZE'].contains(event.action) || event.action=='INITIALIZE' && event.objectType!='CREDENTIAL') {
-                exit 400,'事件操作不正确';
-            }
-            if(identityTransport.canonicalText(p.payload)!=p.payload) {
-                exit 400,'事件未使用规范JSON';
-            }
-            if(!(event.sourceVersion instanceof Number) || event.sourceVersion.longValue()!=event.sourceVersion.doubleValue() || event.sourceVersion<1 || event.sourceVersion>9007199254740991L) {
-                exit 400,'来源版本必须是安全正整数';
-            }
-            var nonceReceipt=sql.selectOne("""
+        // 持锁核对预检所用绑定，避免密钥轮换、停用或租户变更后继续写入。
+        if(!identityReceiver.matchesLockedBinding(binding)) {
+            exit 403,'接收签名、有效期或接入状态无效';
+        }
+        var event=identityTransport.parseJson(p.payload);
+        var hash=DigestUtil.sha256Hex(p.payload);
+        if(event.appId!=route.appId || event.receiverInstanceId!=route.instanceId) {
+            exit 400,'事件目标应用或实例不正确';
+        }
+        if(event.eventId==null || !event.eventId.matches('[A-Za-z0-9_-]{8,64}')) {
+            exit 400,'事件号格式不正确';
+        }
+        if(event.objectId==null || !event.objectId.matches('[A-Za-z0-9_.:-]{1,64}') || !['PING','ORG','SUBJECT','RESOURCE','ROLE','PORTAL_CONFIG','CREDENTIAL'].contains(event.objectType)) {
+            exit 400,'对象ID或类型不正确';
+        }
+        if(!['UPSERT','DISABLE','REMOVE','INITIALIZE'].contains(event.action) || event.action=='INITIALIZE' && event.objectType!='CREDENTIAL') {
+            exit 400,'事件操作不正确';
+        }
+        if(identityTransport.canonicalText(p.payload)!=p.payload) {
+            exit 400,'事件未使用规范JSON';
+        }
+        if(!(event.sourceVersion instanceof Number) || event.sourceVersion.longValue()!=event.sourceVersion.doubleValue() || event.sourceVersion<1 || event.sourceVersion>9007199254740991L) {
+            exit 400,'来源版本必须是安全正整数';
+        }
+        var nonceReceipt=sql.selectOne("""
 select *
 from idaas_receiver_receipt_t
 where app_id=#{route.appId}
     and instance_id=#{route.instanceId}
     and nonce=#{p.nonce}
 """);
-            if(nonceReceipt!=null && (nonceReceipt.payload_hash!=hash || nonceReceipt.event_id!=event.eventId)) {
-                exit 409,'随机数不能复用为不同报文';
-            }
-            var previous=sql.selectOne("""
+        if(nonceReceipt!=null && (nonceReceipt.payload_hash!=hash || nonceReceipt.event_id!=event.eventId)) {
+            exit 409,'随机数不能复用为不同报文';
+        }
+        var previous=sql.selectOne("""
 select *
 from idaas_receiver_receipt_t
 where app_id=#{route.appId}
@@ -690,57 +683,56 @@ where app_id=#{route.appId}
 order by created_time desc
 limit 1
 """);
-            if(previous!=null && (previous.payload_hash!=hash || previous.event_id!=event.eventId)) {
-                exit 409,'事件号或随机数不能复用为不同报文';
-            }
-            var result=null;
-            var stateHash=DigestUtil.sha256Hex(identityTransport.canonicalJson({
-                type:event.objectType,id:event.objectId,version:event.sourceVersion,action:event.action,data:event.data
-            }));
-            var prior=previous==null?null:JSONUtil.parseObj(previous.result_json);
-            if(prior!=null && ['APPLIED','DUPLICATE'].contains(prior.result)) {
-                result={
-                    result:'DUPLICATE',localId:prior.localId,message:'已持久接收，重复事件不重新写入'
-                };
-            }
-            else if(event.objectType=='PING') {
-                result={
-                    result:'APPLIED',localId:'receiver',message:'接收应用、实例与签名核验通过',objectTypes:['ORG','SUBJECT','RESOURCE','ROLE','PORTAL_CONFIG']
-                };
-            }
-            else if(event.objectType=='PORTAL_CONFIG') {
-                if(event.objectId!=route.appId) {
-                    exit 400,'界面配置只能下发至目标应用';
-                }
-                result=applyPortal(binding,event,stateHash);
-            }
-            else if(event.objectType=='CREDENTIAL') {
-                result=applyCredential(binding,event);
-            }
-            else {
-                result=apply(binding,event,stateHash);
-            }
-            var receipt={
-                protocol:'IDAAS/2',appId:route.appId,receiverInstanceId:route.instanceId,eventId:event.eventId,objectType:event.objectType,objectId:event.objectId,sourceVersion:result.sourceVersion||event.sourceVersion,payloadHash:hash,stateHash:stateHash||null,result:result.result,localId:result.localId||'',message:result.message,localEnabled:result.localEnabled||false,sourceEnabled:result.sourceEnabled||false
+        if(previous!=null && (previous.payload_hash!=hash || previous.event_id!=event.eventId)) {
+            exit 409,'事件号或随机数不能复用为不同报文';
+        }
+        var result=null;
+        var stateHash=DigestUtil.sha256Hex(identityTransport.canonicalJson({
+            type:event.objectType,id:event.objectId,version:event.sourceVersion,action:event.action,data:event.data
+        }));
+        var prior=previous==null?null:JSONUtil.parseObj(previous.result_json);
+        if(prior!=null && ['APPLIED','DUPLICATE'].contains(prior.result)) {
+            result={
+                result:'DUPLICATE',localId:prior.localId,message:'已持久接收，重复事件不重新写入'
             };
-            var signature=identityTransport.receiptSignature(binding.secret_cipher,receipt);
-            var encoded=identityTransport.canonicalJson(receipt);
-            if(previous==null || previous.nonce!=p.nonce) {
-                var id=IdUtil.fastSimpleUUID();
-                sql.update("""
+        }
+        else if(event.objectType=='PING') {
+            result={
+                result:'APPLIED',localId:'receiver',message:'接收应用、实例与签名核验通过',objectTypes:['ORG','SUBJECT','RESOURCE','ROLE','PORTAL_CONFIG']
+            };
+        }
+        else if(event.objectType=='PORTAL_CONFIG') {
+            if(event.objectId!=route.appId) {
+                exit 400,'界面配置只能下发至目标应用';
+            }
+            result=applyPortal(binding,event,stateHash);
+        }
+        else if(event.objectType=='CREDENTIAL') {
+            result=applyCredential(binding,event);
+        }
+        else {
+            result=apply(binding,event,stateHash);
+        }
+        var receipt={
+            protocol:'IDAAS/2',appId:route.appId,receiverInstanceId:route.instanceId,eventId:event.eventId,objectType:event.objectType,objectId:event.objectId,sourceVersion:result.sourceVersion||event.sourceVersion,payloadHash:hash,stateHash:stateHash||null,result:result.result,localId:result.localId||'',message:result.message,localEnabled:result.localEnabled||false,sourceEnabled:result.sourceEnabled||false
+        };
+        var signature=identityTransport.receiptSignature(binding.secret_cipher,receipt);
+        var encoded=identityTransport.canonicalJson(receipt);
+        if(previous==null || previous.nonce!=p.nonce) {
+            var id=IdUtil.fastSimpleUUID();
+            sql.update("""
 insert into idaas_receiver_receipt_t(id,
                 app_id, instance_id, event_id, nonce, payload_hash, object_type, source_id, source_version,
                 result_json)
 values(#{id},#{route.appId},#{route.instanceId},#{event.eventId},#{p.nonce},#{hash},#{event.objectType},#{event.objectId},#{event.sourceVersion},#{encoded})
 """);
-            }
-            return {
-                receipt:receipt,receiptSignature:signature
-            };
-        });
-        if(outcome.receipt.objectType=='PORTAL_CONFIG' && ['APPLIED','DUPLICATE'].contains(outcome.receipt.result)) {
-            systemConfig.evict('PORTAL');
         }
-        return outcome;
+        return {
+            receipt:receipt,receiptSignature:signature
+        };
     });
-}));
+    if(outcome.receipt.objectType=='PORTAL_CONFIG' && ['APPLIED','DUPLICATE'].contains(outcome.receipt.result)) {
+        systemConfig.evict('PORTAL');
+    }
+    return outcome;
+});

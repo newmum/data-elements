@@ -13,7 +13,12 @@
   "description": "由用户触发连接测试，使用已保存的接收配置验证目标接口可达性与鉴权并返回测试结果。",
   "parameters": [],
   "method": "POST",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

@@ -415,6 +415,20 @@ export async function probeColumns(
   return normalizeProbeResponse<ColumnsProbeResult>(data, '字段探查', 'columns');
 }
 
+export async function probeRegisteredMysqlColumns(datasourceId: string, tables: string[]): Promise<ColumnsProbeResult[]> {
+  const { data } = await api.post('/api/columns', { manifestKey: 'source.mysql', datasourceId, tables }, { timeout: 45000 });
+  const batch = normalizeProbeResponse<{ success: boolean; error?: string; results?: unknown[] }>(data, '批量字段探查');
+  if (!batch.success) throw new Error(batch.error);
+  if (!Array.isArray(batch.results) || batch.results.length !== tables.length) {
+    throw new Error('批量字段探查返回的表数与请求不一致');
+  }
+  return batch.results.map((item, index) => {
+    const result = normalizeProbeResponse<ColumnsProbeResult>(item, '字段探查', 'columns');
+    if (!result.success || result.table !== tables[index]) throw new Error(result.error ?? '批量字段探查返回了其他表');
+    return result;
+  });
+}
+
 export async function probeTables(
   manifestKey: string,
   config: Record<string, unknown>,

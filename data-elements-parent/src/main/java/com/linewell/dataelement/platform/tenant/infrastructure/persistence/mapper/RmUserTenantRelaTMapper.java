@@ -26,10 +26,4 @@ public interface RmUserTenantRelaTMapper extends BaseMapper<RmUserTenantRelaT> {
             @Param("updatedTime") LocalDateTime updatedTime
     );
 
-    String selectRelationId(
-            @Param("userId") String userId,
-            @Param("tenantId") String tenantId
-    );
-
-    int updateAssignment(RmUserTenantRelaT relation);
 }

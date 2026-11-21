@@ -103,16 +103,11 @@ class CollectionReadMagicTest {
         function("response", "02.采集接口响应", "action");
         function("job", "03.装配采集任务状态", "row", "sourceId", "previous", "withDeleted");
         function("jobs", "04.定义采集任务读取列", "alias", "withDeleted");
-        function("status", "05.读取单个采集状态");
-        function("pageargs", "06.读取表清单分页参数");
-        function("tablepage", "07.装配采集表清单", "page", "args");
-        function("tables", "08.定义采集清单读取列", "alias");
-        function("saved", "09.读取已保存采集表");
-        function("additions", "10.读取最近新增采集表");
-        function("historyargs", "11.读取采集历史分页参数", "defaultSize", "withOffset");
-        function("deleted", "12.读取采集任务差异原文", "tenantId", "source", "successfulOnly");
-        function("changes", "13.分页读取采集差异");
-        function("snapshot", "14.分页读取待标注表快照");
+        function("pageargs", "05.读取表清单分页参数");
+        function("tablepage", "06.装配采集表清单", "page", "args");
+        function("tables", "07.定义采集清单读取列", "alias");
+        function("historyargs", "08.读取采集历史分页参数", "defaultSize", "withOffset");
+        function("deleted", "09.读取采集任务差异原文", "tenantId", "source", "successfulOnly");
     }
 
     @ParameterizedTest
@@ -134,7 +129,7 @@ class CollectionReadMagicTest {
             for (int size : List.of(20, 100)) {
                 var visible = new ArrayList<>(ids.subList(0, size).reversed());
                 bindings.put("body", Map.of("dbIds", visible, "tenantId", FOREIGN_TENANT));
-                var items = maps(success("03.批量查询数据源采集状态", "statuses").get("items"));
+                var items = maps(success("02.批量查询数据源采集状态", "statuses").get("items"));
                 assertEquals(visible, items.stream().map(row -> row.get("datasourceId")).toList());
                 assertEquals("NOT_COLLECTED", items.getFirst().get("status"));
                 assertEquals("recent", items.getLast().get("jobId"));
@@ -152,9 +147,9 @@ class CollectionReadMagicTest {
                 assertDenied(visible, "deleted");
             }
             bindings.put("body", Map.of("dbIds", List.of(ids.getFirst(), " " + ids.getFirst() + " ")));
-            assertEquals(1, maps(success("03.批量查询数据源采集状态", "statuses").get("items")).size());
+            assertEquals(1, maps(success("02.批量查询数据源采集状态", "statuses").get("items")).size());
             bindings.put("body", Map.of("dbIds", List.of(42)));
-            assertEquals("dbId 格式不正确", error("03.批量查询数据源采集状态", "statuses").getMsg());
+            assertEquals("dbId 格式不正确", error("02.批量查询数据源采集状态", "statuses").getMsg());
             assertEquals(0, selects.size());
         }
     }
@@ -183,7 +178,6 @@ class CollectionReadMagicTest {
             assertEquals("successful", status.get("jobId"));
             assertEquals(3, selects.size());
             assertEquals(List.of(Map.of("tableName", "old")), status.get("deleted"));
-            assertEquals(status, success("02.查询数据源采集状态响应头", "status_head"));
             request.setParameter("jobId", "recent");
             assertEquals(List.of(), success("01.查询数据源采集状态", "status").get("deleted"));
             request.setParameter("jobId", "foreign");
@@ -223,13 +217,13 @@ class CollectionReadMagicTest {
             request.setParameter("sortDir", "desc");
             for (int size : List.of(20, 100)) {
                 request.setParameter("pageSize", String.valueOf(size));
-                var saved = success("04.查询已保存采集表", "saved");
+                var saved = success("03.查询已保存采集表", "saved");
                 assertEquals(121L, saved.get("total"));
                 assertEquals(size, maps(saved.get("rows")).size());
                 assertEquals(saved.get("rows"), saved.get("list"));
                 assertEquals("preferred", maps(saved.get("rows")).getFirst().get("tid"));
                 assertEquals(3, selects.size());
-                var additions = success("06.查询最近新增采集表", "additions");
+                var additions = success("04.查询最近新增采集表", "additions");
                 assertEquals(121L, additions.get("total"));
                 assertEquals(size, maps(additions.get("rows")).size());
                 assertEquals("preferred", maps(additions.get("rows")).getFirst().get("tid"));
@@ -237,18 +231,18 @@ class CollectionReadMagicTest {
                 assertEquals(4, selects.size());
             }
             request.setParameter("keyword", "说明29");
-            assertEquals(1L, success("05.查询已保存采集表响应头", "saved_head").get("total"));
+            assertEquals(1L, success("03.查询已保存采集表", "saved").get("total"));
             request.setParameter("keyword", "说明0");
-            assertEquals(0L, success("04.查询已保存采集表", "saved").get("total"));
+            assertEquals(0L, success("03.查询已保存采集表", "saved").get("total"));
             request.setParameter("sortField", "field_count;--");
-            assertEquals("不支持的排序字段：field_count;--", error("07.查询最近新增采集表响应头", "additions_head").getMsg());
+            assertEquals("不支持的排序字段：field_count;--", error("04.查询最近新增采集表", "additions").getMsg());
             assertEquals(0, selects.size());
             request.setParameter("sortField", "tableName");
             request.setParameter("pageSize", "NaN");
-            assertEquals(20002, error("04.查询已保存采集表", "saved").getCode());
+            assertEquals(20002, error("03.查询已保存采集表", "saved").getCode());
             request.setParameter("pageSize", "20");
             request.setParameter("dbId", "foreign");
-            assertEquals("数据源不存在或无访问权限", error("06.查询最近新增采集表", "additions").getMsg());
+            assertEquals("数据源不存在或无访问权限", error("04.查询最近新增采集表", "additions").getMsg());
             assertEquals(1, selects.size());
         }
     }
@@ -272,7 +266,7 @@ class CollectionReadMagicTest {
             for (int size : List.of(20, 100)) {
                 bindings.put("body", Map.of("dbId", "validation", "pageSize", size, "allTables", true,
                         "sortField", "fieldCount", "sortDir", "desc"));
-                var full = success("12.查询登记审查顺序", "order");
+                var full = success("07.查询登记审查顺序", "order");
                 var allKeys = assertInstanceOf(List.class, full.get("keys"));
                 assertEquals(30_000L, ((Number) full.get("total")).longValue());
                 assertEquals(size, allKeys.size());
@@ -281,33 +275,33 @@ class CollectionReadMagicTest {
 
                 bindings.put("body", Map.of("dbId", "validation", "pageSize", size, "names", new ArrayList<>(selected),
                         "sortField", "fieldCount", "sortDir", "desc"));
-                var filtered = success("12.查询登记审查顺序", "order");
+                var filtered = success("07.查询登记审查顺序", "order");
                 assertEquals(15_000, filtered.get("total"));
                 assertEquals(IntStream.range(0, size).mapToObj(index -> "table_%05d".formatted(29998 - index * 2)).toList(),
                         filtered.get("keys"));
                 assertEquals(2, selects.size());
             }
             bindings.put("body", Map.of("dbId", "validation", "pageNo", 1501, "pageSize", 20, "allTables", true));
-            assertEquals(List.of(), success("12.查询登记审查顺序", "order").get("keys"));
+            assertEquals(List.of(), success("07.查询登记审查顺序", "order").get("keys"));
             assertEquals(2, selects.size());
             for (String invalid : List.of("foreign", "other", "deleted", "missing")) {
                 bindings.put("body", Map.of("dbId", "validation", "names", List.of("table_00000", invalid)));
                 assertEquals("审查范围包含不存在或无权访问的数据表，请刷新清单",
-                        error("12.查询登记审查顺序", "order").getMsg());
+                        error("07.查询登记审查顺序", "order").getMsg());
                 assertEquals(2, selects.size());
             }
             bindings.put("body", Map.of("dbId", "validation", "names", List.of("table_00000", "table_00000")));
-            assertEquals("数据表名称为空或重复", error("12.查询登记审查顺序", "order").getMsg());
+            assertEquals("数据表名称为空或重复", error("07.查询登记审查顺序", "order").getMsg());
             bindings.put("body", Map.of("dbId", "validation", "allTables", true, "names", List.of()));
-            assertEquals("完整范围与筛选范围不能同时指定", error("12.查询登记审查顺序", "order").getMsg());
+            assertEquals("完整范围与筛选范围不能同时指定", error("07.查询登记审查顺序", "order").getMsg());
             bindings.put("body", Map.of("dbId", "validation", "allTables", true, "pageSize", 101));
-            assertEquals("分页参数无效，每页最多100张表", error("12.查询登记审查顺序", "order").getMsg());
+            assertEquals("分页参数无效，每页最多100张表", error("07.查询登记审查顺序", "order").getMsg());
             bindings.put("body", Map.of("dbId", "validation", "allTables", true, "sortField", "field_count;--"));
-            assertEquals("不支持的排序字段：field_count;--", error("12.查询登记审查顺序", "order").getMsg());
+            assertEquals("不支持的排序字段：field_count;--", error("07.查询登记审查顺序", "order").getMsg());
             scope(Scope.ORG);
             source("foreign-org", TENANT, "team-b", "operator", 0);
             bindings.put("body", Map.of("dbId", "foreign-org", "allTables", true));
-            assertEquals("数据源不存在或无访问权限", error("12.查询登记审查顺序", "order").getMsg());
+            assertEquals("数据源不存在或无访问权限", error("07.查询登记审查顺序", "order").getMsg());
             assertEquals(1, selects.size());
         }
     }
@@ -344,7 +338,7 @@ class CollectionReadMagicTest {
             request.setParameter("sortDir", "desc");
             for (int size : List.of(20, 100)) {
                 request.setParameter("pageSize", String.valueOf(size));
-                var changes = success("08.查询采集缺失表", "changes");
+                var changes = success("05.查询采集缺失表", "changes");
                 assertEquals(130L, changes.get("total"));
                 var diff = maps(changes.get("rows"));
                 assertEquals(size, diff.size());
@@ -353,7 +347,7 @@ class CollectionReadMagicTest {
                 assertEquals(4, selects.size());
 
                 request.setParameter("offset", "7");
-                var snapshot = success("10.查询待标注表快照", "snapshot");
+                var snapshot = success("06.查询待标注表快照", "snapshot");
                 assertEquals(121L, snapshot.get("total"));
                 assertEquals(122L, snapshot.get("physicalTotal"));
                 assertEquals(7L, ((Number) snapshot.get("offset")).longValue());
@@ -366,16 +360,16 @@ class CollectionReadMagicTest {
             request.setParameter("offset", "0");
             request.setParameter("sortDir", "asc");
             request.setParameter("keyword", "table_004");
-            assertEquals(0L, success("11.查询待标注表快照响应头", "snapshot_head").get("total"));
+            assertEquals(0L, success("06.查询待标注表快照", "snapshot").get("total"));
             request.setParameter("keyword", "历史129");
-            assertEquals(1L, success("09.查询采集缺失表响应头", "changes_head").get("total"));
+            assertEquals(1L, success("05.查询采集缺失表", "changes").get("total"));
             request.setParameter("offset", "bad");
-            assertEquals(20002, error("10.查询待标注表快照", "snapshot").getCode());
+            assertEquals(20002, error("06.查询待标注表快照", "snapshot").getCode());
             assertEquals(0, selects.size());
             request.removeParameter("offset");
             request.setParameter("dbId", "unowned");
             scope(Scope.ORG);
-            assertEquals("数据源不存在或无访问权限", error("10.查询待标注表快照", "snapshot").getMsg());
+            assertEquals("数据源不存在或无访问权限", error("06.查询待标注表快照", "snapshot").getMsg());
             assertEquals(1, selects.size());
         }
     }
@@ -490,22 +484,22 @@ class CollectionReadMagicTest {
             spring.when(() -> SpringUtil.getBean(ObjectMapper.class)).thenReturn(new ObjectMapper());
             scope(Scope.OWNER);
             bindings.put("body", Map.of("dbId", "allowed", "tableId", "other", "tableName", "ext_name"));
-            assertEquals("登记表不存在或无访问权限", error("14.关联缺失登记表新名称", "rename").getMsg());
+            assertEquals("登记表不存在或无访问权限", error("09.关联缺失登记表新名称", "rename").getMsg());
             bindings.put("body", Map.of("dbId", "allowed", "tableId", "foreign", "tableName", "ext_name"));
-            assertEquals("登记表不存在或无访问权限", error("14.关联缺失登记表新名称", "rename").getMsg());
+            assertEquals("登记表不存在或无访问权限", error("09.关联缺失登记表新名称", "rename").getMsg());
             var preview = new LinkedHashMap<>(body);
             preview.put("dryRun", true);
             bindings.put("body", preview);
-            assertEquals(2, success("14.关联缺失登记表新名称", "rename").get("removedSnapshotCount"));
+            assertEquals(2, success("09.关联缺失登记表新名称", "rename").get("removedSnapshotCount"));
 
             bindings.put("body", body);
-            assertEquals(500, error("14.关联缺失登记表新名称", "rename").getCode());
+            assertEquals(500, error("09.关联缺失登记表新名称", "rename").getCode());
             assertEquals("old_name", jdbc.queryForObject("select table_name from db_table_t where tid='target'", String.class));
             assertEquals(2, jdbc.queryForObject("select count(*) from db_table_t where tid in ('duplicate','nullable') and is_del=0", Integer.class));
 
             jdbc.execute("alter table metadata_table_collection_job_t drop constraint validation_history_write");
-            var one = CompletableFuture.supplyAsync(() -> collectionRequest(body, "14.关联缺失登记表新名称", "rename"));
-            var two = CompletableFuture.supplyAsync(() -> collectionRequest(body, "14.关联缺失登记表新名称", "rename"));
+            var one = CompletableFuture.supplyAsync(() -> collectionRequest(body, "09.关联缺失登记表新名称", "rename"));
+            var two = CompletableFuture.supplyAsync(() -> collectionRequest(body, "09.关联缺失登记表新名称", "rename"));
             Object first = one.get(12, TimeUnit.SECONDS);
             Object second = two.get(12, TimeUnit.SECONDS);
             var applied = assertInstanceOf(Map.class, assertInstanceOf(Map.class, first instanceof Map ? first : second).get("data"));
@@ -516,7 +510,7 @@ class CollectionReadMagicTest {
             assertEquals("ext_name", jdbc.queryForObject("select table_name from db_table_t where tid='target' and annotated=1", String.class));
             assertEquals(2, jdbc.queryForObject("select count(*) from db_table_t where tid in ('duplicate','nullable') and is_del=1", Integer.class));
             assertEquals("[]", jdbc.queryForObject("select deleted_detail from metadata_table_collection_job_t where tid='success'", String.class));
-            assertEquals("该表不在当前变更列表中，请重新探查后再修改", error("14.关联缺失登记表新名称", "rename").getMsg());
+            assertEquals("该表不在当前变更列表中，请重新探查后再修改", error("09.关联缺失登记表新名称", "rename").getMsg());
         }
     }
 
@@ -597,7 +591,7 @@ class CollectionReadMagicTest {
     }
 
     private Object collectionRequest(Map<String, Object> body) {
-        return collectionRequest(body, "13.启动数据源表采集", "start");
+        return collectionRequest(body, "08.启动数据源表采集", "start");
     }
 
     private Object collectionRequest(Map<String, Object> body, String title, String id) {
@@ -764,7 +758,7 @@ class CollectionReadMagicTest {
         var requested = new ArrayList<>(visible);
         requested.set(visible.size() - 1, forbidden);
         bindings.put("body", Map.of("dbIds", requested));
-        assertEquals("数据源不存在或无访问权限", error("03.批量查询数据源采集状态", "statuses").getMsg());
+        assertEquals("数据源不存在或无访问权限", error("02.批量查询数据源采集状态", "statuses").getMsg());
         assertEquals(1, selects.size());
     }
 

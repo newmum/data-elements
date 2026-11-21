@@ -1,6 +1,6 @@
 package com.linewell.dataelement.dataservice.flowserve;
 
-import static com.linewell.dataelement.dataservice.flowserve.FlowServeRuntimeAdapter.PUBLISHED_GROUP_ID;
+import static com.linewell.dataelement.magic.runtime.route.PublishedFlowRoutes.GROUP_ID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -14,6 +14,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.linewell.dataelement.integration.flowserve.FlowServeRuntimePaths;
+import com.linewell.dataelement.magic.runtime.route.PublishedFlowRoutes;
 import com.linewell.dataelement.platform.tenant.config.TenantProperties;
 import java.util.HashMap;
 import java.util.Map;
@@ -34,14 +36,16 @@ class FlowServeRuntimeAdapterTest {
     private final MagicAPIService service = mock(MagicAPIService.class);
     private final RequestMagicDynamicRegistry registry = mock(RequestMagicDynamicRegistry.class);
     private final FlowServeRuntimeAdapter adapter = new FlowServeRuntimeAdapter(
-            new ObjectMapper(), resources, service, registry, new TenantProperties(), "http://localhost");
+            new ObjectMapper(), resources, service, registry, new TenantProperties(),
+            new FlowServeRuntimePaths("/api/v1/runtime", "/health", "/deploy"),
+            new PublishedFlowRoutes(resources, PUBLIC_PREFIX), "http://localhost");
 
     @BeforeEach
     void storeResourcesById() {
-        when(resources.getGroup(PUBLISHED_GROUP_ID)).thenReturn(new Group());
-        when(resources.getGroupPath(PUBLISHED_GROUP_ID)).thenReturn("dws//flowserve");
+        when(resources.getGroup(GROUP_ID)).thenReturn(new Group());
+        when(resources.getGroupPath(GROUP_ID)).thenReturn("dws//flowserve");
         when(resources.file(anyString())).thenAnswer(call -> files.get(call.getArgument(0)));
-        when(resources.<ApiInfo>listFiles(PUBLISHED_GROUP_ID)).thenAnswer(call -> files.values().stream().toList());
+        when(resources.<ApiInfo>listFiles(GROUP_ID)).thenAnswer(call -> files.values().stream().toList());
         when(resources.saveFile(any(ApiInfo.class))).thenAnswer(call -> {
             ApiInfo saved = call.getArgument(0);
             files.put(saved.getId(), saved);
@@ -56,7 +60,7 @@ class FlowServeRuntimeAdapterTest {
         staticApi.setId("static");
         staticApi.setName("19.查询");
         staticApi.setPath("/flows");
-        staticApi.setGroupId(PUBLISHED_GROUP_ID);
+        staticApi.setGroupId(GROUP_ID);
         files.put(staticApi.getId(), staticApi);
 
         adapter.deployFromRequest(deployment("first", "第一个", "/__tenant/validation/first", "return 1"));
@@ -81,11 +85,31 @@ class FlowServeRuntimeAdapterTest {
 
     @Test
     void keepsTheLegacyStoragePathForAnExistingOldRuntime() {
-        when(resources.getGroupPath(PUBLISHED_GROUP_ID)).thenReturn(PUBLIC_PREFIX);
+        var legacy = new Group();
+        legacy.setParentId("5d290a9b3bca3b2dd9ffd715dc47ce56");
+        when(resources.getGroup(GROUP_ID)).thenReturn(legacy);
+        when(resources.getGroupPath(GROUP_ID)).thenReturn(PUBLIC_PREFIX);
         adapter.deployFromRequest(deployment("first", "旧分组服务", "/validation/first", "return 1"));
 
         assertThat(files.get("first").getPath()).isEqualTo("/validation/first");
         assertThat(files.get("first").getName()).isEqualTo("旧分组服务");
+        verify(resources, never()).saveGroup(any());
+    }
+
+    @Test
+    void readsTheCurrentGroupAndSegmentAndDoesNotRecreateMissingGroups() {
+        var moved = new Group();
+        moved.setAttribute("flowservePublishedSegment", "services");
+        when(resources.getGroup(GROUP_ID)).thenReturn(moved);
+        when(resources.getGroupPath(GROUP_ID)).thenReturn("/validation/flows");
+        var deployed = adapter.deploy("validation", Map.of(), "return 1", Map.of());
+        assertThat(deployed).containsEntry("url", "http://localhost/validation/flows/services/validation");
+        assertThat(files.get(deployed.get("resourceId")).getPath()).isEqualTo("/services/validation");
+
+        when(resources.getGroup(GROUP_ID)).thenReturn(null);
+        assertThatThrownBy(() -> adapter.deployFromRequest(deployment("orphan", "缺少分组", "/validation", "return 1")))
+                .isInstanceOf(IllegalStateException.class);
+        assertThat(files).hasSize(1);
         verify(resources, never()).saveGroup(any());
     }
 

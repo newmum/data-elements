@@ -13,7 +13,12 @@
   "description": "按当前操作人的应用范围列出可配置下发接收端的应用、资料类型与可用目标，不发起下发。",
   "parameters": [],
   "method": "GET",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

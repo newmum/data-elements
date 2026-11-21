@@ -45,12 +45,6 @@ public class SystemConfigMagicModule {
         return service.value(group, code);
     }
 
-    @Comment("读取 Nacos 中的旧版 SSO 客户端凭据；未配置时明确失败")
-    public String legacySsoClientSecret() {
-        return required(legacySecrets.getSsoClientSecret(),
-                "请配置 data-element.legacy-integration.sso-client-secret");
-    }
-
     @Comment("读取 Nacos 中的旧版对象存储凭据；未配置时明确失败")
     public String legacyMinioPassword() {
         return required(legacySecrets.getMinioPassword(),

@@ -19,7 +19,7 @@ class UnifiedMappingDeploymentTest {
     private final DslCompiler compiler=mock(DslCompiler.class);
     private final NifiClient nifi=mock(NifiClient.class);
     private final PipelineGroupOrganizer groups=mock(PipelineGroupOrganizer.class);
-    private final PipelineTaskLifecycleSynchronizer tasks=mock(PipelineTaskLifecycleSynchronizer.class);
+    private final NifiDeploymentMagicFixture.TaskOperations tasks=mock(NifiDeploymentMagicFixture.TaskOperations.class);
     private final ErrorService errors=mock(ErrorService.class);
     private final NifiDeploymentMagicFixture deployment = new NifiDeploymentMagicFixture(repo, compiler, nifi, errors, tasks, groups, mock(TargetTableCleanupService.class));
     private Pipeline fixture(){

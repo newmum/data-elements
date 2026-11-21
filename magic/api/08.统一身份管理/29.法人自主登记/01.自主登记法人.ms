@@ -13,19 +13,24 @@
   "description": "校验当前认证账号及法人登记资料，创建待核验法人和申请人与法人的成员关系。",
   "parameters": [],
   "method": "POST",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_ACCOUNT_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],
   "responseBody": null
 }
 ================================
+import authSession;
 import db;
 import identityTransport;
 import cn.hutool.core.util.IdUtil;
 import cn.hutool.json.JSONUtil;
 import cn.hutool.crypto.digest.DigestUtil;
-import '@/idaas/auth-account-context' as context;
 import '@/idaas/audit' as audit;
 import identityRuntime;
 import request;
@@ -40,7 +45,7 @@ return identityRuntime.control(()=>apiCall(()=>{
     // 请求参数与本接口业务处理。
     var operation = 'register';
 
-    var ctx=context();
+    var ctx=authSession.verifiedContext();
     // 获取当前身份域的数据库连接；租户接收流程在租户上下文内取得对应库。
     var sql=db.normal();
     var p=payload||{};

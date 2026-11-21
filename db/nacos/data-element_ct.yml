@@ -151,22 +151,6 @@ oss:
   roleSessionName: ''
   bucket: ''
   bucketDomain: ''
-data-trading-parent:
-  config:
-    checkToken: ${NACOS_DATA_TRADING_PARENT_CONFIG_CHECKTOKEN}
-  whiteList:
-  - /api/v1/runtime/**
-  - /v1/portal/*
-  - /portal/**
-  - /sym/sso/*
-  - /flow/**
-  - /warm-flow-ui/**
-  - /warm-flow/**
-  - /dataassets/workshop/repository/**
-  - /openapi/**
-  - /data/file
-  - /dataassets/scence/**
-  - /gis/**
 elasticsearch:
   host: 192.168.175.86:19200
   auth: true
@@ -206,6 +190,7 @@ logging:
     com.linewell.dataelement.integrated.base: error
 warm-flow:
   ui: true
+  designer-protocol-access: true
   data-source-type: mysql
   logic_delete: false
 nifi:

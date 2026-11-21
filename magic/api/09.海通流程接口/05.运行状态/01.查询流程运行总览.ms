@@ -6,17 +6,77 @@
   "name": "01.查询流程运行总览",
   "path": "/overview",
   "method": "GET",
-  "description": "统计认证行业租户的有效流程，按 sortField 和 sortDir 排序返回前五条流程。返回原始 total、running、failed、flows，保留非法排序参数的错误格式。只读业务库中的已保存状态，不请求 NiFi。 GET 与 HEAD 共用 @/common/nifiRuntimeOverview。",
+  "description": "统计当前行业租户的有效流程，从完整排序中返回前五条。只读已保存状态。按原绑定规则校验排序字段和方向。",
   "parameters": [],
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "TENANT_SESSION"
+    },
+    {
+      "name": "head",
+      "value": "true"
+    }
+  ],
   "headers": [],
   "paths": []
 }
 ================================
-import '@/common/nifiRuntimeOverview' as readOverview
+import '@/common/nifiPipelineReadHttp' as withHttpResponse
+import org.springframework.http.ResponseEntity
+import tableRead
+import tableSort
+import tenantRuntime
 
-// GET /nifi/run/overview 查询流程运行总览。
-// GET /nifi/run/overview 解析 sortField 和 sortDir，在认证行业库统计有效流程，并按白名单字段排序后读取前五条。
-// GET 与 HEAD 共用 @/common/nifiRuntimeOverview，无写入或 NiFi 调用。
+// 统计当前行业租户的有效流程，从完整排序中返回前五条。
+// 只读已保存状态。按原绑定规则校验排序字段和方向。
 
-return readOverview()
+return withHttpResponse((unused, textParameter) => {
+    var sortField = textParameter('sortField')
+    var sortDir = textParameter('sortDir')
+
+    // 从已认证会话选择行业库。结构化查询同时拒绝控制库和跳过隔离的上下文。
+    var tenantId = tenantRuntime.id()
+    var pipeline = tableRead.from('nifi_pipeline_t', 'p', tenantId)
+
+    // 明细排序仅允许约定字段。空参数采用更新时间降序。
+    var sortRequest = {
+        sortField: sortField == null || sortField.isBlank() ? null : sortField,
+        sortDir: sortDir == null || sortDir.isBlank() ? null : sortDir
+    }
+    var sortFields = {
+        taskName: 'name', latestRunTime: 'last_deployed_at', updatedAt: 'updated_at'
+    }
+    var column = tableSort.field(sortRequest, sortFields, 'updatedAt')
+    var direction = tableSort.direction(sortRequest)
+
+    // 先在认证租户内统计完整有效集合，流程卡片的排序只作用于明细窗口。
+    var status = tableRead.column('p', 'status', 'TEXT')
+    pipeline.where(tableRead.equal(tableRead.column('p', 'is_del', 'NUMBER'), 0))
+    var counts = pipeline.grouped({
+        total: tableRead.count(),
+        running: tableRead.countIf(tableRead.equal(status, 'RUNNING')),
+        failed: tableRead.countIf(tableRead.in(status, ['RUN_ERROR', 'DEPLOY_FAILED']))
+    }, [])[0]
+
+    // 在数据库完整排序后截取前五条，空值在尾部，同值按流程 ID 稳定排列。
+    var id = tableRead.column('p', 'id', 'TEXT')
+    var order = tableRead.column('p', column, column == 'name' ? 'TEXT' : 'NUMBER')
+    var selected = pipeline.rows({
+        id: id,
+        taskName: tableRead.column('p', 'name', 'TEXT'),
+        currentStatus: status,
+        processGroupId: tableRead.column('p', 'nifi_process_group_id', 'TEXT'),
+        latestRunTime: tableRead.column('p', 'last_deployed_at', 'NUMBER'),
+        endTime: tableRead.column('p', 'last_stopped_at', 'NUMBER')
+    }, [order, id], [direction, 'asc'], 5)
+
+    // 只返回约定字段。达梦窗口语句附带的行号不属于此接口，未记录的时间保留空值。
+    var flows = selected.map(row => {
+        return {
+            id: row.id, taskName: row.taskName, currentStatus: row.currentStatus,
+            processGroupId: row.processGroupId, latestRunTime: row.latestRunTime, endTime: row.endTime
+        }
+    })
+    return ResponseEntity.ok({total: counts.total, running: counts.running, failed: counts.failed, flows: flows})
+})

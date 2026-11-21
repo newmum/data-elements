@@ -13,7 +13,12 @@
   "description": "校验请求字段、所属范围和版本；新建或更新中央人员及必要关联记录，写入审计并返回保存结果。处理控制库的中央人员资料，保持人员资料与租户本地账号隔离；仅显式下发时才影响租户。",
   "parameters": [],
   "method": "POST",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

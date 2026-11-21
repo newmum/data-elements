@@ -13,7 +13,12 @@
   "description": "校验请求字段、所属范围和版本；新建或更新应用访问授权及必要关联记录，写入审计并返回保存结果。对指定业务应用的人员或组织颁发访问授权，核验身份域、角色、有效期与对象范围。",
   "parameters": [],
   "method": "POST",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

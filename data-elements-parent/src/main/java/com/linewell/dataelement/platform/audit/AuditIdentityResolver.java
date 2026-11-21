@@ -2,6 +2,7 @@ package com.linewell.dataelement.platform.audit;
 
 import cn.dev33.satoken.stp.StpUtil;
 import cn.dev33.satoken.session.SaSession;
+import com.linewell.dataelement.magic.runtime.security.MagicAccessPolicy;
 import com.linewell.dataelement.platform.tenant.api.PlatformSessionMagicModule;
 import com.linewell.dataelement.platform.tenant.api.AuthAccountSessionMagicModule;
 import com.linewell.dataelement.platform.tenant.domain.TenantContext;
@@ -14,22 +15,42 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 @Component
 public class AuditIdentityResolver {
     public static final String ATTRIBUTE = AuditIdentityResolver.class.getName();
+    private static final String REALM = ATTRIBUTE + ".realm";
+    private static final String IDENTITY_GROUP = ATTRIBUTE + ".identityGroup";
     private final AuditStore store;
     public AuditIdentityResolver(AuditStore store) { this.store=store; }
     public static HttpServletRequest request() {
         return RequestContextHolder.getRequestAttributes() instanceof ServletRequestAttributes a ? a.getRequest() : null;
     }
+
+    static void selectRealm(HttpServletRequest request, MagicAccessPolicy policy, boolean identityGroup) {
+        request.setAttribute(REALM, policy);
+        request.setAttribute(IDENTITY_GROUP, identityGroup);
+    }
+
+    static boolean protectsIdentityParameters(HttpServletRequest request) {
+        Object policy = request.getAttribute(REALM);
+        return Boolean.TRUE.equals(request.getAttribute(IDENTITY_GROUP))
+                || policy == MagicAccessPolicy.IDAAS_PLATFORM_SESSION || policy == MagicAccessPolicy.IDAAS_ACCOUNT_SESSION;
+    }
+
     public AuditIdentity current() {
         var req=request();
         if (req!=null && req.getAttribute(ATTRIBUTE) instanceof AuditIdentity identity) return identity;
         AuditIdentity identity=null;
-        boolean platform=req!=null && req.getRequestURI().startsWith("/idaas/");
+        var policy = req == null ? null : (MagicAccessPolicy) req.getAttribute(REALM);
+        boolean explicitRealm = policy == MagicAccessPolicy.TENANT_SESSION
+                || policy == MagicAccessPolicy.IDAAS_PLATFORM_SESSION || policy == MagicAccessPolicy.IDAAS_ACCOUNT_SESSION;
+        boolean legacyPlatform = !explicitRealm && req != null && Boolean.TRUE.equals(req.getAttribute(IDENTITY_GROUP));
+        boolean operator = policy == MagicAccessPolicy.IDAAS_PLATFORM_SESSION || legacyPlatform;
+        boolean account = policy == MagicAccessPolicy.IDAAS_ACCOUNT_SESSION || legacyPlatform;
+        boolean industry = policy == MagicAccessPolicy.TENANT_SESSION || (!explicitRealm && !legacyPlatform);
         try {
-        if (platform && PlatformSessionMagicModule.LOGIC.isLogin()) {
+        if (operator && PlatformSessionMagicModule.LOGIC.isLogin()) {
             identity=platform(PlatformSessionMagicModule.LOGIC.getLoginIdAsString(),"OPERATOR",null);
-        } else if(platform && AuthAccountSessionMagicModule.LOGIC.isLogin()) {
+        } else if(account && AuthAccountSessionMagicModule.LOGIC.isLogin()) {
             identity=platform(AuthAccountSessionMagicModule.LOGIC.getLoginIdAsString(),"AUTH_ACCOUNT",null);
-        } else if (!platform && StpUtil.isLogin()) {
+        } else if (industry && StpUtil.isLogin()) {
             SaSession session=StpUtil.getTokenSession();
             Object tenant=session.get("tenantId");
             if (tenant!=null) identity=tenant(String.valueOf(tenant),StpUtil.getLoginIdAsString());
@@ -37,9 +58,9 @@ public class AuditIdentityResolver {
         } catch(org.springframework.dao.DataAccessException unavailable) {
             // Revocation must remain possible even when profile storage is unavailable.
             org.slf4j.LoggerFactory.getLogger("audit.health").error("audit_actor_snapshot_unavailable type={}",unavailable.getClass().getSimpleName());
-            if(platform&&PlatformSessionMagicModule.LOGIC.isLogin())identity=new AuditIdentity(null,"OPERATOR",PlatformSessionMagicModule.LOGIC.getLoginIdAsString(),null,null,null,null,"idaas",ref(PlatformSessionMagicModule.LOGIC.getTokenSession()),"workforce");
-            else if(platform&&AuthAccountSessionMagicModule.LOGIC.isLogin())identity=new AuditIdentity(null,"AUTH_ACCOUNT",AuthAccountSessionMagicModule.LOGIC.getLoginIdAsString(),null,null,null,null,"idaas",ref(AuthAccountSessionMagicModule.LOGIC.getTokenSession()),Objects.toString(AuthAccountSessionMagicModule.LOGIC.getTokenSession().get("auditDomain"),"public"));
-            else if(!platform&&StpUtil.isLogin()&&StpUtil.getTokenSession().get("tenantId")!=null)identity=new AuditIdentity(String.valueOf(StpUtil.getTokenSession().get("tenantId")),"TENANT_USER",StpUtil.getLoginIdAsString(),null,null,null,null,Objects.toString(StpUtil.getTokenSession().get("appId"),null),ref(StpUtil.getTokenSession()),null);
+            if(operator&&PlatformSessionMagicModule.LOGIC.isLogin())identity=new AuditIdentity(null,"OPERATOR",PlatformSessionMagicModule.LOGIC.getLoginIdAsString(),null,null,null,null,"idaas",ref(PlatformSessionMagicModule.LOGIC.getTokenSession()),"workforce");
+            else if(account&&AuthAccountSessionMagicModule.LOGIC.isLogin())identity=new AuditIdentity(null,"AUTH_ACCOUNT",AuthAccountSessionMagicModule.LOGIC.getLoginIdAsString(),null,null,null,null,"idaas",ref(AuthAccountSessionMagicModule.LOGIC.getTokenSession()),Objects.toString(AuthAccountSessionMagicModule.LOGIC.getTokenSession().get("auditDomain"),"public"));
+            else if(industry&&StpUtil.isLogin()&&StpUtil.getTokenSession().get("tenantId")!=null)identity=new AuditIdentity(String.valueOf(StpUtil.getTokenSession().get("tenantId")),"TENANT_USER",StpUtil.getLoginIdAsString(),null,null,null,null,Objects.toString(StpUtil.getTokenSession().get("appId"),null),ref(StpUtil.getTokenSession()),null);
         }
         if (identity!=null && req!=null) req.setAttribute(ATTRIBUTE,identity);
         return identity;

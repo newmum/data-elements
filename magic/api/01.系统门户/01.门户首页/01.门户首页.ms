@@ -18,6 +18,10 @@
       "value": "PUBLIC",
       "dataType": "String",
       "required": false
+    },
+    {
+      "name": "head",
+      "value": "true"
     }
   ],
   "requestBody": "{\n}",

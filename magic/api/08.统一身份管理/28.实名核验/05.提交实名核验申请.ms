@@ -13,13 +13,19 @@
   "description": "校验账号与证件资料，保护敏感字段并请求可信提供方；只有验签通过的真实回执才能改变核验状态。",
   "parameters": [],
   "method": "POST",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_ACCOUNT_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],
   "responseBody": null
 }
 ================================
+import authSession;
 // 接口：05.提交实名核验申请
 // 路由：POST /idaas/verifications/submit
 // 业务说明：校验账号与证件资料，保护敏感字段并请求可信提供方；只有验签通过的真实回执才能改变核验状态。
@@ -32,7 +38,6 @@ import identityTransport;
 import cn.hutool.core.util.IdUtil;
 import cn.hutool.crypto.digest.DigestUtil;
 import cn.hutool.json.JSONUtil;
-import '@/idaas/auth-account-context' as accountContext;
 import '@/idaas/guard' as guard;
 import '@/idaas/mutate' as mutate;
 import '@/idaas/audit' as audit;
@@ -146,7 +151,7 @@ values(#{cid},'VERIFY_PROVIDER',#{id},'HMAC_KEY',#{revision},'AES256_GCM',#{ciph
             };
         });
     }
-    var ctx=accountContext();
+    var ctx=authSession.verifiedContext();
     if(ctx.account.identity_domain!='public' || ctx.account.must_change_password==1) {
         exit 403,'请使用已完成密码设置的公众认证账号';
     }

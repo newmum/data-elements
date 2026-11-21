@@ -1359,7 +1359,7 @@ async function startRegistrationStream() {
   const armWatchdog = () => {clearTimeout(watchdog); watchdog = setTimeout(() => {stalled = true; controller.abort();}, 20000);};
   armWatchdog();
   try {
-    await $request.get('/nifi/api/task-runtime/events', {signal:controller.signal,timeout:0,responsePolicy:'raw',errorPolicy:'silent',headers:{Accept:'text/event-stream'},adapter:async config => {
+    await $request.get('/nifi/run/events', {signal:controller.signal,timeout:0,responsePolicy:'raw',errorPolicy:'silent',headers:{Accept:'text/event-stream'},adapter:async config => {
       const headers = Object.fromEntries(Object.entries(config.headers.toJSON()).filter(([,value]) => value != null).map(([key,value]) => [key,String(value)]));
       const response = await fetch($request.getUri(config), {headers,signal:controller.signal,cache:'no-store'});
       if (!response.ok || !response.headers.get('content-type')?.includes('text/event-stream') || !response.body) throw new Error('实时状态连接不可用');

@@ -11,8 +11,11 @@ public class AuditMagicRequestInterceptor implements RequestInterceptor {
         request.setAttribute("audit.functionName", entity.getApiInfo().getName());
         request.setAttribute("audit.functionId", entity.getApiInfo().getId());
         try {
+            AuditRequestParameters.selectResourceAudit(request, entity.getApiInfo());
             if (!entity.isRequestedFromTest() && !entity.isRequestedFromDebug()) {
-                AuditRequestParameters.capture(request, entity.getParameters(), entity.getPathVariables(), entity.getRequestBody());
+                Object body = entity.getRequestBody();
+                AuditRequestParameters.selectReadAction(request, entity.getApiInfo(), body);
+                AuditRequestParameters.capture(request, entity.getParameters(), entity.getPathVariables(), body);
             }
         } catch (RuntimeException error) {
             AuditRequestParameters.captureFailed(request);

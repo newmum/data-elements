@@ -47,18 +47,8 @@
         "f5c231f2eb04431e8ff2a7ecbb7d07c2"
       ],
       "kind": null,
-      "baseSha256": "a97442e26ded63cabd978459f7f894f9b9771a8f9ccd897ef78e0f9afa2b63b3",
+      "baseSha256": "693b1a48f10b2ac4b671852bcc55a378bc80cdfcb77d217fdbd17657703099ab",
       "metadataId": "f5c231f2eb04431e8ff2a7ecbb7d07c2"
-    },
-    {
-      "path": "api/01.系统门户/01.门户首页/02.读取门户首页响应头.ms",
-      "databasePath": "/magic-api/api/01.系统门户/01.门户首页/02.读取门户首页响应头.ms",
-      "rowIds": [
-        "29884ca5202c47b1bc90e5dc9b9b95c5"
-      ],
-      "kind": "api",
-      "metadataId": "portal_public_index_head_v1",
-      "baseSha256": "adadc0120d9a48b8255389f3ac14729b33426ac729c23e9988841d2869379088"
     },
     {
       "path": "api/01.系统门户/01.门户首页/group.json",
@@ -106,7 +96,7 @@
         "9ea20d0b193b46d5988a997fa522965f"
       ],
       "kind": null,
-      "baseSha256": "ca0dcf78e1ddb9a418f7d7e646c4aae8e3fecfb855ce471a59ff8fae0cef4a1d",
+      "baseSha256": "428b1a7790a7d64f751a52e170cf919279b9ff1074b3117aaa4375b8d051e194",
       "metadataId": "9ea20d0b193b46d5988a997fa522965f"
     },
     {
@@ -116,7 +106,7 @@
         "c98ee7cf1481482586080eb71cf423d5"
       ],
       "kind": null,
-      "baseSha256": "356eba71193c15cb25d4b7ed1b573bbe41520f4ea8f8aa0bedde71583d11f577",
+      "baseSha256": "0dc2d3b1ca7258dfbd212c7a68600369ba080a9990c945a2e958a09146f500ea",
       "metadataId": "c98ee7cf1481482586080eb71cf423d5"
     },
     {
@@ -167,7 +157,7 @@
       ],
       "kind": "api",
       "metadataId": "portal_switch_v1",
-      "baseSha256": "865eae4dde1ea107af9ec15ea0b9fa9c8bfe30c8bd3ea8f298c881c2187f9891"
+      "baseSha256": "e6513ca3bde333a5e1a29c8ec49579585326e93fdf2be5361f15958476c703c7"
     },
     {
       "path": "api/01.系统门户/02.登录与会话/group.json",
@@ -195,7 +185,7 @@
         "6ee73a631d6f4719b5b7f3aee0ccc39e"
       ],
       "kind": null,
-      "baseSha256": "41fb83558611ad3a8aed35807d07b48573db61f9c47db5ed3b9614da5ea4a0cc",
+      "baseSha256": "af2938a2185f84449d00c14ae21050d169b810b0283600eb8143accd68db81ea",
       "metadataId": "5e5d48c9fced4fc9a18b8308d102936f"
     },
     {
@@ -432,7 +422,7 @@
         null
       ],
       "kind": null,
-      "baseSha256": "b4fd92116421bc90cf852632f2b2d5c1d886e6ede83311ef684f4b833b555853",
+      "baseSha256": "75e4a393f518ef86f590b272068fd23e0804606de8f2ee44cf5688567327a781",
       "metadataId": "c78db2b6d3b04a2ba5d0854d8171a106"
     },
     {
@@ -661,7 +651,7 @@
         "347c0f505eed4457ac03b77f07eb6896"
       ],
       "kind": null,
-      "baseSha256": "174a3130f89e5de2507aa9c39aeebdbc428938d2fe86e48e4fb1324e6573dac0",
+      "baseSha256": "359fafc0afa7e7e69cbaec571ffd5a256042c5f2329dcda28f58ec8c0634ba1a",
       "metadataId": "347c0f505eed4457ac03b77f07eb6896"
     },
     {
@@ -1066,137 +1056,87 @@
       ],
       "kind": "api",
       "metadataId": "collect_status_v1",
-      "baseSha256": "9f9be32279467a56c3ee2c0bdd866606233b80f0f25ba6bc88587206cabe12ab"
+      "baseSha256": "caed8fcca4b1740afa2fb8edfd63a10a08debe007edd267cf150b7ac59ab741e"
     },
     {
-      "path": "api/02.数据盘点/09.表采集/02.查询数据源采集状态响应头.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/09.表采集/02.查询数据源采集状态响应头.ms",
-      "rowIds": [
-        "0b7a7ef2c6544e16802080783a9b2f4e"
-      ],
-      "kind": "api",
-      "metadataId": "collect_status_head_v1",
-      "baseSha256": "09892054c72cc331416ebbf04cd3e48c7f5729498f199fd67acb160f263ab8c8"
-    },
-    {
-      "path": "api/02.数据盘点/09.表采集/03.批量查询数据源采集状态.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/09.表采集/03.批量查询数据源采集状态.ms",
+      "path": "api/02.数据盘点/09.表采集/02.批量查询数据源采集状态.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/09.表采集/02.批量查询数据源采集状态.ms",
       "rowIds": [
         "7be2a786f15b49d3b8ccd8f661ab0807"
       ],
       "kind": "api",
       "metadataId": "collect_statuses_v1",
-      "baseSha256": "b0023633f4f4e9175f8b44c7af2e43fda862ff24717d3074d7e315bbdaebd788"
+      "baseSha256": "6e0984d2335476c353d9b3d915d592f3e497c074fbde9942ab163bb2a54d3e00"
     },
     {
-      "path": "api/02.数据盘点/09.表采集/04.查询已保存采集表.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/09.表采集/04.查询已保存采集表.ms",
+      "path": "api/02.数据盘点/09.表采集/03.查询已保存采集表.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/09.表采集/03.查询已保存采集表.ms",
       "rowIds": [
         "f316775c65de4c0eb7e1b907e4ac91fd"
       ],
       "kind": "api",
       "metadataId": "collect_saved_v1",
-      "baseSha256": "126127b55b62cb8b2968e622e854d3259b6d3716a55392f3103a3e0925842178"
+      "baseSha256": "c0051f8da8f03174581b2061f2ede4af6cb2134bfde2127e9d6b92ed37792be3"
     },
     {
-      "path": "api/02.数据盘点/09.表采集/05.查询已保存采集表响应头.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/09.表采集/05.查询已保存采集表响应头.ms",
-      "rowIds": [
-        "b95500ef436c49338ef3a4c6a3499e1a"
-      ],
-      "kind": "api",
-      "metadataId": "collect_saved_head_v1",
-      "baseSha256": "4cd57623eb605527b4a3d1cc6ec1c3e875c9a5da072928d3cfae269fb4c37e70"
-    },
-    {
-      "path": "api/02.数据盘点/09.表采集/06.查询最近新增采集表.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/09.表采集/06.查询最近新增采集表.ms",
+      "path": "api/02.数据盘点/09.表采集/04.查询最近新增采集表.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/09.表采集/04.查询最近新增采集表.ms",
       "rowIds": [
         "10ee11cad9284aaca94b5cb31227405c"
       ],
       "kind": "api",
       "metadataId": "collect_additions_v1",
-      "baseSha256": "420ba7bbf036c1eb268ed2610b29d2ead7f90c2f4ff8d5001be53cf5c75a5c75"
+      "baseSha256": "1544abb4f54082cebebe8de0c20d1851f759096f1f8bb821e5723c65e9b5cb10"
     },
     {
-      "path": "api/02.数据盘点/09.表采集/07.查询最近新增采集表响应头.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/09.表采集/07.查询最近新增采集表响应头.ms",
-      "rowIds": [
-        "de581e3159364548abd1b43162074dfa"
-      ],
-      "kind": "api",
-      "metadataId": "collect_additions_head_v1",
-      "baseSha256": "4aa95440b723476628d745529e566431eba347759f06cff0ba9b297b5ee1ff3d"
-    },
-    {
-      "path": "api/02.数据盘点/09.表采集/08.查询采集缺失表.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/09.表采集/08.查询采集缺失表.ms",
+      "path": "api/02.数据盘点/09.表采集/05.查询采集缺失表.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/09.表采集/05.查询采集缺失表.ms",
       "rowIds": [
         "04b35e964677405f8b9cc831c544d934"
       ],
       "kind": "api",
       "metadataId": "collect_changes_v1",
-      "baseSha256": "9d784c9cf135e70e7e0547386a857336d90f0a646a0310af94907d5daa3d526f"
+      "baseSha256": "ab4aaebccd222f10c654c64a8d44e848cd46fa4fd5ca6849e2d29f1b95de3f62"
     },
     {
-      "path": "api/02.数据盘点/09.表采集/09.查询采集缺失表响应头.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/09.表采集/09.查询采集缺失表响应头.ms",
-      "rowIds": [
-        "81151a58993548d79f590d8683ef36cb"
-      ],
-      "kind": "api",
-      "metadataId": "collect_changes_head_v1",
-      "baseSha256": "9be3f6601f5a5f95bea6af4aacc9219dce3c5927d39f3f140b74ec6482a92ee9"
-    },
-    {
-      "path": "api/02.数据盘点/09.表采集/10.查询待标注表快照.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/09.表采集/10.查询待标注表快照.ms",
+      "path": "api/02.数据盘点/09.表采集/06.查询待标注表快照.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/09.表采集/06.查询待标注表快照.ms",
       "rowIds": [
         "ab16d27e7d76465cbe852843911da1e9"
       ],
       "kind": "api",
       "metadataId": "collect_snapshot_v1",
-      "baseSha256": "0ef4d5d0d4a924d3d16dce4b8bbde717f5631c94b3303d6d76f650a3e7109c5d"
+      "baseSha256": "3c583a6a2667980ba33a3baf7b9596e627f60f9c224b7f1a8e62a81f27f8df68"
     },
     {
-      "path": "api/02.数据盘点/09.表采集/11.查询待标注表快照响应头.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/09.表采集/11.查询待标注表快照响应头.ms",
-      "rowIds": [
-        "9e763995f2654e0f9d9d83022de32824"
-      ],
-      "kind": "api",
-      "metadataId": "collect_snapshot_head_v1",
-      "baseSha256": "3e6e900cce43529e3350bc7ba2b410e6d76ffc38934cfe003d2504d27588ef7b"
-    },
-    {
-      "path": "api/02.数据盘点/09.表采集/12.查询登记审查顺序.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/09.表采集/12.查询登记审查顺序.ms",
+      "path": "api/02.数据盘点/09.表采集/07.查询登记审查顺序.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/09.表采集/07.查询登记审查顺序.ms",
       "rowIds": [
         "b4e5c69244314f809eb29afccff3ddce"
       ],
       "kind": "api",
       "metadataId": "collect_order_v1",
-      "baseSha256": "02b60be133d84cbd70dfa12baa2e31d4196668c82eddb08da652dcacc009060c"
+      "baseSha256": "e866170ffea880be2ed90597c9c789e5f2e23acfde35c23dad6b2c0b592032c9"
     },
     {
-      "path": "api/02.数据盘点/09.表采集/13.启动数据源表采集.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/09.表采集/13.启动数据源表采集.ms",
+      "path": "api/02.数据盘点/09.表采集/08.启动数据源表采集.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/09.表采集/08.启动数据源表采集.ms",
       "rowIds": [
         "f6f9c61414554afea1f54a18f8dc549a"
       ],
       "kind": "api",
       "metadataId": "collect_start_v1",
-      "baseSha256": "bdcdadd3f8f2f417e98a4d0cc3a5a419f1afb1cb2dbbeee6e96de4a470d11d2c"
+      "baseSha256": "ee1041d8747ada14d09d52059d1ba308f33bd68b121d6cf37816a7008902955f"
     },
     {
-      "path": "api/02.数据盘点/09.表采集/14.关联缺失登记表新名称.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/09.表采集/14.关联缺失登记表新名称.ms",
+      "path": "api/02.数据盘点/09.表采集/09.关联缺失登记表新名称.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/09.表采集/09.关联缺失登记表新名称.ms",
       "rowIds": [
         "6921a32532ef47ac9adae60956f91c33"
       ],
       "kind": "api",
       "metadataId": "collect_rename_v1",
-      "baseSha256": "9b20d1193e6e8a5e44603b3b7c27a83774be757828592e3803122720cab630b0"
+      "baseSha256": "de2342ba85c1cffa7cf11dfbf0045a435f05fd99265cf2282fae2537f58abed5"
     },
     {
       "path": "api/02.数据盘点/09.表采集/group.json",
@@ -1243,7 +1183,7 @@
         "ods_nifi_node_page_01"
       ],
       "kind": "api",
-      "baseSha256": "5328c41236c061a9f256f2630c7c8deb9b280e47483a8070fbf164ae18b33ff4",
+      "baseSha256": "67b5f89fd8a17bfc27eace8b82e516321e1b69ec45d89654aea865b9bcc8d743",
       "metadataId": "ods_nifi_node_page_01"
     },
     {
@@ -1302,7 +1242,7 @@
         "ods_service_node_page_01"
       ],
       "kind": "api",
-      "baseSha256": "b5fe9f389866848d34299a1203bbe4239606a982ba636882496d6dc9b25a82bd",
+      "baseSha256": "63af1c1c80530446628447d98434f662c9f3931f858587feb5fed9101c78f967",
       "metadataId": "ods_service_node_page_01"
     },
     {
@@ -2449,7 +2389,7 @@
     {
       "path": "api/04.数据治理/07.元数据目录/01.目录关联服务分页.ms",
       "databasePath": "/magic-api/api/04.数据治理/07.元数据目录/01.目录关联服务分页.ms",
-      "baseSha256": "74b4678dc0d123f2d8d415fe6de7a299d077ced67e96d2ea0927a1f51fdb5f31",
+      "baseSha256": "cfc3df7759eb69c009f037f7bda4dfcbc426483348f1a3f62045409508be0e4b",
       "kind": "api",
       "rowIds": [
         "d5949dd2037d46c4b9c13ef054f7e3d2"
@@ -2457,19 +2397,9 @@
       "metadataId": "7542b242144845b287c82950a1a4b87d"
     },
     {
-      "path": "api/04.数据治理/07.元数据目录/02.核验目录关联服务分页.ms",
-      "databasePath": "/magic-api/api/04.数据治理/07.元数据目录/02.核验目录关联服务分页.ms",
-      "baseSha256": "e93a8026f5926be5072b980ccbf5ee70707272b70da256058f627c79ac3bfa3b",
-      "kind": "api",
-      "rowIds": [
-        "a31ab4353647410faf5ea7a6bc1ad74c"
-      ],
-      "metadataId": "1b28c8fa05ef4e04be8766664f304608"
-    },
-    {
-      "path": "api/04.数据治理/07.元数据目录/03.目录关联表资源.ms",
-      "databasePath": "/magic-api/api/04.数据治理/07.元数据目录/03.目录关联表资源.ms",
-      "baseSha256": "111bf80423e1dde9c317dade46cd0efdf0be169383d3fecc7f97f3af1178eb94",
+      "path": "api/04.数据治理/07.元数据目录/02.目录关联表资源.ms",
+      "databasePath": "/magic-api/api/04.数据治理/07.元数据目录/02.目录关联表资源.ms",
+      "baseSha256": "53a8ad9afd6198b5a0e130ea7a21292bdb6d26286059086adc2e6e7742f0ef2c",
       "kind": "api",
       "rowIds": [
         "700968160aae4c3895c7075ed6d62dc7"
@@ -2477,34 +2407,14 @@
       "metadataId": "8ac4f13df5184fe1b6195a23bbfa3cb6"
     },
     {
-      "path": "api/04.数据治理/07.元数据目录/04.核验目录关联表资源.ms",
-      "databasePath": "/magic-api/api/04.数据治理/07.元数据目录/04.核验目录关联表资源.ms",
-      "baseSha256": "64f71a0c40b1ab49010c8ac7d333df8fc289b10657c22c1a8cccb5c80c8c99dc",
-      "kind": "api",
-      "rowIds": [
-        "b79a3ca35d934c0e82981f7ff5f2819c"
-      ],
-      "metadataId": "6fd099f9efa348f990d386b34ac33dcf"
-    },
-    {
-      "path": "api/04.数据治理/07.元数据目录/05.采集表分页.ms",
-      "databasePath": "/magic-api/api/04.数据治理/07.元数据目录/05.采集表分页.ms",
-      "baseSha256": "c532e6a395f3493d0ec9936e6c4b90f8b02cf9f1021355c9702db8ba8f45a711",
+      "path": "api/04.数据治理/07.元数据目录/03.采集表分页.ms",
+      "databasePath": "/magic-api/api/04.数据治理/07.元数据目录/03.采集表分页.ms",
+      "baseSha256": "1b03846577f000ecb4a45d700636a15263d25ca9b75281353b4cebe7449f4c71",
       "kind": "api",
       "rowIds": [
         "8cf670cb7b074c778f453853e4b61db3"
       ],
       "metadataId": "2aae3cefffb2475998ca78df66e3a8a5"
-    },
-    {
-      "path": "api/04.数据治理/07.元数据目录/06.核验采集表分页.ms",
-      "databasePath": "/magic-api/api/04.数据治理/07.元数据目录/06.核验采集表分页.ms",
-      "baseSha256": "dfa509d2bc5c71baafe5c1938e809a90a071dbda284e35a45fe8b92579fe01e4",
-      "kind": "api",
-      "rowIds": [
-        "1830186b208d4fc48e3858f80a24d028"
-      ],
-      "metadataId": "72c09465432842a898b4287719ed0eaa"
     },
     {
       "path": "api/04.数据治理/07.元数据目录/group.json",
@@ -2528,7 +2438,7 @@
     {
       "path": "api/04.数据治理/08.采集字段/01.采集字段清单.ms",
       "databasePath": "/magic-api/api/04.数据治理/08.采集字段/01.采集字段清单.ms",
-      "baseSha256": "fc82072975a66523b544327ec550bfdba0392bb544c4ddea99d506afca33d6d7",
+      "baseSha256": "15f46e8fc8ee7f723ea7d20deab6ce65d9caf3683480f4baca2200564a62e5ce",
       "kind": "api",
       "rowIds": [
         "b19899a1ebeb49a2919fac69f3433fc4"
@@ -2536,19 +2446,9 @@
       "metadataId": "07b31a6510b54fec87b6b26d3b678eb2"
     },
     {
-      "path": "api/04.数据治理/08.采集字段/02.核验采集字段清单.ms",
-      "databasePath": "/magic-api/api/04.数据治理/08.采集字段/02.核验采集字段清单.ms",
-      "baseSha256": "bc41605a8a07ca1725acacf25c4ec010c32cae67a7e8ac64ca96358d728edb03",
-      "kind": "api",
-      "rowIds": [
-        "27acb97443ef4eaba56f7f84dc248b2e"
-      ],
-      "metadataId": "7b22c3e0a9104c8888a358c0707c126f"
-    },
-    {
-      "path": "api/04.数据治理/08.采集字段/03.采集字段分页.ms",
-      "databasePath": "/magic-api/api/04.数据治理/08.采集字段/03.采集字段分页.ms",
-      "baseSha256": "c8f5aa89c187e3bead2e8d6c0e1e5b2b5b54ba222a43ed11afa3918de67788ee",
+      "path": "api/04.数据治理/08.采集字段/02.采集字段分页.ms",
+      "databasePath": "/magic-api/api/04.数据治理/08.采集字段/02.采集字段分页.ms",
+      "baseSha256": "3111a03855d5357ff10f6826948ee36e7408db48d0a4a31bcddeada2c7f24d37",
       "kind": "api",
       "rowIds": [
         "0271b59006324ba9bcff188eccad3c29"
@@ -2556,19 +2456,9 @@
       "metadataId": "5c88cf5d07524a1684303a8748f1de47"
     },
     {
-      "path": "api/04.数据治理/08.采集字段/04.核验采集字段分页.ms",
-      "databasePath": "/magic-api/api/04.数据治理/08.采集字段/04.核验采集字段分页.ms",
-      "baseSha256": "f13c4038e08dd514e8fb16f13ee8157c6014eaa39f2fb7a595b22aa5ba05bd5b",
-      "kind": "api",
-      "rowIds": [
-        "08ed7493c14f47839391c627affa54b4"
-      ],
-      "metadataId": "d2762b4faa0f4e1c8f19669f3c54ac2c"
-    },
-    {
-      "path": "api/04.数据治理/08.采集字段/05.批量读取采集字段.ms",
-      "databasePath": "/magic-api/api/04.数据治理/08.采集字段/05.批量读取采集字段.ms",
-      "baseSha256": "e3cabc1d56260f9147935a6cce245f283376a5e87b423f4356ea38b4807f00dc",
+      "path": "api/04.数据治理/08.采集字段/03.批量读取采集字段.ms",
+      "databasePath": "/magic-api/api/04.数据治理/08.采集字段/03.批量读取采集字段.ms",
+      "baseSha256": "7c171a93d9f3e05e9f8a18684210b22110b11bf56387ea582e4847596e5cc1a2",
       "kind": "api",
       "rowIds": [
         "e67389b51907476781e06cba4541e9ac"
@@ -2720,7 +2610,7 @@
         "b6aaff9e31925977b94369d347e7c32a"
       ],
       "kind": "api",
-      "baseSha256": "c4a5af043431be9921da2fc7ac8063502f95f600d1f260b01fb27418c109d435",
+      "baseSha256": "4a860c6bc1a37f52c321dce8470f6bd8d7938baff57a9fb2a9774e91a03a878a",
       "metadataId": "b6aaff9e31925977b94369d347e7c32a"
     },
     {
@@ -3319,73 +3209,53 @@
         "04bb5f0daa6340729403e76665977943"
       ],
       "kind": "api",
-      "baseSha256": "5c6d220bf5e5f8b2b2bb1bbcbe08ecb3823c3f6e38be5b1caded6aa3b95d5518",
+      "baseSha256": "a45ea62fc19da767a01d0f80958a7299fd4a29a371dbef9c39e259d9948ff3ba",
       "metadataId": "flowserve_canvas_flow_get_v1"
     },
     {
-      "path": "api/05.数据服务/01.服务编排/07.核验画布流程详情.ms",
-      "databasePath": "/magic-api/api/05.数据服务/01.服务编排/07.核验画布流程详情.ms",
-      "rowIds": [
-        "c50ebc6f12044d3fa5ea74a4c59dbb46"
-      ],
-      "kind": "api",
-      "baseSha256": "ec65da6a191318617449e56f8516c9bb6d03bc1ea85329d846efcb10aeac6eeb",
-      "metadataId": "flowserve_canvas_flow_head_v1"
-    },
-    {
-      "path": "api/05.数据服务/01.服务编排/08.查询画布运行节点.ms",
-      "databasePath": "/magic-api/api/05.数据服务/01.服务编排/08.查询画布运行节点.ms",
+      "path": "api/05.数据服务/01.服务编排/07.查询画布运行节点.ms",
+      "databasePath": "/magic-api/api/05.数据服务/01.服务编排/07.查询画布运行节点.ms",
       "rowIds": [
         "d1711f8bdba64ece974eab71b377fc3a"
       ],
       "kind": "api",
-      "baseSha256": "49b948bd1cc1e2621e8462979b3589fe662d7a97f3db7411b5abac630712a4d1",
+      "baseSha256": "7ffe87813f129cb2d66bf42202f8eddd63757880521e8a3ce12ef46b18a4de82",
       "metadataId": "flowserve_canvas_nodes_get_v1"
     },
     {
-      "path": "api/05.数据服务/01.服务编排/09.核验画布运行节点.ms",
-      "databasePath": "/magic-api/api/05.数据服务/01.服务编排/09.核验画布运行节点.ms",
-      "rowIds": [
-        "27d9c1eefbcf45138fdc79752d8d87b4"
-      ],
-      "kind": "api",
-      "baseSha256": "5c71d2107743968a175d1d4f6385075c959651d9b8ae5ea2c5e54d709493a0c6",
-      "metadataId": "flowserve_canvas_nodes_head_v1"
-    },
-    {
-      "path": "api/05.数据服务/01.服务编排/10.服务列表.ms",
-      "databasePath": "/magic-api/api/05.数据服务/01.服务编排/10.服务列表.ms",
+      "path": "api/05.数据服务/01.服务编排/08.服务列表.ms",
+      "databasePath": "/magic-api/api/05.数据服务/01.服务编排/08.服务列表.ms",
       "rowIds": [
         "510fe82cba4a42248abd1faefc515441"
       ],
       "kind": null,
-      "baseSha256": "3b28e1ee440fed0e93f1a67cf64f397f4c996e50181c2c660b64a18336561a3e",
+      "baseSha256": "028de63769536ed98e6c9e3dd92bd62f707e45d890642f19c831bd79ff15ff50",
       "metadataId": "510fe82cba4a42248abd1faefc515441"
     },
     {
-      "path": "api/05.数据服务/01.服务编排/11.服务详情.ms",
-      "databasePath": "/magic-api/api/05.数据服务/01.服务编排/11.服务详情.ms",
+      "path": "api/05.数据服务/01.服务编排/09.服务详情.ms",
+      "databasePath": "/magic-api/api/05.数据服务/01.服务编排/09.服务详情.ms",
       "rowIds": [
         "1cc3266227a24804b9ba7c3a9e00d724"
       ],
       "kind": "api",
-      "baseSha256": "3325bb38d9f62dc4a0d5c5bb7e72c07f7d2301269084a311bcf96badbe9e910e",
+      "baseSha256": "ba0362825d1309f1e9d873649ac19f9ea15ec59ad414e60cbf8b46f0f4fe448e",
       "metadataId": "1cc3266227a24804b9ba7c3a9e00d724"
     },
     {
-      "path": "api/05.数据服务/01.服务编排/12.调试服务接口.ms",
-      "databasePath": "/magic-api/api/05.数据服务/01.服务编排/12.调试服务接口.ms",
+      "path": "api/05.数据服务/01.服务编排/10.调试服务接口.ms",
+      "databasePath": "/magic-api/api/05.数据服务/01.服务编排/10.调试服务接口.ms",
       "rowIds": [
         "eaf30ca304034ef8a61c404e17e6cde9"
       ],
       "kind": "api",
-      "baseSha256": "e653d650b4d337f673da80f51861db578a91c4588d9e7fa0dcc1e9cb98c1fa13",
+      "baseSha256": "b4287509ed6b84375ee2cf8a25ead14027de1883b40aa4da4632b9d3f3fc9d0c",
       "metadataId": "c7a2c918325a452c84ac391e3e2c6a11"
     },
     {
       "path": "api/05.数据服务/01.服务编排/group.json",
       "databasePath": "/magic-api/api/05.数据服务/01.服务编排/group.json",
-      "baseSha256": "3d35b0cd9258a4036d8c841eaeb136ff06e7bcb7102ecad0f68598b88431ff02",
+      "baseSha256": "4df09d3b9173f5aaaf6c7acc036ef2fe0e484d379f3410a5108e0bbf219ab015",
       "rowIds": [
         "e5ce028f1797312d57c628b66ffcf657"
       ],
@@ -4147,7 +4017,7 @@
       ],
       "kind": "api",
       "metadataId": "dws_push_registry_contracts_v1",
-      "baseSha256": "bff230b4ac236c097007146a4cd62cdd83e7ae7b739c5ab75fa90288b29f82c1"
+      "baseSha256": "3621591c9a1c402a322c575083ab6755922cbae4b91a263388dc2c9bb594fa06"
     },
     {
       "path": "api/05.数据服务/14.推送登记/02.发布推送契约.ms",
@@ -4160,54 +4030,24 @@
       "baseSha256": "ca9a72e27d975f0cdb2bc8e6c9c3fb80c5845406b74f1c96f85b0db21436c842"
     },
     {
-      "path": "api/05.数据服务/14.推送登记/03.校验海通推送批次.ms",
-      "databasePath": "/magic-api/api/05.数据服务/14.推送登记/03.校验海通推送批次.ms",
-      "rowIds": [
-        "6564937cd9b142c986415a5ea0ef8645"
-      ],
-      "kind": "api",
-      "metadataId": "dws_push_registry_validate_v1",
-      "baseSha256": "af39c0ca8f5a4a0abbb587d3e556ace55d817ea0fdea717669bcd6b63daf401c"
-    },
-    {
-      "path": "api/05.数据服务/14.推送登记/04.投递海通推送文件.ms",
-      "databasePath": "/magic-api/api/05.数据服务/14.推送登记/04.投递海通推送文件.ms",
-      "rowIds": [
-        "4bce2b6a5385422ca428f108746c1216"
-      ],
-      "kind": "api",
-      "metadataId": "dws_push_registry_deliver_v1",
-      "baseSha256": "b1b7c3cece56850f42d779eac216f1659e6f6c3df4d79705a9ee9b8cbaf4e041"
-    },
-    {
-      "path": "api/05.数据服务/14.推送登记/05.核验已发布推送契约.ms",
-      "databasePath": "/magic-api/api/05.数据服务/14.推送登记/05.核验已发布推送契约.ms",
-      "rowIds": [
-        "6531493fb22f44809d32f73ab1e0d599"
-      ],
-      "kind": "api",
-      "metadataId": "dws_push_registry_head_v1",
-      "baseSha256": "5d428264f3e8cee7d882803280bb799063d96a184959aa9ac56bd7836d892c30"
-    },
-    {
-      "path": "api/05.数据服务/14.推送登记/06.签发业务推送密钥.ms",
-      "databasePath": "/magic-api/api/05.数据服务/14.推送登记/06.签发业务推送密钥.ms",
+      "path": "api/05.数据服务/14.推送登记/03.签发业务推送密钥.ms",
+      "databasePath": "/magic-api/api/05.数据服务/14.推送登记/03.签发业务推送密钥.ms",
       "rowIds": [
         "81c3bf0b8b154e03a7298b6261b0b944"
       ],
       "kind": "api",
       "metadataId": "dws_push_registry_issue_v1",
-      "baseSha256": "59d8e844112e5fc8c7b3d4dd1e9d29543679a575893a59ddd584024473788025"
+      "baseSha256": "8f96699d7d6e3287b745f1be8bb65f810d312e183597231a27e8355253857afb"
     },
     {
-      "path": "api/05.数据服务/14.推送登记/07.轮换业务推送密钥.ms",
-      "databasePath": "/magic-api/api/05.数据服务/14.推送登记/07.轮换业务推送密钥.ms",
+      "path": "api/05.数据服务/14.推送登记/04.轮换业务推送密钥.ms",
+      "databasePath": "/magic-api/api/05.数据服务/14.推送登记/04.轮换业务推送密钥.ms",
       "rowIds": [
         "e73540b1535c4350aad913787308b1b7"
       ],
       "kind": "api",
       "metadataId": "dws_push_registry_rotate_v1",
-      "baseSha256": "5b37892d755ab31465bdb5359ebbb363f5c73b174a716399617c1c716016bb5f"
+      "baseSha256": "a0d0b8ee9a5c1249d8deb5cd78e0baa5dcb9502deb26afa90f92db51c57252a6"
     },
     {
       "path": "api/05.数据服务/14.推送登记/group.json",
@@ -4973,7 +4813,7 @@
         "a3b59b1dfb2c4c3989bf0a8a0e1f91cc"
       ],
       "kind": null,
-      "baseSha256": "73978dc6afea1d5481924ccc523ea42bd91166f663c697ca66c9218969a8b1a3",
+      "baseSha256": "21d46306479a6b309b2527dad03e1646ca47557f1e93a95d354ec1be9700ece0",
       "metadataId": "a3b59b1dfb2c4c3989bf0a8a0e1f91cc"
     },
     {
@@ -5114,33 +4954,13 @@
       "metadataId": "tenant_user_page_magic_01"
     },
     {
-      "path": "api/07.系统管理/11.租户管理/04.保存用户租户关联.ms",
-      "databasePath": "/magic-api/api/07.系统管理/11.租户管理/04.保存用户租户关联.ms",
-      "rowIds": [
-        "tenant_assign_user_magic_01"
-      ],
-      "kind": null,
-      "baseSha256": "70898f753c2dd61d46a769d74df35ef05d5d48295c59da70ee975c9483cf1e9d",
-      "metadataId": "tenant_assign_user_magic_01"
-    },
-    {
-      "path": "api/07.系统管理/11.租户管理/05.解除用户租户关联.ms",
-      "databasePath": "/magic-api/api/07.系统管理/11.租户管理/05.解除用户租户关联.ms",
-      "rowIds": [
-        "tenant_unassign_user_magic_01"
-      ],
-      "kind": null,
-      "baseSha256": "ecb6fa2c6ca51819261f4963c37130383f99a261e7b10da6a8039835c34aa8ac",
-      "metadataId": "tenant_unassign_user_magic_01"
-    },
-    {
-      "path": "api/07.系统管理/11.租户管理/06.租户列表兼容读取.ms",
-      "databasePath": "/magic-api/api/07.系统管理/11.租户管理/06.租户列表兼容读取.ms",
+      "path": "api/07.系统管理/11.租户管理/04.租户列表兼容读取.ms",
+      "databasePath": "/magic-api/api/07.系统管理/11.租户管理/04.租户列表兼容读取.ms",
       "rowIds": [
         "tenant_list_magic_get_01"
       ],
       "kind": null,
-      "baseSha256": "5f7bfb48468c06ef58d23388592473dff2765f721a7a36c64d23e586ff1ee159",
+      "baseSha256": "176ca8f5214e7edc1500cd9492f856c1e150f30a738aa749388ea4779953e675",
       "metadataId": "tenant_list_magic_get_01"
     },
     {
@@ -5169,7 +4989,7 @@
         "cff7ffae8e9742ff828cd149d88e161f"
       ],
       "kind": "api",
-      "baseSha256": "91ebe8d29e5726208ee3dfe13f5b8836c56024391979d1325f94a5fb585d6c06",
+      "baseSha256": "ca2a864d0af07a4ec1c31d0646634f4f2f19fe56914e27ef47e59f5dba031d49",
       "metadataId": "sym_draft_preview_order_v1"
     },
     {
@@ -5198,7 +5018,7 @@
         "8a0fbccc12fb4bc3877f19416dd10ed7"
       ],
       "kind": "api",
-      "baseSha256": "a29560650baa9582121d33ab82a560c3c7b55180e34c4fec373ca8c6bec8b056",
+      "baseSha256": "7c57b9616f0e88d3eb7f5e9e680c7a6baeb997606f91a09a06d3b1e16021d0e8",
       "metadataId": "sym_scope_role_v1"
     },
     {
@@ -5208,7 +5028,7 @@
         "f05955c5939a4c9ba694e9829bfe08a4"
       ],
       "kind": "api",
-      "baseSha256": "10e33fd2fc8c0806e48a5bb57ea9416d502f9e402a240138a71e5b5b8bd4e7a4",
+      "baseSha256": "ee480800baebafd706ddd9092813f59e5c90e89f7847579418a9f30f726540d6",
       "metadataId": "sym_scope_save_v1"
     },
     {
@@ -5218,7 +5038,7 @@
         "a05db0c6f7394922a2f4daad9c2cec47"
       ],
       "kind": "api",
-      "baseSha256": "568385d0337065326f0cc8f56418806d21aebd48bd126af493b542a28418977c",
+      "baseSha256": "5be8fafa8f02936d4dc81aa19b532b4b224cafb8f025424410d147adff91dd23",
       "metadataId": "sym_scope_current_v1"
     },
     {
@@ -5434,37 +5254,17 @@
       ],
       "kind": "api",
       "metadataId": "tenant_log_capabilities_get_v1",
-      "baseSha256": "b9e7fa22440c11f48f401b3d348cc3e6e8c2c1e6401c23ec9f7d2ff376e8376e"
+      "baseSha256": "96941d7375dd3a73e80dd9d915b7d3bd6bfb09bf0e32d20e8653d0ece3e39ab4"
     },
     {
-      "path": "api/07.系统管理/18.日志管理/02.读取行业日志能力响应头.ms",
-      "databasePath": "/magic-api/api/07.系统管理/18.日志管理/02.读取行业日志能力响应头.ms",
-      "rowIds": [
-        "8f15eecfba2642f5b5b288f4adf81a29"
-      ],
-      "kind": "api",
-      "metadataId": "tenant_log_capabilities_head_v1",
-      "baseSha256": "a177c2f5e209418520619bdb2e314675ac4789522514422c7053fb90a607f3b6"
-    },
-    {
-      "path": "api/07.系统管理/18.日志管理/03.读取行业日志组件.ms",
-      "databasePath": "/magic-api/api/07.系统管理/18.日志管理/03.读取行业日志组件.ms",
+      "path": "api/07.系统管理/18.日志管理/02.读取行业日志组件.ms",
+      "databasePath": "/magic-api/api/07.系统管理/18.日志管理/02.读取行业日志组件.ms",
       "rowIds": [
         "3abca67d03da409c998683504b3d4447"
       ],
       "kind": "api",
       "metadataId": "tenant_log_components_get_v1",
-      "baseSha256": "5f16860c61bbdd8a1b17f87cc93487a66cb4b8c962e933f3580aa20cd346246b"
-    },
-    {
-      "path": "api/07.系统管理/18.日志管理/04.读取行业日志组件响应头.ms",
-      "databasePath": "/magic-api/api/07.系统管理/18.日志管理/04.读取行业日志组件响应头.ms",
-      "rowIds": [
-        "1fe32a0eb84a49fe9223a4ef9166c5e7"
-      ],
-      "kind": "api",
-      "metadataId": "tenant_log_components_head_v1",
-      "baseSha256": "20be3b54101f63c653f6f8b30948c57a0101826316140f5453d8db4f71527a11"
+      "baseSha256": "9074eae6d81e26334a6f3ed959ca083b6d661a39354eff077d1dca5adc3f2f0a"
     },
     {
       "path": "api/07.系统管理/18.日志管理/group.json",
@@ -5493,87 +5293,47 @@
       ],
       "kind": "api",
       "metadataId": "tenant_logauth_page_get_v1",
-      "baseSha256": "f5ba864925d126a6c8611e567c78f52e2a368bba85022371d36b358d285d2163"
+      "baseSha256": "c9f7f8aa05e30dc01cd6679670e4fe28eddbb219e2b5c3eb2277e7c2f26c4903"
     },
     {
-      "path": "api/07.系统管理/19.登录日志/02.分页读取事件响应头.ms",
-      "databasePath": "/magic-api/api/07.系统管理/19.登录日志/02.分页读取事件响应头.ms",
-      "rowIds": [
-        "cb0cbd2e12df4c308abd68e027f4a800"
-      ],
-      "kind": "api",
-      "metadataId": "tenant_logauth_page_head_v1",
-      "baseSha256": "4eee25e82ab3551e80bfd505e208c00dec668c0ced20c118e28fb7b9f36e3fc5"
-    },
-    {
-      "path": "api/07.系统管理/19.登录日志/03.统计筛选结果.ms",
-      "databasePath": "/magic-api/api/07.系统管理/19.登录日志/03.统计筛选结果.ms",
+      "path": "api/07.系统管理/19.登录日志/02.统计筛选结果.ms",
+      "databasePath": "/magic-api/api/07.系统管理/19.登录日志/02.统计筛选结果.ms",
       "rowIds": [
         "075b584f69ea488cad8fdaabbd1f3dd4"
       ],
       "kind": "api",
       "metadataId": "tenant_logauth_stats_get_v1",
-      "baseSha256": "b306f82ce5aa15a8d9d9fa752d82248cf7064588ca1ae436b18a373a80c9b708"
+      "baseSha256": "5e8a9baaaaf77a9854a6215baf55a1d45b8056727d1ab13106760ddffee5f82b"
     },
     {
-      "path": "api/07.系统管理/19.登录日志/04.统计筛选结果响应头.ms",
-      "databasePath": "/magic-api/api/07.系统管理/19.登录日志/04.统计筛选结果响应头.ms",
-      "rowIds": [
-        "1fd01101f54141e79a3717a64e049bd6"
-      ],
-      "kind": "api",
-      "metadataId": "tenant_logauth_stats_head_v1",
-      "baseSha256": "7665286be3150945822c5ffe9aaf31dd21758662bfc21b4bdfc75836882d7d6f"
-    },
-    {
-      "path": "api/07.系统管理/19.登录日志/05.查询事件详情.ms",
-      "databasePath": "/magic-api/api/07.系统管理/19.登录日志/05.查询事件详情.ms",
+      "path": "api/07.系统管理/19.登录日志/03.查询事件详情.ms",
+      "databasePath": "/magic-api/api/07.系统管理/19.登录日志/03.查询事件详情.ms",
       "rowIds": [
         "c409474239d84a42b1f2e0b2d7be42df"
       ],
       "kind": "api",
       "metadataId": "tenant_logauth_detail_get_v1",
-      "baseSha256": "72a57992e7f44e470dc52f9c091cdc6aa465fbc00b6a77d4e89369efb1a2e64b"
+      "baseSha256": "373fafabcf4b4056ea000c77a13c0da69973c72b59378fc7aa901a36bfdbdd2f"
     },
     {
-      "path": "api/07.系统管理/19.登录日志/06.查询事件详情响应头.ms",
-      "databasePath": "/magic-api/api/07.系统管理/19.登录日志/06.查询事件详情响应头.ms",
-      "rowIds": [
-        "822e75c801a945a78abbc511619c73eb"
-      ],
-      "kind": "api",
-      "metadataId": "tenant_logauth_detail_head_v1",
-      "baseSha256": "c87337d19c77cb9e170d7f72cc79107549ea96e52defa0781a255399db6ae18c"
-    },
-    {
-      "path": "api/07.系统管理/19.登录日志/07.分页读取批次明细.ms",
-      "databasePath": "/magic-api/api/07.系统管理/19.登录日志/07.分页读取批次明细.ms",
+      "path": "api/07.系统管理/19.登录日志/04.分页读取批次明细.ms",
+      "databasePath": "/magic-api/api/07.系统管理/19.登录日志/04.分页读取批次明细.ms",
       "rowIds": [
         "a117111c59a94bacb426cee1b1a07856"
       ],
       "kind": "api",
       "metadataId": "tenant_logauth_items_get_v1",
-      "baseSha256": "89d975c778238e5170e5e3bbe3dde6839b4a537c3f81598b7196c56c534c1666"
+      "baseSha256": "0475e673c75dd63f47ccb3f1adc178aaceec6c07d61b6e2c95594f3023a91ff0"
     },
     {
-      "path": "api/07.系统管理/19.登录日志/08.分页读取批次明细响应头.ms",
-      "databasePath": "/magic-api/api/07.系统管理/19.登录日志/08.分页读取批次明细响应头.ms",
-      "rowIds": [
-        "a1cafce5057b48128b33352e9578b542"
-      ],
-      "kind": "api",
-      "metadataId": "tenant_logauth_items_head_v1",
-      "baseSha256": "d9978f08be2be51d807d29d875e11ff7de0f41438088e56d5d0dddffdc459aa6"
-    },
-    {
-      "path": "api/07.系统管理/19.登录日志/09.批量读取事件.ms",
-      "databasePath": "/magic-api/api/07.系统管理/19.登录日志/09.批量读取事件.ms",
+      "path": "api/07.系统管理/19.登录日志/05.批量读取事件.ms",
+      "databasePath": "/magic-api/api/07.系统管理/19.登录日志/05.批量读取事件.ms",
       "rowIds": [
         "78604b8b3a6043648bdaa308629fff14"
       ],
       "kind": "api",
       "metadataId": "tenant_logauth_batch_post_v1",
-      "baseSha256": "9fe0a4512ed483b699fb3963e16943b55909df973ff236d6fd6f2d5e1bf96112"
+      "baseSha256": "63ef2182950eb524b2f1ae69895170dd48cdff257e732866eb16cac72ee4a32c"
     },
     {
       "path": "api/07.系统管理/19.登录日志/group.json",
@@ -5602,87 +5362,47 @@
       ],
       "kind": "api",
       "metadataId": "tenant_logops_page_get_v1",
-      "baseSha256": "4aceae3afed13c9756786ac63983b359e3342e5fa6922cf1800f48e41a4f6912"
+      "baseSha256": "0cebf31b8e91384ef404548fecdc904184105ce11fd6225818a0521097239cd3"
     },
     {
-      "path": "api/07.系统管理/20.操作日志/02.分页读取事件响应头.ms",
-      "databasePath": "/magic-api/api/07.系统管理/20.操作日志/02.分页读取事件响应头.ms",
-      "rowIds": [
-        "0e0d5ee8642642a1809d697b4ee4c21e"
-      ],
-      "kind": "api",
-      "metadataId": "tenant_logops_page_head_v1",
-      "baseSha256": "03a4202be54e5152b34c1e248e3813771b670db7d97058babc81c526f88f1b51"
-    },
-    {
-      "path": "api/07.系统管理/20.操作日志/03.统计筛选结果.ms",
-      "databasePath": "/magic-api/api/07.系统管理/20.操作日志/03.统计筛选结果.ms",
+      "path": "api/07.系统管理/20.操作日志/02.统计筛选结果.ms",
+      "databasePath": "/magic-api/api/07.系统管理/20.操作日志/02.统计筛选结果.ms",
       "rowIds": [
         "6881dd6af1f34b6aba7f9f13f6bc6e45"
       ],
       "kind": "api",
       "metadataId": "tenant_logops_stats_get_v1",
-      "baseSha256": "70a79b727157d7085adaf6c954110352ce2532c233c6e0f6354c65f733f851b5"
+      "baseSha256": "364f2a1c70371242c75be481db6948d44d52759e5b97e3e178dc0b9bc4383c1f"
     },
     {
-      "path": "api/07.系统管理/20.操作日志/04.统计筛选结果响应头.ms",
-      "databasePath": "/magic-api/api/07.系统管理/20.操作日志/04.统计筛选结果响应头.ms",
-      "rowIds": [
-        "320aee8999b74f1db6116e8c5afb2ab2"
-      ],
-      "kind": "api",
-      "metadataId": "tenant_logops_stats_head_v1",
-      "baseSha256": "6ed72aa3e6cce9cf8c24524d97bd0e08306ec62c05fc89d720736700a688a339"
-    },
-    {
-      "path": "api/07.系统管理/20.操作日志/05.查询事件详情.ms",
-      "databasePath": "/magic-api/api/07.系统管理/20.操作日志/05.查询事件详情.ms",
+      "path": "api/07.系统管理/20.操作日志/03.查询事件详情.ms",
+      "databasePath": "/magic-api/api/07.系统管理/20.操作日志/03.查询事件详情.ms",
       "rowIds": [
         "6c5ca0e4eda64d9795b6e5a99b11f8e1"
       ],
       "kind": "api",
       "metadataId": "tenant_logops_detail_get_v1",
-      "baseSha256": "2be9ec2ea589c378fd6d6eca5a1e56291611615fa41b7f7c969d92a022ad88f5"
+      "baseSha256": "6a0ef4e295420f1c6b27331b9945d853526f5de42d8cddc16c038daf7e6c4729"
     },
     {
-      "path": "api/07.系统管理/20.操作日志/06.查询事件详情响应头.ms",
-      "databasePath": "/magic-api/api/07.系统管理/20.操作日志/06.查询事件详情响应头.ms",
-      "rowIds": [
-        "e7531b895a31494db4a9874afdd63f1a"
-      ],
-      "kind": "api",
-      "metadataId": "tenant_logops_detail_head_v1",
-      "baseSha256": "7a6fda208e7bfe253f67e7ac57e4de674b911496aeff726e36378940f4390de6"
-    },
-    {
-      "path": "api/07.系统管理/20.操作日志/07.分页读取批次明细.ms",
-      "databasePath": "/magic-api/api/07.系统管理/20.操作日志/07.分页读取批次明细.ms",
+      "path": "api/07.系统管理/20.操作日志/04.分页读取批次明细.ms",
+      "databasePath": "/magic-api/api/07.系统管理/20.操作日志/04.分页读取批次明细.ms",
       "rowIds": [
         "f4391b87635445c3a8c6c06537f293b2"
       ],
       "kind": "api",
       "metadataId": "tenant_logops_items_get_v1",
-      "baseSha256": "60fd93352b21ae4d60eb5eb47436ce93f034cc20c908f434e862f829d0df2b35"
+      "baseSha256": "6aa36bea4f0b805796c144e60363536fe10603acd59e65fa3416af6c6aeed7c9"
     },
     {
-      "path": "api/07.系统管理/20.操作日志/08.分页读取批次明细响应头.ms",
-      "databasePath": "/magic-api/api/07.系统管理/20.操作日志/08.分页读取批次明细响应头.ms",
-      "rowIds": [
-        "77355947450e41a0a7145735c5f24f18"
-      ],
-      "kind": "api",
-      "metadataId": "tenant_logops_items_head_v1",
-      "baseSha256": "86b40cc74217b4b9e5c4fbbbf45480e621727b8a1d9ea72a17bd2d0a45df583e"
-    },
-    {
-      "path": "api/07.系统管理/20.操作日志/09.批量读取事件.ms",
-      "databasePath": "/magic-api/api/07.系统管理/20.操作日志/09.批量读取事件.ms",
+      "path": "api/07.系统管理/20.操作日志/05.批量读取事件.ms",
+      "databasePath": "/magic-api/api/07.系统管理/20.操作日志/05.批量读取事件.ms",
       "rowIds": [
         "d1e4f5eb34fd494d832dc155445a1ddf"
       ],
       "kind": "api",
       "metadataId": "tenant_logops_batch_post_v1",
-      "baseSha256": "3451b48d9852e2cced8858f8e92c5a6d70929d79b181df6e4dff74ce6bcc6487"
+      "baseSha256": "f433dd8979642bf274b7a692e23f2046b17c953065ea3a5f777e3825f9c300a5"
     },
     {
       "path": "api/07.系统管理/20.操作日志/group.json",
@@ -5711,87 +5431,47 @@
       ],
       "kind": "api",
       "metadataId": "tenant_logreq_page_get_v1",
-      "baseSha256": "1153d472805ebfa6657d17851495d7baf32d8c9d7e11c75fc9188c866a135aef"
+      "baseSha256": "48148178dd5e79f64b2de55939b359bcec1b3bbc954ce92a0aff36bff80d5f08"
     },
     {
-      "path": "api/07.系统管理/21.接口日志/02.分页读取事件响应头.ms",
-      "databasePath": "/magic-api/api/07.系统管理/21.接口日志/02.分页读取事件响应头.ms",
-      "rowIds": [
-        "748406bd946f4f388669921c4bf233cc"
-      ],
-      "kind": "api",
-      "metadataId": "tenant_logreq_page_head_v1",
-      "baseSha256": "c681441d7a4580ee1d17e475d435d2c6e60bf0de834f03e184eebb6835473262"
-    },
-    {
-      "path": "api/07.系统管理/21.接口日志/03.统计筛选结果.ms",
-      "databasePath": "/magic-api/api/07.系统管理/21.接口日志/03.统计筛选结果.ms",
+      "path": "api/07.系统管理/21.接口日志/02.统计筛选结果.ms",
+      "databasePath": "/magic-api/api/07.系统管理/21.接口日志/02.统计筛选结果.ms",
       "rowIds": [
         "78dbc5d239684d3b8f686a0e07f3442b"
       ],
       "kind": "api",
       "metadataId": "tenant_logreq_stats_get_v1",
-      "baseSha256": "83ecb83c44429e53a1185802ea097006a8ec4dfd62145cdb06df74ff35294f61"
+      "baseSha256": "0253298273bb6997d1571da5582f46084cba444521fa019cee735c60afb6bb7a"
     },
     {
-      "path": "api/07.系统管理/21.接口日志/04.统计筛选结果响应头.ms",
-      "databasePath": "/magic-api/api/07.系统管理/21.接口日志/04.统计筛选结果响应头.ms",
-      "rowIds": [
-        "449ceca93ea1443e885e8c379475290d"
-      ],
-      "kind": "api",
-      "metadataId": "tenant_logreq_stats_head_v1",
-      "baseSha256": "3478f3c7040f5fc39a5528a7925fc6d6d16f3013879769ddb0e2756717e0aa16"
-    },
-    {
-      "path": "api/07.系统管理/21.接口日志/05.查询事件详情.ms",
-      "databasePath": "/magic-api/api/07.系统管理/21.接口日志/05.查询事件详情.ms",
+      "path": "api/07.系统管理/21.接口日志/03.查询事件详情.ms",
+      "databasePath": "/magic-api/api/07.系统管理/21.接口日志/03.查询事件详情.ms",
       "rowIds": [
         "30989d99743a43488937e3c5c81abb90"
       ],
       "kind": "api",
       "metadataId": "tenant_logreq_detail_get_v1",
-      "baseSha256": "a85bbad66ee26a85c3b12fe7b06951c6fc6c7a24d5e071f7540a545767bf12ef"
+      "baseSha256": "8d223a32121f7000015e8f57ebc1afe3ed5881c278cb58f8e0d1c48401eeed4d"
     },
     {
-      "path": "api/07.系统管理/21.接口日志/06.查询事件详情响应头.ms",
-      "databasePath": "/magic-api/api/07.系统管理/21.接口日志/06.查询事件详情响应头.ms",
-      "rowIds": [
-        "6f9c23081cad4155b238a7946d919057"
-      ],
-      "kind": "api",
-      "metadataId": "tenant_logreq_detail_head_v1",
-      "baseSha256": "f91c1539cf0b9e3870c49bc92a825bc156d94ce96c4d3c613cd640fb261aebf9"
-    },
-    {
-      "path": "api/07.系统管理/21.接口日志/07.分页读取批次明细.ms",
-      "databasePath": "/magic-api/api/07.系统管理/21.接口日志/07.分页读取批次明细.ms",
+      "path": "api/07.系统管理/21.接口日志/04.分页读取批次明细.ms",
+      "databasePath": "/magic-api/api/07.系统管理/21.接口日志/04.分页读取批次明细.ms",
       "rowIds": [
         "d4dceeaa26a443c4a1d71fd12a7e29d0"
       ],
       "kind": "api",
       "metadataId": "tenant_logreq_items_get_v1",
-      "baseSha256": "99babcf426d0c863ecb1274cd5775ef57556af7b0a1626327830563ea90c945e"
+      "baseSha256": "5b9878f948ea01cc1dc4df2488c64ef34b5f30990d7efdc4a27c0cdb57c6e6a4"
     },
     {
-      "path": "api/07.系统管理/21.接口日志/08.分页读取批次明细响应头.ms",
-      "databasePath": "/magic-api/api/07.系统管理/21.接口日志/08.分页读取批次明细响应头.ms",
-      "rowIds": [
-        "ecbd38e9c9864b729ab1753c5e9e5a9f"
-      ],
-      "kind": "api",
-      "metadataId": "tenant_logreq_items_head_v1",
-      "baseSha256": "1a01f19828ffeff0f917ea3ab0f7b788980ff076fcacb54f4428538391533d16"
-    },
-    {
-      "path": "api/07.系统管理/21.接口日志/09.批量读取事件.ms",
-      "databasePath": "/magic-api/api/07.系统管理/21.接口日志/09.批量读取事件.ms",
+      "path": "api/07.系统管理/21.接口日志/05.批量读取事件.ms",
+      "databasePath": "/magic-api/api/07.系统管理/21.接口日志/05.批量读取事件.ms",
       "rowIds": [
         "77decb5c97244b03aaeedd66eeef2e17"
       ],
       "kind": "api",
       "metadataId": "tenant_logreq_batch_post_v1",
-      "baseSha256": "f20452fc76baafdf2417c8c8b133e96dffd5006b64f14523844846588dc679d8"
+      "baseSha256": "1c0761f17ec60dc690434a0821a07e3a90d996eb93ca64fec25abcef4c84e23e"
     },
     {
       "path": "api/07.系统管理/21.接口日志/group.json",
@@ -5820,87 +5500,47 @@
       ],
       "kind": "api",
       "metadataId": "tenant_logsec_page_get_v1",
-      "baseSha256": "5821a8990db78fb37ba404e1400e586d596ffba64e06b2c0efe05938095d0ffd"
+      "baseSha256": "ff46281a903335735867cfd09936c34f55c63e9ea99cf25dd6555cbd6bc82da8"
     },
     {
-      "path": "api/07.系统管理/22.安全日志/02.分页读取事件响应头.ms",
-      "databasePath": "/magic-api/api/07.系统管理/22.安全日志/02.分页读取事件响应头.ms",
-      "rowIds": [
-        "f83d182f6ad64225b8a7e9f693bb1c80"
-      ],
-      "kind": "api",
-      "metadataId": "tenant_logsec_page_head_v1",
-      "baseSha256": "36d54e65734ad2b960973793f9f26c513b4b29625e41f7011b519e09396b7ce4"
-    },
-    {
-      "path": "api/07.系统管理/22.安全日志/03.统计筛选结果.ms",
-      "databasePath": "/magic-api/api/07.系统管理/22.安全日志/03.统计筛选结果.ms",
+      "path": "api/07.系统管理/22.安全日志/02.统计筛选结果.ms",
+      "databasePath": "/magic-api/api/07.系统管理/22.安全日志/02.统计筛选结果.ms",
       "rowIds": [
         "c79884afbae0469a83d05702cec35d26"
       ],
       "kind": "api",
       "metadataId": "tenant_logsec_stats_get_v1",
-      "baseSha256": "d82c2244261b1375ce07c7afe766660573b605614b8a2085398e1be1efd5150f"
+      "baseSha256": "31d9dfb83d6cbc807deaacbe8c15aeee5856bc399790ffca8ac8c537c0523669"
     },
     {
-      "path": "api/07.系统管理/22.安全日志/04.统计筛选结果响应头.ms",
-      "databasePath": "/magic-api/api/07.系统管理/22.安全日志/04.统计筛选结果响应头.ms",
-      "rowIds": [
-        "10937576ece144948b8e3e8a5a1656b9"
-      ],
-      "kind": "api",
-      "metadataId": "tenant_logsec_stats_head_v1",
-      "baseSha256": "247288c4e94387cc33233112abde0f4e354e83d103fc1db3cccdd6fa8f4ab918"
-    },
-    {
-      "path": "api/07.系统管理/22.安全日志/05.查询事件详情.ms",
-      "databasePath": "/magic-api/api/07.系统管理/22.安全日志/05.查询事件详情.ms",
+      "path": "api/07.系统管理/22.安全日志/03.查询事件详情.ms",
+      "databasePath": "/magic-api/api/07.系统管理/22.安全日志/03.查询事件详情.ms",
       "rowIds": [
         "c590d6f6c8054af98b9bb76d620dd98b"
       ],
       "kind": "api",
       "metadataId": "tenant_logsec_detail_get_v1",
-      "baseSha256": "6dc365c84aa2d64007adfd4b4331bc249d50b7c43d39073149ad5a0dc0975a4c"
+      "baseSha256": "d6b82357e97cdadc7286098fefc120a7d11ce1878d4885e8ed822ec3cc220000"
     },
     {
-      "path": "api/07.系统管理/22.安全日志/06.查询事件详情响应头.ms",
-      "databasePath": "/magic-api/api/07.系统管理/22.安全日志/06.查询事件详情响应头.ms",
-      "rowIds": [
-        "798449101cc0428392d16d68bca0ea82"
-      ],
-      "kind": "api",
-      "metadataId": "tenant_logsec_detail_head_v1",
-      "baseSha256": "143e769309a321cb18f23cfb9abbcf97af578812703eacf9bb0499261c537bd1"
-    },
-    {
-      "path": "api/07.系统管理/22.安全日志/07.分页读取批次明细.ms",
-      "databasePath": "/magic-api/api/07.系统管理/22.安全日志/07.分页读取批次明细.ms",
+      "path": "api/07.系统管理/22.安全日志/04.分页读取批次明细.ms",
+      "databasePath": "/magic-api/api/07.系统管理/22.安全日志/04.分页读取批次明细.ms",
       "rowIds": [
         "7d07eea930c545d490ba6d6aa5bc71e9"
       ],
       "kind": "api",
       "metadataId": "tenant_logsec_items_get_v1",
-      "baseSha256": "608973abf609bafc5c21fe7737114ab4a76ec37c065ad0ffd9c5015c16bd8983"
+      "baseSha256": "eb36fb8680d9c07ac8eb61061992e76a41c36e0a8548593f547d8c605fd62de3"
     },
     {
-      "path": "api/07.系统管理/22.安全日志/08.分页读取批次明细响应头.ms",
-      "databasePath": "/magic-api/api/07.系统管理/22.安全日志/08.分页读取批次明细响应头.ms",
-      "rowIds": [
-        "b0a22d8ad31248bbb4085181c3e8b6ad"
-      ],
-      "kind": "api",
-      "metadataId": "tenant_logsec_items_head_v1",
-      "baseSha256": "3b6ea61fa19d42216367f48bfb15ad095d14818ec5915654ff0225b3d61f118a"
-    },
-    {
-      "path": "api/07.系统管理/22.安全日志/09.批量读取事件.ms",
-      "databasePath": "/magic-api/api/07.系统管理/22.安全日志/09.批量读取事件.ms",
+      "path": "api/07.系统管理/22.安全日志/05.批量读取事件.ms",
+      "databasePath": "/magic-api/api/07.系统管理/22.安全日志/05.批量读取事件.ms",
       "rowIds": [
         "d591cb5764ad4afcac422402da395c69"
       ],
       "kind": "api",
       "metadataId": "tenant_logsec_batch_post_v1",
-      "baseSha256": "d33dd2a07916d1f8ee6090be68f2f0057acf4a072ca3292fca07cc75bff2a7b9"
+      "baseSha256": "fdce15dc936be8bcfce96ad0788120e5caa75ef7e0c6740e5914c173c94de947"
     },
     {
       "path": "api/07.系统管理/22.安全日志/group.json",
@@ -5929,27 +5569,27 @@
       ],
       "kind": "api",
       "metadataId": "tenant_logexport_page_get_v1",
-      "baseSha256": "228b9452f99d02380cd8e367f08e45a3d6c171c4503297f4e190d0062edbe657"
+      "baseSha256": "2559fcbf1e61f4c15bbea4824ec2a264690e79fe9cb407e96d2777c784048505"
     },
     {
-      "path": "api/07.系统管理/23.日志导出/02.分页读取任务响应头.ms",
-      "databasePath": "/magic-api/api/07.系统管理/23.日志导出/02.分页读取任务响应头.ms",
-      "rowIds": [
-        "3e934747519b490287a14fbad46fcbf5"
-      ],
-      "kind": "api",
-      "metadataId": "tenant_logexport_page_head_v1",
-      "baseSha256": "afd0bb5453cca81a92f12727906f19dc5068c30c70e82125e570e274f3eb48fe"
-    },
-    {
-      "path": "api/07.系统管理/23.日志导出/03.提交日志导出.ms",
-      "databasePath": "/magic-api/api/07.系统管理/23.日志导出/03.提交日志导出.ms",
+      "path": "api/07.系统管理/23.日志导出/02.提交日志导出.ms",
+      "databasePath": "/magic-api/api/07.系统管理/23.日志导出/02.提交日志导出.ms",
       "rowIds": [
         "b5b8edb1d78d44f4b2454c7c2c7bfe3e"
       ],
       "kind": "api",
       "metadataId": "tenant_logexport_create_post_v1",
-      "baseSha256": "c9f39c29501bee78974ea59ca7be652225f8500932721b4de3e75ef2c1c175cc"
+      "baseSha256": "ac505f4321d292be6128c78d11cb47dc27ad35fd102c37e2fb87cefaa692e9f0"
+    },
+    {
+      "path": "api/07.系统管理/23.日志导出/03.下载导出文件.ms",
+      "databasePath": "/magic-api/api/07.系统管理/23.日志导出/03.下载导出文件.ms",
+      "rowIds": [
+        "8da617ed60a64053b79ea3671c0511b8"
+      ],
+      "kind": "api",
+      "metadataId": "tenant_logexport_download_get_v1",
+      "baseSha256": "cd4c02a3245fc468ebf2c4778e3dbea570c7b84b321e57e030a76981273e3838"
     },
     {
       "path": "api/07.系统管理/23.日志导出/group.json",
@@ -5978,37 +5618,27 @@
       ],
       "kind": "api",
       "metadataId": "tenant_logarchive_page_get_v1",
-      "baseSha256": "7fd714abf776f90932c402952863108a6ad2a52a6d28d514c78ca95c1cbb5ffe"
+      "baseSha256": "684fd9097993d24693b362755ba0e7507cd4bf7a4d0b6cbb91f1b654d03db376"
     },
     {
-      "path": "api/07.系统管理/24.日志归档/02.分页读取任务响应头.ms",
-      "databasePath": "/magic-api/api/07.系统管理/24.日志归档/02.分页读取任务响应头.ms",
-      "rowIds": [
-        "dbd722be2624487ea2fa3687e1956726"
-      ],
-      "kind": "api",
-      "metadataId": "tenant_logarchive_page_head_v1",
-      "baseSha256": "4823f34dd9a7de148da04abbca7b7fe260acdcf2179455d408a6670700b37051"
-    },
-    {
-      "path": "api/07.系统管理/24.日志归档/03.提交日志归档.ms",
-      "databasePath": "/magic-api/api/07.系统管理/24.日志归档/03.提交日志归档.ms",
+      "path": "api/07.系统管理/24.日志归档/02.提交日志归档.ms",
+      "databasePath": "/magic-api/api/07.系统管理/24.日志归档/02.提交日志归档.ms",
       "rowIds": [
         "e90b619640f04eb4801b6a2ce4d03aa2"
       ],
       "kind": "api",
       "metadataId": "tenant_logarchive_create_post_v1",
-      "baseSha256": "1c522886df71ad5210936402e2c32e23ae529ee8eecdbebe34841ce362688ab6"
+      "baseSha256": "d5f2d2a1286ddbba5935a28706d051553f35b59e27806d3658bbcf8844d59aa8"
     },
     {
-      "path": "api/07.系统管理/24.日志归档/04.处理归档批次.ms",
-      "databasePath": "/magic-api/api/07.系统管理/24.日志归档/04.处理归档批次.ms",
+      "path": "api/07.系统管理/24.日志归档/03.处理归档批次.ms",
+      "databasePath": "/magic-api/api/07.系统管理/24.日志归档/03.处理归档批次.ms",
       "rowIds": [
         "680c32df2aed48bea79efd772ab3633c"
       ],
       "kind": "api",
       "metadataId": "tenant_logarchive_action_post_v1",
-      "baseSha256": "cb35b24340e02286bd835ee19bb25d634cad3219f05e47ceb96264d239ee702c"
+      "baseSha256": "0038e7db313a6b07466eac4d9e9856c06426d3398b2e2eb3aedcce6272148ffc"
     },
     {
       "path": "api/07.系统管理/24.日志归档/group.json",
@@ -6037,37 +5667,27 @@
       ],
       "kind": "api",
       "metadataId": "tenant_logpolicy_list_get_v1",
-      "baseSha256": "7e071faff58b3e7042cacf46ff58ba2b5ef86cbc56b0777bfa76af23aede0f29"
+      "baseSha256": "cccb31dceaa6a5461dc9f7b2b969c0ae2fceb923d15ec633e6900be7d6c7cfa0"
     },
     {
-      "path": "api/07.系统管理/25.日志策略/02.读取日志策略响应头.ms",
-      "databasePath": "/magic-api/api/07.系统管理/25.日志策略/02.读取日志策略响应头.ms",
-      "rowIds": [
-        "4c691c387bf947f1a9beed97d920b776"
-      ],
-      "kind": "api",
-      "metadataId": "tenant_logpolicy_list_head_v1",
-      "baseSha256": "fb22b06f34a0bd828c9749f8411ed89f5338bbf2b33fc39d49c25fdd631cd9fd"
-    },
-    {
-      "path": "api/07.系统管理/25.日志策略/03.更新日志策略.ms",
-      "databasePath": "/magic-api/api/07.系统管理/25.日志策略/03.更新日志策略.ms",
+      "path": "api/07.系统管理/25.日志策略/02.更新日志策略.ms",
+      "databasePath": "/magic-api/api/07.系统管理/25.日志策略/02.更新日志策略.ms",
       "rowIds": [
         "3d5f9e5d03fb420085fbc158da8294eb"
       ],
       "kind": "api",
       "metadataId": "tenant_logpolicy_save_put_v1",
-      "baseSha256": "a16c34fa02df855ba424500102329295990ffc5ce639a49ea943ac21c476434f"
+      "baseSha256": "8f49ef7ecb7baab46c135ecf40561de69b1b3ec954acb61cd72fa25c9ade0137"
     },
     {
-      "path": "api/07.系统管理/25.日志策略/04.兼容保存日志策略.ms",
-      "databasePath": "/magic-api/api/07.系统管理/25.日志策略/04.兼容保存日志策略.ms",
+      "path": "api/07.系统管理/25.日志策略/03.兼容保存日志策略.ms",
+      "databasePath": "/magic-api/api/07.系统管理/25.日志策略/03.兼容保存日志策略.ms",
       "rowIds": [
         "2143396100f047f5aa43299970f7166f"
       ],
       "kind": "api",
       "metadataId": "tenant_logpolicy_save_post_v1",
-      "baseSha256": "0ad2e37db0204e5a753ecf490fc400ff6d664c6cab91263d4b2be372f86ced98"
+      "baseSha256": "5dddd339c50a331c6bda1e03653353bdbd3981aa0866e8fe427165a00f41d092"
     },
     {
       "path": "api/07.系统管理/25.日志策略/group.json",
@@ -6124,7 +5744,7 @@
         "eb2532b6f1b14c7997939892ef542c21"
       ],
       "kind": "api",
-      "baseSha256": "2a22b4fe51980982363373cf160c48db4293405db5c9e7187099e0695dff5d19",
+      "baseSha256": "e77cf52a23a83bbae018f61a83b425b02562b503b53b06bd3f3ea2ed2e1f4cea",
       "metadataId": "4bd2f846272751cab344701a3258027c"
     },
     {
@@ -6134,18 +5754,8 @@
         "3b13b476daa042d0911f4de52da35158"
       ],
       "kind": "api",
-      "baseSha256": "216fd02518d2af352235497b2008dda14fb494a970a015bc0a214263872dc992",
+      "baseSha256": "7a2f784b407382d7d6f16f5a058590bf35b0461a678a2507578b92af5247a38c",
       "metadataId": "c5e8f3f5dc9d52d5b23709f6e3c2ec15"
-    },
-    {
-      "path": "api/08.统一身份管理/01.认证会话/04.读取登录页设置响应头.ms",
-      "databasePath": "/magic-api/api/08.统一身份管理/01.认证会话/04.读取登录页设置响应头.ms",
-      "rowIds": [
-        "481f73da74ad48d0b56b93d40e30a3ed"
-      ],
-      "kind": "api",
-      "metadataId": "idaas_public_brand_head_v1",
-      "baseSha256": "d277983fe9ac87a2149b570a3070a3bcb84c8f10130478f4f5ba264f0960f34f"
     },
     {
       "path": "api/08.统一身份管理/01.认证会话/group.json",
@@ -6183,7 +5793,7 @@
         "cc39ca29f8c549e1a84038385cb7f9e6"
       ],
       "kind": "api",
-      "baseSha256": "1318a5b3c14bd54f07b2aeddbb443a60f38d32fae9d12c2fa4f36802d2110bee",
+      "baseSha256": "2286467c89e412c6131872533504fae916dd3e68fb214d231a243a27d691ff5c",
       "metadataId": "e52368d8d58458c096bd3323746f85b9"
     },
     {
@@ -6212,7 +5822,7 @@
         "e789f62c9eba4a76abc9fe5cdc833931"
       ],
       "kind": "api",
-      "baseSha256": "c9ad1821f2f105db19826ed8d6dcf3fc32f6dec4c77557168e705e70196cad61",
+      "baseSha256": "0404c8549720091e314ec02423b77190632917ae5bbbaa9bbbd5d04bbea62c9b",
       "metadataId": "9d76df5fd4ad5e05ba9ff2f10dfa75e4"
     },
     {
@@ -6222,7 +5832,7 @@
         "f73a709a19564733be96e7912d54c6d0"
       ],
       "kind": "api",
-      "baseSha256": "be13729a22df2e288bb786685e640b8c8e33245c8248d9b965c54cf8f71fa400",
+      "baseSha256": "2fa4dc8a84303d50c1c2ca9e0a4b947b81006246e4369153198baa368058297a",
       "metadataId": "idaas_draft_preview_order_v1"
     },
     {
@@ -6251,7 +5861,7 @@
         "6cbf83a89d534737b8cc9200cbb48144"
       ],
       "kind": "api",
-      "baseSha256": "2ac45519deda264e8bafb2ae70691ebba870abf8df9cbcd015c13c9f34877987",
+      "baseSha256": "f70df70c5884f97320b490bfdbd30d4303868f437bf89aeabd647269143a5fb4",
       "metadataId": "1c1cbd2c3b35549e9ded9eb532e5db53"
     },
     {
@@ -6261,7 +5871,7 @@
         "e843b9498b304966a295cfdd44ff760b"
       ],
       "kind": "api",
-      "baseSha256": "536f8fb08c903ba99c674e352a70994e230ab1712a931417cb885c2b796cdd0f",
+      "baseSha256": "b4d873c5d8a2a9b1ba879f897f6b4ae3838333efd1f4ce268b4914b44c36c1e4",
       "metadataId": "7a008c9916c45a4aaa460d2085bf954c"
     },
     {
@@ -6271,7 +5881,7 @@
         "03a83c79d2a948a48cff3aa3bf50400c"
       ],
       "kind": "api",
-      "baseSha256": "d1d24040691bdaabd6a39f8a4b32d5e62d4c3257a0f98440964e68e8498df044",
+      "baseSha256": "2ef4e89e8058bf9ab08089dec3ecd6c557c7e04c83c97619940d586e725a7788",
       "metadataId": "a760b9ee968459319e61298b087f200e"
     },
     {
@@ -6281,7 +5891,7 @@
         "0d0ffb408ee74cc6812957fd91ab3723"
       ],
       "kind": "api",
-      "baseSha256": "5d6f98ce0c20fcbc0104a203ea82fe1360fe838778316ba412f03f85d8279e27",
+      "baseSha256": "a6ac0af01854e2338492466012d0961a49deb38a45c885d37044be87236f5ef0",
       "metadataId": "dd8968d7f8b15b97a01ade4c88d10c34"
     },
     {
@@ -6291,7 +5901,7 @@
         "3e613aa0cea445ed9ee5591ef7ba67e9"
       ],
       "kind": "api",
-      "baseSha256": "f6504a49267c49d578780355bddea8d1d03f7684ee9b96cba44cc553b0c7c307",
+      "baseSha256": "020e92aa5fa82649de9496e03dd401c54253cef70d11240b1cbf267a2bde27f7",
       "metadataId": "b1e014a17e445892a5a311480b75a2d6"
     },
     {
@@ -6301,7 +5911,7 @@
         "3be72a759ed24404a0f2b6186fd08255"
       ],
       "kind": "api",
-      "baseSha256": "3354168a632924118d3ce17d76d3b632fe427b18cf25348f1f7ce4d98e0d5126",
+      "baseSha256": "e169ff7a92c96f80ff12662f4a61079e2a55a5c613fe64b3e3a6b8a320aa84b9",
       "metadataId": "7e158ace27ea5f6d89811d934a5588e0"
     },
     {
@@ -6311,7 +5921,7 @@
         "7bd0afaff84b478090be4771a3ee8549"
       ],
       "kind": "api",
-      "baseSha256": "a24b980e2fee0d4546be295ea167b54af7aa4be2d3a90465a2e3123ed8c284f6",
+      "baseSha256": "13b10aaa7133f9d35de23fdbfddb6a22fde0e33cc10b58623677d633616ba519",
       "metadataId": "2ee9fcbb39945c999ac6ac109947d492"
     },
     {
@@ -6321,7 +5931,7 @@
         "e57b1b0990d74f6d8fb539f93b7472ed"
       ],
       "kind": "api",
-      "baseSha256": "296bcd9bddbcd0437c0baf779303772b5afbd2ad537b1afac3bffd06999876c6",
+      "baseSha256": "d8fbab911549cf3cda60fbe1a910a83632c012fedc62e42a87667e356d54ea82",
       "metadataId": "70125b723bc452648ef74d6ec085f2ca"
     },
     {
@@ -6331,7 +5941,7 @@
         "27deb428c52b4ea7a7c3508c6bc2a593"
       ],
       "kind": "api",
-      "baseSha256": "a3e475c522bcc614ac79e2f2d578eba5ec64054415ee7d5b6d55309dad16cc0d",
+      "baseSha256": "7c7a07014393d9e3d768d63792857fb7ad484737cb685afa5b18157ec7891536",
       "metadataId": "7cb4e9d431d85d5a8c2c865c98c80b96"
     },
     {
@@ -6360,7 +5970,7 @@
         "ad143714faa6495787cb4fc6504f3d8f"
       ],
       "kind": "api",
-      "baseSha256": "21130909fb5f988234c1e8420c2b04750d57cc1b761fa5973e584a14b70f108b",
+      "baseSha256": "0ef4ae01d965e0568033ea3e2f8d74d362565bfba8696ad44799f9c8f95ea76e",
       "metadataId": "e61411e62bc5562fb8e3e453e3b63340"
     },
     {
@@ -6370,7 +5980,7 @@
         "99662f5070e04e968cefb4f595acf6ee"
       ],
       "kind": "api",
-      "baseSha256": "b530eb527ade741dfe9341a19593d9cc4973d8b1ce74a0f1fca1b1d1eeee26b0",
+      "baseSha256": "38e9635d67942bd59c51f40ba3b54fa2734fe56823b483b6b99210a49479fa6d",
       "metadataId": "ab76991d24435043bff63e1fef264ddd"
     },
     {
@@ -6399,7 +6009,7 @@
         "001fd31ec98348ffba3a393da9a103dc"
       ],
       "kind": "api",
-      "baseSha256": "37f01560c67b7b68df75754082687e43c6be54504593e29fb850461a796dd276",
+      "baseSha256": "9619bca3d1262c990de6b6b7c84c892549b68032137bcd0e8059a96735d65ca7",
       "metadataId": "5e04ef923b49583a816bb928384d2985"
     },
     {
@@ -6409,7 +6019,7 @@
         "1d4ebb3c875d439eb3e84c80b733bf23"
       ],
       "kind": "api",
-      "baseSha256": "f8be5e1c96acdfbbf519b9cc06cc43e17e5a15b1c14a14f8befc9647e2cf45c6",
+      "baseSha256": "9753a5998a5594e10f50e4a797076585309f86191bf94c5570e6bc2ad24dc1f4",
       "metadataId": "5c56009a3c805d3a90bd53cf23e8245c"
     },
     {
@@ -6419,7 +6029,7 @@
         "0c11eeaf3a83472880cc761b84ae4e6e"
       ],
       "kind": "api",
-      "baseSha256": "cccb54a547fe0a322e75c72281af583944dcc85ba2d78a66ec451973ab339669",
+      "baseSha256": "9fbf332621315b71eb1657da7aa2d7dc9eef5208cccd3bbbeeeb3c46beed7cdc",
       "metadataId": "2049857ef4b552d5a47490851cb25d97"
     },
     {
@@ -6429,7 +6039,7 @@
         "4b7a0c6290974f9b8080efdf0163c987"
       ],
       "kind": "api",
-      "baseSha256": "15b06594f8432f22fe230b45e65320978ae2f8cbebc2c44a23f2be90e2354ec9",
+      "baseSha256": "9799e263c52c6bb89eecad80a6452f41bf90eabdd8a858c6a1a8cd71ec4cd077",
       "metadataId": "8f03bf6ef638590086272b685efc3035"
     },
     {
@@ -6458,7 +6068,7 @@
         "4066ea85777a497287b4b155f17c534b"
       ],
       "kind": "api",
-      "baseSha256": "9d23a9c12d3c8885523c2fe0b5bbe751721d1e2e3c16f62c04a69a215cc71d0d",
+      "baseSha256": "764643eafdf398132e6e4be61f0e63ba11e46944eb4f104a590d0fc119b76772",
       "metadataId": "0f9b0c2c3dc4513686c90ec2bfedf5e6"
     },
     {
@@ -6468,7 +6078,7 @@
         "398dfee984f14f7996c538a42837a8cd"
       ],
       "kind": "api",
-      "baseSha256": "1e6b5f73f660143734afd9e3d91d889622f4fe5bc8d82d6a6e6b67a988efe477",
+      "baseSha256": "b73d4c09577d52e914770adb7940afa7d0df6f3b8987a5c878dfaa36027ed596",
       "metadataId": "8ee3dabd4da15e23be8e7d24c8ccdf5b"
     },
     {
@@ -6478,7 +6088,7 @@
         "cea95a2e4cd349ba924441d847979e0b"
       ],
       "kind": "api",
-      "baseSha256": "c50e9aa2deb348e9bde68da03a739593cc7a297dd1275235911cab469a467528",
+      "baseSha256": "3ceb7142409af42f55534514376947a26760587f07f81e6584a9a15503ce4246",
       "metadataId": "06d8db502b255e098024ef3a7ef595f1"
     },
     {
@@ -6488,7 +6098,7 @@
         "d46af7e9162543d1bbf6cd320a69f916"
       ],
       "kind": "api",
-      "baseSha256": "14cc7964d5006a68898c6618d430df4fc16c69d27040c6bb8dc86aef603a052b",
+      "baseSha256": "e35d07e34e1b9f7516a4f5748de348ecca1cf84e5362912406b82d08880ee2d9",
       "metadataId": "703537903bf65870bad007eea877180b"
     },
     {
@@ -6498,7 +6108,7 @@
         "4d4b36cc5cf74b62a433a484427c4b8a"
       ],
       "kind": "api",
-      "baseSha256": "f7434bbf1b7afb3b693362d9b62c69f195b054e8674bf2a6b2206147fafa7f23",
+      "baseSha256": "91b729bddb6b7315954cde4ef90a6b42cc35cd8f9a4456016e2b938a9654fb75",
       "metadataId": "0ebea9ab19a951019a530accee61f353"
     },
     {
@@ -6527,7 +6137,7 @@
         "604c7dd98ab546f1b186bd819ec35641"
       ],
       "kind": "api",
-      "baseSha256": "10bb8bdfac8671d78f94a6bdcc496978aed791ca97641c4cf4c4e3445070d6b8",
+      "baseSha256": "4b0042b99d383872dcace3a24e9064f188029e3e0a6c08240266e3aa25c971a7",
       "metadataId": "b6989040ccbe588abe6c9169ad23ee82"
     },
     {
@@ -6556,7 +6166,7 @@
         "ab7d5fe5332e43fca75145df2540dbf2"
       ],
       "kind": "api",
-      "baseSha256": "e7843f24ebe69a3335f2bb970c7b7eb505050854b39466513852f5fa7559ff77",
+      "baseSha256": "aef072f2c219bffbe5b808c99f2a5ce6565fd68288f128686c9893db384b5fc3",
       "metadataId": "58695a5f7a255701bfa51ae44c00b26e"
     },
     {
@@ -6566,7 +6176,7 @@
         "9b1a2cd222d844ff8770de50e4256ba4"
       ],
       "kind": "api",
-      "baseSha256": "14d4f1b7289247a4014bd92e2f4a4f304f0d898662c2b1d804afe7478c97ea18",
+      "baseSha256": "c509d988eee00df7729b64aeb096c3d08802640c236433f5062d1bb96ad72ee0",
       "metadataId": "b053321931715e798c0c032e180ca907"
     },
     {
@@ -6595,7 +6205,7 @@
         "857f1867fdb64756aa1f2584c325fd6d"
       ],
       "kind": "api",
-      "baseSha256": "95052d83a733493e0939c547ab2a502f4787ae0f8fcd518cd22592c40573134c",
+      "baseSha256": "49cdb0e801ec27fc659d20457367ac8092074c566f869aa05966246502419fb9",
       "metadataId": "442547f994c85528842eaab529f84850"
     },
     {
@@ -6624,7 +6234,7 @@
         "e1cc0858d35f469ab8919e5b61a412d3"
       ],
       "kind": "api",
-      "baseSha256": "76d50122cd6d535c3bd59f2c0a8e66674c6ca228edf84550d683514617df0fbe",
+      "baseSha256": "1c7bf4a20833f8b6dc8d6994ca8f112ac58e1d8e64e6369f74793888df148893",
       "metadataId": "a933e818d7bf53468de98461fe26d5f9"
     },
     {
@@ -6634,7 +6244,7 @@
         "61bb3b703754417d9a4059dc19c637b7"
       ],
       "kind": "api",
-      "baseSha256": "220ec89e0858e9d2efb34ee746962f6d871af68d014806b6f2fa77f264aff3d5",
+      "baseSha256": "400ee3ba76ba025e829445e53bbc1b1102aed08447ccf70fb708014bbd953f87",
       "metadataId": "8dedf6d666c55613a4cf9c1b46001b15"
     },
     {
@@ -6644,7 +6254,7 @@
         "5a537c02af344ae9a51ef8b632b25449"
       ],
       "kind": "api",
-      "baseSha256": "10af37a16195cc288af492d6a82cfa6a36c64ad32d36dae75ba52a911e544129",
+      "baseSha256": "d0c7800f20b6f220a3fb95f0a8d9c0ffd663a536439bfbce324a24bd7cd4b8c1",
       "metadataId": "e064863bbc0d537d909fbba98c60b2e0"
     },
     {
@@ -6654,7 +6264,7 @@
         "8d16429080e44e21a6283ca7f1816f84"
       ],
       "kind": "api",
-      "baseSha256": "9cfd4aebe1fb84bc09dec14d056f16a1fcf6f97362735a50b2c7d1d6f87afe2e",
+      "baseSha256": "03155b2187f54d14e40196e2455ffbd8c609eae034b0bd070a9df1c059444adb",
       "metadataId": "dc4619ca6349542791baee8cb1cb9f25"
     },
     {
@@ -6664,7 +6274,7 @@
         "42ac64480d1f474b83f139d8d8c8a121"
       ],
       "kind": "api",
-      "baseSha256": "40f3771603b09b0307b6f866eca9eb518805d621cf667f98c891f1c1d98d66c6",
+      "baseSha256": "4f159fb43de8a74f855df84d42f2791e573072a32673d9523c71c961e9bcf191",
       "metadataId": "ce1b7dafa9405755b263b849c2c9dc96"
     },
     {
@@ -6674,7 +6284,7 @@
         "ec4feceafbe94977943f17ecde63d723"
       ],
       "kind": "api",
-      "baseSha256": "700caa3069ce43c9176142fefc7219b517ec08cd669a2f74270df1f9570ae724",
+      "baseSha256": "48f3c7b0a9065b684978dcf758ca9d2a2bb18609a54181c82a62754af9bb2b01",
       "metadataId": "062a1e8f5b825797baf08ddc8654daa8"
     },
     {
@@ -6684,7 +6294,7 @@
         "46238b0f3ae244fa946ea94e313bcab4"
       ],
       "kind": "api",
-      "baseSha256": "095123fabe0c5aedae76fd359bf58fe2d05e57e18a626510f38cd65855b065b4",
+      "baseSha256": "f224a51ab3ace8f50d749609c62b709bfa17f54d98327bba0c951880b6795975",
       "metadataId": "29012d6e76a753cfa2d44cc5d086165c"
     },
     {
@@ -6713,7 +6323,7 @@
         "4d99ef0127e242c895da05452a0e8663"
       ],
       "kind": "api",
-      "baseSha256": "16666a7ecc9bffecd49c435e56d031399e86e963ae23bf2a08ad6e788cceebc0",
+      "baseSha256": "b1abf6c8ff22fcc8eee1362c51a2c44490b8ee827c709eb04b71ac07d0c5500f",
       "metadataId": "f35cf38baa1455b085cfc3ae6d7473b3"
     },
     {
@@ -6723,7 +6333,7 @@
         "ece2f57de7e04b1b918c4d634ddcfb9b"
       ],
       "kind": "api",
-      "baseSha256": "659185d3f3fec768b31df2717efa195d7b93ab0e67b96d74a172e410b81974bf",
+      "baseSha256": "3030121e84e7bcc9696ab9355925bcb9e4a423fa30fafff670e95d653aad9deb",
       "metadataId": "67cd460119445b64a9652e73c102e0eb"
     },
     {
@@ -6752,7 +6362,7 @@
         "89c14d76c74a4374a2030298c2dc1064"
       ],
       "kind": "api",
-      "baseSha256": "bdd514bbee863b1625a68e378ff86719636888bd3f6ff99340cc0455020766b9",
+      "baseSha256": "409b419d88d54218e88ff11c270fcdbb037aeb376fefd4954b10d9a557c22a9b",
       "metadataId": "696383013abe5008aae8fe5ed01ac834"
     },
     {
@@ -6762,7 +6372,7 @@
         "2ef28179052c4bed8d5a41ef41133eb1"
       ],
       "kind": "api",
-      "baseSha256": "787667fcc37113308fd6855de108dbaabdfebad7fae954f7cc6c4e7219c4ae3c",
+      "baseSha256": "87dd9bbe1ae0580f3478a98fd120c019b1b037d0133944f343341337f6543718",
       "metadataId": "01aae8ea3467573180daa39b2c0f2480"
     },
     {
@@ -6772,7 +6382,7 @@
         "85966ac37bc14515981687731b788f0c"
       ],
       "kind": "api",
-      "baseSha256": "bd6250d01732aa13fd61628e1dd73ca1fe418d21596f6a251fc0ee9b8af3bcd1",
+      "baseSha256": "9b4dd0f03715a4c5bf41a9e633811e78b45ad5f153b89d604a4c0282c4a79f59",
       "metadataId": "d3584c2bbce4543ca25ffbc5654a8c46"
     },
     {
@@ -6782,7 +6392,7 @@
         "78e3e30a0cfd44a9895102855377a3f2"
       ],
       "kind": "api",
-      "baseSha256": "5b42c13bb12333a6c38f2920718e0b92a04028caed3fbf98b74ca5971d6a0e8b",
+      "baseSha256": "7f35cb9d55ac25aa94567d45c59cf6cdffb5f358c912cee5a4c2f4f2b4c20b80",
       "metadataId": "ba7b2a02b6ff551186d4dee95781f743"
     },
     {
@@ -6792,7 +6402,7 @@
         "8adfbefd60384b348184e1f06f883c91"
       ],
       "kind": "api",
-      "baseSha256": "f86c48a475de77c90504774e03808e1f8b99034fdd6d90a50b221268e04d7e8f",
+      "baseSha256": "f49b316a303281437f7977c9c44ae51b95d84084de385171168beb26b80aac96",
       "metadataId": "440df30da8fa582e9ce22c24c6693e06"
     },
     {
@@ -6802,7 +6412,7 @@
         "22fd880d7d914031911b844f2f1f25b6"
       ],
       "kind": "api",
-      "baseSha256": "ef60a6d303dcc9cee9e4b5fe6ffc557ce14bf5e41eceb706d9795ae3080e7f83",
+      "baseSha256": "2dae67508f908e657773c8861b42b1b981f69a68277afd58b07afc7494527ae2",
       "metadataId": "d2ae39bdaaf355b98c48d3f1ae366416"
     },
     {
@@ -6812,7 +6422,7 @@
         "2f1fb391afcc47ea9a4265b2189e6c0e"
       ],
       "kind": "api",
-      "baseSha256": "4ee4c8c5b504cf080935d2fae24235071928f17a9f01030ddca6d63544702c03",
+      "baseSha256": "bf54a1c0f1710918d246e58fff975e7db905eb765c874843f3e1bf78de2f17e3",
       "metadataId": "98326ef1fc5558f4816375a354792250"
     },
     {
@@ -6822,7 +6432,7 @@
         "f9f95ac48c504f4982971abba618889c"
       ],
       "kind": "api",
-      "baseSha256": "4f3b96a3e95e671df12f9c1342ed16ed53b065f0b2b43b2f32a97fabfc8a6f1d",
+      "baseSha256": "bfc546998dcb13c9e85d42e3af3eb0e64631a9110c4c41e566809249c40f1c90",
       "metadataId": "7b1d8aae55725bdda939675bd29b2c2a"
     },
     {
@@ -6832,7 +6442,7 @@
         "033a341f797d45458eb1a683bb7417d2"
       ],
       "kind": "api",
-      "baseSha256": "380ab72f4647634975f002aa4bd87825f237dba33d4bb3ee82739ac6d6b48390",
+      "baseSha256": "ed443caae79f7305466bd7298743ab6a7ed1d978f726dd35ae37f6dd32adc8c3",
       "metadataId": "bdadee3c54325c0c8c04c28dc02c0281"
     },
     {
@@ -6842,7 +6452,7 @@
         "4075121696d141b3b46f6f314d8f2803"
       ],
       "kind": "api",
-      "baseSha256": "d92c77d4f6870f84af67d257df30f7eb6a9b9f5cf03c7ee6bfaaa433d48fbcb7",
+      "baseSha256": "194d5ec413947c01c085fa71dd02d286cc86c5cd43ed90532ec792a5d1919ea2",
       "metadataId": "43af23446f825dd09c5c88784e8d0425"
     },
     {
@@ -6852,7 +6462,7 @@
         "e13a7814924c40be9c3a64f5d33e0cc2"
       ],
       "kind": "api",
-      "baseSha256": "2aa4f34c751115edd4161d21cf7e566a118fa8847edf78d83a2d5633b3ff66b5",
+      "baseSha256": "3acb87e3da8ef0ca434afac6edfd5d2374771b42dc2617467e8ba348e842ed2b",
       "metadataId": "cf026ce5125b49338d2941874f0cbd62"
     },
     {
@@ -6881,7 +6491,7 @@
         "965fb491e17344a3a9cf8921e4b6ce91"
       ],
       "kind": "api",
-      "baseSha256": "86ba05752e541e664fa33238865db91b81e0bca81fe84802371d9422ee787bb8",
+      "baseSha256": "cf1443dc43cabda7bab5f77ae1f62c3bce1cd1b23df4a0362cc8dd6929b1ad13",
       "metadataId": "e2e6dfb77ad95241aba08dd2a4c3fb53"
     },
     {
@@ -6891,7 +6501,7 @@
         "7274eddd4bfb4418aeed42cd2d057fb0"
       ],
       "kind": "api",
-      "baseSha256": "6ab7c4f323adb5403ea33cc2dafb6826c82fd1bc31826fceaab3c4cb1a86cf22",
+      "baseSha256": "fbfcfa33fb299eec5d912cffb714a4fddeae8ced3c79bbeab0c44d2daae369e5",
       "metadataId": "a3821384bf4151ce85fdb396aa898d9b"
     },
     {
@@ -6920,7 +6530,7 @@
         "0d618d3163ed4c6ebf7e017f23f0aa01"
       ],
       "kind": "api",
-      "baseSha256": "67150020aed15d165f134cd8e77f694002ccd6ac86ebf9740f971619ad3e6489",
+      "baseSha256": "aa4c1ffcf3fe89be8366931b47061de09de1385a3aaf0bc27b06c1aa3e8d02fb",
       "metadataId": "419dd6a6040c519c83df3583bad95aa2"
     },
     {
@@ -6930,7 +6540,7 @@
         "2ba12965514f457e89f43406d7169172"
       ],
       "kind": "api",
-      "baseSha256": "44960d36d29c21b1d94d7c5dfb952de767e820c129ad7ef2bfdaf4f6621c93af",
+      "baseSha256": "dc863922ef252614e9a5cf70569256a45753d15f01641b9c65f73f6d087cc2e2",
       "metadataId": "7b835c29c6115af8a691831c8fb631df"
     },
     {
@@ -6959,7 +6569,7 @@
         "40155c8e7414425aacc4f2b5d9b9d70f"
       ],
       "kind": "api",
-      "baseSha256": "e09e5e1d40e4f2a69d221faf72920cc56898eaf24ce4e3475061bc7d03a67839",
+      "baseSha256": "5d098b51b13ef675b8f2d39feb3fe4ae40f62b59a0e0573f6d58ecd3028930a4",
       "metadataId": "3bb4ca383d1e58e6971c458ef78eb6b8"
     },
     {
@@ -6969,7 +6579,7 @@
         "8e7e5884ea6d4fcea5c6e624381eb904"
       ],
       "kind": "api",
-      "baseSha256": "69ea69c015750d09c2cd938194939ba7c88682a4ad35a2441a35ee123d5f47e6",
+      "baseSha256": "b6bbb99b8d7492b0f3cd6dae20eaa65dbc33b2f979fc8ce920ad32fc85bd6ab0",
       "metadataId": "6f389c31a29c5cbea2ee5f94acdc70ec"
     },
     {
@@ -6979,7 +6589,7 @@
         "ba9e1879ced84ea182f925c75840d755"
       ],
       "kind": "api",
-      "baseSha256": "2640b99000e48a0b2685b3b46efc4c0c6e82073945369d2e37d9b2806d8a6513",
+      "baseSha256": "4e55142193d5b3ef4f11bfdf17fd836b6824a90d7b775c1a84b90b78c0f1ac50",
       "metadataId": "130e0dc6612c5250b7abfd777d1fd1be"
     },
     {
@@ -7008,7 +6618,7 @@
         "4eef540ec9194331a3e2fc357425434b"
       ],
       "kind": "api",
-      "baseSha256": "40b421966d2a7904bbce2759a471a60e819bd6e4eb2b64549d9cc11d304279cb",
+      "baseSha256": "02235b156d947b730c74e1bd701aaf5877e78452ac3ccdb80bafb884f879601a",
       "metadataId": "198cc4bcf30754adb17aafd004e44b34"
     },
     {
@@ -7018,7 +6628,7 @@
         "a55fddb41b3445e8a4da899f9caa2b9e"
       ],
       "kind": "api",
-      "baseSha256": "755e7188fe8308c71415f0d60a5634694ffe10cc1c002a557eee519f96c387dd",
+      "baseSha256": "1f40d2750ad6b7c2567349e881d6bb7d6fc8461eb7d3d6bac7d51292aad27105",
       "metadataId": "b9c145c0fe395dadb51ee4eb896d7b78"
     },
     {
@@ -7047,7 +6657,7 @@
         "4c7b8ff6ccfb476299f75469b112bfc8"
       ],
       "kind": "api",
-      "baseSha256": "a5e5ce72f35afe97819769f2b1899a902a6894bb89e89af7abf6cef8fc77245c",
+      "baseSha256": "752e772f4eb44dcb3389921764f8307a38f6382f0745c116362f41c734229b39",
       "metadataId": "81d9266d4fe052f090cc0631d8e3cd2c"
     },
     {
@@ -7057,7 +6667,7 @@
         "8c9d4d51e6334677a69e7233c714c4e2"
       ],
       "kind": "api",
-      "baseSha256": "1328abe232eee1a9f70db8604c618faeee8b45c0a993cc68b837ebb88ebb8791",
+      "baseSha256": "f2abc5c1662a27b537215e10c1cdaf6136ed2bfa8c32a1e1992bf2037edc792e",
       "metadataId": "551fcded58c1543ea75dfd5a72b9f0c0"
     },
     {
@@ -7086,7 +6696,7 @@
         "cb87e645421945b4b956b2626950af51"
       ],
       "kind": "api",
-      "baseSha256": "99055306f468bbeeea8f88e0a8d9d51203c5383075c18b92165d563bc7225538",
+      "baseSha256": "bb1632a614aa2d397dae6fe8508c3d0a9b0c5a27ef380e0b4c4c46db6a8e92a0",
       "metadataId": "3271b28c612650c88db8832fc5eda9b0"
     },
     {
@@ -7096,7 +6706,7 @@
         "44bbad9ed4994e59917bdb6e2a0c12c7"
       ],
       "kind": "api",
-      "baseSha256": "69d68464e165b084fc6694cbeea45426a0bf1081abc397322e176f1d6e2e4d26",
+      "baseSha256": "d322b4c34d057f5e48b0a051cad0335c5f4f30f1cb59be02c552826f176be444",
       "metadataId": "f8189bdc4eda5d2f8e2c7238365bbc35"
     },
     {
@@ -7125,7 +6735,7 @@
         "91b5cb16f40b4e7ebce295eefe59c98b"
       ],
       "kind": "api",
-      "baseSha256": "314087c2584289af99cd6e1d46aa41fcf436457a8e017e0c96e37a0f7acb3671",
+      "baseSha256": "127be6892217d8d0257b2feefcdc75c6ba1f346d9dee7e7e74992270eea65bb0",
       "metadataId": "0ce64f83f20e56769be48ddba696af99"
     },
     {
@@ -7135,7 +6745,7 @@
         "4b1ea5eb2e024f0ea126545cb0e387e8"
       ],
       "kind": "api",
-      "baseSha256": "e6bd3570df11fb8564ec6be3b4f3a3d9b18b98ed2d233e81c1012b793c9ba1e4",
+      "baseSha256": "046c7b5b4adfbf7f47af0c20078a206468913f0f75c0ffabb945f1a4b9674aa6",
       "metadataId": "ed4e9afa31fe5fd9bdfb3cf54a7e2db5"
     },
     {
@@ -7164,7 +6774,7 @@
         "0ce0a869b2564c20a32f15a12122b6b6"
       ],
       "kind": "api",
-      "baseSha256": "496d3c2f0cccabe044bada17efd95b6271301e8ff7b21240fc806eaf0a2edfb2",
+      "baseSha256": "9eb37cd4fdc4b0e902947688ad775a35519226dbce1b7de0b9718d8cbbc0e574",
       "metadataId": "a00b226b4fd35e91a584718eb4b9a2f1"
     },
     {
@@ -7174,7 +6784,7 @@
         "cd43b34d94f84938bab7b9ef685648d7"
       ],
       "kind": "api",
-      "baseSha256": "efbe3ffc5246d51ef2fb6a5666cfcf2d41c7210f7108ecf6414b56670d6dfba4",
+      "baseSha256": "a82c3943119d52dad9b33259b8025080fb812cdf2e6a3bfa7ff4f797b1faa96f",
       "metadataId": "3fbdbbf3b526546f9c9fbcb38a38784d"
     },
     {
@@ -7184,7 +6794,7 @@
         "d45b385d7a6e415e90eb4e03b137c972"
       ],
       "kind": "api",
-      "baseSha256": "e04480e8f135455f93ea15a6166e0ce1d4d6d5e21c8288d262ead7dc3d8f7747",
+      "baseSha256": "3a660edd086e83e2e32a44d9014e513a74ab60756a0929db02b234a1e0e00909",
       "metadataId": "db01a757fc205fee8debb0e3cdf6da31"
     },
     {
@@ -7213,7 +6823,7 @@
         "c032f0402a39415f8b07bea82b007fb6"
       ],
       "kind": "api",
-      "baseSha256": "88cd8343c45b1e110e99848ee7aad9a502e7b80edc98a3839026c391e2b3d3ad",
+      "baseSha256": "05421bfd43eea990bd679a5a67cd6d732511adbcbab2f9b910935a59f2566941",
       "metadataId": "d523319ceb2b56edbabedb12112417d7"
     },
     {
@@ -7223,7 +6833,7 @@
         "1cb0fca6458d46af9541298b105daa82"
       ],
       "kind": "api",
-      "baseSha256": "c345a26e2ea56cafe258dfb18a939f1d3798dd2e6a4c40b8f8320cb64e7edbc4",
+      "baseSha256": "9ad48abfd8d4aeebbe8159588fefd404d46b6165a9a001f84e8c426c09972662",
       "metadataId": "8b7e7875e5f35f1bbd3b2ba81fea5373"
     },
     {
@@ -7252,7 +6862,7 @@
         "96ce839fed9446d38eca5cc63b24402d"
       ],
       "kind": "api",
-      "baseSha256": "48b7a362341c6ed9b59735972d5f27efc7506ff998f1ad32f18f445bd7660356",
+      "baseSha256": "b07615288f8c207e16fa7084e82f75d8d909809cd5b1323f5a7abb4f9c919822",
       "metadataId": "868fca7d381256fd95e5d01079062df0"
     },
     {
@@ -7262,7 +6872,7 @@
         "460d3cd8cb4f4c27b4f582beedfb3de1"
       ],
       "kind": "api",
-      "baseSha256": "00ff241170751a694686da3b9f88b4c571d4a3245fbcae1b5c363b55566c2235",
+      "baseSha256": "77aa40b064213dc8b1acb4463e7f7a3b2830c56672814e4bf5a4b6de41a1b3ac",
       "metadataId": "ac7b2ac7fc9155e7937e23909b279301"
     },
     {
@@ -7272,7 +6882,7 @@
         "7396146c8ae54a34b7d406d631d7923c"
       ],
       "kind": "api",
-      "baseSha256": "02ffdd402d73722d3d86bcd6cb132345fc23118c61877a2aa7cc8cb60b27da5b",
+      "baseSha256": "0717bda99e501a977c430f4e62062d1a54c991615dc17c39865d831c4bb285aa",
       "metadataId": "0f99e70984075175aeb9b134185c0932"
     },
     {
@@ -7282,7 +6892,7 @@
         "abaf6ff8b88e4755a7d45a267d680653"
       ],
       "kind": "api",
-      "baseSha256": "1ae7bc512208a2bcc287a10d2515ddd20cdffb2d8a3f5048269c0ab8c84449b0",
+      "baseSha256": "ed7ccf0c8bf0854e531a28a9068de064403ebfc3ed3d19f7d8ee4294907dbb61",
       "metadataId": "1fc70fed3a2c53f5af5fbd6dd694076d"
     },
     {
@@ -7311,7 +6921,7 @@
         "cfbf91170e874d92ac8e67a5f0989c5a"
       ],
       "kind": "api",
-      "baseSha256": "ea68771c9fb707b3829e1ca3c795d8fe9e58a82e175823d3ab02a20c05f24e7c",
+      "baseSha256": "d07bc331d795d7530688a564d07bf6ae2f75e537adabdbe11afa60f027f55ec4",
       "metadataId": "f4c91e5297f253d7a83356038bfbf6cd"
     },
     {
@@ -7321,7 +6931,7 @@
         "d63d05f49f7a455b894f2e08bb0759de"
       ],
       "kind": "api",
-      "baseSha256": "92d64de637ee4a7cdf9ddc3bc39c9790a64ed019e31cc5ee7ad2ca18ef1df96e",
+      "baseSha256": "2a68a83e4acb013191527ab8893a6078c4c8af56a7b3e6c7110b2e8f9a1c0d7b",
       "metadataId": "219e2839013d5af28fbc5ea6a701674e"
     },
     {
@@ -7331,7 +6941,7 @@
         "c9cf5af4f33c42aaa67492e7e99f4d41"
       ],
       "kind": "api",
-      "baseSha256": "f33032a1cc3c0e57278465d67ae8a8eb0833d1c14532e089db0d380a07dbda92",
+      "baseSha256": "c21b08386814b709c60ca6754a72931b3d10807a80fd4e1627a64dd5938581fb",
       "metadataId": "260bd09d1f005dd7831242a478ee823c"
     },
     {
@@ -7341,7 +6951,7 @@
         "e0a21e765e6b47d9a6ae6bea8c01d0ef"
       ],
       "kind": "api",
-      "baseSha256": "cf25582e7c89ca21a8917091286e974175f05841807fea3c59078b649c23d801",
+      "baseSha256": "679bd66dc595ac30e2b4308741c3b20e72465797c380b47bdc7bf54524b37ab3",
       "metadataId": "67ab9a470ab355e69bc3627aeb505d80"
     },
     {
@@ -7370,7 +6980,7 @@
         "38b294f7dd6c4b44a69fa7cbb740ac78"
       ],
       "kind": "api",
-      "baseSha256": "fc7585718d12dd9385c8e1832c64338ba2265225aa162120ea94bbabab4c6f3e",
+      "baseSha256": "6628b23a618c65eb1ee385567a690c2bb964d8b773eafe7887b5489be24650ff",
       "metadataId": "c1eeec0de90e5f5fac276c075e9bfae5"
     },
     {
@@ -7380,7 +6990,7 @@
         "9863608b5c9e4d55bc516dbc38e67e2c"
       ],
       "kind": "api",
-      "baseSha256": "edd734ef7a33a5d3c258577bf163708d830d38d864b1e58f93e20fef76fb5470",
+      "baseSha256": "7ed37b2c9468106663134e1a35d9c413aa0920aa279cbd020bf86d5d274f6897",
       "metadataId": "e3a6dbd17bac5e63b83ff8c1bd7cd0d2"
     },
     {
@@ -7390,7 +7000,7 @@
         "df625f416df548c39dd0f34277316a9a"
       ],
       "kind": "api",
-      "baseSha256": "bccd2cb46e12dec35316f3d580cd454043c1603dfd052baec45f88753a307b99",
+      "baseSha256": "63093f53bf6d6eeb1f9b41b6002f6c787c92b8449ea9878d7b26b6cbbd2661d2",
       "metadataId": "15180e2b284a51a3b055e10e0602eaf7"
     },
     {
@@ -7400,7 +7010,7 @@
         "7a18023668b64376865808f502dfa3ba"
       ],
       "kind": "api",
-      "baseSha256": "db91f70fe73b27c6f37306ecd7c388fb6df1301881490099e0e63ef1f894db9c",
+      "baseSha256": "88d139abbe0a9d12edc44e460b4c356b2c883c09dd9096a1dbf83a4850949b1c",
       "metadataId": "374ffc103bc25d9096db402786b68d74"
     },
     {
@@ -7410,7 +7020,7 @@
         "3f167680d863495eba69546e06df3078"
       ],
       "kind": "api",
-      "baseSha256": "81c939f46addfe9741816e3761116f5f95573af2ef7f718265ccfdd2644f8234",
+      "baseSha256": "68e8602d6bd317668d40b237b7fa2cf9061c6f1aeafa318c041cd85c09c674b4",
       "metadataId": "3532f978386e5de2ac75a50c0aee3fbd"
     },
     {
@@ -7420,7 +7030,7 @@
         "6379e409f96749d9942a47fad18f9327"
       ],
       "kind": "api",
-      "baseSha256": "5c278af84e8cafb6b78c4ba4ff24aab77610062e4bd05c282df85b46622a237b",
+      "baseSha256": "db5446cfe5af0ce4c0799cda1400e0752a625f660f75006fd98ef5f0d2e6b171",
       "metadataId": "08cb9880a0935a23801d7a1e38ff6f3f"
     },
     {
@@ -7430,7 +7040,7 @@
         "136fa035fc8246f4862ea3cbbd12e28f"
       ],
       "kind": "api",
-      "baseSha256": "9e1d3a314d645840062f43535b973e862cb22a6a8b81a4aadef95416965a3faf",
+      "baseSha256": "d28d3299ed75e576acba04e52ca99d575d7cfc62fbd90e27da3fbc2749f3891e",
       "metadataId": "892b44094da6586a9051c75b0b4f5893"
     },
     {
@@ -7440,7 +7050,7 @@
         "d3b23c0c46504bb4b11ff6043ee92774"
       ],
       "kind": "api",
-      "baseSha256": "ff604feb8cb00f42ee65cead0a8636aa93dad7ad0e8c9b17085783e047503c8c",
+      "baseSha256": "d3e3bb28d681d41b2d5b08841eba35c1324d4bdc6f64765787e299e61bd54be2",
       "metadataId": "c4e2fec90a6f57c899b72b88c894a814"
     },
     {
@@ -7469,7 +7079,7 @@
         "b619c17fbbaa445e9c0ff7a9d855986a"
       ],
       "kind": "api",
-      "baseSha256": "afc2cbdca3f2d9ef917cb30eee1f5821dd4d5dc4bc1f36ee3598324f9e14dfe0",
+      "baseSha256": "f27eb0b2100925041c099d240f27b1367e9cf29d4741e7826d47b11a241bf4c2",
       "metadataId": "f1817a5e1f1a55e3a6b0c3ed41985043"
     },
     {
@@ -7479,7 +7089,7 @@
         "4ffb709f56d34c30975a6a9653fc839f"
       ],
       "kind": "api",
-      "baseSha256": "e05acb24b25c1ddf13e15361eb46453ca103ef01bf5a463d1642109fd06f27fc",
+      "baseSha256": "fdb202b0634aa755a34e273fb8878b8784b2fc305dbb2d0955533afa362828ee",
       "metadataId": "d56ef41bf6e655aaae8554c7de8399e3"
     },
     {
@@ -7489,7 +7099,7 @@
         "52a2c56509a848cd945cc26125c2ecd7"
       ],
       "kind": "api",
-      "baseSha256": "10b15682c98d75fdfa86773644ae5822086869127c192153316468129c5ae8a6",
+      "baseSha256": "1c4f5d6fdbd4e753560d4f67ab3e710b665ee1e0d369355179a8f9a35fc48e9f",
       "metadataId": "716347fdd5f258c1b7176786483b6286"
     },
     {
@@ -7499,7 +7109,7 @@
         "3afaf76838324c35972b88b607871148"
       ],
       "kind": "api",
-      "baseSha256": "f6e9f49ec37f18f29a1ddc47eea9a68bf1c3c13c0f3f3e1a178585cfa019d554",
+      "baseSha256": "26bc5a5057bc96c68f2bd254acb414bd300e31317a5dca907e8a5b39b5929310",
       "metadataId": "ba8ca2ef66bd58489112eda1c6cbf90a"
     },
     {
@@ -7509,7 +7119,7 @@
         "63c49c9406974c33a966bb3848d86808"
       ],
       "kind": "api",
-      "baseSha256": "3e4917a4c91652de2cef9ea6af5d8e82ff349e680caa96e58bb54a6fd6305625",
+      "baseSha256": "f19703f0ad0351275e6b7c8f3d768689c61b121ebbf67dc4a71255ab80f4a679",
       "metadataId": "53ef5b91495854feaf2420d17dfa1677"
     },
     {
@@ -7538,7 +7148,7 @@
         "5a69e3e621284e5a9483fe428360f4bf"
       ],
       "kind": "api",
-      "baseSha256": "0bc3b846bf1666eed3506e71fc174595f8e2476985bf8246c37f81bded9569fb",
+      "baseSha256": "15b8b8ba7cea99ecc7af5e4e74dc9469b910e4e3ef2027fb2848e06af780217d",
       "metadataId": "a68117ccd109513bb96afc0f12c6e7fb"
     },
     {
@@ -7548,7 +7158,7 @@
         "4cce9ff8d68a42788c913d8ad4f68ab7"
       ],
       "kind": "api",
-      "baseSha256": "1273db7ca8ec42b371846752c36ac0c6228b16a7d917a9e54fa73d8ccbdca202",
+      "baseSha256": "6e1bdf2636e51028588d35f5137c804ea81a358363226bc61ccb106bda01f965",
       "metadataId": "c3125d61a134575c8b34951315d5e897"
     },
     {
@@ -7577,7 +7187,7 @@
         "e5f7bc383fa7460994bcae945950a135"
       ],
       "kind": "api",
-      "baseSha256": "afa0973ddad85c616f80cf38efada43ee7c709dc4556590ab4209b51d20cef3d",
+      "baseSha256": "02d44180778a47f0ff3a7562707b8995f2cc2270ad4ee94666da88bc6e94980c",
       "metadataId": "548164e3c6de52b3b8e8b9563dcec75b"
     },
     {
@@ -7587,7 +7197,7 @@
         "a6a53f92c7c64d34b71d0a298eb9e936"
       ],
       "kind": "api",
-      "baseSha256": "a68d7f6d17fd49b43c41858bbb53cbc15c6a1a7f6776c765a374cb2f6c18ce50",
+      "baseSha256": "7e798a8ecccba927fa67a31f7b2f237323a7eba46554de948e2957571493ec95",
       "metadataId": "cc4c1981178f58e3aa80aeff3ece02e8"
     },
     {
@@ -7597,7 +7207,7 @@
         "f76eae703c024502bfcccad73f2b03e8"
       ],
       "kind": "api",
-      "baseSha256": "9916fdffb9960878adabde6d5c68cfa778d1da19fec46ccbc9dd15e9dfce1ecb",
+      "baseSha256": "3140987ada70b7e72a9dc6d4d733739bf2334f955e2dbc6a5feac38d385f2159",
       "metadataId": "a8690a99453c517383574e097c0d5fc2"
     },
     {
@@ -7607,7 +7217,7 @@
         "8277b29531894dcca082566121af37dc"
       ],
       "kind": "api",
-      "baseSha256": "f57d8a01c2977b4297d2f3ba32c1389fffde13f2e743f0095641dab4a6ff87ba",
+      "baseSha256": "d633f0735cdf3cd455cd347ba8db21ef30efdda56f7d7eead37ce87259eecaa8",
       "metadataId": "7e75adea4f3b53b2884b460faf58f385"
     },
     {
@@ -7617,7 +7227,7 @@
         "2d2ed39f83724fad874e0f148c5c7430"
       ],
       "kind": "api",
-      "baseSha256": "12a5a3de2d2fa64d0ea32589eb6ec4ea4f35389f47318e79663bfbefc2b579ad",
+      "baseSha256": "96cfc7a29cc7d60560326f036b02c653fb6ceabe20ab9205f961cd2063b78ee0",
       "metadataId": "55c1602a7e8856a8833195aa7be6d16c"
     },
     {
@@ -7646,7 +7256,7 @@
         "406b39217e3044b0b847b944755d320f"
       ],
       "kind": "api",
-      "baseSha256": "d6bb7fb7b0e52467e4d0e9a98a4fc94e45e1161730248246691bb9d8e378b597",
+      "baseSha256": "f2bb514ab73cf308308f458b0a48baf0e362a9b977418272330d8ac56abd4bb1",
       "metadataId": "c97fb943c17750e8a59547fbb5f9ca03"
     },
     {
@@ -7656,7 +7266,7 @@
         "fcbd3dc7ec04416e83c9fe3f045d0315"
       ],
       "kind": "api",
-      "baseSha256": "41b63f8f75731ae2a4aca176db238fae0b1e2bc3976e8ab4b4556ae3c65af436",
+      "baseSha256": "bcb4b0a1313b9f71040887c1e3a4b70065f0a014ddd66d67cec4fddb66020637",
       "metadataId": "54371175f20c5b8cb28c1769c05e2180"
     },
     {
@@ -7685,7 +7295,7 @@
         "7f63412a549b40f7aef2b901c4219a5b"
       ],
       "kind": "api",
-      "baseSha256": "45afa3fc9929a88b4286711f19585ee143ad18ef2026326b88c0758f1b4c17c2",
+      "baseSha256": "d06955f0bcf34949310490604f2d9c12bd32662fa18b887ed36989a25fa03abd",
       "metadataId": "8733f3234268544bbe84d00927f55e99"
     },
     {
@@ -7714,7 +7324,7 @@
         "2a0e84408249413e92827738d5782813"
       ],
       "kind": "api",
-      "baseSha256": "1102c698a2fda96c61e35f32b67415af4a3e76eb74842afa5f1ec51af12b552c",
+      "baseSha256": "7a496f899ef10c8c14026ec7cb2096e54c58f53a4b02f644a757dea82147dbdf",
       "metadataId": "16fe18be7f815f8a90784acaa3a32b12"
     },
     {
@@ -7724,7 +7334,7 @@
         "02fce5215b7043e49d420d9a2590eda6"
       ],
       "kind": "api",
-      "baseSha256": "4c67be055df0391c15ddcca493cb35bc1a9a7d20af5d444050c03754a67afebd",
+      "baseSha256": "15604d04c89b76be2eac687a1eebd854cefd514c65cb9c298b8c57c0f055f375",
       "metadataId": "a7aa191e975b505e96298e4aacfb365f"
     },
     {
@@ -7763,8 +7373,18 @@
         "e2d9f04247944f5bacec4edd29475221"
       ],
       "kind": "api",
-      "baseSha256": "8b316ce9ca684b82f8f6c92253f28c9fc2c570916fd68e91503374f0591f835e",
+      "baseSha256": "dec510f7e42dc8af6ce74ef1fd802ac4f75cc61708ca78fb919b580e75ff0a80",
       "metadataId": "log_command_platform_v1"
+    },
+    {
+      "path": "api/08.统一身份管理/32.日志管理/03.下载平台日志文件.ms",
+      "databasePath": "/magic-api/api/08.统一身份管理/32.日志管理/03.下载平台日志文件.ms",
+      "rowIds": [
+        "4120f1666e2645a0af4d7ca4e5ee38a9"
+      ],
+      "kind": "api",
+      "metadataId": "platform_log_download_get_v1",
+      "baseSha256": "fce64e2eb1fa268819f45dd35a2f28a427430ebdf445089e6b8d368a43769dec"
     },
     {
       "path": "api/08.统一身份管理/32.日志管理/group.json",
@@ -7870,7 +7490,7 @@
         "2d5d7ffa98e04dc9a965eaa0b40fac74"
       ],
       "kind": "api",
-      "baseSha256": "cc44f08b2fd32acd7c204d95b3287cd3c3e0e272416aca00555849e86bd78ae7",
+      "baseSha256": "452f4889f67497c205302350507ba3eef72f1dd76d05c8c5a6a367d8f22ab4b6",
       "metadataId": "faf0e7885f4429edbeaa5add552fe155"
     },
     {
@@ -7988,7 +7608,7 @@
         "eeabc2f89e6d421facdba37ceec46f2a"
       ],
       "kind": "api",
-      "baseSha256": "1fce670b4c3288fc69a7c25923ab6d3083f04b24014c9765a30dec07f1ccf8a8",
+      "baseSha256": "31222e4b0b0f8ccdc46448ce0be02fdc3215e7c68c17a6b9c2603e04de17047b",
       "metadataId": "62c1acd0237345fab3b9817f6bc1b4c4"
     },
     {
@@ -7998,7 +7618,7 @@
         "bb1882e6ca4d4fc6bb30d8dad6a01261"
       ],
       "kind": "api",
-      "baseSha256": "23532709d84dd9344a4c93b9d4a61b783db91304ebca43c1ff787f72f9fe47ca",
+      "baseSha256": "08c7661df26c318a3953a14fcf89252646e9db398b71593c8c0ee42e1b87ae3f",
       "metadataId": "4c8f2cc3d01446059d4d6cd4fd19570a"
     },
     {
@@ -8008,38 +7628,8 @@
         "b1cbffb76d6449dd92f7ef75d1f138d5"
       ],
       "kind": "api",
-      "baseSha256": "d4203894f4d2dd6cbde42d363cdfbd1fc3c043f592d54090e46c6cf0268e6ced",
+      "baseSha256": "c80d387e3ecd8bb3a7056e1df8df68ececf3253f02554d1751e6b8f931572faa",
       "metadataId": "0dc8254bb39040ebad3a1ad704fb1a31"
-    },
-    {
-      "path": "api/09.海通流程接口/04.接入链路/04.按任务核验接入链路.ms",
-      "databasePath": "/magic-api/api/09.海通流程接口/04.接入链路/04.按任务核验接入链路.ms",
-      "rowIds": [
-        "8b03af73a54f433c871e17001a5f3de6"
-      ],
-      "kind": "api",
-      "baseSha256": "88ac40a98da162391cf5882386d5be171ae12aa48a5ef0785b98573d3e06702a",
-      "metadataId": "e847115bc8794012a94eda07750a7403"
-    },
-    {
-      "path": "api/09.海通流程接口/04.接入链路/05.按流程核验接入链路.ms",
-      "databasePath": "/magic-api/api/09.海通流程接口/04.接入链路/05.按流程核验接入链路.ms",
-      "rowIds": [
-        "06c86ed852064f94a25ecd045d32802b"
-      ],
-      "kind": "api",
-      "baseSha256": "38b374e40f78ee63ce6de75329559ee623552a460e1a0113212f63d35b57fac5",
-      "metadataId": "3654e9c8061c4f5e9c34bb3dce0fec11"
-    },
-    {
-      "path": "api/09.海通流程接口/04.接入链路/06.核验任务链路原生入口.ms",
-      "databasePath": "/magic-api/api/09.海通流程接口/04.接入链路/06.核验任务链路原生入口.ms",
-      "rowIds": [
-        "cdc849b013884c18a68b8d4788476a09"
-      ],
-      "kind": "api",
-      "baseSha256": "3e5ecbe5687b890b98ed726f03340e42579648f44a29cbedb49a37f8bff104f4",
-      "metadataId": "bf4107f30b0b479fabd2c236c186e340"
     },
     {
       "path": "api/09.海通流程接口/04.接入链路/group.json",
@@ -8067,78 +7657,48 @@
         "3578ca9006fd45b1b760f6f596e6f040"
       ],
       "kind": "api",
-      "baseSha256": "d647d53fed8043de89b9d043f6480ef8aee223cd7d3a3f84bdeb43b7ac863a7a",
+      "baseSha256": "76ed4b7567accfe8ac82630de4320342f8fba1171ddabaaca5d02df2796b54d5",
       "metadataId": "nifi_runtime_overview_get_v1"
     },
     {
-      "path": "api/09.海通流程接口/05.运行状态/02.核验流程运行总览.ms",
-      "databasePath": "/magic-api/api/09.海通流程接口/05.运行状态/02.核验流程运行总览.ms",
-      "rowIds": [
-        "2fea2d5302bd4780a5e3a3ab5539a402"
-      ],
-      "kind": "api",
-      "baseSha256": "849b2eb49a62bc4b68d90c7b01a78615725bd7277df646c5cede09357f85e85a",
-      "metadataId": "nifi_runtime_overview_head_v1"
-    },
-    {
-      "path": "api/09.海通流程接口/05.运行状态/03.查询流程运行列表.ms",
-      "databasePath": "/magic-api/api/09.海通流程接口/05.运行状态/03.查询流程运行列表.ms",
+      "path": "api/09.海通流程接口/05.运行状态/02.查询流程运行列表.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/05.运行状态/02.查询流程运行列表.ms",
       "rowIds": [
         "3687acbd36df4cc09ab2ea053df30a8e"
       ],
       "kind": "api",
-      "baseSha256": "81c9e03aea1c4795b9003958fb2ef283ebb70f068cd83cc52f4009342dcc3f49",
+      "baseSha256": "482eb86d6ffe102561e05c3ffcf94c7540a1bc07b3fb1b86e531d6007acc9310",
       "metadataId": "nifi_pipe_runtime_list_get_v1"
     },
     {
-      "path": "api/09.海通流程接口/05.运行状态/04.核验流程运行列表.ms",
-      "databasePath": "/magic-api/api/09.海通流程接口/05.运行状态/04.核验流程运行列表.ms",
-      "rowIds": [
-        "c177c1699eed4423b7dbfa8730c5c87f"
-      ],
-      "kind": "api",
-      "baseSha256": "ec01e9fe70770e5b6df0a0e6b2911e86e2c4bd7f7611136b5b32d394568dc64e",
-      "metadataId": "nifi_pipe_runtime_list_head_v1"
-    },
-    {
-      "path": "api/09.海通流程接口/05.运行状态/05.查询流程运行状态.ms",
-      "databasePath": "/magic-api/api/09.海通流程接口/05.运行状态/05.查询流程运行状态.ms",
+      "path": "api/09.海通流程接口/05.运行状态/03.查询流程运行状态.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/05.运行状态/03.查询流程运行状态.ms",
       "rowIds": [
         "497930f50c884d88aa71e6bbab66c423"
       ],
       "kind": "api",
-      "baseSha256": "f843a7b85a9f042ef2a7ae53b599afa1636b1cf1182a574047711ba9845122fc",
+      "baseSha256": "89fc551651b8c6db49a6df03adc746564d329723963be81993915d631da62ce7",
       "metadataId": "nifi_pipeline_status_get_v1"
     },
     {
-      "path": "api/09.海通流程接口/05.运行状态/06.核验流程运行状态.ms",
-      "databasePath": "/magic-api/api/09.海通流程接口/05.运行状态/06.核验流程运行状态.ms",
-      "rowIds": [
-        "823dc592ef644e96a4b2e43fb246c47f"
-      ],
-      "kind": "api",
-      "baseSha256": "30f92ceff05728d2dc03c1cdfa65a379e6ea27b0d11c000b31620aeb60fe83f4",
-      "metadataId": "nifi_pipeline_status_head_v1"
-    },
-    {
-      "path": "api/09.海通流程接口/05.运行状态/07.查询处理器状态分页.ms",
-      "databasePath": "/magic-api/api/09.海通流程接口/05.运行状态/07.查询处理器状态分页.ms",
+      "path": "api/09.海通流程接口/05.运行状态/04.查询处理器状态分页.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/05.运行状态/04.查询处理器状态分页.ms",
       "rowIds": [
         "c44c3c52afde4e53886da33e3dade6a6"
       ],
       "kind": "api",
-      "baseSha256": "9c5a0396393133b8774af3d43619919d5cd55ca9b46c95b93ecef3f58b85e953",
+      "baseSha256": "f82b9b9d8a412f4f99022a3114ff0c3cf47080e8596d3a0942da82ba5d1b6047",
       "metadataId": "nifi_processor_page_get_v1"
     },
     {
-      "path": "api/09.海通流程接口/05.运行状态/08.核验处理器状态分页.ms",
-      "databasePath": "/magic-api/api/09.海通流程接口/05.运行状态/08.核验处理器状态分页.ms",
+      "path": "api/09.海通流程接口/05.运行状态/05.订阅实时状态事件.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/05.运行状态/05.订阅实时状态事件.ms",
       "rowIds": [
-        "76de3efb8ed5463b80d4299d73f88d4c"
+        "cff1a258e9b848aaacc7e1e25cf64e40"
       ],
       "kind": "api",
-      "baseSha256": "44876ad1d15a4fddcf81d7f4e3abfd6acba1c53ac6d5225ea43f8c5b1a274992",
-      "metadataId": "nifi_processor_page_head_v1"
+      "metadataId": "nifi_runtime_events_v1",
+      "baseSha256": "dbd52316f02dc0356f5489559a9b8ec2b5114c704985c031874336cb90d1dc9a"
     },
     {
       "path": "api/09.海通流程接口/05.运行状态/group.json",
@@ -8166,7 +7726,7 @@
         "aef49fd436d54631b6a399428c6a1fca"
       ],
       "kind": "api",
-      "baseSha256": "f2b3d3dd50f2af32d9bc662c4b24444d5e51bbf3f0ac030245a8373747a993c0",
+      "baseSha256": "660bf6cf9bc531170180b940bc859440a1f4fe70cfbfde3369ee41ae464e386f",
       "metadataId": "nifi_pipeline_deploy_post_v1"
     },
     {
@@ -8176,7 +7736,7 @@
         "4d2e86dd38b443ffa65e9f3d04e359d1"
       ],
       "kind": "api",
-      "baseSha256": "867fb8011b851fe49a3f138249b4fbb16635e2be6546905709dea0e82f87b117",
+      "baseSha256": "58ac91f37046ad0b02a7e0fb902a8b00f206198d2183e0cbdcb1126aee2f2bda",
       "metadataId": "nifi_candidate_activate_post_v1"
     },
     {
@@ -8284,27 +7844,17 @@
         "aee3c0c742ef411282dc629be537e793"
       ],
       "kind": "api",
-      "baseSha256": "ac022ba5e3cb07fadfd000786d0475744f5418c7e3fa221e7f596ad42a8194e9",
+      "baseSha256": "65f8c6188a20b09024f21de51ebc328bfc14303c2aa7c0fc0a982e61208ffbcf",
       "metadataId": "nifi_attribute_sync_get_v1"
     },
     {
-      "path": "api/09.海通流程接口/08.节点运行/03.核验原生属性差异.ms",
-      "databasePath": "/magic-api/api/09.海通流程接口/08.节点运行/03.核验原生属性差异.ms",
-      "rowIds": [
-        "30eb8f59dd1d405e9ffb06a2d66d5c03"
-      ],
-      "kind": "api",
-      "baseSha256": "94a33bdfb3549b08c7e4497078f705080a4512f32e23f4b4a64bae7615c9e163",
-      "metadataId": "nifi_attribute_sync_head_v1"
-    },
-    {
-      "path": "api/09.海通流程接口/08.节点运行/04.同步原生属性.ms",
-      "databasePath": "/magic-api/api/09.海通流程接口/08.节点运行/04.同步原生属性.ms",
+      "path": "api/09.海通流程接口/08.节点运行/03.同步原生属性.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/08.节点运行/03.同步原生属性.ms",
       "rowIds": [
         "fd513d684499469dad241c1d993c6d13"
       ],
       "kind": "api",
-      "baseSha256": "01f120dfa430879f08a443181994997cc6916453cbdece860add395fa00d123c",
+      "baseSha256": "c4076228367cd195f4f636b441cd36a2e381df94f15b3fb0f5e44e57e123c559",
       "metadataId": "nifi_attribute_sync_post_v1"
     },
     {
@@ -8382,67 +7932,37 @@
         "df21df67d85240f4a0bcdadde2b03af4"
       ],
       "kind": "api",
-      "baseSha256": "b9be799f9eb5e73a6442b2839bbd539baa80462994c262340e663568da5b413e",
+      "baseSha256": "015aa04c168ca0f72d567d074f72c17a4048c460e3bbc8204c91fa1695dac090",
       "metadataId": "nifi_map_plans_get_v1"
     },
     {
-      "path": "api/09.海通流程接口/10.映射计划/02.核验映射计划历史.ms",
-      "databasePath": "/magic-api/api/09.海通流程接口/10.映射计划/02.核验映射计划历史.ms",
-      "rowIds": [
-        "4b725516b16c48808e2f3e69154120c1"
-      ],
-      "kind": "api",
-      "baseSha256": "2395e478a712ecd555340fd9e6d8b57dd59cabfa5df63a88146db76b4bc76e45",
-      "metadataId": "nifi_map_plans_head_v1"
-    },
-    {
-      "path": "api/09.海通流程接口/10.映射计划/03.查询映射计划版本.ms",
-      "databasePath": "/magic-api/api/09.海通流程接口/10.映射计划/03.查询映射计划版本.ms",
+      "path": "api/09.海通流程接口/10.映射计划/02.查询映射计划版本.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/10.映射计划/02.查询映射计划版本.ms",
       "rowIds": [
         "b7779a7b704040c4a7974f78bba03e39"
       ],
       "kind": "api",
-      "baseSha256": "9946d59e7fa527ca1f113b0ce08df999b60f5608f361d5706f4ee7c7d2a7ecba",
+      "baseSha256": "a6876f93bf27e2176fa5de6bb5c84f64084156fa861c49a8df4be90561794d7f",
       "metadataId": "nifi_map_plan_get_v1"
     },
     {
-      "path": "api/09.海通流程接口/10.映射计划/04.核验映射计划版本.ms",
-      "databasePath": "/magic-api/api/09.海通流程接口/10.映射计划/04.核验映射计划版本.ms",
-      "rowIds": [
-        "0af5ee7d4ac44723bdcb906f8e6eb311"
-      ],
-      "kind": "api",
-      "baseSha256": "df7306bc10bcbe6ff93793d7b6fc42ca6219b4e5374ec57e3b9ef4912553e5e3",
-      "metadataId": "nifi_map_plan_head_v1"
-    },
-    {
-      "path": "api/09.海通流程接口/10.映射计划/05.查询映射版本保留策略.ms",
-      "databasePath": "/magic-api/api/09.海通流程接口/10.映射计划/05.查询映射版本保留策略.ms",
+      "path": "api/09.海通流程接口/10.映射计划/03.查询映射版本保留策略.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/10.映射计划/03.查询映射版本保留策略.ms",
       "rowIds": [
         "bf31de8cc27d45aa8439264e7a247442"
       ],
       "kind": "api",
-      "baseSha256": "137b45c5a83b1044fdec19fc26165f8c23f20a51847b2bf13701912b65ec49cd",
+      "baseSha256": "db34036e093e85b635f9e1f3a9fe2d57f9225398a78122e22d992d1bf20ba503",
       "metadataId": "nifi_map_retention_get_v1"
     },
     {
-      "path": "api/09.海通流程接口/10.映射计划/06.核验映射版本保留策略.ms",
-      "databasePath": "/magic-api/api/09.海通流程接口/10.映射计划/06.核验映射版本保留策略.ms",
-      "rowIds": [
-        "8ca27a7e4b944c21a0cdd25a4057e117"
-      ],
-      "kind": "api",
-      "baseSha256": "c07d1b638ae0e28cc4d1304ca7bcf867541286fcd7f46b7787705634da520de9",
-      "metadataId": "nifi_map_retention_head_v1"
-    },
-    {
-      "path": "api/09.海通流程接口/10.映射计划/07.恢复映射计划草稿.ms",
-      "databasePath": "/magic-api/api/09.海通流程接口/10.映射计划/07.恢复映射计划草稿.ms",
+      "path": "api/09.海通流程接口/10.映射计划/04.恢复映射计划草稿.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/10.映射计划/04.恢复映射计划草稿.ms",
       "rowIds": [
         "096a5c360950425eae358dcd461aa20e"
       ],
       "kind": "api",
-      "baseSha256": "628904da0e15471bbc29eb6015fe1ba9fe8969c94e5bf682a30381768fbeb3e1",
+      "baseSha256": "a2200087df779ca79a5d816539c1d1728a8d851c00a9241139f4841932d7c9fb",
       "metadataId": "nifi_map_restore_post_v1"
     },
     {
@@ -8471,57 +7991,37 @@
         "d4947089316d4a599bcd039154217790"
       ],
       "kind": "api",
-      "baseSha256": "3d2c13db721ad894caff739c1fbb8a0b6079f11ef45d5161e5aa2f955f948d39",
+      "baseSha256": "123df6d59c03bccf6b3e6cef8761b4fa7994abb33fb14a440f5b2de3259cb684",
       "metadataId": "nifi_map_templates_get_v1"
     },
     {
-      "path": "api/09.海通流程接口/11.映射模板/02.核验映射模板版本.ms",
-      "databasePath": "/magic-api/api/09.海通流程接口/11.映射模板/02.核验映射模板版本.ms",
-      "rowIds": [
-        "f4c1b20359604a10ae412c63df5de339"
-      ],
-      "kind": "api",
-      "baseSha256": "a166ede4b48b043f06846922ef3ac8ec2fbaf723625d9e3664b057e4b1e37ab2",
-      "metadataId": "nifi_map_templates_head_v1"
-    },
-    {
-      "path": "api/09.海通流程接口/11.映射模板/03.查询映射模板详情.ms",
-      "databasePath": "/magic-api/api/09.海通流程接口/11.映射模板/03.查询映射模板详情.ms",
+      "path": "api/09.海通流程接口/11.映射模板/02.查询映射模板详情.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/11.映射模板/02.查询映射模板详情.ms",
       "rowIds": [
         "7069d654e50c4b51ba103d3c3a48389b"
       ],
       "kind": "api",
-      "baseSha256": "8d402da2fd799db95135da42915a3420efc1aac520e54dfd6fec783b35c83681",
+      "baseSha256": "a662c0eeb3e64c1892599b517ef2abd7541ee3d8651b07442e9a491a0c5ac73f",
       "metadataId": "nifi_map_template_get_v1"
     },
     {
-      "path": "api/09.海通流程接口/11.映射模板/04.核验映射模板详情.ms",
-      "databasePath": "/magic-api/api/09.海通流程接口/11.映射模板/04.核验映射模板详情.ms",
-      "rowIds": [
-        "acd942b680944f21a25a03acc5647b30"
-      ],
-      "kind": "api",
-      "baseSha256": "8e745cc4a859cdd96fdebd3890ce3f1bd56cfb507651e0cd3ab226144920e067",
-      "metadataId": "nifi_map_template_head_v1"
-    },
-    {
-      "path": "api/09.海通流程接口/11.映射模板/05.导入映射模板.ms",
-      "databasePath": "/magic-api/api/09.海通流程接口/11.映射模板/05.导入映射模板.ms",
+      "path": "api/09.海通流程接口/11.映射模板/03.导入映射模板.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/11.映射模板/03.导入映射模板.ms",
       "rowIds": [
         "880848121d57416c957c9b42e1e554c9"
       ],
       "kind": "api",
-      "baseSha256": "d5b2ef9a00e2026fd8db020f1b04236badf97612cfca1bb88fe3844b60cb38bc",
+      "baseSha256": "ec16f550e9d1e7dbf530070cf6d11e58a6474d8389b99b9ebd00b8c22624eef8",
       "metadataId": "nifi_map_template_import_v1"
     },
     {
-      "path": "api/09.海通流程接口/11.映射模板/06.保存映射模板.ms",
-      "databasePath": "/magic-api/api/09.海通流程接口/11.映射模板/06.保存映射模板.ms",
+      "path": "api/09.海通流程接口/11.映射模板/04.保存映射模板.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/11.映射模板/04.保存映射模板.ms",
       "rowIds": [
         "2766a6de50364706833bfb9c1273ca5a"
       ],
       "kind": "api",
-      "baseSha256": "6cb44a1c10ee59b2fcef50626db80cb100e2a4b99e23721894b44f6659c94b00",
+      "baseSha256": "15189f1df0c53b8b845344668de9d4c12dc722edd00b59a79afed8d526b35f33",
       "metadataId": "nifi_map_templates_post_v1"
     },
     {
@@ -8550,57 +8050,37 @@
         "ad2b7da268f94e808a7fb4ff514ce309"
       ],
       "kind": "api",
-      "baseSha256": "80146db2ea26666a702b6dc34a6a260c4d97b41db89630a6e810082cb0c9126c",
+      "baseSha256": "46292934758638fd0c32d6d4bb984e7e0bf1a432adb2dbf4149ceb33c2fc0abb",
       "metadataId": "nifi_map_dict_tables_get_v1"
     },
     {
-      "path": "api/09.海通流程接口/12.映射字典/02.核验字典候选表.ms",
-      "databasePath": "/magic-api/api/09.海通流程接口/12.映射字典/02.核验字典候选表.ms",
-      "rowIds": [
-        "d496ef34d395445ea2f742ff0c04080d"
-      ],
-      "kind": "api",
-      "baseSha256": "857045ad35c6a438eda8778e22241794c6eef77a7f45b70d41d14751cabedc60",
-      "metadataId": "nifi_map_dict_tables_head_v1"
-    },
-    {
-      "path": "api/09.海通流程接口/12.映射字典/03.查询字典候选字段.ms",
-      "databasePath": "/magic-api/api/09.海通流程接口/12.映射字典/03.查询字典候选字段.ms",
+      "path": "api/09.海通流程接口/12.映射字典/02.查询字典候选字段.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/12.映射字典/02.查询字典候选字段.ms",
       "rowIds": [
         "babad349657748e29066619f41a58514"
       ],
       "kind": "api",
-      "baseSha256": "00429c866ad63d685a80ef472fe082a990eeffecc99854be6dda4bff862db5b6",
+      "baseSha256": "e52a983b913dfb3f666050ee1416daa8bb230796a0bdfe7af1971f4cc93a3dfa",
       "metadataId": "nifi_map_dict_cols_get_v1"
     },
     {
-      "path": "api/09.海通流程接口/12.映射字典/04.核验字典候选字段.ms",
-      "databasePath": "/magic-api/api/09.海通流程接口/12.映射字典/04.核验字典候选字段.ms",
-      "rowIds": [
-        "d6632db61d0441ceba291690dfa9f223"
-      ],
-      "kind": "api",
-      "baseSha256": "b9426dfa2cfdb2b6571eb8ed36ee142e000cef0120ab6e39441dce696cb6f8cb",
-      "metadataId": "nifi_map_dict_cols_head_v1"
-    },
-    {
-      "path": "api/09.海通流程接口/12.映射字典/05.生成字典快照.ms",
-      "databasePath": "/magic-api/api/09.海通流程接口/12.映射字典/05.生成字典快照.ms",
+      "path": "api/09.海通流程接口/12.映射字典/03.生成字典快照.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/12.映射字典/03.生成字典快照.ms",
       "rowIds": [
         "c727c1ad7ee245d2b087e3c5e45b63da"
       ],
       "kind": "api",
-      "baseSha256": "8201aec6ceb6baf8177be53a6abe29ef20d97ca4939e51ce2816d5ecbbcde3f0",
+      "baseSha256": "ed51b2d18239ea6cc153b0432f50b10fb8563d219a4a389e29a4895dde2d36be",
       "metadataId": "nifi_map_dict_snapshot_post_v1"
     },
     {
-      "path": "api/09.海通流程接口/12.映射字典/06.生成字典查询模板.ms",
-      "databasePath": "/magic-api/api/09.海通流程接口/12.映射字典/06.生成字典查询模板.ms",
+      "path": "api/09.海通流程接口/12.映射字典/04.生成字典查询模板.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/12.映射字典/04.生成字典查询模板.ms",
       "rowIds": [
         "e8d4ac2c777c44b68197a7a631b799ec"
       ],
       "kind": "api",
-      "baseSha256": "4a9f3f7db7a93604a5b641992d190261927ba5256d97a4f939cffbf65953f84f",
+      "baseSha256": "e5e98fdead8c5981d3f9dcb905d57c4820abf6084e9556530e08f471f7f678c8",
       "metadataId": "nifi_field_map_lookup_v1"
     },
     {
@@ -8629,7 +8109,7 @@
         "f5c3489a9e6047588644765e3614e724"
       ],
       "kind": "api",
-      "baseSha256": "c4df33c3ef405a86c9f8cbd002565fa353daad1ca541b9d548113246316a0a25",
+      "baseSha256": "43b2deca75e83316854667fc4052df001ae954b62a4c600911a8271f2fe851bb",
       "metadataId": "nifi_map_schema_post_v1"
     },
     {
@@ -8639,7 +8119,7 @@
         "1e5fa03630664e94b756ccf0f044bf75"
       ],
       "kind": "api",
-      "baseSha256": "5fbceab26ec6862d3945e1e0499d18346fa2f2d356e0cc73e1c40791565459a9",
+      "baseSha256": "0c934ad02099d152bb7d61155a0c9c1f1333891c9417b18990d7cd1a5b3fe482",
       "metadataId": "nifi_map_sample_post_v1"
     },
     {
@@ -8649,67 +8129,57 @@
         "2db0db3a508a4df2a2303347c75495ba"
       ],
       "kind": "api",
-      "baseSha256": "6e5d57b02f9496cd6e8bd65d0f1ef15c129eed77b9769a87f909f16cb946269e",
+      "baseSha256": "5388a1ae1201ab2626bc6d9ad1b91a88e698776a48b1c8bd3dece3a810a43346",
       "metadataId": "nifi_field_map_caps_get_v1"
     },
     {
-      "path": "api/09.海通流程接口/13.字段映射/04.核验字段映射能力.ms",
-      "databasePath": "/magic-api/api/09.海通流程接口/13.字段映射/04.核验字段映射能力.ms",
-      "rowIds": [
-        "3415a37481654c999efe96f6c83ca206"
-      ],
-      "kind": "api",
-      "baseSha256": "dfce2538c041249d4f2431d6386578ca10ac36cdca50641754c8efcf3d312f06",
-      "metadataId": "nifi_field_map_caps_head_v1"
-    },
-    {
-      "path": "api/09.海通流程接口/13.字段映射/05.校验字段映射.ms",
-      "databasePath": "/magic-api/api/09.海通流程接口/13.字段映射/05.校验字段映射.ms",
+      "path": "api/09.海通流程接口/13.字段映射/04.校验字段映射.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/13.字段映射/04.校验字段映射.ms",
       "rowIds": [
         "a9c7b3391ef0452d838895159f932646"
       ],
       "kind": "api",
-      "baseSha256": "0ac92b8a56430377e2d9c5ee5c685e0d7cedf3265ce294710e49829d254d6ad0",
+      "baseSha256": "17d598282cb61e33a9f8b4a14a277839f413b6d537e4e5f1f39442cd8e987025",
       "metadataId": "nifi_field_map_validate_v1"
     },
     {
-      "path": "api/09.海通流程接口/13.字段映射/06.预览字段映射.ms",
-      "databasePath": "/magic-api/api/09.海通流程接口/13.字段映射/06.预览字段映射.ms",
+      "path": "api/09.海通流程接口/13.字段映射/05.预览字段映射.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/13.字段映射/05.预览字段映射.ms",
       "rowIds": [
         "5010349117d5457099b187ab9c5a8ba4"
       ],
       "kind": "api",
-      "baseSha256": "6bedebfd28f46202147163ca8640e2a785ca1496b3b86e7a50abc9743031a52f",
+      "baseSha256": "d3807a4cae0eee332521fa8d95bc711012024e1dac412bf673b837d7fb2145dc",
       "metadataId": "nifi_field_map_preview_v1"
     },
     {
-      "path": "api/09.海通流程接口/13.字段映射/07.推荐字段映射.ms",
-      "databasePath": "/magic-api/api/09.海通流程接口/13.字段映射/07.推荐字段映射.ms",
+      "path": "api/09.海通流程接口/13.字段映射/06.推荐字段映射.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/13.字段映射/06.推荐字段映射.ms",
       "rowIds": [
         "f7f5a4ff7e9a4b92b5b15172712e18e4"
       ],
       "kind": "api",
-      "baseSha256": "645c99f5fe26706412c11c93a894cc0a7f99c8f9b0d8ae436bf7e492886687ed",
+      "baseSha256": "bc8afef929d4d3a1cb70c206e048e20528b8f17f4f68f234efa15f85cc2af810",
       "metadataId": "nifi_field_map_recommend_v1"
     },
     {
-      "path": "api/09.海通流程接口/13.字段映射/08.编译字段映射.ms",
-      "databasePath": "/magic-api/api/09.海通流程接口/13.字段映射/08.编译字段映射.ms",
+      "path": "api/09.海通流程接口/13.字段映射/07.编译字段映射.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/13.字段映射/07.编译字段映射.ms",
       "rowIds": [
         "e7a46f591ffd4c4ab51a622c046ffd38"
       ],
       "kind": "api",
-      "baseSha256": "c98eccd2b2cb250d0956bd4536007ddb78a5cb18113b64cec47ac105d9df032c",
+      "baseSha256": "0fb6ee18e554119011b8eb07a7b71349f4f76e72c6d92f6f14b76ae3b812b274",
       "metadataId": "nifi_field_map_compile_v1"
     },
     {
-      "path": "api/09.海通流程接口/13.字段映射/09.转换旧字段映射.ms",
-      "databasePath": "/magic-api/api/09.海通流程接口/13.字段映射/09.转换旧字段映射.ms",
+      "path": "api/09.海通流程接口/13.字段映射/08.转换旧字段映射.ms",
+      "databasePath": "/magic-api/api/09.海通流程接口/13.字段映射/08.转换旧字段映射.ms",
       "rowIds": [
         "b9269595e80f4908914fafba21d69079"
       ],
       "kind": "api",
-      "baseSha256": "5681b5a153cf309307ef65f5164929a7a50608fc9eb08639430a6d7b60e88a4c",
+      "baseSha256": "f6aea5a68a6ca74ffae56321836d4a8e89b8a8b20162a93881367b7ca62f73e0",
       "metadataId": "nifi_field_map_legacy_v1"
     },
     {
@@ -8738,7 +8208,7 @@
         "2015a9d9959f4bf580721b834650c6cf"
       ],
       "kind": "api",
-      "baseSha256": "2b0f9cf9c6374474cae0564144f626ef7380b75ad0a3d5e2efe688ba52c1ad99",
+      "baseSha256": "b8fcd680618c726b4364b6316028792a899cbab6e11ee0efec7567ee7d6a5d9b",
       "metadataId": "nifi_map_upgrade_post_v1"
     },
     {
@@ -8748,7 +8218,7 @@
         "273e66d1636240ceb1c8e500e83bab74"
       ],
       "kind": "api",
-      "baseSha256": "4eb0ef348901ce91e793cf4131d6a6dfb34142396f3c178b5c10cfdcdcbc9235",
+      "baseSha256": "11c1def833c7dec29202d0922d691c01ec76dd039b1ee54c3e3e13b6107e6406",
       "metadataId": "nifi_map_start_pub_post_v1"
     },
     {
@@ -8777,7 +8247,7 @@
         "58819bee760449df94ce6d3c53a3fe45"
       ],
       "kind": "api",
-      "baseSha256": "3b436bd381397943fb8f5f5dbed0f50ddc0e5c9e9b24a46e7f92a62d8c067339",
+      "baseSha256": "36ea4b470508419f085930a1f172be64c5862d7d127d04bb66946899cb6d481a",
       "metadataId": "nifi_connection_test_post_v1"
     },
     {
@@ -8787,7 +8257,7 @@
         "67cbbf06f45f4e2abb5c0a6bace30bf6"
       ],
       "kind": "api",
-      "baseSha256": "89d6318b3e1d856b285a66e1b6977c37847fcbe43b7a82b10c0155c5d7f9cca4",
+      "baseSha256": "1dfbc70bed09b325df1a94d0450bf3e7b10efee5d690263f2dc08aeb9a5d8687",
       "metadataId": "nifi_columns_probe_post_v1"
     },
     {
@@ -8797,7 +8267,7 @@
         "a9f6eec6a04f407190c7edea2d60edc4"
       ],
       "kind": "api",
-      "baseSha256": "73f219a19809759f1987d1d8c7b0e717fe41d21f15396963b5edafc43a8d446c",
+      "baseSha256": "4e6f5f33cd828e86e8dd61ac5b0fd7db8b34490221baf05835e83ce17e66145b",
       "metadataId": "nifi_tables_probe_post_v1"
     },
     {
@@ -8989,7 +8459,7 @@
         "8fda5b541c5047e3a1b74bf692025a31"
       ],
       "kind": "function",
-      "baseSha256": "40e5d94a64faae58d35a3a7298fe5dd08af3f6ec1c7c947dbc238a71b3ae2912",
+      "baseSha256": "a1b8634cf6e889fb29d264964811c5ddd2eb724428bcc944781b6f4405029c6e",
       "metadataId": "f3a8100dc6474a759ec52ec6d2b1f116"
     },
     {
@@ -9053,14 +8523,14 @@
       "metadataId": "log_parameter_condition_v1"
     },
     {
-      "path": "function/01.通用函数/20.海通流程运行总览.ms",
-      "databasePath": "/magic-api/function/01.通用函数/20.海通流程运行总览.ms",
+      "path": "function/01.通用函数/20.分页统计行业日志事件.ms",
+      "databasePath": "/magic-api/function/01.通用函数/20.分页统计行业日志事件.ms",
       "rowIds": [
-        "12307197574c4f00b1c89b4e4c632793"
+        "50f1cdb4134a49e690cc32aea2a7a4e5"
       ],
       "kind": "function",
-      "baseSha256": "759894ad77fd91efbad397876450fcd6f43fb02fde4e57fcbb4519b04d309241",
-      "metadataId": "4a9311c67f104f589affeb51aa1e3a62"
+      "metadataId": "log_tenant_event_search_v1",
+      "baseSha256": "c7a34bfd9467accaaeefaa7982522e4074110112489c2535a8956db66b9a9936"
     },
     {
       "path": "function/01.通用函数/21.接口拉取定义校验.ms",
@@ -9080,7 +8550,7 @@
       ],
       "kind": "function",
       "metadataId": "log_tenant_lifecycle_page_v1",
-      "baseSha256": "54ebe7c42249a063c17f50ff8af5b7fe07b8bf56b1fdd8b5407f17a89fcdf3d4"
+      "baseSha256": "6eb48d579791a7ebf74cee2457e218f9ae34bba83e2648bf96aaef9d9dc8298e"
     },
     {
       "path": "function/01.通用函数/23.海通画布接口来源模板.ms",
@@ -9109,7 +8579,7 @@
         "887f5d68323041cbaf5e8437860c988c"
       ],
       "kind": "function",
-      "baseSha256": "5722d3b47c220fa7a04b2e9e7934c5d0402f0fab68bea31d812cbb049a4104af",
+      "baseSha256": "0459c7098998b70e462a26fefb52e25578871b3e79dd1a96bc6dd27bbbf005b7",
       "metadataId": "eb7168fdec7a422cbdd49784a9c7c981"
     },
     {
@@ -9129,7 +8599,7 @@
         "e5350ea94a154c569c2870ac8a5adff5"
       ],
       "kind": "function",
-      "baseSha256": "0b57f5b7fe09b0af9e7f554eb7c77de3bb92c2d5cc5a9fdf39d1ecc8e02f09cc",
+      "baseSha256": "041be76824201f8ce6f5b952866a893aaf3de7fd7adf074c595adc63ee99199c",
       "metadataId": "fbbbebbeee9346e1813e9b1bf635eb09"
     },
     {
@@ -9173,14 +8643,14 @@
       "metadataId": "nifi_flow_error_http_v1"
     },
     {
-      "path": "function/01.通用函数/32.读取行业日志策略.ms",
-      "databasePath": "/magic-api/function/01.通用函数/32.读取行业日志策略.ms",
-      "rowIds": [
-        "01cd2b953ff2408ab6129c0fdcd8579f"
-      ],
+      "path": "function/01.通用函数/32.元数据目录请求参数.ms",
+      "databasePath": "/magic-api/function/01.通用函数/32.元数据目录请求参数.ms",
+      "baseSha256": "07ea4e9cf8063bfc9158272e9e7e713911a88742a9c8499f1e585224b3573342",
       "kind": "function",
-      "metadataId": "log_tenant_policy_list_v1",
-      "baseSha256": "8c5c5ccc93c2eb72a01ac88505e42399e5a2193402a514b4efa308df0a1690c0"
+      "rowIds": [
+        "85df67e18a504e26bdb2386ed9034c95"
+      ],
+      "metadataId": "c24248f72ceb4fdebc665422701e7c34"
     },
     {
       "path": "function/01.通用函数/33.海通已保存流程列表.ms",
@@ -9213,14 +8683,14 @@
       "metadataId": "nifi_pipe_list_response_v1"
     },
     {
-      "path": "function/01.通用函数/36.海通流程运行列表响应.ms",
-      "databasePath": "/magic-api/function/01.通用函数/36.海通流程运行列表响应.ms",
+      "path": "function/01.通用函数/36.按标识读取行业日志事件.ms",
+      "databasePath": "/magic-api/function/01.通用函数/36.按标识读取行业日志事件.ms",
       "rowIds": [
-        "3827ef4c57ec4c77bcf3e93d63a424f6"
+        "9dbe6cc791574a6d86566abeaf22090a"
       ],
       "kind": "function",
-      "baseSha256": "6bf8fff2fbc750f5b809bdb739be81de7761680c0a3e48c36428d86a35157b09",
-      "metadataId": "nifi_pipe_runtime_list_http_v1"
+      "metadataId": "log_tenant_event_objects_v1",
+      "baseSha256": "0eea596007c076becc15e94e9eff09394fcb8485d36fda87a9c71099a9927dcd"
     },
     {
       "path": "function/01.通用函数/37.海通画布模板资产.ms",
@@ -9353,24 +8823,24 @@
       "baseSha256": "d2ef7c0b5c5e3e96ee1ef0693f1ab5c1a78071f5c1092f383d03c0506a18663a"
     },
     {
-      "path": "function/01.通用函数/50.海通流程运行状态响应.ms",
-      "databasePath": "/magic-api/function/01.通用函数/50.海通流程运行状态响应.ms",
+      "path": "function/01.通用函数/50.行业日志原响应.ms",
+      "databasePath": "/magic-api/function/01.通用函数/50.行业日志原响应.ms",
       "rowIds": [
-        "570fd86bc31d48068581018bb71d1aa2"
+        "9a9be868f9474059ae4581441bc0a99a"
       ],
       "kind": "function",
-      "baseSha256": "f40fc34f94eabae21922462c4c37f7f446ac6483ca84254e16e740abf48000b9",
-      "metadataId": "nifi_pipeline_status_http_v1"
+      "metadataId": "log_tenant_legacy_response_v1",
+      "baseSha256": "5ea5ba1b299a871e4f4260959cd13431de7b51aa886c0a8819253de64fc514b8"
     },
     {
-      "path": "function/01.通用函数/51.海通处理器状态分页响应.ms",
-      "databasePath": "/magic-api/function/01.通用函数/51.海通处理器状态分页响应.ms",
+      "path": "function/01.通用函数/51.海通协议连通性探查.ms",
+      "databasePath": "/magic-api/function/01.通用函数/51.海通协议连通性探查.ms",
+      "baseSha256": "31918b2c856525a30ef4f2978370eb4afb2a81e3fa0bb0b80c404f9473c7304d",
+      "metadataId": "nifi_connection_health_v1",
       "rowIds": [
-        "9a25a30eafed4d6494bd10058a221215"
+        "4d3c1093d841410fa66a5628a24e6bf4"
       ],
-      "kind": "function",
-      "baseSha256": "2dc92a22de8b6e88ad42f8cb91dfda0690e1808e0d683f640c7319339767c0f1",
-      "metadataId": "nifi_processor_page_http_v1"
+      "kind": "function"
     },
     {
       "path": "function/01.通用函数/52.海通更新画布运行记录.ms",
@@ -9419,7 +8889,7 @@
         "5c60ea7c3ee145478a2fe6ef278c59c8"
       ],
       "kind": "function",
-      "baseSha256": "20570b7e6ccf84d950279cf031c75c1684b33e58119a5339c63e379fa027948a",
+      "baseSha256": "c9bb44661ce17def009c80c75e8f74e26709eb4aa422ec408184202a2406f50c",
       "metadataId": "nifi_canvas_deploy_v1"
     },
     {
@@ -9439,7 +8909,7 @@
         "7ab680c20b64429c9c7bdbbdeb7bf87f"
       ],
       "kind": "function",
-      "baseSha256": "d8389c152f89adefc10be46d0378a681bb4741207d6b2a3de989ace52d515afa",
+      "baseSha256": "d46f0505a0fb3e56164de6d83f92c9a59d1decb4935f629a2b51141bcd653c04",
       "metadataId": "nifi_start_canvas_v1"
     },
     {
@@ -9453,14 +8923,14 @@
       "metadataId": "nifi_stop_canvas_v1"
     },
     {
-      "path": "function/01.通用函数/60.海通原生属性差异.ms",
-      "databasePath": "/magic-api/function/01.通用函数/60.海通原生属性差异.ms",
-      "rowIds": [
-        "cfb0785ffae54a34ad3f1977ba59c0d2"
-      ],
+      "path": "function/01.通用函数/60.元数据目录查询响应.ms",
+      "databasePath": "/magic-api/function/01.通用函数/60.元数据目录查询响应.ms",
+      "baseSha256": "9f4b9b65d1fc591a2fc04172cfdd272c17989bbcf053ac8fae8806c93cdafefe",
       "kind": "function",
-      "baseSha256": "afd4da683d734bd41a06fbbdd9e03387c794dd35e2f5d58e434c6948b77b0fe1",
-      "metadataId": "nifi_attribute_preview_v1"
+      "rowIds": [
+        "d1a6dbd9bf7243bb9913d277dde2209d"
+      ],
+      "metadataId": "f10c3898f07848f0975a9dc1baa426ac"
     },
     {
       "path": "function/01.通用函数/61.海通映射读取响应.ms",
@@ -9493,74 +8963,74 @@
       "metadataId": "nifi_mapping_template_read_v1"
     },
     {
-      "path": "function/01.通用函数/64.海通映射计划历史.ms",
-      "databasePath": "/magic-api/function/01.通用函数/64.海通映射计划历史.ms",
+      "path": "function/01.通用函数/64.数据上报原件磁盘存储.ms",
+      "databasePath": "/magic-api/function/01.通用函数/64.数据上报原件磁盘存储.ms",
       "rowIds": [
-        "7d54fdaf692040a6a95cc6a487a025b2"
+        "2ce400722ac34830a158839cf5341df4"
       ],
       "kind": "function",
-      "baseSha256": "c88d51c6fbb4248562e8681536ecdd241f0a89f4c419d654b35d2a404f06c61b",
-      "metadataId": "nifi_mapping_plans_v1"
+      "metadataId": "report_original_disk_storage_01",
+      "baseSha256": "9fd6ad4cd24965698208afe3807008ba4604591c4faf0caf656846b8928f3092"
     },
     {
-      "path": "function/01.通用函数/65.海通映射计划版本.ms",
-      "databasePath": "/magic-api/function/01.通用函数/65.海通映射计划版本.ms",
+      "path": "function/01.通用函数/65.读取现役日志组件.ms",
+      "databasePath": "/magic-api/function/01.通用函数/65.读取现役日志组件.ms",
       "rowIds": [
-        "ffc27524b20a440185faae14719dd898"
+        "3a838e87db89414a99875efb86c8f472"
       ],
       "kind": "function",
-      "baseSha256": "3ce023341ab63d7f6397a8d2029aa677d67cf1fd512c02bd147074e787721edb",
-      "metadataId": "nifi_mapping_plan_v1"
+      "metadataId": "log_component_bundle_v1",
+      "baseSha256": "dc8724db199e6713081d3138b17dbe2be60246cb05175837d60997656d83b72c"
     },
     {
-      "path": "function/01.通用函数/66.海通映射模板版本.ms",
-      "databasePath": "/magic-api/function/01.通用函数/66.海通映射模板版本.ms",
+      "path": "function/01.通用函数/66.计算当前行业日志能力.ms",
+      "databasePath": "/magic-api/function/01.通用函数/66.计算当前行业日志能力.ms",
       "rowIds": [
-        "fb03c8623e9942b7a0d926f3929ab1bd"
+        "f4c6b40c447d4551837bf57e29ef688f"
       ],
       "kind": "function",
-      "baseSha256": "f214d823bc16b2b1e1ae22d575556c7a0f01cd55279c8d9cb1b3af2109afb811",
-      "metadataId": "nifi_mapping_templates_v1"
+      "metadataId": "log_tenant_capabilities_v1",
+      "baseSha256": "dd44b88e772db410b826520de563c0c2b05c6414ffe86241a0ee79c84c2c4ed2"
     },
     {
-      "path": "function/01.通用函数/67.海通映射模板详情.ms",
-      "databasePath": "/magic-api/function/01.通用函数/67.海通映射模板详情.ms",
+      "path": "function/01.通用函数/67.读取行业日志授权.ms",
+      "databasePath": "/magic-api/function/01.通用函数/67.读取行业日志授权.ms",
       "rowIds": [
-        "0d3d7be4bdc44368a71c1d6642045507"
+        "c07fd25503364609a91cea11ad2f4be3"
       ],
       "kind": "function",
-      "baseSha256": "c2a9e01c57872a8096100aca674760018a60b9eeb781825e97b86d6e109b936d",
-      "metadataId": "nifi_mapping_template_v1"
+      "metadataId": "log_tenant_grants_v1",
+      "baseSha256": "0f524681acb594fab1d6407b77dbace874d81cd646d39ee711c3c34f4f8be9c9"
     },
     {
-      "path": "function/01.通用函数/68.海通映射版本保留策略.ms",
-      "databasePath": "/magic-api/function/01.通用函数/68.海通映射版本保留策略.ms",
+      "path": "function/01.通用函数/68.构造行业日志事件查询.ms",
+      "databasePath": "/magic-api/function/01.通用函数/68.构造行业日志事件查询.ms",
       "rowIds": [
-        "b158eb80c2bb41089ec7b4cb8e18e734"
+        "06824bd96f254c6da29edd0dd42a7d63"
       ],
       "kind": "function",
-      "baseSha256": "a4d3f51303366228ede8340b1094808345a5bda393458bd270d750cd7114e9c0",
-      "metadataId": "nifi_mapping_retention_v1"
+      "metadataId": "log_tenant_event_query_v1",
+      "baseSha256": "1c4d0231389090698a55903d78c184921b162048d7c76a796cced32f74b73fad"
     },
     {
-      "path": "function/01.通用函数/69.海通字典候选表.ms",
-      "databasePath": "/magic-api/function/01.通用函数/69.海通字典候选表.ms",
-      "rowIds": [
-        "874913a411b247bf889387bdf4afef63"
-      ],
+      "path": "function/01.通用函数/69.采集字段结构化范围.ms",
+      "databasePath": "/magic-api/function/01.通用函数/69.采集字段结构化范围.ms",
+      "baseSha256": "c596d5cdc6f290f9e205a77414c5fa27f31890544a4325c87b4e851e397987c5",
       "kind": "function",
-      "baseSha256": "bd937131a11d3112580ef05eba1053f7f4b800be11613c6f316e3c2a2c17ed2f",
-      "metadataId": "nifi_mapping_dict_tables_v1"
+      "rowIds": [
+        "1d36fde85cb34c01a3e9c86555fac220"
+      ],
+      "metadataId": "e30966d29ca7423fa7cde295f8918b28"
     },
     {
-      "path": "function/01.通用函数/70.海通字典候选字段.ms",
-      "databasePath": "/magic-api/function/01.通用函数/70.海通字典候选字段.ms",
-      "rowIds": [
-        "8137c8601fa044968f012ec227a5a65c"
-      ],
+      "path": "function/01.通用函数/70.采集字段分页或清单.ms",
+      "databasePath": "/magic-api/function/01.通用函数/70.采集字段分页或清单.ms",
+      "baseSha256": "8055433b66dd68df5fec1b4de6a5e650e2c8ae488e300941cc475f9d105d78a5",
       "kind": "function",
-      "baseSha256": "03bfb83911a75db1ead1511289e3da1566500d1eb0bf34d711c0fcd508571fc5",
-      "metadataId": "nifi_mapping_dict_cols_v1"
+      "rowIds": [
+        "84a7234a1a2c4861928dceb53ca47dfe"
+      ],
+      "metadataId": "aa4d85f493a64aff8d75eb0ee5693cfe"
     },
     {
       "path": "function/01.通用函数/71.海通追加映射资源版本.ms",
@@ -9583,14 +9053,14 @@
       "metadataId": "nifi_mapping_plan_read_v1"
     },
     {
-      "path": "function/01.通用函数/73.海通字段映射能力.ms",
-      "databasePath": "/magic-api/function/01.通用函数/73.海通字段映射能力.ms",
+      "path": "function/01.通用函数/73.数据标准代码集匹配.ms",
+      "databasePath": "/magic-api/function/01.通用函数/73.数据标准代码集匹配.ms",
+      "baseSha256": "cd892476ac8eabcbdf4bd6d0765484bb58290a8c581a90752cac8c9fea54ed1c",
       "rowIds": [
-        "6bd5a084213e4b35adc5c77721019db9"
+        "715cf8a0ca1b4b6a989384d9850179ba"
       ],
-      "kind": "function",
-      "baseSha256": "8f820f3977ee565ef1f2eb3971173d580beb4c0967dd31ecb1e484ca4c9ebddb",
-      "metadataId": "nifi_field_map_capabilities_v1"
+      "kind": "api",
+      "metadataId": "dwm_standard_code_resolution_01"
     },
     {
       "path": "function/01.通用函数/74.海通探查数据源配置.ms",
@@ -9623,174 +9093,24 @@
       "metadataId": "cc92b11b7eb845768205468cb139d247"
     },
     {
-      "path": "function/01.通用函数/77.元数据目录请求参数.ms",
-      "databasePath": "/magic-api/function/01.通用函数/77.元数据目录请求参数.ms",
-      "baseSha256": "cad82f440f7d1ce3493d14b7718d0a884d0fb5740f03ac69b8b5d721b39c439b",
-      "kind": "function",
+      "path": "function/01.通用函数/77.返回日志导出附件.ms",
+      "databasePath": "/magic-api/function/01.通用函数/77.返回日志导出附件.ms",
       "rowIds": [
-        "85df67e18a504e26bdb2386ed9034c95"
-      ],
-      "metadataId": "c24248f72ceb4fdebc665422701e7c34"
-    },
-    {
-      "path": "function/01.通用函数/78.元数据目录查询响应.ms",
-      "databasePath": "/magic-api/function/01.通用函数/78.元数据目录查询响应.ms",
-      "baseSha256": "cb08aac46fe32a6749274880bb978a2e1c4797b5ab3329f79dce703cc4a29b65",
-      "kind": "function",
-      "rowIds": [
-        "d1a6dbd9bf7243bb9913d277dde2209d"
-      ],
-      "metadataId": "f10c3898f07848f0975a9dc1baa426ac"
-    },
-    {
-      "path": "function/01.通用函数/79.采集字段结构化范围.ms",
-      "databasePath": "/magic-api/function/01.通用函数/79.采集字段结构化范围.ms",
-      "baseSha256": "9c6bf2e1f97aae5c47b7e087cb3779ef326b74976be96eb0191ffdcac9493be8",
-      "kind": "function",
-      "rowIds": [
-        "1d36fde85cb34c01a3e9c86555fac220"
-      ],
-      "metadataId": "e30966d29ca7423fa7cde295f8918b28"
-    },
-    {
-      "path": "function/01.通用函数/80.目录关联服务分页.ms",
-      "databasePath": "/magic-api/function/01.通用函数/80.目录关联服务分页.ms",
-      "baseSha256": "c989ff0d7cbd1ad0b3cd0d49daf81bc97d83a0da93ccb49e62e317d84deb3a88",
-      "kind": "function",
-      "rowIds": [
-        "34b67308ce3348a7adb32e1232175a6c"
-      ],
-      "metadataId": "228019db42f7433899e76c65dab6e582"
-    },
-    {
-      "path": "function/01.通用函数/81.目录关联表资源.ms",
-      "databasePath": "/magic-api/function/01.通用函数/81.目录关联表资源.ms",
-      "baseSha256": "686553d65baa7b96d6c2cae556152625e093236f9bbeb4bd527116c59a7744ce",
-      "kind": "function",
-      "rowIds": [
-        "242086aa1e19452e984f934c2291dc7c"
-      ],
-      "metadataId": "3ff834baaa2e4c028ac0159f903d4eea"
-    },
-    {
-      "path": "function/01.通用函数/82.采集表分页.ms",
-      "databasePath": "/magic-api/function/01.通用函数/82.采集表分页.ms",
-      "baseSha256": "fb15d927f26b097b6e9d56fdd5c9c779ed59b88bc8ac705a7bbbbb9264590246",
-      "kind": "function",
-      "rowIds": [
-        "279e24c150384fcd94ab33ae7e61bca7"
-      ],
-      "metadataId": "e4e9c341f7204025a438da78107217c1"
-    },
-    {
-      "path": "function/01.通用函数/83.采集字段分页或清单.ms",
-      "databasePath": "/magic-api/function/01.通用函数/83.采集字段分页或清单.ms",
-      "baseSha256": "32395cc862a41816ebacfab6f13dba4ff767b3c974f7505afc31819504b92ee6",
-      "kind": "function",
-      "rowIds": [
-        "84a7234a1a2c4861928dceb53ca47dfe"
-      ],
-      "metadataId": "aa4d85f493a64aff8d75eb0ee5693cfe"
-    },
-    {
-      "path": "function/01.通用函数/84.数据标准代码集匹配.ms",
-      "databasePath": "/magic-api/function/01.通用函数/84.数据标准代码集匹配.ms",
-      "baseSha256": "98aae32d23a19515060456014c6c54bfa8c6b8079470596b13edc881e9b6a73f",
-      "rowIds": [
-        "715cf8a0ca1b4b6a989384d9850179ba"
-      ],
-      "kind": "api",
-      "metadataId": "dwm_standard_code_resolution_01"
-    },
-    {
-      "path": "function/01.通用函数/85.数据上报原件磁盘存储.ms",
-      "databasePath": "/magic-api/function/01.通用函数/85.数据上报原件磁盘存储.ms",
-      "rowIds": [
-        "2ce400722ac34830a158839cf5341df4"
+        "1cd8eeff12cd4b1ca0fde9c4e4fb076f"
       ],
       "kind": "function",
-      "metadataId": "report_original_disk_storage_01",
-      "baseSha256": "9e935d1f9922bb7e0eb56b73640128cfce72dc378ae9fc7d44bca1c35d89688c"
+      "metadataId": "log_export_attachment_v1",
+      "baseSha256": "9d20a1c33f900b39bda933bca072f1219f61e9de8eb560fe4b3d1466c8a36ea8"
     },
     {
-      "path": "function/01.通用函数/86.读取现役日志组件.ms",
-      "databasePath": "/magic-api/function/01.通用函数/86.读取现役日志组件.ms",
+      "path": "function/01.通用函数/78.读取NiFi运行节点配置.ms",
+      "databasePath": "/magic-api/function/01.通用函数/78.读取NiFi运行节点配置.ms",
       "rowIds": [
-        "3a838e87db89414a99875efb86c8f472"
+        "0bdb9fd44e1440ceb767488b69f40655"
       ],
       "kind": "function",
-      "metadataId": "log_component_bundle_v1",
-      "baseSha256": "2747b56a98595117d80d1d4a5a017ad65d61746c62db8c2aec3ee9ca0713d329"
-    },
-    {
-      "path": "function/01.通用函数/87.计算当前行业日志能力.ms",
-      "databasePath": "/magic-api/function/01.通用函数/87.计算当前行业日志能力.ms",
-      "rowIds": [
-        "f4c6b40c447d4551837bf57e29ef688f"
-      ],
-      "kind": "function",
-      "metadataId": "log_tenant_capabilities_v1",
-      "baseSha256": "6161d8bfc4cd4e14a934e274c0972b233602306348e6d6ab275b5b049161eba2"
-    },
-    {
-      "path": "function/01.通用函数/88.读取行业日志授权.ms",
-      "databasePath": "/magic-api/function/01.通用函数/88.读取行业日志授权.ms",
-      "rowIds": [
-        "c07fd25503364609a91cea11ad2f4be3"
-      ],
-      "kind": "function",
-      "metadataId": "log_tenant_grants_v1",
-      "baseSha256": "f74721f95dfc1ee26eecec33af185b4dcc92440094a0ca55a355d0039b0974d0"
-    },
-    {
-      "path": "function/01.通用函数/89.构造行业日志事件查询.ms",
-      "databasePath": "/magic-api/function/01.通用函数/89.构造行业日志事件查询.ms",
-      "rowIds": [
-        "06824bd96f254c6da29edd0dd42a7d63"
-      ],
-      "kind": "function",
-      "metadataId": "log_tenant_event_query_v1",
-      "baseSha256": "000c8bae6c7c12ab3152557d6e81eda3bcdbecbccf0d3fa0c5bd712decf08389"
-    },
-    {
-      "path": "function/01.通用函数/90.分页统计行业日志事件.ms",
-      "databasePath": "/magic-api/function/01.通用函数/90.分页统计行业日志事件.ms",
-      "rowIds": [
-        "50f1cdb4134a49e690cc32aea2a7a4e5"
-      ],
-      "kind": "function",
-      "metadataId": "log_tenant_event_search_v1",
-      "baseSha256": "e619cb1ddbd7e8d54b6e4b130be69b72fb1e3030123bdb4fe94341b0b1bf8c89"
-    },
-    {
-      "path": "function/01.通用函数/91.按标识读取行业日志事件.ms",
-      "databasePath": "/magic-api/function/01.通用函数/91.按标识读取行业日志事件.ms",
-      "rowIds": [
-        "9dbe6cc791574a6d86566abeaf22090a"
-      ],
-      "kind": "function",
-      "metadataId": "log_tenant_event_objects_v1",
-      "baseSha256": "26805f861805f3f20f67ad2d4796c0725f700af7e1c2865d80f82d70cf512236"
-    },
-    {
-      "path": "function/01.通用函数/92.行业日志原响应.ms",
-      "databasePath": "/magic-api/function/01.通用函数/92.行业日志原响应.ms",
-      "rowIds": [
-        "9a9be868f9474059ae4581441bc0a99a"
-      ],
-      "kind": "function",
-      "metadataId": "log_tenant_legacy_response_v1",
-      "baseSha256": "dbf5f2a1537928c53bfecb173e7ba93621255ab62acaa461229c7be0143d63db"
-    },
-    {
-      "path": "function/01.通用函数/93.海通协议连通性探查.ms",
-      "databasePath": "/magic-api/function/01.通用函数/93.海通协议连通性探查.ms",
-      "baseSha256": "15b1030501af82fd4bfacc71a3c9fa785554ceba360fc9b98ccd0c155671b01f",
-      "metadataId": "nifi_connection_health_v1",
-      "rowIds": [
-        "4d3c1093d841410fa66a5628a24e6bf4"
-      ],
-      "kind": "function"
+      "metadataId": "nifi_runtime_node_read_v1",
+      "baseSha256": "6c202b72fc32789acdce45bef10e454945fae2672bd23293f6248a24602b3a32"
     },
     {
       "path": "function/01.通用函数/group.json",
@@ -9967,7 +9287,7 @@
         "75d94bf24e7142de89c7cabb9d9bc1fb"
       ],
       "kind": "function",
-      "baseSha256": "69ac7730349cc969d62b4bd36a641a444142ff58329878a093523e5e86d6ec1e",
+      "baseSha256": "2061d781fdb65aa8d69ed1793c5e8071da6e3170e05285e119dbb684ef93479f",
       "metadataId": "bf142250e1a35995a1041adb40ea5bf4"
     },
     {
@@ -10211,16 +9531,6 @@
       "baseSha256": "23912d7fc932497e66195fbe51a44bd3022d18431170033d8a723f94dfa6087f"
     },
     {
-      "path": "function/13.统一身份管理/34.读取平台公开品牌.ms",
-      "databasePath": "/magic-api/function/13.统一身份管理/34.读取平台公开品牌.ms",
-      "rowIds": [
-        "dfe260921b7140f495a094a5a6d46e81"
-      ],
-      "kind": "function",
-      "metadataId": "idaas_public_brand_read_v1",
-      "baseSha256": "d52c1163f3f9fc8b6dfb5ebb70ccf3bcc27368a19569d29e94d0a6dc799c1908"
-    },
-    {
       "path": "function/13.统一身份管理/group.json",
       "databasePath": "/magic-api/function/13.统一身份管理/group.json",
       "rowIds": [
@@ -10240,93 +9550,53 @@
       "baseSha256": "bcd6713f14e725369f9cf7a0e4eb9d5e02ec38b825a236b1309c21af2c77eb56"
     },
     {
-      "path": "function/14.磐石资源中心/01.目录操作.ms",
-      "databasePath": "/magic-api/function/14.磐石资源中心/01.目录操作.ms",
-      "rowIds": [
-        "0454d01c38ab5d66aafdaf02d9b547d6"
-      ],
-      "kind": "function",
-      "baseSha256": "42e4f59344263c9796773ec0e8bb2502b5657f110e9e4038e48e57a17ba67148",
-      "metadataId": "0454d01c38ab5d66aafdaf02d9b547d6"
-    },
-    {
-      "path": "function/14.磐石资源中心/02.目录读取.ms",
-      "databasePath": "/magic-api/function/14.磐石资源中心/02.目录读取.ms",
+      "path": "function/14.磐石资源中心/01.目录读取.ms",
+      "databasePath": "/magic-api/function/14.磐石资源中心/01.目录读取.ms",
       "rowIds": [
         "084a92c02bd05f8bb8507cc4c4660e40"
       ],
       "kind": "function",
-      "baseSha256": "2118ccb8e185d195e50a1ac19f2d94d6cd9be239265b6243e009a01e4288c92c",
+      "baseSha256": "f302465084bba69c106ee6a07620a482d6836fbbba5e5fed867f56f8b1e04b02",
       "metadataId": "084a92c02bd05f8bb8507cc4c4660e40"
     },
     {
-      "path": "function/14.磐石资源中心/03.物化操作.ms",
-      "databasePath": "/magic-api/function/14.磐石资源中心/03.物化操作.ms",
-      "rowIds": [
-        "2ebdc2a6af4b5e2989cd8add98c849fa"
-      ],
-      "kind": "function",
-      "baseSha256": "7da6aa4b797331b5d8bed04d244d31b5f4fc8db92d263df431e610c1a3228a1a",
-      "metadataId": "2ebdc2a6af4b5e2989cd8add98c849fa"
-    },
-    {
-      "path": "function/14.磐石资源中心/04.模型操作.ms",
-      "databasePath": "/magic-api/function/14.磐石资源中心/04.模型操作.ms",
-      "rowIds": [
-        "ad740688aec155419e89ac237559c727"
-      ],
-      "kind": "function",
-      "baseSha256": "037fd1d4499395706aa50525376983b680da33318a2e27213833ba22a182ef67",
-      "metadataId": "ad740688aec155419e89ac237559c727"
-    },
-    {
-      "path": "function/14.磐石资源中心/05.模型读取.ms",
-      "databasePath": "/magic-api/function/14.磐石资源中心/05.模型读取.ms",
+      "path": "function/14.磐石资源中心/02.模型读取.ms",
+      "databasePath": "/magic-api/function/14.磐石资源中心/02.模型读取.ms",
       "rowIds": [
         "7a5e47d9db00585f8d0feeefedcd6465"
       ],
       "kind": "function",
-      "baseSha256": "fb359b7fd9959d23889378c6e723c20a5c541de8a964d6fcefaad6f3f7fad778",
+      "baseSha256": "517f994d8356da754194029f002914bd27fa3fe693e7d8119d6385b031ae03ce",
       "metadataId": "7a5e47d9db00585f8d0feeefedcd6465"
     },
     {
-      "path": "function/14.磐石资源中心/06.模型校验.ms",
-      "databasePath": "/magic-api/function/14.磐石资源中心/06.模型校验.ms",
+      "path": "function/14.磐石资源中心/03.模型校验.ms",
+      "databasePath": "/magic-api/function/14.磐石资源中心/03.模型校验.ms",
       "rowIds": [
         "779419e5edd654dd9f851a610cdb6033"
       ],
       "kind": "function",
-      "baseSha256": "f241da39786afc904e4a2cc797a930982d4be92857444b2211a2506065b2e148",
+      "baseSha256": "812e6b64c8c59892de0da67c33b819b8a8e61401cc9af51568d643e895fac3d6",
       "metadataId": "779419e5edd654dd9f851a610cdb6033"
     },
     {
-      "path": "function/14.磐石资源中心/07.规划操作.ms",
-      "databasePath": "/magic-api/function/14.磐石资源中心/07.规划操作.ms",
-      "rowIds": [
-        "fa237a4aca795e95b6a1086b2e3ed012"
-      ],
-      "kind": "function",
-      "baseSha256": "0b6785bca8d18a1cdd44ff28ff3cecdae362bf3928ae6175cf6df75f14fac902",
-      "metadataId": "fa237a4aca795e95b6a1086b2e3ed012"
-    },
-    {
-      "path": "function/14.磐石资源中心/08.规划读取.ms",
-      "databasePath": "/magic-api/function/14.磐石资源中心/08.规划读取.ms",
+      "path": "function/14.磐石资源中心/04.规划读取.ms",
+      "databasePath": "/magic-api/function/14.磐石资源中心/04.规划读取.ms",
       "rowIds": [
         "4e0ee97e906054229d56e22da830272e"
       ],
       "kind": "function",
-      "baseSha256": "d50b326bee26bbef0b314300267ee0aef3bab1db1629749cecdcac4e9d497ffc",
+      "baseSha256": "48434e266972491f7471fedfbf99f57c85ba9bea7cccb2d101c619458a18ad20",
       "metadataId": "4e0ee97e906054229d56e22da830272e"
     },
     {
-      "path": "function/14.磐石资源中心/09.技术资产读取.ms",
-      "databasePath": "/magic-api/function/14.磐石资源中心/09.技术资产读取.ms",
+      "path": "function/14.磐石资源中心/05.技术资产读取.ms",
+      "databasePath": "/magic-api/function/14.磐石资源中心/05.技术资产读取.ms",
       "rowIds": [
         "490931832d8a5b87a46bdb77544bb02c"
       ],
       "kind": "function",
-      "baseSha256": "ed8fbd9dda97c930632ebb01195993c4182ff695d4dfa99bdce633fdbcbb1f0c",
+      "baseSha256": "bc46a0a90e131e1f05c2ce5b730dc49ab2f1cf4a1ab04e16c0234833fca0568e",
       "metadataId": "490931832d8a5b87a46bdb77544bb02c"
     },
     {
@@ -10369,34 +9639,14 @@
       "baseSha256": "7397e8ba378ad1afcd9d5ef845400daca0844e663c871a2236e4dd4a32d04e29"
     },
     {
-      "path": "function/15.推送登记/03.校验海通回调数据.ms",
-      "databasePath": "/magic-api/function/15.推送登记/03.校验海通回调数据.ms",
-      "rowIds": [
-        "2a7949a035974c5daae29b477c8da0eb"
-      ],
-      "kind": "function",
-      "metadataId": "push_registry_relay_check_v1",
-      "baseSha256": "0a615f80fd3cc6812364cfd39c84f2744c906f3a60330e1e3ec2347302b7bf3a"
-    },
-    {
-      "path": "function/15.推送登记/04.读取已发布推送契约.ms",
-      "databasePath": "/magic-api/function/15.推送登记/04.读取已发布推送契约.ms",
-      "rowIds": [
-        "fb116052bd6048449cf53aa1e301ac1a"
-      ],
-      "kind": "function",
-      "metadataId": "push_registry_schema_query_v1",
-      "baseSha256": "a54954725442ff1c9ca5aa67fc836a81f8d44fee093f5c60bbcf099774c317b5"
-    },
-    {
-      "path": "function/15.推送登记/05.签发与轮换业务密钥.ms",
-      "databasePath": "/magic-api/function/15.推送登记/05.签发与轮换业务密钥.ms",
+      "path": "function/15.推送登记/03.签发与轮换业务密钥.ms",
+      "databasePath": "/magic-api/function/15.推送登记/03.签发与轮换业务密钥.ms",
       "rowIds": [
         "e7a1322935ca43cab1d58ce63ca54bcb"
       ],
       "kind": "function",
       "metadataId": "push_registry_credential_v1",
-      "baseSha256": "a08d2d0574ac20197dc45ec88dc63b3238ba6f788b14bcc5133a004b2612b1fb"
+      "baseSha256": "24f8866811159353b3b0c193ce65c1abdd56ceb4fdbcf6af728a951c0050eaad"
     },
     {
       "path": "function/15.推送登记/group.json",
@@ -10458,104 +9708,54 @@
       "baseSha256": "037cdb4dcc72be4ce27353f8e929692aa93594aec4f7a990e28f313b70e2b6b0"
     },
     {
-      "path": "function/16.表采集/05.读取单个采集状态.ms",
-      "databasePath": "/magic-api/function/16.表采集/05.读取单个采集状态.ms",
-      "rowIds": [
-        "fb3c9ab281db46da80b9457ae914acb4"
-      ],
-      "kind": "function",
-      "metadataId": "collect_fn_status_v1",
-      "baseSha256": "b6b6205e1eba472b1e96effbcea06d4b24cdb35d7663082640ee4b826fef853e"
-    },
-    {
-      "path": "function/16.表采集/06.读取表清单分页参数.ms",
-      "databasePath": "/magic-api/function/16.表采集/06.读取表清单分页参数.ms",
+      "path": "function/16.表采集/05.读取表清单分页参数.ms",
+      "databasePath": "/magic-api/function/16.表采集/05.读取表清单分页参数.ms",
       "rowIds": [
         "2c4c871d51ec4220867e7cc667ba1c29"
       ],
       "kind": "function",
       "metadataId": "collect_fn_pageargs_v1",
-      "baseSha256": "bd47c8b96de39424fe07bcdadce4523a983c68478436b22b89cf17be8601dfc2"
+      "baseSha256": "4f41611458c5287a5eb69a6bd31b02196e18f36fa44326cffce56eaa1c819158"
     },
     {
-      "path": "function/16.表采集/07.装配采集表清单.ms",
-      "databasePath": "/magic-api/function/16.表采集/07.装配采集表清单.ms",
+      "path": "function/16.表采集/06.装配采集表清单.ms",
+      "databasePath": "/magic-api/function/16.表采集/06.装配采集表清单.ms",
       "rowIds": [
         "27805c6f58914ef095639a2cbf6d3fa7"
       ],
       "kind": "function",
       "metadataId": "collect_fn_tablepage_v1",
-      "baseSha256": "75706120bc25607da35bd07728090f2b5dd2b022695b35b154384fc8aa0695e0"
+      "baseSha256": "e4de638c5964f98a93d302540db88ea52192352f5ce5e9030b59a4bb0ae13c04"
     },
     {
-      "path": "function/16.表采集/08.定义采集清单读取列.ms",
-      "databasePath": "/magic-api/function/16.表采集/08.定义采集清单读取列.ms",
+      "path": "function/16.表采集/07.定义采集清单读取列.ms",
+      "databasePath": "/magic-api/function/16.表采集/07.定义采集清单读取列.ms",
       "rowIds": [
         "a1327cd7674c4dea91e5b898fae9a2df"
       ],
       "kind": "function",
       "metadataId": "collect_fn_tables_v1",
-      "baseSha256": "69f8f6ea06eb5862dce3186bb6433aab467fcbabf7ca9efda8755e3f529f5e82"
+      "baseSha256": "1d5907fe70f74533cb4b792fb7f1a1104d2cf684e658c9af21256fbafdca1513"
     },
     {
-      "path": "function/16.表采集/09.读取已保存采集表.ms",
-      "databasePath": "/magic-api/function/16.表采集/09.读取已保存采集表.ms",
-      "rowIds": [
-        "38a69d55439f47178a1bfe0ae51e50da"
-      ],
-      "kind": "function",
-      "metadataId": "collect_fn_saved_v1",
-      "baseSha256": "b659608f6d7db2984f7280ca4c0286fc9d3addc56e244293752b7a5eeeb92dd4"
-    },
-    {
-      "path": "function/16.表采集/10.读取最近新增采集表.ms",
-      "databasePath": "/magic-api/function/16.表采集/10.读取最近新增采集表.ms",
-      "rowIds": [
-        "8948c1188b9c4b05b954169793465714"
-      ],
-      "kind": "function",
-      "metadataId": "collect_fn_additions_v1",
-      "baseSha256": "69e858bb27ae5896137167e82e03d3b2417e883e5dfa21c58a52824526d4bd72"
-    },
-    {
-      "path": "function/16.表采集/11.读取采集历史分页参数.ms",
-      "databasePath": "/magic-api/function/16.表采集/11.读取采集历史分页参数.ms",
+      "path": "function/16.表采集/08.读取采集历史分页参数.ms",
+      "databasePath": "/magic-api/function/16.表采集/08.读取采集历史分页参数.ms",
       "rowIds": [
         "edde921c97ab446aa0ba5e09f5fab46d"
       ],
       "kind": "function",
       "metadataId": "collect_fn_historyargs_v1",
-      "baseSha256": "deebb7cd2b69b33db7fa384524121e544ce96835604af0e48f4afe22dd3bb933"
+      "baseSha256": "927a8f1fddde438ecbbf9acf54b36f13563b98bdf13e813257c0ecf42dfed3f6"
     },
     {
-      "path": "function/16.表采集/12.读取采集任务差异原文.ms",
-      "databasePath": "/magic-api/function/16.表采集/12.读取采集任务差异原文.ms",
+      "path": "function/16.表采集/09.读取采集任务差异原文.ms",
+      "databasePath": "/magic-api/function/16.表采集/09.读取采集任务差异原文.ms",
       "rowIds": [
         "60e1f36cd72b4655a8df3b4a2292f087"
       ],
       "kind": "function",
       "metadataId": "collect_fn_deleted_v1",
-      "baseSha256": "f99a30769015369be7e0228d217b68f3527c0a031828078a506e5670d0a1eeb0"
-    },
-    {
-      "path": "function/16.表采集/13.分页读取采集差异.ms",
-      "databasePath": "/magic-api/function/16.表采集/13.分页读取采集差异.ms",
-      "rowIds": [
-        "00583a65a8d74f14b81127fb52c45936"
-      ],
-      "kind": "function",
-      "metadataId": "collect_fn_changes_v1",
-      "baseSha256": "5fe82c9e2f1d08eaf3f71ca6c4aed402df043af3316327354497701850584c05"
-    },
-    {
-      "path": "function/16.表采集/14.分页读取待标注表快照.ms",
-      "databasePath": "/magic-api/function/16.表采集/14.分页读取待标注表快照.ms",
-      "rowIds": [
-        "f0a8e40a3c12423fa092d4ff0f30adc6"
-      ],
-      "kind": "function",
-      "metadataId": "collect_fn_snapshot_v1",
-      "baseSha256": "4106799602207fbbc29b6b93ef4b7162d06c214fa2efed014dff87c4ba7b9c6d"
+      "baseSha256": "004d8090926fcb919450914d0a80f08744d4d3745c328cb1f8f3bf78a75a37d6"
     },
     {
       "path": "function/16.表采集/group.json",

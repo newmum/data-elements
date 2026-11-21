@@ -77,7 +77,7 @@ Magic API 直接提供画布初始化的 `GET /dws/flowserve/detail?id=<流程ID
 
 试运行输入仅用于当前请求。也可通过 `credentialRef` 选择部署侧凭据。凭据 JSON 按 `flowserve.http.credentials.<租户ID>.<引用名>` 配置，包含绑定的 `serviceId` 以及可选的 `headers` 或 `payload`。实际凭据保存在受限运行配置，画布只保存引用。节点跟踪输出 HTTP 状态、业务码和耗时。出站执行由共享 Magic 函数处理，响应正文受大小限制，敏感字段在预览中脱敏。
 
-本机上游基础地址默认是 `http://127.0.0.1:8088`，由 `flowserve.http.platform-base-url` 覆盖。当前环境可使用澄天登录、当前租户、服务分页和 IDAAS 发券／身份查询路径。其他上游由部署侧在 `flowserve.http.allowed-targets.<租户ID>` 中明确配置，以逗号分隔完整 URL。末尾为斜杠时匹配该地址下的子路径。上游请求保持 TLS 校验并禁止重定向。
+本机上游基础地址默认是 `http://127.0.0.1:8088`，由 `flowserve.http.platform-base-url` 覆盖。当前环境可使用澄天登录、当前租户、服务分页和 IDAAS 发券／身份查询路径。服务分页上游在登记中填写 `POST /dws/flowserve/services`，编排节点继续按服务 ID 读取当前登记地址。其他上游由部署侧在 `flowserve.http.allowed-targets.<租户ID>` 中明确配置，以逗号分隔完整 URL。末尾为斜杠时匹配该地址下的子路径。上游请求保持 TLS 校验并禁止重定向。
 
 保存和发布使用当前草稿锁版本。发布入口由服务端生成并使用 `/services/{apiId}` 路径，完整 URL 由 Magic 运行节点和租户路由生成。调用时校验平台会话、发布版本以及服务和引用的对象权限。新版本部署成功后写入版本和发布记录。下线后已有入口拒绝执行。外部调用方使用独立的已授权平台会话，流程内部上游认证仍由节点绑定完成。
 

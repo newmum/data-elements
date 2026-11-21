@@ -7,8 +7,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
-import org.springframework.beans.factory.ObjectProvider;
-import org.ssssssss.magicapi.core.service.MagicAPIService;
+import com.linewell.dataelement.magic.runtime.route.RegisteredMagicFunctionInvoker;
 import org.ssssssss.script.MagicScript;
 import org.ssssssss.script.MagicScriptContext;
 import static org.mockito.ArgumentMatchers.*;
@@ -23,14 +22,11 @@ final class LogParameterMagicFixture {
 
     private LogParameterMagicFixture() { }
 
-    @SuppressWarnings("unchecked")
-    static ObjectProvider<MagicAPIService> provider() {
-        ObjectProvider<MagicAPIService> provider = mock(ObjectProvider.class);
-        MagicAPIService functions = mock(MagicAPIService.class);
-        when(provider.getObject()).thenReturn(functions);
-        when(functions.invoke(eq(LogQueryService.PARAMETER_CONDITION_FUNCTION), anyMap()))
+    static RegisteredMagicFunctionInvoker invoker() {
+        var functions = mock(RegisteredMagicFunctionInvoker.class);
+        when(functions.invoke(eq(LogQueryService.PARAMETER_CONDITION_FUNCTION_ID), anyMap()))
                 .thenAnswer(call -> execute(call.getArgument(1)));
-        return provider;
+        return functions;
     }
 
     static Object execute(Map<String, Object> variables) {

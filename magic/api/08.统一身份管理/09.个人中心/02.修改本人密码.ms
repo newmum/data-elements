@@ -13,7 +13,12 @@
   "description": "核验当前会话、原密码和新密码策略，更新平台账号安全凭据并使旧会话失效。",
   "parameters": [],
   "method": "POST",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

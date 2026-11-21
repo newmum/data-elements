@@ -147,9 +147,11 @@ NiFi 与业务接口使用数据平台的登录会话。独立打开海通时，
 
 嵌入消息只接受实际父窗口，且来源必须为海通同源、数据中台来源，或部署时显式配置的 `VITE_NIFI_EMBED_ORIGINS` / `iframe-allowed-origins`。本机开发未自定义源平台地址时，数据中台入口 `http://localhost:3000` 和 `http://127.0.0.1:3000` 均可传入当前会话。独立页面忽略外部窗口发来的 NiFi Token 消息。在独立入口打开 NiFi 流程列表时，页面和外壳的并发同步以最近一次会话结果为准，再决定是否跳转到平台登录页。
 
-本地开发代理见 `vite.config.ts`：`/nifi/api`、`/nifi-api`、`/nifi-ui` 代理到 `http://localhost:8088`，`/dev-api` 也转向同一服务并去掉前缀。NiFi API 默认基址是 `/nifi/api`，可用 `VITE_APP_BASE_API` 覆盖。生产构建的 `.env.production` 使用 `/prod-api/nifi/api`；部署网关需要把该路径及原生 NiFi 页面路径正确代理到现有后端，并提供页面同源访问。前端请求携带当前 token，租户及资源权限由后端校验。仅启动前端不会使后端接口可用。
+本地 `vite.config.ts` 将 `/nifi/`、`/nifi-api`、`/nifi-ui` 转发到 `http://localhost:8088`，并去掉 `/dev-api` 网关前缀。共享平台海通的 Magic API 基址由 `VITE_APP_BASE_API` 配置，本机默认 `/nifi`，生产构建使用 `/prod-api/nifi`。流程页直调 `GET /nifi/flow/page`，画布直调 `GET /nifi/chain/flow` 并通过 `GET /nifi/run/events` 订阅实时状态。部署网关提供同源访问，业务请求携带当前会话，由后端校验租户和资源权限。原生 NiFi 页面及协议使用 `/nifi-ui`、`/nifi-api`。共享 86 已退役 `/nifi/api/nifi/**` 通配代理及 `/nifi/api/task-runtime/events`。
 
-节点配置的连接测试、字段探查和表探查分别使用 `POST /nifi/api/connect`、`POST /nifi/api/columns`、`POST /nifi/api/tables`。既有画布请求的旧 POST 地址继续由共享后端按原参数及鉴权规则兼容。表探查接受关键词和限制数量，字段探查按当前所选表读取。
+节点配置的连接测试、字段探查和表探查直接调用 Magic 注册的 `POST /nifi/api/connect`、`POST /nifi/api/columns`、`POST /nifi/api/tables`。表探查接受关键词和限制数量，字段探查按当前所选表读取。
+
+集群监控在 `POST /ods/node/page` 读取节点列表，健康检测和系统诊断分别使用该资源的 `health` 和 `diagnostics` 操作。检测、诊断、运行采样和流程编译共用服务器侧的节点配置读取。默认选择启用节点，按默认标志和更新时间排序，已绑定流程按当前可信行业及节点 ID 精确选择。HTTP 响应只返回列表字段、健康结果或允许展示的诊断指标，连接凭据由服务端协议客户端消费。
 
 
 <a id="overview--画布图标与主题"></a>
@@ -2778,9 +2780,11 @@ NiFi 对自动精度小数在每个既有有界窗口内计算一个能承载所
 
 共享平台的 `POST /nifi/canvas/template` 和 `POST /nifi/canvas/node` 在生成 API 来源配置时共用 `@/common/nifiApiTemplateConfig`。接口完成租户和资产读取后，函数使用已有的数据源配置及表名匹配 API 定义，输出地址、方法、请求体、响应提取、分页、增量、超时和调度字段。保留只有一条定义时的历史回退，并从画布输出中移除认证等敏感请求头。缺失或无效的可选 JSON 配置走原有默认规则，显式 JSON `null` 也按缺失处理。模板转换只处理内存数据，无额外 SQL 或 NiFi 请求。
 
-画布创建入口 `POST /nifi/flow/create` 携带 `catalogTid` 时，由 Magic 校验当前租户的目录或来源表范围，按保存新流程、关联接入任务、尝试绑定规则的顺序执行。创建脚本在独立事务中确认有效来源为 API 拉取后，按租户、来源和表更新有效规则，沿用 `system` 和应用时钟审计。绑定失败时回滚该事务并保留画布和任务。已有画布直接保存设计，任务关联失败时画布回滚，这两种情况均不执行绑定。对外的规则绑定接口按其原有的权限、锁和数据库时钟契约执行。
+画布创建入口 `POST /nifi/flow/create` 携带 `catalogTid` 时，由 Magic 校验当前租户的目录或来源表范围，按保存新流程、关联接入任务、尝试绑定规则的顺序执行。画布创建和部署直接共用接入任务关联 Function，优先复用当前画布的任务，并在已确认的有效目录上同步 `accessTaskId` 镜像。目录属性及搜索投影走现有批量适配器。创建脚本在独立事务中确认有效来源为 API 拉取后，按租户、来源和表更新有效规则，沿用 `system` 和应用时钟审计。绑定失败时回滚该事务并保留画布和任务。已有画布直接保存设计，任务关联失败时画布回滚，这两种情况均不执行绑定。对外的规则绑定接口继续按既有权限、锁和数据库时钟执行。
 
-创建画布、构建部署候选和完整部署共用内部 Magic 函数 `@/common/ensureNifiCatalogAccessTask`。按当前租户优先复用已经绑定该流程的活动任务，再按目录匹配未绑定任务。目录已经被其他流程占用时沿用原错误。DSL 中的来源、目标及主键字段沿用已有别名优先级。首建任务从有效目录及其扩展属性读取，澄天缺少旧 `da_asset_t` 视图仍可创建。传入现用来源表标识时核查其有效数据源与租户，并识别已验证的来源目录。独立画布保留原有关联。创建时任务写入与画布同事务，部署沿用原时序。目录属性及 Elasticsearch 投影继续通过已有回调更新。
+创建画布、构建部署候选和完整部署共用内部 Magic 函数 `@/common/ensureNifiCatalogAccessTask`。按当前租户优先复用已经绑定该流程的活动任务，再按目录匹配未绑定任务。目录已经被其他流程占用时沿用原错误。DSL 中的来源、目标及主键字段沿用已有别名优先级。首建任务从有效目录及其扩展属性读取，澄天缺少旧 `da_asset_t` 视图仍可创建。传入现用来源表标识时核查其有效数据源与租户，并识别已验证的来源目录。独立画布保留原有关联。创建时任务写入与画布同事务，部署沿用原时序。关联函数通过资产适配器批量更新目录属性及 Elasticsearch 投影。
+
+现役画布从租户业务库 `nifi_pipeline_t` 加载。启动时从本地 `pipelines/*.json` 批量导入的旧实现已退役。`nifi_pipeline_migration_mark_t` 的既有结构和历史记录保留供审计。用户显式登记 NiFi Canvas DSL v1 JSON 仍走登记入口和租户校验。
 
 `POST /ods/registry/switch` 接受当前数据源、表 ID、任务 ID 和 `start|stop`。先核对当前表与任务的关联，再用已授权的流程 ID 调用画布共用的 `@/common/nifiStartCanvas` 或 `@/common/nifiStopCanvas`。收到 `409/deployment-required` 时由 `@/common/nifiDeployCanvas` 部署已保存配置，部署成功后才启动。启停沿用共享写锁、已部署版本和清空确认。登记入口使用普通启动参数，部署和启动各自核验当前配置、队列和水位。
 

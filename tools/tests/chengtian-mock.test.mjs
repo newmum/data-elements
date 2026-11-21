@@ -41,7 +41,7 @@ function setup(role = "admin", code = "police") {
 
 test("澄天契约指向真实实现及当前审阅版本", async () => {
   const result = await checkContracts();
-  assert.equal(result.interfaces, 88);
+  assert.equal(result.interfaces, 89);
   assert.deepEqual(result.errors, []);
 });
 

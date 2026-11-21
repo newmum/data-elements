@@ -13,7 +13,12 @@
   "description": "单次最多导入 500 人；批量校验机构、岗位、身份域和操作人范围，一次写入人员与任职档案，不创建登录凭据。",
   "parameters": [],
   "method": "POST",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

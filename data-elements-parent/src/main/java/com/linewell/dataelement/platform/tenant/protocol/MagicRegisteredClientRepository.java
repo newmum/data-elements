@@ -18,7 +18,7 @@ public class MagicRegisteredClientRepository implements RegisteredClientReposito
  @Override public RegisteredClient findById(String id){return find(Map.of("id",id));}
  @Override public RegisteredClient findByClientId(String id){return find(Map.of("clientKey",id));}
  @SuppressWarnings("unchecked") private RegisteredClient find(Map<String,Object> criteria){
-  var r=bridge.call("protocol-client",criteria);if(r==null || !Boolean.TRUE.equals(r.get("found")))return null;
+  var r=bridge.client(criteria);if(r==null || !Boolean.TRUE.equals(r.get("found")))return null;
   var b=RegisteredClient.withId((String)r.get("id")).clientId((String)r.get("clientKey")).clientName((String)r.get("name"));
   String type=(String)r.get("clientType");b.clientAuthenticationMethod("PUBLIC".equals(type)?ClientAuthenticationMethod.NONE:ClientAuthenticationMethod.CLIENT_SECRET_BASIC);
   if(!"PUBLIC".equals(type))b.clientSecret((String)r.get("secretHash"));

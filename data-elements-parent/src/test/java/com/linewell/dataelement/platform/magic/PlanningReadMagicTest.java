@@ -319,7 +319,7 @@ class PlanningReadMagicTest {
 
         Object gateway(Scope scope, Map<String, Object> query) throws IOException {
             String gateway = CanonicalMagicSources.byId(GATEWAY_ID)
-                    .replaceAll("(?m)^import (tenantRuntime|dataScope|tableRead|tableSort|metadataAsset|'[^\\r\\n]+)[^\\r\\n]*\\r?\\n", "");
+                    .replaceAll("(?m)^import (tenantRuntime|dataScope|tableRead|tableSort|metadataAsset|jsons|log|'[^\\r\\n]+)[^\\r\\n]*\\r?\\n", "");
             var script = MagicScript.create(gateway, null);
             Function<Object[], Object> planningRead = arguments -> readPlanning(scope);
             var variables = Map.of("db", db, "tenantRuntime", scope, "dataScope", scope, "tableRead", tableRead,

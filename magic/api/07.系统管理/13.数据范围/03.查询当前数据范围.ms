@@ -7,7 +7,12 @@
   "path": "/current",
   "method": "POST",
   "parameters": [],
-  "options": [],
+  "options": [
+    {
+      "name": "jsonBody",
+      "value": "CACHED"
+    }
+  ],
   "headers": [],
   "paths": [],
   "description": "查询当前登录人的有效范围，复用数据源和登记接口使用的 dataScope 权限计算。"

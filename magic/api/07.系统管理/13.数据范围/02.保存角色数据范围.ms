@@ -7,7 +7,12 @@
   "path": "/save",
   "method": "POST",
   "parameters": [],
-  "options": [],
+  "options": [
+    {
+      "name": "jsonBody",
+      "value": "CACHED"
+    }
+  ],
   "headers": [],
   "paths": [],
   "description": "对当前租户的启用角色保存 ALL、ORG 或 OWNER。先校验资源编码，再在单一租户事务内写入。"

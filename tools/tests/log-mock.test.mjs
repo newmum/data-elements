@@ -34,6 +34,9 @@ function call(runtime, route, query = {}, body = {}, method = "GET") {
     if (action === "detail" || action === "items") query = { ...query, id: item };
   } else if (route === "exports") {
     path = method === "POST" ? "/sym/logexport/create" : "/sym/logexport/page";
+  } else if (kind === "exports" && items === "download") {
+    path = "/sym/logexport/download";
+    query = { ...query, id: item };
   }
   return runtime.handle({ path, method, query, body, token });
 }
@@ -292,7 +295,11 @@ test("导出本人/租户/范围/权限/过期/摘要约束及失败状态不伪
   assert(!storage.getItem(runtime.logs.key(runtime.database)).includes("validation-unknown-sensitive-value"));
   assert(!storage.getItem(runtime.logs.key(runtime.database)).includes(runtime.session.token));
   await refused(runtime, `exports/${pending.id}/download`, 500);
-  const { id } = await exported(runtime, { kind: "requests", format: "JSONL" });
+  const { id, file } = await exported(runtime, { kind: "requests", format: "JSONL" });
+  const headers = await call(runtime, "/sym/logexport/download", { id }, {}, "HEAD");
+  assert.equal(headers.body, null);
+  assert.deepEqual(headers.headers, file.headers);
+  await refused(runtime, "/sym/logexport/download", 20001);
   runtime.session.scope = "OWNER";
   await refused(runtime, `exports/${id}/download`, 403);
   runtime.session.scope = "ALL";
@@ -324,7 +331,7 @@ test("未知动作/归档/策略/平台路径拒绝、无真实网络访问、�
   const previous = globalThis.fetch;
   globalThis.fetch = () => { throw new Error("不允许真实网络"); };
   try {
-    for (const [route, method, body, query] of [["archives", "GET"], ["archives", "POST", { kind: "auth" }], ["/sym/logarchive/create", "POST", { kind: "auth" }], ["archives/not-real", "POST", { action: "purge" }], ["policies", "PUT", {}], ["/sym/logpolicy/list", "GET"], ["/sym/logpolicy/save", "PUT", {}], ["operations", "POST", {}], ["requests", "GET", {}, { action: "list" }], ["exports/invalid/download", "GET"], ["exports", "DELETE"], ["/idaas/logs/query", "GET"]]) {
+    for (const [route, method, body, query] of [["archives", "GET"], ["archives", "POST", { kind: "auth" }], ["/sym/logarchive/create", "POST", { kind: "auth" }], ["archives/not-real", "POST", { action: "purge" }], ["policies", "PUT", {}], ["/sym/logpolicy/list", "GET"], ["/sym/logpolicy/save", "PUT", {}], ["operations", "POST", {}], ["requests", "GET", {}, { action: "list" }], ["/sym/logs/exports/invalid/download", "GET"], ["exports", "DELETE"], ["/idaas/logs/query", "GET"]]) {
       const response = await call(runtime, route, query, body, method);
       assert.equal(response.status, 501); assert.match(response.body.message, /阻止访问真实服务/);
     }
@@ -584,12 +591,11 @@ test("ORG/OWNER导出与列表一致，CSV历史时间及实际字段不丢失",
   }
 });
 
-test("日志44项HTTP契约覆盖能力、HEAD、列表、详情、统计、批量和文件", async () => {
+test("日志45项HTTP契约覆盖能力、HEAD、列表、详情、统计、批量和文件", async () => {
   const spec = JSON.parse(await fs.readFile(new URL("../../mock/contracts/chengtian.json", import.meta.url), "utf8"));
   const contracts = spec.interfaces.filter((row) => new RegExp(" /sym/(logs|logauth|logops|logreq|logsec|logexport)/").test(row.operation));
-  assert.equal(contracts.length, 44);
-  assert.equal(contracts.filter((row) => row.source.kind === "magic").length, 43);
-  assert.equal(contracts.filter((row) => row.source.state === "pending-magic").length, 1);
+  assert.equal(contracts.length, 45);
+  assert(contracts.every((row) => row.source.kind === "magic"));
   const { runtime } = setup();
   for (const route of ["capabilities", "components"]) {
     const head = await call(runtime, route, {}, {}, "HEAD");

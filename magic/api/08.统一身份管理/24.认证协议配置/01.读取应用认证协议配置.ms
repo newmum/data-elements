@@ -13,7 +13,12 @@
   "description": "读取指定应用的统一认证协议开通状态、客户端及回调配置，对密钥脱敏后供管理界面展示。",
   "parameters": [],
   "method": "GET",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

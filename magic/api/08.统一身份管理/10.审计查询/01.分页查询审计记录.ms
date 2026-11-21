@@ -13,7 +13,12 @@
   "description": "按身份域、应用、事件和时间范围分页查询控制库审计记录，校验可见范围并对敏感字段脱敏。",
   "parameters": [],
   "method": "GET",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

@@ -1,8 +1,5 @@
 package com.linewell.dataelement.platform.tenant.api;
 
-import cn.dev33.satoken.stp.StpUtil;
-import com.linewell.dataelement.feature.identity.application.ControlIdentityService;
-import com.linewell.dataelement.platform.tenant.application.TenantAccessService;
 import com.linewell.dataelement.platform.tenant.config.TenantDatabaseProperties;
 import com.linewell.dataelement.platform.tenant.domain.TenantAccessException;
 import com.linewell.dataelement.platform.tenant.domain.TenantContext;
@@ -31,8 +28,6 @@ import org.ssssssss.script.annotation.Comment;
 @MagicModule("identityRuntime")
 public class IdentityRuntimeMagicModule {
 
-    private final TenantAccessService tenantAccessService;
-    private final ControlIdentityService controlIdentityService;
     private final TenantDatabaseProperties databaseProperties;
     private final TenantDataSourceRegistry dataSourceRegistry;
     private final DataSource routingDataSource;
@@ -52,14 +47,10 @@ public class IdentityRuntimeMagicModule {
     }
 
     public IdentityRuntimeMagicModule(
-            TenantAccessService tenantAccessService,
-            ControlIdentityService controlIdentityService,
             TenantDatabaseProperties databaseProperties,
             TenantDataSourceRegistry dataSourceRegistry,
             @Qualifier("dataSource") DataSource routingDataSource
     ) {
-        this.tenantAccessService = tenantAccessService;
-        this.controlIdentityService = controlIdentityService;
         this.databaseProperties = databaseProperties;
         this.dataSourceRegistry = dataSourceRegistry;
         this.routingDataSource = routingDataSource;
@@ -77,36 +68,6 @@ public class IdentityRuntimeMagicModule {
         try (TenantContext.Scope ignored = TenantContext.control()) {
             return action.get();
         }
-    }
-
-    @Comment("严格校验当前登录、成员资格和租户数据源；必须在业务事务之前调用")
-    public Map<String, String> strict() {
-        if (hasTransaction()) {
-            throw new TenantAccessException(
-                    "IDENTITY-TRANSACTION-ORDER",
-                    "身份上下文校验必须在业务事务之前执行"
-            );
-        }
-        if (!StpUtil.isLogin()) {
-            throw new TenantAccessException("IDENTITY-LOGIN-REQUIRED", "请先登录统一身份管理平台");
-        }
-        String tenantId = TenantContext.requireTenantId();
-        Object sessionTenant = StpUtil.getTokenSession().get("tenantId");
-        if (TenantContext.usesControlDatabase()
-                || sessionTenant == null
-                || !tenantId.equals(String.valueOf(sessionTenant))) {
-            throw new TenantAccessException(
-                    "IDENTITY-TENANT-CONTEXT-MISMATCH", "登录租户上下文无效，请重新登录"
-            );
-        }
-        requireTenantBinding(tenantId);
-        String userId = String.valueOf(StpUtil.getLoginId());
-        tenantAccessService.requireMembership(userId, tenantId);
-        Map<String, Object> account = controlIdentityService.find(tenantId, userId);
-        if (account == null || !"0".equals(String.valueOf(account.get("status")))) {
-            throw new TenantAccessException("IDENTITY-ACCOUNT-UNAVAILABLE", "当前账号已停用或不存在");
-        }
-        return Map.of("tenantId", tenantId, "userId", userId);
     }
 
     @Comment("校验租户具有显式业务数据源绑定，不使用默认回退且不改变当前上下文")
@@ -179,7 +140,7 @@ public class IdentityRuntimeMagicModule {
     }
 
     @Comment("供已完成登录或服务签名验证的Magic闭包选择显式绑定；不能在事务内切库")
-    public Object inTenant(String tenantId, Supplier<Object> action) {
+    public <T> T inTenant(String tenantId, Supplier<T> action) {
         if (hasTransaction()) throw new IllegalStateException("必须在开启事务前选择业务库");
         requireTenantBinding(tenantId);
         try (TenantContext.Scope ignored = TenantContext.use(tenantId)) {

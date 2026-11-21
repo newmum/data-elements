@@ -97,6 +97,14 @@ var numberColumn = (alias, field) => tableRead.column(alias, field, 'NUMBER')
 var active = alias => tableRead.equal(numberColumn(alias, 'is_del'), 0)
 var activeIncludingLegacy = alias => tableRead.any([active(alias), tableRead.isNull(numberColumn(alias, 'is_del'))])
 var settingsBean = 'data-element.push-registry-com.linewell.dataelement.config.DataPushRegistryProperties'
+var resolveNodeTarget = () => {
+    // 只拼接已通过当前租户校验的节点地址，协议路径由服务端配置提供。
+    try {
+        return SpringUtil.getBean('haitongStandaloneRegistryClient').registryEndpoint(str(pushNode.baseUrl || pushNode.base_url))
+    } catch (e) {
+        return null
+    }
+}
 var recordNodeStatus = (status, sourceId) => {
     // 回执状态单独写回已选节点；批量同步的空来源标识会覆盖此前的单源状态。
     db.table('push_node_t').withBlank().where()
@@ -313,7 +321,10 @@ if (body.all == true) {
         totalTables += normalized.size()
         totalColumns += count
     }
-    var targetUrl = str(pushNode.baseUrl || pushNode.base_url).replaceAll('/+$', '') + '/api/v1/push'
+    var targetUrl = resolveNodeTarget()
+    if (targetUrl == null) {
+        exit 503, '海通推送节点地址或登记同步协议路径配置无效'
+    }
     // 指纹包含目标及登记定义，省略每次生成的时间戳，让确认时能够识别实际配置变化。
     var planSources = snapshots.map(snapshot => {
         datasourceId: snapshot.datasourceId, datasourceName: snapshot.datasourceName,
@@ -532,6 +543,10 @@ var settings = SpringUtil.getBean(settingsBean)
 if ((pushNode == null && settings.getRelayBaseUrl() == '') || settings.getStandaloneSyncKey() == '') {
     exit 503, '海通推送配置同步地址或服务间密钥尚未配置'
 }
+var nodeTarget = pushNode == null ? null : resolveNodeTarget()
+if (pushNode != null && nodeTarget == null) {
+    exit 503, '海通推送节点地址或登记同步协议路径配置无效'
+}
 var snapshot = null
 try {
     // 单源发布与现有接收接口共用契约构造，保留文件表排除及原有字段规则。
@@ -556,8 +571,7 @@ try {
         // 节点由当前租户配置指定，回执必须确认同一个数据源。
         var response = null
         try {
-            var target = (pushNode.baseUrl || pushNode.base_url) + '/api/v1/push'
-            response = HttpRequest.post(target).timeout(10000).setFollowRedirects(false)
+            response = HttpRequest.post(nodeTarget).timeout(10000).setFollowRedirects(false)
                 .header('Content-Type', 'application/json')
                 .header('X-Standalone-Registry-Key', settings.getStandaloneSyncKey())
                 .header('Idempotency-Key', 'node-registry-' + nodeId + '-' + datasourceId + '-' + IdUtil.fastSimpleUUID())

@@ -7,7 +7,16 @@
   "path": "/order",
   "method": "POST",
   "parameters": [],
-  "options": [],
+  "options": [
+    {
+      "name": "jsonBody",
+      "value": "CACHED"
+    },
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "headers": [],
   "paths": [],
   "description": "校验平台操作员会话后，调用 @/common/previewDraftOrder 对工作区浏览器提交的草稿项排序分页。返回标识和总数，无目录或租户数据读写。"

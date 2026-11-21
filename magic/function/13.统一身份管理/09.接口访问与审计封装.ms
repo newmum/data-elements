@@ -10,7 +10,7 @@
   "createBy": null,
   "updateBy": null,
   "path": "/api-call",
-  "description": "为多个平台接口统一校验请求来源、执行频率及调用审计，再执行调用方提供的业务回调。",
+  "description": "统一执行接口调用闭包，框架可单独使用相同的来源与配额校验。业务审计由请求采集器记录。",
   "parameters": [
     {
       "name": "callback",
@@ -24,59 +24,48 @@
       "error": null,
       "expression": null,
       "children": null
+    },
+    {
+      "name": "checkRequestSource",
+      "value": null,
+      "description": "由 Bearer 访问策略发起的来源与配额校验",
+      "required": false,
+      "dataType": "Boolean",
+      "type": null,
+      "defaultValue": null,
+      "validateType": null,
+      "error": null,
+      "expression": null,
+      "children": null
     }
   ],
   "returnType": null,
   "mappingPath": null
 }
 ================================
-// 共享函数：09.接口访问与审计封装
-// 业务说明：为多个平台接口统一校验请求来源、执行频率及调用审计，再执行调用方提供的业务回调。
-// 函数输入：callback：在事务中执行的业务回调。
-// 返回与副作用：为多个平台接口统一校验请求来源、执行频率及调用审计，再执行调用方提供的业务回调。
 import db;
-import request;
-import platformSession;
-import authSession;
 import identityApi;
 import cn.hutool.json.JSONUtil;
 import cn.hutool.crypto.digest.DigestUtil;
-import java.lang.System;
-import '@/idaas/audit' as audit;
 
-// 接口外层仅校验来源和频率，不保存请求正文、查询串或凭据；业务审计仍在写事务中完成。
-var started=System.nanoTime();
-var result='FAILED';
-var path=request.get().getRequestURI();
-var method=request.get().getMethod();
-try {
-    if(path.startsWith('/idaas/api/')) {
-        var row=db.normal().selectOne("""
-select value_json
-from iam_setting_t
-where category='API_ACCESS'
-    and config_key='access'
-    and scope_key='global'
-    and is_del=0
-    and status='ACTIVE'
-""");
-        if(row!=null) {
-            var policy=JSONUtil.parseObj(row.value_json);
-            var address=identityApi.remoteAddress();
-            var deny=(policy.ipBlacklist||'').split('\n').filter(v=>v.trim()!='');
-            var allow=(policy.apiWhitelist||'').split('\n').filter(v=>v.trim()!='');
-            if(deny.filter(v=>identityApi.matchesAddress(v.trim(),address)).size()>0 || allow.size()>0 && allow.filter(v=>identityApi.matchesAddress(v.trim(),address)).size()==0) {
-                exit 403,'接口来源不在允许范围';
-            }
-            if(!identityApi.withinRate(DigestUtil.sha256Hex(address),policy.apiRateLimit)) {
-                exit 429,'接口请求超过当前配额';
-            }
+// 通用调用继续执行各自的业务闭包。框架按资源声明先校验接口来源和配额，再处理凭证。
+if (checkRequestSource == true) {
+    var row = db.normal().table('iam_setting_t').columns('value_json').where()
+        .eq('category', 'API_ACCESS').eq('config_key', 'access').eq('scope_key', 'global')
+        .eq('is_del', 0).eq('status', 'ACTIVE').selectOne();
+    if (row != null) {
+        var policy = JSONUtil.parseObj(row.value_json);
+        var address = identityApi.remoteAddress();
+        var deny = (policy.ipBlacklist || '').split('\n').filter(value => value.trim() != '');
+        var allow = (policy.apiWhitelist || '').split('\n').filter(value => value.trim() != '');
+        if (deny.filter(value => identityApi.matchesAddress(value.trim(), address)).size() > 0
+            || allow.size() > 0 && allow.filter(value => identityApi.matchesAddress(value.trim(), address)).size() == 0) {
+            exit 403, '接口来源不在允许范围';
+        }
+        if (!identityApi.withinRate(DigestUtil.sha256Hex(address), policy.apiRateLimit)) {
+            exit 429, '接口请求超过当前配额';
         }
     }
-    var response=callback();
-    result='SUCCESS';
-    return response;
+    return true;
 }
-finally {
-    // 实际 HTTP 与业务结果由统一请求采集器在响应结束时记录。
-}
+return callback();

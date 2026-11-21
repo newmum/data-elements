@@ -13,7 +13,12 @@
   "description": "按标识加载应用并检查所属范围与版本；执行软删除或撤销关联，保留审计历史。限定当前身份域与可管理应用范围；应用主档、运行绑定及界面配置分别持久化，绝不写租户本地登录凭据。",
   "parameters": [],
   "method": "POST",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

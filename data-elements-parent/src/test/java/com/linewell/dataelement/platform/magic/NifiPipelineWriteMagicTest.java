@@ -17,7 +17,6 @@ import com.linewell.dataelement.elasticsearch.EsCommonService;
 import com.linewell.dataelement.feature.identity.api.DataScopeMagicModule;
 import com.linewell.dataelement.integration.nifi.canvas.lifecycle.NifiMutationAspect;
 import com.linewell.dataelement.integration.nifi.canvas.lifecycle.PipelineGroupOrganizer;
-import com.linewell.dataelement.integration.nifi.canvas.lifecycle.PipelineTaskLifecycleSynchronizer;
 import com.linewell.dataelement.integration.nifi.canvas.mapping.MappingProjectionService;
 import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient;
 import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiException;
@@ -43,7 +42,6 @@ import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.ssssssss.magicapi.core.interceptor.DefaultResultProvider;
-import org.ssssssss.magicapi.core.service.MagicAPIService;
 import org.ssssssss.magicapi.datasource.model.MagicDynamicDataSource;
 import org.ssssssss.magicapi.modules.db.ColumnMapperAdapter;
 import org.ssssssss.magicapi.modules.db.SQLModule;
@@ -58,7 +56,6 @@ class NifiPipelineWriteMagicTest {
     private static final String API = "api/09.海通流程接口/";
     private static final String COMMON = "function/01.通用函数/";
     private final Map<String, Object> bindings = new LinkedHashMap<>();
-    private final PipelineTaskLifecycleSynchronizer tasks = mock(PipelineTaskLifecycleSynchronizer.class);
     private final MappingProjectionService projections = mock(MappingProjectionService.class);
     private final DataScopeMagicModule scope = mock(DataScopeMagicModule.class);
     private final NifiClient nifi = mock(NifiClient.class);
@@ -119,16 +116,15 @@ class NifiPipelineWriteMagicTest {
         var mutation = mock(NifiMutationAspect.class);
         when(mutation.withMutationLock(any())).thenAnswer(call -> call.<FailableSupplier<?, ?>>getArgument(0).get());
         when(scope.resource(any())).thenReturn(Map.of("scope", "ALL"));
-        doAnswer(call -> {
-            var canvas = call.getArgument(1, Pipeline.class);
-            insertTask("task", call.getArgument(0), canvas.id());
+        bindings.put("associateTask", (MagicScriptLambdaFunction) (context, args) -> {
+            insertTask("task", (String) args[0], (String) args[1]);
             return null;
-        }).when(tasks).ensureCatalogAccessTask(any(), any());
+        });
         when(nifi.getRootProcessGroupId()).thenReturn("root");
         bindings.putAll(Map.ofEntries(Map.entry("db", db), Map.entry("tableRead", TaskRuntimeMagicFixture.structuredReads(jdbc, readSql::add)),
                 Map.entry("tableWrite", new StructuredTableWriteMagicModule(jdbc)), Map.entry("mapper", new ObjectMapper()),
                 Map.entry("tenantRuntime", new TenantMagicModule(null)), Map.entry("mutation", mutation),
-                Map.entry("tasks", tasks), Map.entry("projections", projections), Map.entry("dataScope", scope),
+                Map.entry("projections", projections), Map.entry("dataScope", scope),
                 Map.entry("nifi", nifi), Map.entry("organizer", new PipelineGroupOrganizer(nifi, jdbc)), Map.entry("index", index),
                 Map.entry("transactionManager", manager), Map.entry("log", LoggerFactory.getLogger(getClass()))));
         register("respond", "35.海通流程列表超文本响应.ms", "nifi_pipe_list_response_v1", "action");
@@ -301,10 +297,10 @@ class NifiPipelineWriteMagicTest {
     @Test
     void taskAndCanvasRollbackTogetherOnFailureAndForeignCatalogIsRejected() throws Exception {
         assertThat(create("foreign").getBody()).isNotInstanceOf(Pipeline.class);
-        doAnswer(call -> {
-            insertTask("failure", call.getArgument(0), call.getArgument(1, Pipeline.class).id());
+        bindings.put("associateTask", (MagicScriptLambdaFunction) (context, args) -> {
+            insertTask("failure", (String) args[0], (String) args[1]);
             throw new IllegalStateException("validation task failure");
-        }).when(tasks).ensureCatalogAccessTask(any(), any());
+        });
         assertThat(create("catalog").getBody()).isNotInstanceOf(Pipeline.class);
         assertThat(count("nifi_pipeline_t")).isZero();
         assertThat(count("data_access_agg_task_t")).isZero();
@@ -313,14 +309,9 @@ class NifiPipelineWriteMagicTest {
 
     @Test
     void canonicalCreationAndTaskAssociationUseOneTransactionWithoutLegacyAssetView() throws Exception {
-        var magic = mock(MagicAPIService.class);
-        var task = script(COMMON + "27.海通画布接入任务关联.ms", "fbbbebbeee9346e1813e9b1bf635eb09");
-        when(magic.invoke(eq("/common/ensureNifiCatalogAccessTask"), anyMap())).thenAnswer(call -> {
-            var arguments = new LinkedHashMap<>(bindings);
-            arguments.putAll(call.getArgument(1));
-            return task.execute(new MagicScriptContext(arguments));
-        });
-        bindings.put("tasks", new PipelineTaskLifecycleSynchronizer(mock(DataAssetRuntimeAdapter.class), magic));
+        bindings.put("catalogProjection", mock(DataAssetRuntimeAdapter.class));
+        register("associateTask", "27.海通画布接入任务关联.ms", "fbbbebbeee9346e1813e9b1bf635eb09",
+                "rawCatalogTid", "pipelineId", "pipelineName", "dsl");
         var created = canvas(create(" source-table "));
         assertThat(jdbc.queryForMap("SELECT * FROM data_access_agg_task_t WHERE pipeline_id=?", created.id()))
                 .containsEntry("tenant_id", TENANT).containsEntry("data_catalog_id", "catalog")
@@ -523,7 +514,7 @@ class NifiPipelineWriteMagicTest {
     private static MagicScript script(String path, String id) throws Exception {
         var source = CanonicalMagicSources.byPath(path, id);
         MagicScript.create(source, null).compile();
-        return MagicScript.create(source.replaceAll("(?m)^import (?:'@[^\\r\\n]+|tenantRuntime|tableRead|tableWrite|dataScope|request|log|[^\\r\\n]+ as (?:mapper|mutation|tasks|projections|transactions|transactionManager|organizer|nifi|index|mappingVersions|errorStore|lineage))\\R", ""), null);
+        return MagicScript.create(source.replaceAll("(?m)^import (?:'@[^\\r\\n]+|tenantRuntime|tableRead|tableWrite|dataScope|request|log|[^\\r\\n]+ as (?:mapper|mutation|catalogProjection|projections|transactions|transactionManager|organizer|nifi|index|mappingVersions|errorStore|lineage))\\R", ""), null);
     }
 
     private String rule(String id) {

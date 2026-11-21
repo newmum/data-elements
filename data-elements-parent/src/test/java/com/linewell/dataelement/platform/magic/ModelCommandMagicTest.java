@@ -34,7 +34,7 @@ import org.ssssssss.script.MagicScriptContext;
 import org.ssssssss.script.runtime.ExitValue;
 
 class ModelCommandMagicTest {
-    private static final String SCRIPT_ID = "ad740688aec155419e89ac237559c727";
+    private static final String SCRIPT_ID = "b6aaff9e31925977b94369d347e7c32a";
 
     @ParameterizedTest
     @ValueSource(strings = {"MySQL", "PostgreSQL"})
@@ -194,7 +194,7 @@ class ModelCommandMagicTest {
                 }
             }));
             String sourceText = CanonicalMagicSources.byId(SCRIPT_ID)
-                    .replaceAll("(?m)^import (tenantRuntime|jsons|'@/[^\\r\\n]*)[^\\r\\n]*\\r?\\n", "")
+                    .replaceAll("(?m)^import (?!java\\.|cn\\.hutool\\.)[^\\r\\n]*\\r?\\n", "")
                     .replace("StpUtil.getLoginIdAsString()", "'validation-actor'");
             script = MagicScript.create(sourceText, null);
         }
@@ -253,11 +253,11 @@ class ModelCommandMagicTest {
                     "name", "验证数据项集", "items", List.of(Map.of("entityId", "validation-entity", "fieldId", "validation-field"))));
             Function<Object[], Object> readModels = args -> Map.of("models", List.of(model), "itemSets", List.of(itemset));
             Map<String, Object> variables = new HashMap<>();
-            variables.put("input", input);
+            variables.put("body", new LinkedHashMap<>(input));
             variables.put("tenantRuntime", new Tenant());
             variables.put("jsons", new JsonModule());
             variables.put("db", db);
-            variables.put("readModels", readModels);
+            variables.put("modelRead", readModels);
             return TenantContext.call("tenant-a", () -> script.execute(new MagicScriptContext(variables)));
         }
     }

@@ -13,7 +13,12 @@
   "description": "按标识加载应用人员资料分配并检查所属范围与版本；执行软删除或撤销关联，保留审计历史。管理中央人员资料与指定应用的分配关系；资料分配和访问授权分别维护。",
   "parameters": [],
   "method": "POST",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

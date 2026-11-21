@@ -9,6 +9,7 @@ import cn.dev33.satoken.stp.StpUtil;
 import cn.hutool.extra.spring.SpringUtil;
 import com.linewell.dataelement.model.common.CommonResponse;
 import com.linewell.dataelement.platform.configuration.MagicBootConfiguration;
+import com.linewell.dataelement.platform.tenant.api.TenantAccountsMagicModule;
 import com.linewell.dataelement.platform.tenant.application.TenantAccessService;
 import com.linewell.dataelement.platform.tenant.application.TenantAccountPolicy;
 import com.linewell.dataelement.platform.tenant.domain.TenantContext;
@@ -35,9 +36,10 @@ import org.ssssssss.magicapi.modules.db.inteceptor.SQLInterceptor;
 import org.ssssssss.magicapi.modules.db.provider.DefaultColumnMapperProvider;
 import org.ssssssss.script.MagicScript;
 import org.ssssssss.script.MagicScriptContext;
+import org.ssssssss.script.runtime.ExitValue;
 import org.ssssssss.script.runtime.function.MagicScriptLambdaFunction;
 
-class PortalTenantMagicTest {
+public class PortalTenantMagicTest {
     private static final String FUNCTIONS = "function/09.租户账号/";
     private static final String API = "api/01.系统门户/02.登录与会话/";
 
@@ -188,6 +190,54 @@ class PortalTenantMagicTest {
                 assertEquals(2, sql.size());
             }
         }
+    }
+
+    @Test
+    void receiverAdminUsesTheBoundTenantForBothRoleAndRows() throws Exception {
+        jdbc.execute("create alias utc_timestamp for 'com.linewell.dataelement.platform.magic.PortalTenantMagicTest.utcTimestamp'");
+        jdbc.execute("create table rm_user_role_rela_t(user_id varchar,role_id varchar,tenant_id varchar,end_time timestamp)");
+        jdbc.execute("create table rm_role_t(id varchar,tenant_id varchar,deleted int,status int,app_id varchar)");
+        jdbc.execute("create table rm_role_menu_rela_t(role_id varchar,tenant_id varchar,app_resource_id varchar)");
+        jdbc.execute("create table rm_menu_t(id varchar,tenant_id varchar,deleted int,url varchar)");
+        jdbc.execute("create table idaas_receiver_binding_t(key_id varchar, tenant_id varchar, app_id varchar, "
+                + "instance_id varchar, enabled int, version int, credential_version int)");
+        jdbc.update("insert into rm_user_role_rela_t values ('operator','admin','local',null), ('elsewhere','admin','other',null)");
+        jdbc.update("insert into rm_role_t values ('admin','local',0,0,'app'), ('admin','other',0,0,'app')");
+        jdbc.update("insert into rm_role_menu_rela_t values ('admin','local','settings'), ('admin','other','settings')");
+        jdbc.update("insert into rm_menu_t values ('settings','local',0,'/setting'), ('settings','other',0,'/setting')");
+        jdbc.update("insert into idaas_receiver_binding_t values ('foreign','other','app','instance',1,0,0)");
+        var accounts = mock(TenantAccountsMagicModule.class);
+        when(accounts.isLocal("local")).thenReturn(true);
+        when(accounts.session()).thenReturn(token);
+        when(token.get("appId")).thenReturn("app");
+        bindings.put("tenantAccounts", accounts);
+        bindings.put("body", Map.of("action", "read", "tenantId", "other", "keyId", "foreign"));
+        var script = CanonicalMagicSources.byId("8b7e7875e5f35f1bbd3b2ba81fea5373")
+                .replaceAll("(?m)^import (?:db|tenantRuntime|identityRuntime|tenantAccounts|identityTransport);?\\h*\\R", "");
+        try (var stp = mockStatic(StpUtil.class); var tenant = TenantContext.use("local")) {
+            stp.when(StpUtil::getLoginId).thenReturn("operator");
+            for (int count : List.of(20, 100)) {
+                int start = count == 20 ? 0 : 20;
+                for (int i = start; i < count; i++) {
+                    jdbc.update("insert into idaas_receiver_binding_t values (?, 'local', 'app', 'instance', 1, 0, 0)", "local-" + i);
+                }
+                sql.clear();
+                var rows = assertInstanceOf(List.class, run(script, bindings));
+                assertEquals(count, rows.size());
+                for (Object row : rows) {
+                    assertTrue(assertInstanceOf(Map.class, row).get("keyid").toString().startsWith("local-"));
+                }
+                assertEquals(2, sql.size());
+            }
+            stp.when(StpUtil::getLoginId).thenReturn("elsewhere");
+            sql.clear();
+            assertEquals(403, assertInstanceOf(ExitValue.class, run(script, bindings)).getValues()[0]);
+            assertEquals(1, sql.size());
+        }
+    }
+
+    public static java.sql.Timestamp utcTimestamp(int precision) {
+        return java.sql.Timestamp.from(java.time.Instant.now());
     }
 
     private void insertTenant(String id, int order, int status, int deleted) {

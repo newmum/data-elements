@@ -38,16 +38,16 @@ public class MagicOAuth2AuthorizationService implements OAuth2AuthorizationServi
    var input=new LinkedHashMap<String,Object>();input.put("operation","save");input.put("state",new ObjectMapper().writeValueAsString(state));input.put("id",a.getId());input.put("clientId",a.getRegisteredClientId());input.put("principalName",a.getPrincipalName());input.put("grant",a.getAuthorizationGrantType().getValue());
    input.put("code",value(a,OAuth2AuthorizationCode.class));input.put("access",value(a,OAuth2AccessToken.class));input.put("refresh",value(a,OAuth2RefreshToken.class));input.put("stateValue",a.getAttribute("state"));
    input.put("revoked",invalidated(a,OAuth2AccessToken.class)||invalidated(a,OAuth2RefreshToken.class));
-   var result=bridge.call("protocol-store",input);if(result==null || !Boolean.TRUE.equals(result.get("saved")))throw new IllegalStateException("认证状态未提交");
+   var result=bridge.store(input);if(result==null || !Boolean.TRUE.equals(result.get("saved")))throw new IllegalStateException("认证状态未提交");
   }catch(java.io.IOException e){throw new IllegalStateException("协议状态编码失败",e);}
  }
  private <T extends OAuth2Token> String value(OAuth2Authorization a,Class<T> type){var t=a.getToken(type);return t==null?null:t.getToken().getTokenValue();}
  private <T extends OAuth2Token> boolean invalidated(OAuth2Authorization a,Class<T> type){var t=a.getToken(type);return t!=null && t.isInvalidated();}
- @Override public void remove(OAuth2Authorization a){bridge.call("protocol-store",Map.of("operation","remove","id",a.getId()));}
+ @Override public void remove(OAuth2Authorization a){bridge.store(Map.of("operation","remove","id",a.getId()));}
  @Override public OAuth2Authorization findById(String id){return find(Map.of("operation","find","id",id));}
  @Override public OAuth2Authorization findByToken(String token,OAuth2TokenType type){return find(Map.of("operation","find","token",token,"type",type==null?"":type.getValue()));}
  @SuppressWarnings("unchecked") private OAuth2Authorization find(Map<String,Object> input){
-  var r=bridge.call("protocol-store",input);if(r==null || r.get("state")==null)return null;
+  var r=bridge.store(input);if(r==null || r.get("state")==null)return null;
   try{
    var state=new ObjectMapper().readValue((String)r.get("state"),Map.class);var client=clients.findById((String)state.get("client"));if(client==null)return null;
    var b=OAuth2Authorization.withRegisteredClient(client).id((String)state.get("id")).principalName((String)state.get("principal")).authorizationGrantType(new AuthorizationGrantType((String)state.get("grant"))).authorizedScopes(new HashSet<>((List<String>)state.get("scopes")));

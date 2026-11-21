@@ -85,6 +85,26 @@ class FileUploadHttpTest {
         }
         assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM ht_exchange_log WHERE phase='START' AND source_ref=?",
                 Integer.class, "HEAD /api/file/content"));
+        String contentUrl = "/api/file/content" + query;
+        var partialHead = call("HEAD", contentUrl, RECEIVER, null, null, Map.of("Range", "bytes=5-12"));
+        assertEquals(206, partialHead.statusCode());
+        assertEquals(0, partialHead.body().length);
+        for (String header : List.of("Content-Range", "Content-Length", "Content-Type", "ETag",
+                "Accept-Ranges", "Content-Disposition", "Cache-Control", "X-Content-Type-Options")) {
+            assertNotNull(range.headers().get(header), header);
+            assertEquals(range.headers().get(header), partialHead.headers().get(header), header);
+        }
+        var invalidRange = call("HEAD", contentUrl, RECEIVER, null, null, Map.of("Range", "bytes=900-1000"));
+        assertEquals(416, invalidRange.statusCode());
+        assertEquals("bytes */" + content.length, invalidRange.headers().get("Content-Range").getFirst());
+        assertEquals(0, invalidRange.body().length);
+        var headWithStaleEtag = call("HEAD", contentUrl, RECEIVER, null, null,
+                Map.of("Range", "bytes=5-12", "If-Range", "\"invalid\""));
+        assertEquals(200, headWithStaleEtag.statusCode());
+        assertEquals(Integer.toString(content.length), headWithStaleEtag.headers().get("Content-Length").getFirst());
+        assertEquals(0, headWithStaleEtag.body().length);
+        assertEquals(401, call("HEAD", contentUrl, "invalid", null, null, Map.of()).statusCode());
+        assertEquals(404, call("HEAD", "/api/file/content?id=validation-missing", RECEIVER, null, null, Map.of()).statusCode());
         assertArrayEquals(content,call("GET",legacy+"/content",RECEIVER,null,null,Map.of("Range","bytes=5-9","If-Range","\"wrong\"")).body());
         var delivery=repo.deliveries(message).getFirst();var receipt=Map.of("deliveryId",delivery.id(),"sha256",Rules.sha256(content),"status","ACCEPTED","businessRef","received-http-001");
         assertEquals(200,call("POST","/api/file/receipt"+query,RECEIVER,"receipt-http-"+nonce,json.bytes(receipt),Map.of("Content-Type","application/json")).statusCode());

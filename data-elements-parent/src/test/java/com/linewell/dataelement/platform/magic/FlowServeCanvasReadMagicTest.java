@@ -144,19 +144,11 @@ class FlowServeCanvasReadMagicTest {
     }
 
     @Test
-    void moreThanOneHundredNodesAreRejectedAndHeadUsesTheSameResponse() throws Exception {
+    void moreThanOneHundredNodesAreRejectedInOneRead() throws Exception {
         var f = new Fixture();
-        f.scope(Scope.ALL, List.of());
-        f.flow("flow-a", TENANT, 0, "flow-a");
-        f.service("service-a", "flow-a", TENANT, 0, "user-a", "org-a");
         f.seedNodes(101);
         assertError(f.readNodes(), 500, "400 BAD_REQUEST ", "运行节点超过100项");
         assertThat(f.selects).hasSize(1);
-        try (var tenant = TenantContext.use(TENANT)) {
-            var path = Map.of("id", (Object) "flow-a");
-            assertThat(f.run(f.flowHead, path)).isEqualTo(f.run(f.flowGet, path));
-            assertThat(f.run(f.nodesHead, Map.of()).getMsg()).isEqualTo(f.run(f.nodesGet, Map.of()).getMsg());
-        }
     }
 
     private static void assertError(CommonResponse<?> response, int code, String prefix, String message) {
@@ -191,9 +183,7 @@ class FlowServeCanvasReadMagicTest {
         final MagicScript helper = script(HELPER, "flowserve_canvas_read_http_v1", "dataScope", "tableRead",
                 "tenantRuntime", "com.fasterxml.jackson.databind.ObjectMapper as objectMapper");
         final MagicScript flowGet = endpoint("06.查询画布流程详情.ms", "flowserve_canvas_flow_get_v1");
-        final MagicScript flowHead = endpoint("07.核验画布流程详情.ms", "flowserve_canvas_flow_head_v1");
-        final MagicScript nodesGet = endpoint("08.查询画布运行节点.ms", "flowserve_canvas_nodes_get_v1");
-        final MagicScript nodesHead = endpoint("09.核验画布运行节点.ms", "flowserve_canvas_nodes_head_v1");
+        final MagicScript nodesGet = endpoint("07.查询画布运行节点.ms", "flowserve_canvas_nodes_get_v1");
 
         Fixture() throws IOException {
             jdbc.execute("CREATE TABLE fs_flow (id VARCHAR(64), tenant_id VARCHAR(64), deleted INT, dsl CLOB,"

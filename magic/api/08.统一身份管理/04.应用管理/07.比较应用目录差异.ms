@@ -13,7 +13,12 @@
   "description": "用户手动触发租户与控制库的人员、机构、角色和资源定义比对，按应用与身份域列出仅存在一侧或字段不一致的资料；不自动同步。",
   "parameters": [],
   "method": "GET",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

@@ -42,7 +42,7 @@ for (const variant of variants) {
       $common:{post:async(url,body)=>{listRequests++;assert.equal(url,variant.page);assert.equal(body.pageSize,count);assert.equal(body.datasourceType,"mysql");assert.equal(body.keyword,"physical");assert.equal(body.includeDatasourceTypeStatistics,true);assert.equal(body.scopeId,"source");
         const updated=structuredClone(rows);if(listRequests>1)for(const row of updated)Object.assign(row.tasks[1],{runtimeState:'RUNNING',runtimeLabel:'运行中'});
         return {datasourceTypeStatistics:{complete:true,total:10001,typeCounts:{mysql:9999,hive:2}},list:updated,total:count,runtimeRevision:listRequests>1?'v2':'v1',runtimeFresh:true,runtimeObservedAt:listRequests>1?131:1};}},
-      $request:{getUri:()=>'/dev-api/nifi/api/task-runtime/events',get:async(url,config)=>{streamRequests++;assert.equal(url,'/nifi/api/task-runtime/events');return config.adapter({...config,headers:{toJSON:()=>({token:'synthetic-session'})}});}},
+      $request:{getUri:()=>'/dev-api/nifi/run/events',get:async(url,config)=>{streamRequests++;assert.equal(url,'/nifi/run/events');return config.adapter({...config,headers:{toJSON:()=>({token:'synthetic-session'})}});}},
       fetch:async(url,options)=>{assert.ok(!url.includes('synthetic-session'));assert.equal(options.headers.token,'synthetic-session');let offset=0;
         return {ok:true,status:200,headers:{get:()=>'text/event-stream'},body:{getReader:()=>({read:async()=>offset>=bytes.length?{done:true}:{done:false,value:bytes.slice(offset,(offset+=7))},releaseLock(){}})}};},
     });

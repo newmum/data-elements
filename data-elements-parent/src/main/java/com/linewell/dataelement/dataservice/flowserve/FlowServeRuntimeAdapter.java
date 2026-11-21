@@ -2,6 +2,8 @@ package com.linewell.dataelement.dataservice.flowserve;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.linewell.dataelement.integration.flowserve.FlowServeRuntimePaths;
+import com.linewell.dataelement.magic.runtime.route.PublishedFlowRoutes;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -21,7 +23,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.ssssssss.magicapi.core.annotation.MagicModule;
 import org.ssssssss.magicapi.core.model.ApiInfo;
-import org.ssssssss.magicapi.core.model.Group;
 import org.ssssssss.magicapi.core.service.MagicAPIService;
 import org.ssssssss.magicapi.core.service.MagicResourceService;
 import org.ssssssss.magicapi.core.service.impl.RequestMagicDynamicRegistry;
@@ -38,12 +39,6 @@ import com.linewell.dataelement.platform.tenant.domain.TenantContext;
 @Component
 @MagicModule("flowRuntime")
 public class FlowServeRuntimeAdapter {
-    public static final String ROOT_GROUP_ID = "5d290a9b3bca3b2dd9ffd715dc47ce56";
-    public static final String PUBLISHED_GROUP_ID = "e5ce028f1797312d57c628b66ffcf657";
-
-    private static final String FLOW_SERVE_PATH = "/dws/flowserve";
-    private static final String PUBLISHED_PATH = "/published";
-    private static final String PUBLIC_PREFIX = FLOW_SERVE_PATH + PUBLISHED_PATH;
     private static final Pattern NUMBERED_NAME = Pattern.compile("^([0-9]+)\\.");
 
     private final ObjectMapper mapper;
@@ -54,6 +49,8 @@ public class FlowServeRuntimeAdapter {
             HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
     private final String publicBaseUrl;
     private final TenantProperties tenantProperties;
+    private final FlowServeRuntimePaths runtimePaths;
+    private final PublishedFlowRoutes publishedRoutes;
 
     public FlowServeRuntimeAdapter(
             ObjectMapper mapper,
@@ -61,12 +58,16 @@ public class FlowServeRuntimeAdapter {
             MagicAPIService magicApiService,
             RequestMagicDynamicRegistry registry,
             TenantProperties tenantProperties,
+            FlowServeRuntimePaths runtimePaths,
+            PublishedFlowRoutes publishedRoutes,
             @Value("${flowserve.runtime.public-base-url:http://127.0.0.1:8088}") String publicBaseUrl) {
         this.mapper = mapper;
         this.resourceService = resourceService;
         this.magicApiService = magicApiService;
         this.registry = registry;
         this.tenantProperties = tenantProperties;
+        this.runtimePaths = runtimePaths;
+        this.publishedRoutes = publishedRoutes;
         this.publicBaseUrl = publicBaseUrl.replaceAll("/+$", "");
     }
 
@@ -77,19 +78,20 @@ public class FlowServeRuntimeAdapter {
         String method = text(trigger, "method", "GET").toUpperCase();
         String path = "/__debug/" + text(flow, "flowId", "flow") + "/"
                 + UUID.randomUUID().toString().replace("-", "");
+        var layout = publishedRoutes.layout();
         ApiInfo api = api(
                 "debug_" + UUID.randomUUID().toString().replace("-", ""),
                 text(flow, "name", "流程调试"),
                 method,
-                apiPath(publishedGroupPath(), path),
+                layout.apiPath(path),
                 text(flow, "description", ""),
                 script);
-        api.setGroupId(PUBLISHED_GROUP_ID);
+        api.setGroupId(PublishedFlowRoutes.GROUP_ID);
         registry.register(api);
         long started = System.currentTimeMillis();
         try {
             Map<String, Object> parameters = exampleParameters(trigger);
-            String fullPath = PUBLIC_PREFIX + path;
+            String fullPath = layout.publicPath(path);
             Object response = magicApiService.execute(method, fullPath, parameters);
             long elapsed = System.currentTimeMillis() - started;
             List<Map<String, Object>> trace = new ArrayList<>();
@@ -123,6 +125,7 @@ public class FlowServeRuntimeAdapter {
         String resourceId = stableResourceId(tenantId, flowId);
         String method = text(trigger, "method", "GET").toUpperCase();
         String path = publishedPath(tenantId, normalizePath(text(trigger, "path", "/" + flowId)));
+        var layout = publishedRoutes.layout();
         boolean local = node.isEmpty() || booleanValue(node.get("localNode"), true);
         if (local) {
             ApiInfo api = api(
@@ -132,7 +135,7 @@ public class FlowServeRuntimeAdapter {
                     path,
                     text(flow, "description", ""),
                     script);
-            savePublishedApi(api);
+            savePublishedApi(api, layout);
         } else {
             deployRemote(resourceId, flow, script, node, method, path);
         }
@@ -141,7 +144,7 @@ public class FlowServeRuntimeAdapter {
                 "resourceId", resourceId,
                 "method", method,
                 "path", path,
-                "url", baseUrl + PUBLIC_PREFIX + path,
+                "url", baseUrl + layout.publicPath(path),
                 "runtimeNodeId", text(node, "id", "local_magic_api"));
     }
 
@@ -157,7 +160,7 @@ public class FlowServeRuntimeAdapter {
         try {
             HttpRequest.Builder builder = HttpRequest.newBuilder(
                             URI.create(managementUrl.replaceAll("/+$", "")
-                                    + "/api/v1/runtime/deploy/" + resourceId))
+                                    + runtimePaths.deploy() + "/" + resourceId))
                     .timeout(Duration.ofSeconds(10))
                     .DELETE();
             addToken(builder, node);
@@ -169,41 +172,9 @@ public class FlowServeRuntimeAdapter {
         }
     }
 
-    @Comment("检查本机或远程运行节点健康状态")
-    public Map<String, Object> health(Object rawRuntimeNode) {
-        Map<String, Object> node = asMap(rawRuntimeNode);
-        long started = System.currentTimeMillis();
-        if (node.isEmpty() || booleanValue(node.get("localNode"), true)) {
-            return Map.of(
-                    "nodeId", text(node, "id", "local_magic_api"),
-                    "ok", true,
-                    "status", 200,
-                    "latencyMs", System.currentTimeMillis() - started,
-                    "message", "本机 data-elements 运行节点可用");
-        }
-        String managementUrl = text(node, "managementUrl", text(node, "baseUrl", ""));
-        try {
-            HttpRequest.Builder builder = HttpRequest.newBuilder(
-                            URI.create(managementUrl.replaceAll("/+$", "") + "/api/v1/runtime/health"))
-                    .timeout(Duration.ofSeconds(3))
-                    .GET();
-            addToken(builder, node);
-            HttpResponse<String> response =
-                    httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofString());
-            return Map.of(
-                    "nodeId", text(node, "id", ""),
-                    "ok", response.statusCode() >= 200 && response.statusCode() < 300,
-                    "status", response.statusCode(),
-                    "latencyMs", System.currentTimeMillis() - started,
-                    "message", response.body());
-        } catch (Exception exception) {
-            return Map.of(
-                    "nodeId", text(node, "id", ""),
-                    "ok", false,
-                    "status", 0,
-                    "latencyMs", System.currentTimeMillis() - started,
-                    "message", rootMessage(exception));
-        }
+    @Comment("读取部署配置声明的节点健康检查地址")
+    public String runtimeHealthPath() {
+        return runtimePaths.health();
     }
 
     public void deployFromRequest(Map<String, Object> request) {
@@ -215,7 +186,7 @@ public class FlowServeRuntimeAdapter {
                 normalizePath(text(request, "path", "/" + resourceId)),
                 text(request, "description", ""),
                 text(request, "script", ""));
-        savePublishedApi(api);
+        savePublishedApi(api, publishedRoutes.layout());
     }
 
     public void undeployFromRequest(String resourceId) {
@@ -239,7 +210,7 @@ public class FlowServeRuntimeAdapter {
                     "description", text(flow, "description", ""),
                     "script", script);
             HttpRequest.Builder builder = HttpRequest.newBuilder(
-                            URI.create(managementUrl.replaceAll("/+$", "") + "/api/v1/runtime/deploy"))
+                            URI.create(managementUrl.replaceAll("/+$", "") + runtimePaths.deploy()))
                     .timeout(Duration.ofSeconds(15))
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(payload)));
@@ -255,55 +226,13 @@ public class FlowServeRuntimeAdapter {
         }
     }
 
-    private void ensurePublishedGroup() {
-        if (resourceService.getGroup(PUBLISHED_GROUP_ID) != null) {
-            return;
-        }
-        // 尚未归组的旧运行节点仍可在原服务编排组下创建发布目录。
-        if (resourceService.getGroup(ROOT_GROUP_ID) == null
-                || !FLOW_SERVE_PATH.equals(groupPath(ROOT_GROUP_ID))) {
-            throw new IllegalStateException("缺少 Magic 服务编排发布分组");
-        }
-        Group group = new Group();
-        group.setId(PUBLISHED_GROUP_ID);
-        group.setCreateTime(System.currentTimeMillis());
-        group.setCreateBy("flowserve");
-        group.setName("07.已发布服务");
-        group.setType("api");
-        group.setParentId(ROOT_GROUP_ID);
-        group.setPath(PUBLISHED_PATH);
-        group.setUpdateTime(System.currentTimeMillis());
-        group.setUpdateBy("flowserve");
-        if (!resourceService.saveGroup(group)) {
-            throw new IllegalStateException("保存 Magic 发布分组失败");
-        }
-    }
-
-    private String publishedGroupPath() {
-        String path = groupPath(PUBLISHED_GROUP_ID);
-        if (!FLOW_SERVE_PATH.equals(path) && !PUBLIC_PREFIX.equals(path)) {
-            throw new IllegalStateException("Magic 发布分组路径无效：" + path);
-        }
-        return path;
-    }
-
-    private String groupPath(String groupId) {
-        return normalizePath(resourceService.getGroupPath(groupId)).replaceAll("/+", "/").replaceAll("/$", "");
-    }
-
-    private String apiPath(String groupPath, String path) {
-        return FLOW_SERVE_PATH.equals(groupPath) ? PUBLISHED_PATH + path : path;
-    }
-
-    private synchronized void savePublishedApi(ApiInfo api) {
-        ensurePublishedGroup();
-        String groupPath = publishedGroupPath();
-        api.setGroupId(PUBLISHED_GROUP_ID);
-        api.setPath(apiPath(groupPath, api.getPath()));
-        if (FLOW_SERVE_PATH.equals(groupPath)) {
+    private synchronized void savePublishedApi(ApiInfo api, PublishedFlowRoutes.Layout layout) {
+        api.setGroupId(PublishedFlowRoutes.GROUP_ID);
+        api.setPath(layout.apiPath(api.getPath()));
+        if (layout.sharedGroup()) {
             ApiInfo existing = resourceService.file(api.getId());
             int number = existing == null
-                    ? resourceService.<ApiInfo>listFiles(PUBLISHED_GROUP_ID).stream()
+                    ? resourceService.<ApiInfo>listFiles(PublishedFlowRoutes.GROUP_ID).stream()
                             .mapToInt(this::nameNumber).max().orElse(0) + 1
                     : nameNumber(existing);
             api.setName(numberedName(number, api.getName()));
@@ -318,25 +247,27 @@ public class FlowServeRuntimeAdapter {
         if (api == null) {
             return;
         }
-        String groupPath = publishedGroupPath();
-        if (!PUBLISHED_GROUP_ID.equals(api.getGroupId())
-                || (FLOW_SERVE_PATH.equals(groupPath) && !api.getPath().startsWith(PUBLISHED_PATH + "/"))) {
+        if (!PublishedFlowRoutes.GROUP_ID.equals(api.getGroupId())) {
+            throw new IllegalArgumentException("资源不属于 Magic 已发布服务：" + resourceId);
+        }
+        var layout = publishedRoutes.layout();
+        if (!layout.contains(api.getPath())) {
             throw new IllegalArgumentException("资源不属于 Magic 已发布服务：" + resourceId);
         }
         if (!resourceService.delete(resourceId)) {
             throw new IllegalStateException("删除 Magic 发布资源失败：" + resourceId);
         }
         registry.unregister(api);
-        if (FLOW_SERVE_PATH.equals(groupPath)) {
-            closeNameGap(nameNumber(api));
+        if (layout.sharedGroup()) {
+            closeNameGap(nameNumber(api), layout);
         }
         resourceService.refresh();
     }
 
-    private void closeNameGap(int removedNumber) {
+    private void closeNameGap(int removedNumber, PublishedFlowRoutes.Layout layout) {
         // 用最后一条动态接口填补空号，保持静态接口的名称和顺序。
-        resourceService.<ApiInfo>listFiles(PUBLISHED_GROUP_ID).stream()
-                .filter(api -> api.getPath().startsWith(PUBLISHED_PATH + "/"))
+        resourceService.<ApiInfo>listFiles(PublishedFlowRoutes.GROUP_ID).stream()
+                .filter(api -> layout.contains(api.getPath()))
                 .max(Comparator.comparingInt(this::nameNumber))
                 .filter(api -> nameNumber(api) > removedNumber)
                 .ifPresent(api -> {
@@ -458,7 +389,7 @@ public class FlowServeRuntimeAdapter {
         if (tenantProperties.getDefaultTenantId().equals(tenantId)) {
             return path;
         }
-        return "/__tenant/" + tenantId + path;
+        return PublishedFlowRoutes.tenantPath(tenantId, path);
     }
 
     private String tenantId() {

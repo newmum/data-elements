@@ -130,9 +130,13 @@ class PushNodeMagicTest {
     }
 
     private static Object call(PushRegistrySyncMagicTest.Fixture fixture, String metadataId, Map<String, Object> body) throws Exception {
-        String script = CanonicalMagicSources.byId(metadataId).replaceAll("(?m)^import (tenantRuntime|tableSort)\\R", "");
+        String script = CanonicalMagicSources.byId(metadataId)
+                .replaceAll("(?m)^import (?:tenantRuntime|tableSort|'@/common/nifiruntime' as readConfiguration)\\R", "");
         fixture.reads.set(0);
-        var context = Map.of("body", body, "db", fixture.db, "tenantRuntime", fixture.scope, "tableSort", new TableSortMagicModule());
+        var context = Map.of("body", body, "db", fixture.db, "tenantRuntime", fixture.scope, "tableSort", new TableSortMagicModule(),
+                "readConfiguration", (org.ssssssss.script.runtime.function.MagicScriptLambdaFunction) (ctx, args) -> {
+                    throw new AssertionError("Push nodes must not read NiFi connection settings");
+                });
         return MagicScript.create(script, null).execute(new MagicScriptContext(context));
     }
 

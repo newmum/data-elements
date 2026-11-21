@@ -13,7 +13,12 @@
   "description": "读取已登记实名核验提供方及可展示状态，对密钥与回调凭据脱敏。",
   "parameters": [],
   "method": "GET",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

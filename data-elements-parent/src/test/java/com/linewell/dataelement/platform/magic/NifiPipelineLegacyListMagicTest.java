@@ -164,15 +164,11 @@ class NifiPipelineLegacyListMagicTest {
         final MagicScript load = script(COMMON + "33.海通已保存流程列表.ms", "nifi_saved_canvas_rows_v1",
                 "com.fasterxml.jackson.databind.ObjectMapper as objectMapper", "tableRead", "tenantRuntime");
         final MagicScript respond = script(COMMON + "35.海通流程列表超文本响应.ms", "nifi_pipe_list_response_v1");
-        final MagicScript runtime = script(COMMON + "36.海通流程运行列表响应.ms", "nifi_pipe_runtime_list_http_v1",
-                "'@/common/nifiSavedCanvasRows' as loadSavedCanvases", "'@/common/nifiPipelineListResponse' as respond",
-                "com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient as nifi");
         final MagicScript listGet = script(API + "02.流程设计/01.查询流程列表.ms", "nifi_pipe_list_get_v1",
                 "'@/common/nifiSavedCanvasRows' as loadSavedCanvases", "'@/common/nifiPipelineListResponse' as respond");
-        final MagicScript runtimeGet = script(API + "05.运行状态/03.查询流程运行列表.ms", "nifi_pipe_runtime_list_get_v1",
-                "'@/common/nifiPipelineRuntimeListHttp' as readPipelines");
-        final MagicScript runtimeHead = script(API + "05.运行状态/04.核验流程运行列表.ms", "nifi_pipe_runtime_list_head_v1",
-                "'@/common/nifiPipelineRuntimeListHttp' as readPipelines");
+        final MagicScript runtimeGet = script(API + "05.运行状态/02.查询流程运行列表.ms", "nifi_pipe_runtime_list_get_v1",
+                "'@/common/nifiSavedCanvasRows' as loadSavedCanvases", "'@/common/nifiPipelineListResponse' as respond",
+                "com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient as nifi");
 
         Fixture() throws Exception {
             jdbc.execute("""
@@ -203,9 +199,7 @@ class NifiPipelineLegacyListMagicTest {
                         respond.execute(new MagicScriptContext(Map.of("action", arguments[0])));
                 var bindings = new MagicScriptContext(Map.of(
                         "loadSavedCanvases", loadSavedCanvases, "respond", reply, "nifi", nifi));
-                MagicScriptLambdaFunction read = (context, arguments) -> runtime.execute(bindings);
-                var input = route == listGet ? bindings : new MagicScriptContext(Map.of("readPipelines", read));
-                var response = (ResponseEntity<?>) route.execute(input);
+                var response = (ResponseEntity<?>) route.execute(bindings);
                 assertThat(response.getStatusCode().value()).isEqualTo(200);
                 assertThat(response.getBody()).isInstanceOf(List.class);
                 return StructuredValues.objectRows(response.getBody());

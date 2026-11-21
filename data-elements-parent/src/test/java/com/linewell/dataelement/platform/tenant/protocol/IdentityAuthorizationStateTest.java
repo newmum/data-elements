@@ -1,5 +1,8 @@
 package com.linewell.dataelement.platform.tenant.protocol;
 
+import cn.dev33.satoken.context.SaTokenContextForThreadLocalStaff;
+import com.linewell.dataelement.magic.runtime.route.RegisteredMagicFunctionInvoker;
+import com.linewell.dataelement.platform.tenant.domain.TenantContext;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
@@ -13,13 +16,55 @@ import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequ
 import org.springframework.security.oauth2.core.oidc.OidcIdToken;
 import org.springframework.security.oauth2.server.authorization.*;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 class IdentityAuthorizationStateTest {
+ @Test
+ void registeredProtocolCallbacksPreserveControlScopeAndRestoreOuterContext() {
+  var functions = mock(RegisteredMagicFunctionInvoker.class);
+  var bridge = new IdentityProtocolBridge(functions);
+  var payload = Map.<String, Object>of("operation", "validation");
+  var input = Map.<String, Object>of("payload", payload);
+  when(functions.invoke("f919bae96dc45a398e97ad8bfbdf2dfc", input)).thenAnswer(invocation -> {
+   assertTrue(bridge.isTrusted());
+   assertTrue(TenantContext.usesControlDatabase());
+   assertNotNull(SaTokenContextForThreadLocalStaff.getModelBoxOrNull());
+   return bridge.access(payload);
+  });
+  when(functions.invoke("b8e9f119f73a5c5d80fef296a2d55079", input)).thenAnswer(invocation -> {
+   assertTrue(bridge.isTrusted());
+   assertTrue(TenantContext.usesControlDatabase());
+   return Map.of("allowed", true);
+  });
+  when(functions.invoke("3abcf6298afb5031ab99f4c9897f4809", input)).thenThrow(new IllegalStateException("validation"));
+  var request = new MockHttpServletRequest();
+  request.setParameter("trusted", "true");
+  var attributes = new ServletRequestAttributes(request, new MockHttpServletResponse());
+  RequestContextHolder.setRequestAttributes(attributes);
+  try (var scope = TenantContext.use("industry")) {
+   assertFalse(bridge.isTrusted());
+   assertEquals(Map.of("allowed", true), bridge.client(payload));
+   assertFalse(bridge.isTrusted());
+   assertEquals("industry", TenantContext.getTenantId());
+   assertNull(SaTokenContextForThreadLocalStaff.getModelBoxOrNull());
+   assertThrows(IllegalStateException.class, () -> bridge.store(payload));
+   assertFalse(bridge.isTrusted());
+   assertEquals("industry", TenantContext.getTenantId());
+   assertNull(SaTokenContextForThreadLocalStaff.getModelBoxOrNull());
+  } finally {
+   RequestContextHolder.resetRequestAttributes();
+   attributes.requestCompleted();
+  }
+ }
+
  @Test void codePrincipalClaimsAndInvalidationSurviveEncryptedStoreBoundary(){
   var bridge=mock(IdentityProtocolBridge.class);var clients=mock(MagicRegisteredClientRepository.class);
   var client=RegisteredClient.withId("client").clientId("browser").authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE).redirectUri("https://app.example/callback").scope("openid").build();
   when(clients.findById("client")).thenReturn(client);var stored=new AtomicReference<String>();
-  when(bridge.call(eq("protocol-store"),anyMap())).thenAnswer(inv->{Map<String,Object> p=inv.getArgument(1);if("save".equals(p.get("operation"))){stored.set((String)p.get("state"));return Map.of("saved",true);}return Map.of("state",stored.get());});
+  when(bridge.store(anyMap())).thenAnswer(inv->{Map<String,Object> p=inv.getArgument(0);if("save".equals(p.get("operation"))){stored.set((String)p.get("state"));return Map.of("saved",true);}return Map.of("state",stored.get());});
   var service=new MagicOAuth2AuthorizationService(bridge,clients);var now=Instant.now();
   var principal=User.withUsername("account").password("").authorities("IDAAS_AUTH_ACCOUNT").build();
   var auth=UsernamePasswordAuthenticationToken.authenticated(principal,null,principal.getAuthorities());

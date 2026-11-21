@@ -13,7 +13,12 @@
   "description": "校验平台账号管理权限，清除失败登录锁定状态，保留安全审计；不会修改租户本地账号。",
   "parameters": [],
   "method": "POST",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

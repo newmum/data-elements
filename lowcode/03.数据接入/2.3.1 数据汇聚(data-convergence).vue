@@ -414,7 +414,7 @@ const startRuntimeStream = async () => {
   try {
     // The existing Axios interceptor supplies the current token to this adapter.
     // Fetch keeps the stream open without putting credentials in the URL.
-    await $request.get('/nifi/api/task-runtime/events', {
+    await $request.get('/nifi/run/events', {
       signal: controller.signal, timeout: 0, responsePolicy: 'raw', errorPolicy: 'silent',
       headers: { Accept: 'text/event-stream' },
       adapter: async (config) => {

@@ -13,7 +13,12 @@
   "description": "校验提供方接口地址、验签材料与权限后保存配置；敏感材料加密存储。",
   "parameters": [],
   "method": "POST",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

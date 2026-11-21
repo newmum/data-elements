@@ -13,7 +13,12 @@
   "description": "校验统一认证账号及管理权限，按密码策略更新独立凭据并废止旧会话，不影响平台或租户本地账号。",
   "parameters": [],
   "method": "POST",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

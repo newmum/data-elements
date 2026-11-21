@@ -13,7 +13,12 @@
   "description": "校验应用和运行租户标识、权限应用标识的关联，维护控制库运行绑定及核验状态；不创建租户本地账号。",
   "parameters": [],
   "method": "POST",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

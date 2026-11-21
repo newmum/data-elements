@@ -13,7 +13,12 @@
   "description": "读取符合请求筛选条件的统一认证账号，应用权限及身份域过滤后返回可展示字段；不发生写入。统一认证账号与平台操作账号、租户本地账号是三套隔离的身份体系。",
   "parameters": [],
   "method": "GET",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

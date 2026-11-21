@@ -3,10 +3,6 @@ package com.linewell.dataelement.platform.tenant.api;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
-import cn.dev33.satoken.session.SaSession;
-import cn.dev33.satoken.stp.StpUtil;
-import com.linewell.dataelement.feature.identity.application.ControlIdentityService;
-import com.linewell.dataelement.platform.tenant.application.TenantAccessService;
 import com.linewell.dataelement.platform.tenant.config.TenantDatabaseProperties;
 import com.linewell.dataelement.platform.tenant.domain.TenantAccessException;
 import com.linewell.dataelement.platform.tenant.domain.TenantContext;
@@ -16,7 +12,6 @@ import javax.sql.DataSource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.MockedStatic;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.ssssssss.script.MagicScript;
@@ -24,8 +19,6 @@ import org.ssssssss.script.MagicScriptContext;
 
 class IdentityRuntimeMagicModuleTest {
 
-    private final TenantAccessService access = mock(TenantAccessService.class);
-    private final ControlIdentityService accounts = mock(ControlIdentityService.class);
     private final TenantDatabaseProperties properties = new TenantDatabaseProperties();
     private final TenantDataSourceRegistry registry = mock(TenantDataSourceRegistry.class);
     private final DataSource routing = mock(DataSource.class);
@@ -35,7 +28,7 @@ class IdentityRuntimeMagicModuleTest {
     void setUp() {
         properties.setTenantBindings(Map.of("police", "public-security"));
         when(registry.targets()).thenReturn(Map.of("public-security", mock(DataSource.class)));
-        runtime = new IdentityRuntimeMagicModule(access, accounts, properties, registry, routing);
+        runtime = new IdentityRuntimeMagicModule(properties, registry, routing);
     }
 
     @AfterEach
@@ -119,52 +112,6 @@ class IdentityRuntimeMagicModuleTest {
     }
 
     @Test
-    void strictRechecksMembershipAndAccountOnEachRequest() {
-        try (MockedStatic<StpUtil> session = login("police")) {
-            when(accounts.find("police", "user-one")).thenReturn(Map.of("status", 0));
-            assertEquals(Map.of("tenantId", "police", "userId", "user-one"), runtime.strict());
-            verify(access).requireMembership("user-one", "police");
-            when(access.requireMembership("user-one", "police"))
-                    .thenThrow(new TenantAccessException("TENANT-FORBIDDEN", "membership revoked"));
-            assertThrows(TenantAccessException.class, runtime::strict);
-            verify(access, never()).resolve(anyString());
-        }
-    }
-
-    @Test
-    void strictRejectsDeletedOrDisabledAccount() {
-        try (MockedStatic<StpUtil> session = login("police")) {
-            when(accounts.find("police", "user-one")).thenReturn(null);
-            assertThrows(TenantAccessException.class, runtime::strict);
-            when(accounts.find("police", "user-one")).thenReturn(Map.of("status", 1));
-            assertEquals("IDENTITY-ACCOUNT-UNAVAILABLE", assertThrows(
-                    TenantAccessException.class, runtime::strict).getCode());
-        }
-    }
-
-    @Test
-    void strictRejectsTokenTenantMismatchBeforeReadingAccounts() {
-        try (MockedStatic<StpUtil> session = login("broadcast")) {
-            assertEquals("IDENTITY-TENANT-CONTEXT-MISMATCH", assertThrows(
-                    TenantAccessException.class, runtime::strict).getCode());
-            verifyNoInteractions(access, accounts);
-        }
-    }
-
-    @Test
-    void strictRequiresLoginAndRunsBeforeTransactions() {
-        try (MockedStatic<StpUtil> session = mockStatic(StpUtil.class)) {
-            session.when(StpUtil::isLogin).thenReturn(false);
-            assertEquals("IDENTITY-LOGIN-REQUIRED", assertThrows(
-                    TenantAccessException.class, runtime::strict).getCode());
-            TransactionSynchronizationManager.setActualTransactionActive(true);
-            assertEquals("IDENTITY-TRANSACTION-ORDER", assertThrows(
-                    TenantAccessException.class, runtime::strict).getCode());
-            verifyNoInteractions(access, accounts);
-        }
-    }
-
-    @Test
     void inspectionUsesMysqlCatalogAndDamengSqlSchema() throws Exception {
         DataSource database = mock(DataSource.class);
         java.sql.Connection connection = mock(java.sql.Connection.class);
@@ -201,16 +148,5 @@ class IdentityRuntimeMagicModuleTest {
         try (TenantContext.Scope ignored = TenantContext.control()) {
             assertThrows(TenantAccessException.class, () -> runtime.hasTable("iam_user_profile_t"));
         }
-    }
-
-    private MockedStatic<StpUtil> login(String tokenTenant) {
-        TenantContext.bind("police");
-        SaSession tokenSession = mock(SaSession.class);
-        when(tokenSession.get("tenantId")).thenReturn(tokenTenant);
-        MockedStatic<StpUtil> session = mockStatic(StpUtil.class);
-        session.when(StpUtil::isLogin).thenReturn(true);
-        session.when(StpUtil::getTokenSession).thenReturn(tokenSession);
-        session.when(StpUtil::getLoginId).thenReturn("user-one");
-        return session;
     }
 }

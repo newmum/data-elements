@@ -46,6 +46,7 @@ public class DmCompatibleDatabaseResource extends KeyValueResource {
     private final String tableName;
     private final Map<String, String> cachedContent;
     private final Object refreshLock;
+    private final ThreadLocal<Boolean> preparedRefresh = new ThreadLocal<>();
 
     /**
      * 创建根资源节点。
@@ -106,6 +107,23 @@ public class DmCompatibleDatabaseResource extends KeyValueResource {
      */
     @Override
     public void readAll() {
+        if (preparedRefresh.get() != null) {
+            preparedRefresh.remove();
+            return;
+        }
+        loadSnapshot();
+    }
+
+    void prepareRefresh() {
+        loadSnapshot();
+        preparedRefresh.set(true);
+    }
+
+    void finishRefresh() {
+        preparedRefresh.remove();
+    }
+
+    private void loadSnapshot() {
         synchronized (refreshLock) {
             List<String> prefixes = List.copyOf(pathCandidates(path));
             String predicates = prefixes.stream()

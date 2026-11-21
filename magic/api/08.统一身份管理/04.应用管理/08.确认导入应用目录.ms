@@ -13,7 +13,12 @@
   "description": "根据用户确认的差异项把租户人员、机构、角色和资源定义导入控制库，校验应用范围与版本并返回结果；不复制租户密码。",
   "parameters": [],
   "method": "POST",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

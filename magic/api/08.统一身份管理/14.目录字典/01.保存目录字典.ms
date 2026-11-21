@@ -13,7 +13,12 @@
   "description": "校验请求字段、所属范围和版本；新建或更新目录字典及必要关联记录，写入审计并返回保存结果。仅接受目录字典允许的字段与值；写入控制库并校验版本，不允许传入任意 SQL 或表名。",
   "parameters": [],
   "method": "POST",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

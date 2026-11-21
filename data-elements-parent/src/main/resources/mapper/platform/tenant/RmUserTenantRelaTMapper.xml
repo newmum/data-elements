@@ -55,21 +55,4 @@
            and is_del = 0
     </update>
 
-    <select id="selectRelationId" resultType="java.lang.String">
-        select tid
-          from rm_user_tenant_rela_t
-         where user_id = #{userId}
-           and tenant_id = #{tenantId}
-           and is_del = 0
-    </select>
-
-    <update id="updateAssignment"
-            parameterType="com.linewell.dataelement.platform.tenant.infrastructure.persistence.entity.RmUserTenantRelaT">
-        update rm_user_tenant_rela_t
-           set is_default = #{isDefault},
-               status = 1,
-               updated_by = #{updatedBy},
-               updated_time = #{updatedTime}
-         where tid = #{tid}
-    </update>
 </mapper>

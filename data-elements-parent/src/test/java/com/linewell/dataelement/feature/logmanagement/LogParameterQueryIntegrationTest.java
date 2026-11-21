@@ -1,6 +1,7 @@
 package com.linewell.dataelement.feature.logmanagement;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.linewell.dataelement.magic.runtime.route.RegisteredMagicFunctionInvoker;
 import com.linewell.dataelement.platform.audit.*;
 import com.linewell.dataelement.platform.persistence.jdbc.StructuredContainsPredicateAdapter;
 import java.lang.reflect.InvocationTargetException;
@@ -48,7 +49,7 @@ class LogParameterQueryIntegrationTest {
             }
             for (int size : List.of(20, 100)) {
                 fixture.source.reset();
-                clearInvocations(fixture.magic.getObject());
+                clearInvocations(fixture.magic);
                 var page = fixture.query.page(OWNER, kind, input("parameterKeyword", "mixed中文 %_!", "size", size));
                 assertEquals(120L, page.get("total"));
                 var rows = rows(page);
@@ -60,7 +61,7 @@ class LogParameterQueryIntegrationTest {
                 assertEquals(List.of(15, 15), fixture.source.timeouts);
                 assertTrue(fixture.source.sql.stream().allMatch(sql -> sql.contains("tenant_id=?") && sql.contains("user_id=?")
                         && sql.toLowerCase(Locale.ROOT).contains("instr(") && !sql.contains("mixed中文 %_!")));
-                verify(fixture.magic.getObject()).invoke(eq(LogQueryService.PARAMETER_CONDITION_FUNCTION), anyMap());
+                verify(fixture.magic).invoke(eq(LogQueryService.PARAMETER_CONDITION_FUNCTION_ID), anyMap());
             }
         }
     }
@@ -113,7 +114,7 @@ class LogParameterQueryIntegrationTest {
         assertThrows(SecurityException.class, () -> fixture.query.authorizedEvents(OWNER, "operations", List.of("allowed", "other-tenant"), true));
         assertEquals(1, fixture.source.sql.size());
         var context = ArgumentCaptor.forClass(Map.class);
-        verify(fixture.magic.getObject(), atLeastOnce()).invoke(eq(LogQueryService.PARAMETER_CONDITION_FUNCTION), context.capture());
+        verify(fixture.magic, atLeastOnce()).invoke(eq(LogQueryService.PARAMETER_CONDITION_FUNCTION_ID), context.capture());
         assertTrue(context.getAllValues().stream().allMatch(value -> value.keySet().equals(Set.of("tenantId", "kind", "keyword"))
                 && "validation-tenant".equals(value.get("tenantId"))));
     }
@@ -210,7 +211,7 @@ class LogParameterQueryIntegrationTest {
 
     static final class Fixture {
         final AuditStore store = mock(AuditStore.class);
-        final org.springframework.beans.factory.ObjectProvider<org.ssssssss.magicapi.core.service.MagicAPIService> magic = LogParameterMagicFixture.provider();
+        final RegisteredMagicFunctionInvoker magic = LogParameterMagicFixture.invoker();
         final DriverManagerDataSource raw = new DriverManagerDataSource("jdbc:h2:mem:validation-parameter-" + UUID.randomUUID()
                 + ";MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1", "sa", "");
         final CountedSource source = new CountedSource(raw);

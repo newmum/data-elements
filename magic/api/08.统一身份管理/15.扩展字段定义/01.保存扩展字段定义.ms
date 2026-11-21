@@ -13,7 +13,12 @@
   "description": "校验请求字段、所属范围和版本；新建或更新扩展字段定义及必要关联记录，写入审计并返回保存结果。只维护白名单内的人员或机构扩展字段定义；校验字段类型与版本，并保护保留字段。",
   "parameters": [],
   "method": "POST",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

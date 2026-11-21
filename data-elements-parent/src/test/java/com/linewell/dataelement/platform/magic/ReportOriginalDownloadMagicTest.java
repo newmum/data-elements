@@ -1,6 +1,7 @@
 package com.linewell.dataelement.platform.magic;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.linewell.dataelement.utils.MinioUtils;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
@@ -23,7 +24,16 @@ class ReportOriginalDownloadMagicTest {
   f.base.jdbc.execute("insert into file_upload_t(tid,tenant_id,created_by,is_del,file_name,file_path) values('file','police','validation-user',0,'data.csv','attachment/file.csv'),('foreign','other','validation-user',0,'other.csv','attachment/other.csv')");
   Path root=Path.of(System.getProperty("user.dir")).toAbsolutePath();while(!Files.isDirectory(root.resolve("magic")))root=root.getParent();
   String content=Files.readString(root.resolve("magic/api/02.数据盘点/03.文件操作/02.业务附件下载.ms"));
-  String script=content.substring(content.indexOf("================================")+32).replaceAll("(?m)^import (?!cn\\.hutool\\.|com\\.linewell\\.)[^\\r\\n]*\\r?\\n","");
+  String[] resource = content.split("================================", 2);
+  var metadata = new ObjectMapper().readTree(resource[0]);
+  assertEquals("GET", metadata.path("method").asText());
+  Map<String, String> options = new HashMap<>();
+  for (var option : metadata.path("options")) {
+   assertNull(options.put(option.path("name").asText(), option.path("value").asText()));
+  }
+  assertEquals("TENANT_SESSION", options.get("access"));
+  assertEquals("true", options.get("head"));
+  String script=resource[1].replaceAll("(?m)^import (?!cn\\.hutool\\.|com\\.linewell\\.)[^\\r\\n]*\\r?\\n","");
   script="var configData=()=>{minio_url:'https://validation.example.test',minio_user:'validation'}\n"+script;
   var response=new Response();var bindings=new HashMap<String,Object>(Map.of("db",f.base.db,"tenantRuntime",f.base.scope,"response",response,"systemConfig",new Config(),"fileId","file"));
   byte[] expected="id,name\n1,验证记录\n".getBytes(StandardCharsets.UTF_8);

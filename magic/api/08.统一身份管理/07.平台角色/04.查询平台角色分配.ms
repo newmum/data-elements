@@ -13,7 +13,12 @@
   "description": "读取平台角色与操作账号的分配及应用对象范围，按当前操作人的管理权限过滤；只读。",
   "parameters": [],
   "method": "GET",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

@@ -13,7 +13,12 @@
   "description": "按标识加载目录字典并检查所属范围与版本；执行软删除或撤销关联，保留审计历史。仅接受目录字典允许的字段与值；写入控制库并校验版本，不允许传入任意 SQL 或表名。",
   "parameters": [],
   "method": "POST",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

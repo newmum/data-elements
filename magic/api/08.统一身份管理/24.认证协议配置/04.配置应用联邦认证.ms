@@ -13,7 +13,12 @@
   "description": "校验指定应用的联邦认证参数及回调白名单，保存可选统一认证开关与映射配置。",
   "parameters": [],
   "method": "POST",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

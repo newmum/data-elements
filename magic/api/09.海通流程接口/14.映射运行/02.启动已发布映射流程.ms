@@ -7,7 +7,12 @@
   "path": "/start",
   "description": "复核计划后启动已发布版本。",
   "parameters": [],
-  "options": [],
+  "options": [
+    {
+      "name": "jsonBody",
+      "value": "EXACT_TREE"
+    }
+  ],
   "method": "POST",
   "headers": [],
   "paths": []

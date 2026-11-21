@@ -344,10 +344,9 @@ public class NifiClient {
         get(node.requireValidConnection(), "/flow/process-groups/root", JsonNode.class);
     }
 
-    /** Reads NiFi system diagnostics for one tenant-owned saved node. */
-    public JsonNode systemDiagnostics(String nodeId) {
-        RuntimeNode node = runtimeResolver.resolveById(nodeId);
-        return get(node, "/system-diagnostics", JsonNode.class);
+    /** Reads NiFi system diagnostics for the node selected by the caller. */
+    public JsonNode systemDiagnostics(RuntimeNode node) {
+        return get(node.requireValidConnection(), "/system-diagnostics", JsonNode.class);
     }
 
     // ---------------------------------------------------------------------

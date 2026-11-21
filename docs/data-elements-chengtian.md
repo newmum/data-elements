@@ -243,7 +243,7 @@ http://localhost:3000/
 
 接入任务的 SSE 实时状态在公安新库尚未配置 NiFi 节点时返回正常事件，标注状态未确认和节点配置提示。按正常订阅周期重新认证和解析节点，配置后新订阅即可恢复采样。未配置节点的事件不包含任务标识，也不发起 NiFi 请求。
 
-该状态沿用现有 SSE 的 `revision/fresh/observedAt/message` 契约，前端运行通道测试覆盖未确认状态和20/100行固定请求数。当前 Mock 未接入实时 SSE，本次配置缺省处理保持原事件格式与调用方协议，未添加独立的 Mock 状态缓存。
+接入监控、数据汇聚和登记内容审查通过 `GET /nifi/run/events` 读取同一 Magic SSE 资源。状态事件沿用 `revision/fresh/observedAt/message` 等字段，前端运行通道测试覆盖未确认状态和 20/100 行固定请求数。当前 Mock 的实时 SSE 仍按未实现接口处理。
 
 ```bash
 pnpm run build

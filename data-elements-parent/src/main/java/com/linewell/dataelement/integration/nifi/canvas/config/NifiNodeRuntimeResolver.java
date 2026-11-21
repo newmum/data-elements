@@ -1,16 +1,16 @@
 package com.linewell.dataelement.integration.nifi.canvas.config;
 
+import com.linewell.dataelement.magic.runtime.route.RegisteredMagicFunctionInvoker;
 import com.linewell.dataelement.platform.tenant.config.TenantProperties;
 import com.linewell.dataelement.platform.tenant.domain.TenantContext;
-import com.linewell.dataelement.platform.tenant.infrastructure.datasource.TenantDataSourceRegistry;
-import java.sql.Timestamp;
+import java.util.LinkedHashMap;
 import java.util.Locale;
-import java.util.List;
 import java.util.Map;
-import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
+import org.ssssssss.script.runtime.function.MagicScriptLambdaFunction;
 
 /**
  * Resolves the enabled default NiFi node for the current tenant.
@@ -22,35 +22,33 @@ import org.springframework.web.client.RestClient;
 @Component
 public class NifiNodeRuntimeResolver {
 
-    private final TenantDataSourceRegistry tenantDataSourceRegistry;
+    private static final String NODE_CONFIGURATION = "nifi_runtime_node_read_v1";
+    private final RegisteredMagicFunctionInvoker magic;
     private final TenantProperties tenantProperties;
 
     public NifiNodeRuntimeResolver(
-            TenantDataSourceRegistry tenantDataSourceRegistry,
+            @Lazy RegisteredMagicFunctionInvoker magic,
             TenantProperties tenantProperties
     ) {
-        this.tenantDataSourceRegistry = tenantDataSourceRegistry;
+        this.magic = magic;
         this.tenantProperties = tenantProperties;
     }
 
     public RuntimeNode resolve() {
         String tenantId = TenantContext.getTenantId();
         if (!StringUtils.hasText(tenantId)) {
-            tenantId = tenantProperties.getDefaultTenantId();
+            // The native NiFi proxy has no industry session. Its configured default is the protocol binding.
+            return TenantContext.call(tenantProperties.getDefaultTenantId(), this::defaultNode);
         }
-        JdbcTemplate jdbc = new JdbcTemplate(tenantDataSourceRegistry.dataSourceForTenant(tenantId));
-        List<Map<String, Object>> rows = jdbc.queryForList("""
-                select tid, node_code, base_url, root_process_group_id,
-                       auth_username, auth_password, insecure_tls, jdbc_driver_locations
-                  from nifi_node_t
-                 where tenant_id = ? and ifnull(is_del, 0) = 0 and ifnull(enabled, 1) = 1
-                 order by ifnull(is_default, 0) desc, updated_time desc
-                 limit 1
-                """, tenantId);
-        if (rows.isEmpty()) {
+        return defaultNode();
+    }
+
+    private RuntimeNode defaultNode() {
+        Map<String, Object> row = readConfiguration(null);
+        if (row == null) {
             throw new NodeNotConfiguredException();
         }
-        return toRuntimeNode(tenantId, rows.getFirst()).requireValidConnection();
+        return runtimeNode(row).requireValidConnection();
     }
 
     /** A new tenant can browse its access tasks before connecting a NiFi node. */
@@ -60,69 +58,32 @@ public class NifiNodeRuntimeResolver {
         }
     }
 
-    /** Resolves one saved node for a server-side connectivity check without accepting credentials from the browser. */
-    public RuntimeNode resolveById(String nodeId) {
-        return configuredNodeById(nodeId).runtimeNode().requireValidConnection();
-    }
-
     public RuntimeNode resolveAssignedNode(String nodeId) {
         if (!StringUtils.hasText(TenantContext.getTenantId()) || TenantContext.usesControlDatabase() || TenantContext.isIgnored()) {
             throw new IllegalStateException("接入节点必须在当前行业租户中解析");
         }
-        ConfiguredNode configured;
-        try {
-            configured = configuredNodeById(nodeId);
-        } catch (IllegalArgumentException missing) {
-            throw new IllegalStateException("任务绑定的数据接入节点不存在或不属于当前租户", missing);
+        Map<String, Object> row = StringUtils.hasText(nodeId) ? readConfiguration(nodeId) : null;
+        if (row == null) {
+            throw new IllegalStateException("任务绑定的数据接入节点不存在或不属于当前租户",
+                    new IllegalArgumentException("数据同步节点不存在或不属于当前租户"));
         }
-        if (!configured.enabled()) {
+        if (!Boolean.TRUE.equals(row.get("enabled")) && !"1".equals(text(row.get("enabled")))) {
             throw new IllegalStateException("任务绑定的数据接入节点已停用，请在节点管理中启用该节点");
         }
-        return configured.runtimeNode().requireValidConnection();
+        return runtimeNode(row).requireValidConnection();
     }
 
-    /** Keeps the configuration revision used by a manual probe together with the resolved endpoint. */
-    public ConfiguredNode configuredNodeById(String nodeId) {
-        String tenantId = TenantContext.getTenantId();
-        if (!StringUtils.hasText(tenantId)) {
-            tenantId = tenantProperties.getDefaultTenantId();
-        }
-        if (!StringUtils.hasText(nodeId)) {
-            throw new IllegalArgumentException("请选择需要检测的数据同步节点");
-        }
-        JdbcTemplate jdbc = new JdbcTemplate(tenantDataSourceRegistry.dataSourceForTenant(tenantId));
-        List<Map<String, Object>> rows = jdbc.queryForList("""
-                select tid, node_code, base_url, root_process_group_id,
-                       auth_username, auth_password, insecure_tls, jdbc_driver_locations, updated_time, enabled
-                  from nifi_node_t
-                 where tenant_id = ? and tid = ? and ifnull(is_del, 0) = 0
-                 limit 1
-                """, tenantId, nodeId);
-        if (rows.isEmpty()) {
-            throw new IllegalArgumentException("数据同步节点不存在或不属于当前租户");
-        }
-        Map<String, Object> row = rows.getFirst();
-        Object enabled = row.get("enabled");
-        return new ConfiguredNode(toRuntimeNode(tenantId, row), connectionRevision(row.get("updated_time")),
-                Boolean.TRUE.equals(enabled) || "1".equals(text(enabled)));
+    private Map<String, Object> readConfiguration(String nodeId) {
+        var inputs = new LinkedHashMap<String, Object>();
+        inputs.put("nodeId", nodeId);
+        inputs.put("consume", (MagicScriptLambdaFunction) (context, arguments) -> arguments[0]);
+        return magic.invoke(NODE_CONFIGURATION, inputs);
     }
 
-    private static String connectionRevision(Object updatedTime) {
-        if (updatedTime instanceof Timestamp timestamp) {
-            return timestamp.toLocalDateTime().toString();
-        }
-        return text(updatedTime).replace(' ', 'T');
-    }
-
-    public record ConfiguredNode(RuntimeNode runtimeNode, String revision, boolean enabled) {
-        public ConfiguredNode(RuntimeNode runtimeNode, String revision) {
-            this(runtimeNode, revision, true);
-        }
-    }
-
-    private RuntimeNode toRuntimeNode(String tenantId, Map<String, Object> row) {
+    /** Converts a trusted configuration row into the protocol client input. */
+    public RuntimeNode runtimeNode(Map<String, Object> row) {
         return new RuntimeNode(
-                tenantId,
+                TenantContext.requireTenantId(),
                 text(row.get("tid")),
                 text(row.get("node_code")),
                 trimTrailingSlash(text(row.get("base_url"))),

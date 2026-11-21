@@ -30,7 +30,7 @@ import org.ssssssss.script.MagicScriptContext;
 import org.ssssssss.script.runtime.ExitValue;
 
 class CatalogCommandMagicTest {
-    private static final String COMMAND_ID = "0454d01c38ab5d66aafdaf02d9b547d6";
+    private static final String COMMAND_ID = "b6aaff9e31925977b94369d347e7c32a";
 
     @Test
     void savePreflightUsesFixedReadsAndRejectsUnauthorizedOrDuplicateSources() throws IOException {
@@ -360,12 +360,12 @@ class CatalogCommandMagicTest {
             };
             Function<Object[], Object> currentUser = args -> Map.of("orgId", "org-a");
             var context = Map.ofEntries(
-                    Map.entry("input", Map.of("kind", kind, "method", "POST", "id", id, "action", action,
+                    Map.entry("body", Map.of("kind", kind, "method", "POST", "id", id, "action", action,
                             "body", payload, "version", version)),
                     Map.entry("db", db), Map.entry("tenantRuntime", scope), Map.entry("dataScope", scope),
                     Map.entry("StpUtil", new Actor()), Map.entry("currentUser", currentUser),
-                    Map.entry("readPlanning", (Function<Object[], Object>) args -> Map.of("classifications", List.of(Map.of("id", "class-a")))),
-                    Map.entry("readCatalog", catalog), Map.entry("saveCatalog", save),
+                    Map.entry("planningRead", (Function<Object[], Object>) args -> Map.of("classifications", List.of(Map.of("id", "class-a")))),
+                    Map.entry("catalogRead", catalog), Map.entry("saveCatalog", save),
                     Map.entry("esCommonService", index), Map.entry("jsons", new Jsons()),
                     Map.entry("log", LoggerFactory.getLogger(CatalogCommandMagicTest.class)));
             return script.execute(new MagicScriptContext(context));

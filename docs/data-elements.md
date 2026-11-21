@@ -503,9 +503,9 @@ Magic 资源可先导出当前启用脚本，再用静态扫描寻找循环内�
 
 四个前端独立安装和发布。涉及相同业务能力时复用当前后端、公共 Magic 契约、权威表及租户边界，不能复制业务主表或等价后端；不因这个要求强制抽取会话桥、导航、图标等共同前端包。运行配置中的能力入口若跳转到其他独立应用，应保持对象 ID 和当前认证租户上下文；同页跳转，URL 不携带 token/密码，生产地址从环境配置取得。认证或 API 失败不得默默退回 mock 数据。
 
-数仓分层/分域共用低代码组件 `data-warehouse` 和 `/register/zl-sjzz/list`，契约为 `GET /dwm/center/layer-list`、`POST /dwm/center/datasource-options`、`POST /dwm/center/node/save`、`GET /sym/dict/query?code=dataSourceType`、`POST /sym/dict/save` 和 `/portal/sso/session`。层与逻辑域使用租户 `sym_dict_t`，绑定使用 `dwm_center_layer_source_t`，数据源主表为 `db_datasource_t`。这里的“分库”指逻辑分域，不能执行物理 CREATE DATABASE；无字典 ID 的 DST 组织汇总不作为可编辑分域。绑定将节点类型标为数据中心，不搬移物理数据，解绑不自动恢复历史节点类型。绑定成功不能充当真实连接测试，构建成功不能充当部署完成。
+数仓分层/分域共用低代码组件 `data-warehouse` 和 `/register/zl-sjzz/list`，契约为 `GET /dwm/center/overview`、`POST /dwm/layer/choices`、`POST /dwm/layer/save`、`GET /sym/dict/query?code=dataSourceType`、`POST /sym/dict/save` 和 `/portal/sso/session`。层与逻辑域使用租户 `sym_dict_t`，绑定使用 `dwm_center_layer_source_t`，数据源主表为 `db_datasource_t`。这里的“分库”指逻辑分域，不能执行物理 CREATE DATABASE；无字典 ID 的 DST 组织汇总不作为可编辑分域。绑定将节点类型标为数据中心，不搬移物理数据，解绑不自动恢复历史节点类型。绑定成功不能充当真实连接测试，构建成功不能充当部署完成。
 
-整层维护向 `/dwm/center/node/save` 一次提交 `layerId`、分层名称、关联数据源及分域列表。每个分域提供现有 ID、名称、编码、排序和关联数据源。接口最多接收 500 个分域和 500 个不同数据源，先校验租户、字典父子关系、同级编码和数据源有效性，再在同一事务写入字典、绑定及数据源标记。空数据源表示解绑，未提交的分域保留原配置。旧单节点和整层关联参数继续可用。重新绑定可以复用已解绑记录。历史上同时有活动绑定与已解绑记录的节点，再次解绑会返回冲突并回滚整次保存。
+整层维护向 `/dwm/layer/save` 一次提交 `layerId`、分层名称、关联数据源及分域列表。每个分域提供现有 ID、名称、编码、排序和关联数据源。接口最多接收 500 个分域和 500 个不同数据源，先校验租户、字典父子关系、同级编码和数据源有效性，再在同一事务写入字典、绑定及数据源标记。空数据源表示解绑，未提交的分域保留原配置。旧单节点和整层关联参数继续可用。重新绑定可以复用已解绑记录。历史上同时有活动绑定与已解绑记录的节点，再次解绑会返回冲突并回滚整次保存。
 
 数据源选项在当前租户最新的 500 条有效候选内按名称、库类型或节点名称检索，最多返回 100 项，节点名称按候选窗口批量读取。回归中，20 和 100 个分域的整层保存均发出 1 次页面请求、执行 7 条校验读取。数据源选项在有节点标签时，两种规模均执行 3 条查询。
 
@@ -756,7 +756,7 @@ Use the released `my-db` page at `/register/register-sjkb/list` as the default v
 - 现有对外路由按以下旧前缀盘点。路由改造按新的业务分组逐批切换，旧前缀作为实际调用和回退的核查基线。
   - `/dst` 管理数据盘点，包含库表资源 `/db`、文件操作 `/file` 和数据目录 `/catalog` 等叶组。
   - `/ods`: data access, ETL, and NiFi orchestration.
-  - `/dwm` 管理数据治理。数据元和标准分类树使用 `/standard`，标准代码使用 `/code`，字段标准引用使用 `/binding`。元数据目录、关联服务和表资源使用 `/catalog`，采集字段清单、分页和批读使用 `/column`。资源总览、数仓分层和资源运营分别使用 `/center`、`/layer` 和 `/ops`。质量规则和概览使用 `/quality`，任务、实例、候选、工单及 SQL 模板分别使用 `/qtask`、`/qrun`、`/qoption`、`/qorder` 和 `/qsql`。治理总览、逻辑关系、血缘依据与覆盖、物理外键及字段对标分别使用 `/meta`、`/relation`、`/lineage`、`/foreign` 和 `/align`。已迁移的旧地址按原方法进入同一脚本，并使用相同会话和租户校验。
+  - `/dwm` 管理数据治理。数据元和标准分类树使用 `/standard`，标准代码使用 `/code`，字段标准引用使用 `/binding`。元数据目录、关联服务和表资源使用 `/catalog`，采集字段清单、分页和批读使用 `/column`。资源总览、数仓分层和资源运营分别使用 `/center`、`/layer` 和 `/ops`。质量规则和概览使用 `/quality`，任务、实例、候选、工单及 SQL 模板分别使用 `/qtask`、`/qrun`、`/qoption`、`/qorder` 和 `/qsql`。治理总览、逻辑关系、血缘依据与覆盖、物理外键及字段对标分别使用 `/meta`、`/relation`、`/lineage`、`/foreign` 和 `/align`。调用方按正式方法直接请求对应资源。
   - `/dws`: data services and cloud-gateway operations.
   - `/das`: data applications, application repository, screen designer, and application-tab operations.
   - `/idaas`: unified identity management and its explicitly configured tenant-receiver interfaces; platform and tenant-local accounts remain separate.
@@ -784,12 +784,12 @@ Use the released `my-db` page at `/register/register-sjkb/list` as the default v
 - 系统门户 Magic 资源位于 `01.系统门户`，门户首页为 `GET /portal/main/index`，本人改密为 `POST /portal/profile/password`。
 - `/portal/sso` 管理登录和会话。`POST /login` 和 `POST /logout` 分别登录和登出，`GET /ticket` 签发票据，`GET /redeem` 兑换票据或授权码。`GET /options` 和 `GET /settings` 提供登录选项与设置。`GET /session`、`GET /tenants` 和 `POST /switch` 校验已登录会话和租户成员关系。登录继续使用 SM3 入参。
 - 库表资源 Magic API 位于 `02.数据盘点/02.库表资源`，完整前缀为 `/dst/db`。叶组按数据源、库结构、登记表、字段和数据行编号。数据源卡片及展开表格用 `POST /dst/db/dept` 的 `cards`、`tables` 模式，字段列表为 `GET /dst/db/fields`，分页预览为 `POST /dst/db/preview`。
-- `04.数据治理/03.资源中心/14.资源操作` 使用 `POST /dwm/center/command`，供万象目录编目、资源表格和共享低代码资产中心查询与操作资源。
+- `04.数据治理/10.资源运营/05.资源操作` 使用 `POST /dwm/ops/command`，供万象目录编目、资源表格和共享低代码资产中心查询与操作资源。
 - 数据接入业务 Magic API 位于 `03.数据接入`，根路径为 `/ods`。任务分页为 `POST /ods/job/page`，多表编组分页为 `POST /ods/multi/page`，汇聚与分发分页分别为 `POST /ods/ingest/page` 和 `POST /ods/dist/page`，即时对账实例分页为 `POST /ods/recon/page`，ETL 分组树为 `GET /ods/job/groups`。完整叶组按同步节点、服务节点、接入任务、字段映射、任务监控、多表编组、接入登记、对账策略、对账执行、分发、汇聚、目标数据和 API 拉取组织。
-- 数据服务 Magic API 位于 `05.数据服务`，根路径为 `/dws`。服务编排与画布候选接口使用 `/dws/flowserve`，网关资产写入、编排打开与授权申请使用 `/dws/gateway`，服务分组使用 `/dws/gategroup`。流程管理通过查询参数 `id` 指定流程。旧地址按原方法和路径 ID 转发，已发布服务继续使用 `/dws/flowserve/published/` 协议前缀。
-- 湖仓分层使用 `/dws/lake`，对象分页、批量纳管和生命周期使用 `/dws/lakeobject`，规则读取、替换、入湖校验和出湖申请使用 `/dws/lakerule`。按 ID 定位的接口使用查询参数 `id`，兼容入口按旧路径里的 ID 核验。在所属租户分层的行锁下批量纳管对象或整体替换规则，规则删除与插入在同一事务内完成。
-- 网关路由、策略、网络区域和接入应用归入 `/dws/gateway`，实例、灰度、日志、指标和调用归入 `/dws/gaterun`，订阅、反馈和合集归入 `/dws/servicemarket`。原 `/dws/service/gateway/` 的 POST 入口继续转发。实例批量保存先预取请求中的完整业务键并验明显式 ID，心跳按状态批量更新。混入外租户或已删除实例时整批拒绝。
-- 定时任务配置分页、管理和历史日志分别使用 `GET /dws/timer/page`、`POST /dws/timer/manage` 和 `GET /dws/timer/logs`。原定时器地址按 HTTP 方法转发。配置保存支持 `dryRun=true`，兼容五段、六段 Cron。启停在当前租户内锁定配置，对停用任务清空下次触发时间。当前定时配置尚未绑定执行端，已有任务的立即执行返回业务码 501。
+- 数据服务 Magic API 位于 `05.数据服务`，根路径为 `/dws`。服务编排与画布候选接口使用 `/dws/flowserve`，网关资产写入、编排打开与授权申请使用 `/dws/gateway`，服务分组使用 `/dws/gategroup`。流程管理通过查询参数 `id` 指定流程。已发布服务的协议路径来自 Magic 注册分组和发布路径段，86 当前使用 `/dws/flowserve/published/`。
+- 湖仓分层使用 `/dws/lake`，对象分页、批量纳管和生命周期使用 `/dws/lakeobject`，规则读取、替换、入湖校验和出湖申请使用 `/dws/lakerule`。按 ID 定位的接口使用查询参数 `id`。在所属租户分层的行锁下批量纳管对象或整体替换规则，规则删除与插入在同一事务内完成。
+- 网关路由、策略、网络区域和接入应用归入 `/dws/gateway`，实例、灰度、日志、指标和调用归入 `/dws/gaterun`，订阅、反馈和合集归入 `/dws/servicemarket`。实例批量保存先预取请求中的完整业务键并验明显式 ID，心跳按状态批量更新。混入外租户或已删除实例时整批拒绝。
+- 定时任务配置分页、管理和历史日志分别使用 `GET /dws/timer/page`、`POST /dws/timer/manage` 和 `GET /dws/timer/logs`。配置保存支持 `dryRun=true`，兼容五段、六段 Cron。启停在当前租户内锁定配置，对停用任务清空下次触发时间。当前定时配置尚未绑定执行端，已有任务的立即执行返回业务码 501。
 - 共享海通流程的 Magic 业务 API 位于 `09.海通流程接口`，根路径为 `/nifi`。流程设计与模板使用 `/flow`、`/canvas`，接入链路使用 `/chain`，运行状态、部署、流程组、节点及错误公告分别使用 `/run`、`/life`、`/group`、`/node`、`/event`。组件清单用 `/catalog`，字段映射按计划 `/plan`、模板 `/template`、字典 `/dict`、编辑规则 `/map`、运行版本 `/maprun` 组织。流程、组件或节点标识以查询参数传递，例如 `GET /nifi/flow/detail?id=<流程ID>`。
 - `15.连接探查` 下的连接测试、字段探查和表探查使用 `POST /nifi/api/connect`、`POST /nifi/api/columns`、`POST /nifi/api/tables`，现役画布的旧 POST 地址继续兼容。Magic 负责校验和当前租户的 Hive 登记配置，Java 负责协议连接与诊断。数据源登记的 `/dst/db/srctest` 复用其中的连接探查能力。
 - Data-application Magic resources belong under `06.数据应用` and use `/das` as the public root. Do not retain `/workshop` calls in low-code source/compiled JS or any frontend project.
@@ -1278,9 +1278,11 @@ SFTP 验证来源为演示服务器端口 22 下的独立模拟文件目录 `/ho
 
 根 Mock 的日志列表、详情、统计、批量和导出使用上述正式路由，按当前模拟会话逐 ID 校验租户和角色范围。归档和策略仍明确返回 501。Node 的 MSW 传输和共享组件浏览器夹具已通过。当前覆盖见 [Mock 设计与接手说明](mock-design.md)。
 
-行业导出使用 `GET /sym/logexport/page`、`POST /sym/logexport/create` 及 `GET /sym/logs/exports/{id}/download`。归档使用 `GET /sym/logarchive/page`、`POST /sym/logarchive/create` 和 `POST /sym/logarchive/action`。归档操作提交 `id` 与 `action`，可执行 `hold`、`release`、`browse`、`purge-plan` 或 `purge`。策略通过 `GET /sym/logpolicy/list` 与 `PUT` 或 `POST /sym/logpolicy/save` 读写。清理提供预览返回的版本和归档确认值，同事务检查冻结、范围和归档 ID，仅删除文件校验通过且仍在授权范围内的事件。
+行业导出使用 `GET /sym/logexport/page`、`POST /sym/logexport/create` 和 `GET /sym/logexport/download?id=…`。归档使用 `GET /sym/logarchive/page`、`POST /sym/logarchive/create` 和 `POST /sym/logarchive/action`。归档操作提交 `id` 与 `action`，可执行 `hold`、`release`、`browse`、`purge-plan` 或 `purge`。策略通过 `GET /sym/logpolicy/list` 与 `PUT` 或 `POST /sym/logpolicy/save` 读写。清理提供预览返回的版本和归档确认值，同事务检查冻结、范围和归档 ID，仅删除文件校验通过且仍在授权范围内的事件。
 
-平台沿用 Magic 规则：`GET /idaas/logs/query`、`POST /idaas/logs/command`，二进制下载为 `/idaas/logs/export-download`。模块与操作严格匹配，不能拿导出／归档权限调用日志详情或统计。平台事件读取沿用 `audit:read`；新增 `audit:export/audit:configure/audit:archive` 分别保护导出、策略及归档。行业使用当前菜单资源中的 `logs:auth/operations/requests/security/exports/archives/policies`，仍从现有角色的数据范围计算权限，不增加管理员标志。
+行业日志导出以任务冻结的 UTC `cutoff_time` 作为提交时间，用于分页筛选、排序及返回的 `created_time`。查询时间窗包含起点、排除终点。导出和归档任务由写入方维护 UTC 审计时间，框架保留其显式写入值。
+
+平台查询、写入和附件下载分别使用 `GET /idaas/logs/query`、`POST /idaas/logs/command`、`GET /idaas/logs/download?id=…&domain=…`，下载域缺省为 `workforce`。两个下载资源均由同址 GET 提供 HEAD，校验后返回原附件类型、长度及 `Cache-Control: no-store`，HEAD 正文为空。模块与操作严格匹配，不能拿导出／归档权限调用日志详情或统计。平台事件读取沿用 `audit:read`。`audit:export`、`audit:configure`、`audit:archive` 分别保护导出、策略及归档。行业使用当前菜单资源中的 `logs:auth/operations/requests/security/exports/archives/policies`，仍从现有角色的数据范围计算权限，不增加管理员标志。
 
 #### 采集、事务与文件策略
 
@@ -1750,7 +1752,7 @@ Magic 的 db.normal().transaction 与 Spring 事务不能只凭线程相同就�
 | GET /sym/logs/events/{kind}/{id}/items | 批量子项分页 | 父事件与每个可见子项范围 |
 | GET /sym/logs/statistics | 分类、结果及趋势聚合 | 与列表同一筛选和权限条件 |
 | POST /sym/logs/exports | 创建受控导出 | 导出权限，条件和数量上限 |
-| GET /sym/logs/exports/{id} | 导出进度或授权下载入口 | 所有者或显式管理权限 |
+| GET /sym/logexport/download | 按查询参数 `id` 下载附件，支持同址 HEAD | 当前租户发起人及源日志、导出权限 |
 | GET PUT /sym/logs/policies | 读取和修改日志策略 | 配置权限、乐观锁与强制下限 |
 | GET POST /sym/logs/archives | 归档列表或受控启动 | 归档权限，不提供一键清空日志 |
 | GET /idaas/audit/list | 平台原查询兼容增强 | identity_domain 及角色应用组织范围 |

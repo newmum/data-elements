@@ -1,5 +1,5 @@
 {
-  "properties": {},
+  "properties": {"flowservePublishedSegment": "published"},
   "id": "e5ce028f1797312d57c628b66ffcf657",
   "name": "01.服务编排",
   "type": "api",

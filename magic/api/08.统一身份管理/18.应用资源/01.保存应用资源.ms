@@ -13,7 +13,12 @@
   "description": "校验请求字段、所属范围和版本；新建或更新应用资源及必要关联记录，写入审计并返回保存结果。只管理业务应用菜单、按钮和接口资源；校验所属应用和资源唯一性。",
   "parameters": [],
   "method": "POST",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

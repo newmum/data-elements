@@ -13,7 +13,12 @@
   "description": "校验请求字段、所属范围和版本；新建或更新应用客户端及必要关联记录，写入审计并返回保存结果。维护应用接入客户端及其协议配置；客户端凭据不随普通列表接口明文返回。",
   "parameters": [],
   "method": "POST",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

@@ -13,7 +13,12 @@
   "description": "读取符合请求筛选条件的应用客户端，应用权限及身份域过滤后返回可展示字段；不发生写入。维护应用接入客户端及其协议配置；客户端凭据不随普通列表接口明文返回。",
   "parameters": [],
   "method": "GET",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

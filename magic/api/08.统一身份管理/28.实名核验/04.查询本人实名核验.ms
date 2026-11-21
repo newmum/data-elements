@@ -13,13 +13,19 @@
   "description": "从当前统一认证会话读取本人的核验申请、状态及结果，不暴露原始敏感资料。",
   "parameters": [],
   "method": "GET",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_ACCOUNT_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],
   "responseBody": null
 }
 ================================
+import authSession;
 // 接口：04.查询本人实名核验
 // 路由：GET /idaas/verifications/mine
 // 业务说明：从当前统一认证会话读取本人的核验申请、状态及结果，不暴露原始敏感资料。
@@ -32,7 +38,6 @@ import identityTransport;
 import cn.hutool.core.util.IdUtil;
 import cn.hutool.crypto.digest.DigestUtil;
 import cn.hutool.json.JSONUtil;
-import '@/idaas/auth-account-context' as accountContext;
 import '@/idaas/guard' as guard;
 import '@/idaas/mutate' as mutate;
 import '@/idaas/audit' as audit;
@@ -153,7 +158,7 @@ values(#{cid},'VERIFY_PROVIDER',#{id},'HMAC_KEY',#{revision},'AES256_GCM',#{ciph
             };
         });
     }
-    var ctx=accountContext();
+    var ctx=authSession.verifiedContext();
     if(ctx.account.identity_domain!='public' || ctx.account.must_change_password==1) {
         exit 403,'请使用已完成密码设置的公众认证账号';
     }

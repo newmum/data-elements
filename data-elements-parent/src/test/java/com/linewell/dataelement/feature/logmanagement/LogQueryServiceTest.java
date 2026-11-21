@@ -16,7 +16,7 @@ class LogQueryServiceTest {
     private final AuditStore store=mock(AuditStore.class);
     private final NamedParameterJdbcTemplate jdbc=mock(NamedParameterJdbcTemplate.class);
     private final LogQueryService queries=new LogQueryService(store,new AuditSanitizer(new ObjectMapper()),
-            LogParameterMagicFixture.provider(),new StructuredContainsPredicateAdapter());
+            LogParameterMagicFixture.invoker(),new StructuredContainsPredicateAdapter());
     private final LogScope owner=new LogScope("validation-tenant","validation-user","validation-app",null,null,"OWNER",List.of(),"operations");
     @BeforeEach void queryTimeoutTemplate() {
         lenient().when(jdbc.getJdbcTemplate()).thenReturn(new org.springframework.jdbc.core.JdbcTemplate());

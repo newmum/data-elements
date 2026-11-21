@@ -13,7 +13,12 @@
   "description": "用户显式发起后读取应用配置表的界面配置，核验运行绑定并调用租户接收端写入；返回每次下发结果，不后台轮询。",
   "parameters": [],
   "method": "POST",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

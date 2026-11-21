@@ -13,7 +13,12 @@
   "description": "校验回调地址、客户端类型和应用权限，登记协议客户端并保存可选统一认证配置；不改变租户本地登录体系。",
   "parameters": [],
   "method": "POST",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

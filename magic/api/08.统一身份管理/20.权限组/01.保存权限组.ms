@@ -13,7 +13,12 @@
   "description": "校验请求字段、所属范围和版本；新建或更新权限组及必要关联记录，写入审计并返回保存结果。维护业务应用的权限组及成员关系，用于聚合可授权的人员范围。",
   "parameters": [],
   "method": "POST",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

@@ -13,7 +13,7 @@
   "description": "公开提交管理员核验申请，统一回执防止账号枚举；按来源和账号限频并记录脱敏审计。",
   "parameters": [],
   "method": "POST",
-  "options": [],
+  "options": [{"name": "access", "value": "PUBLIC_ACTION"}],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

@@ -17,12 +17,17 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.servlet.HandlerMapping;
 import org.springframework.web.multipart.MultipartHttpServletRequest;
+import org.ssssssss.magicapi.core.model.ApiInfo;
 
 /** Legacy allowlisted exact-query fields plus independent, immutable general safe snapshots. */
 public final class AuditRequestParameters {
     public static final String DETAILS_KEY = "requestParameters";
     static final String INDEX_KEY = "requestParameterIndex";
     private static final String ATTRIBUTE = AuditRequestParameters.class.getName();
+    static final String SUPPRESSED = ATTRIBUTE + ".suppressed";
+    private static final String LOG_READER = ATTRIBUTE + ".logReader";
+    private static final String PRIVATE_PARAMETERS = ATTRIBUTE + ".privateParameters";
+    private static final String READ_ACTION = ATTRIBUTE + ".readAction";
     private static final String SAFE_ATTRIBUTE = ATTRIBUTE + ".safe";
     private static final String BODY_EXPECTED = ATTRIBUTE + ".bodyExpected";
     private static final String BODY_STARTED = ATTRIBUTE + ".bodyStarted";
@@ -39,6 +44,64 @@ public final class AuditRequestParameters {
     private static final Set<String> RESOLVED = Set.of("taskName", "deletedTaskId", "deletedTaskName");
 
     private AuditRequestParameters() {}
+
+    public static void validateResourceOptions(ApiInfo api) {
+        auditMode(api);
+        readAction(api);
+    }
+
+    private static String auditMode(ApiInfo api) {
+        String mode = auditOption(api, "auditMode");
+        if (mode == null || "PRIVATE_PARAMETERS".equals(mode)) return mode;
+        if ("LOG_READER".equals(mode) && ("GET".equals(api.getMethod()) || "HEAD".equals(api.getMethod()))) return mode;
+        throw new IllegalArgumentException("日志读取审计选项只允许在 GET 或 HEAD 资源上声明 LOG_READER");
+    }
+
+    private static String readAction(ApiInfo api) {
+        String action = auditOption(api, "auditReadAction");
+        if (action != null && !"POST".equals(api.getMethod())) {
+            throw new IllegalArgumentException("只读动作审计选项只允许在 POST 资源上声明");
+        }
+        return action;
+    }
+
+    private static String auditOption(ApiInfo api, String name) {
+        if (api == null || api.getOptions() == null) return null;
+        var options = api.getOptions().stream()
+                .filter(option -> option != null && name.equals(option.getName()))
+                .toList();
+        if (options.isEmpty()) return null;
+        if (options.size() != 1 || !(options.getFirst().getValue() instanceof String value) || value.isBlank()) {
+            throw new IllegalArgumentException("Magic API 审计选项必须为唯一的非空字符串：" + name);
+        }
+        return value;
+    }
+
+    static void selectResourceAudit(HttpServletRequest request, ApiInfo api) {
+        String mode = auditMode(api);
+        if (mode == null) return;
+        if ("LOG_READER".equals(mode)) request.setAttribute(LOG_READER, true);
+        request.setAttribute(PRIVATE_PARAMETERS, true);
+        // A resource saved after MVC matching may apply the more restrictive mode.
+        request.removeAttribute(ATTRIBUTE);
+        request.removeAttribute(SAFE_ATTRIBUTE);
+        request.removeAttribute(BODY_EXPECTED);
+    }
+
+    static void selectReadAction(HttpServletRequest request, ApiInfo resource, Object body) {
+        String defaultRead = readAction(resource);
+        if (defaultRead == null) return;
+        Object action = body instanceof Map<?, ?> values ? values.get("action") : null;
+        if (action == null || "".equals(action) || defaultRead.equals(action)) request.setAttribute(READ_ACTION, true);
+    }
+
+    static boolean isReadAction(HttpServletRequest request) {
+        return Boolean.TRUE.equals(request.getAttribute(READ_ACTION));
+    }
+
+    static boolean isLogReaderRequest(HttpServletRequest request) {
+        return Boolean.TRUE.equals(request.getAttribute(LOG_READER));
+    }
 
     static void capture(HttpServletRequest request, Object... sources) {
         if (!eligible(request)) return;
@@ -296,11 +359,13 @@ public final class AuditRequestParameters {
     static boolean eligible(HttpServletRequest request) {
         if (request == null) return false;
         try {
+            if (Boolean.TRUE.equals(request.getAttribute(SUPPRESSED)) || Boolean.TRUE.equals(request.getAttribute(PRIVATE_PARAMETERS))
+                    || AuditIdentityResolver.protectsIdentityParameters(request)) return false;
             String path = request.getRequestURI();
             if (path == null) return false;
             if (request.getAttribute(AuditIdentityResolver.ATTRIBUTE) instanceof AuditIdentity actor && actor.platform()) return false;
-            return !(path.startsWith("/portal/") || path.startsWith("/idaas/") || path.startsWith("/sym/logs/")
-                    || path.startsWith("/api/web/") || path.startsWith("/auth/") || path.startsWith("/security/"));
+            return !(path.startsWith("/portal/") || path.startsWith("/idaas/")
+                    || path.startsWith("/auth/") || path.startsWith("/security/"));
         } catch (RuntimeException error) { return false; }
     }
 

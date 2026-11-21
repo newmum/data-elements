@@ -13,7 +13,12 @@
   "description": "按账号、状态与时间范围查询核验记录，校验可见范围并对证件资料脱敏。",
   "parameters": [],
   "method": "GET",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

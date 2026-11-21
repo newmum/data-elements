@@ -1,4 +1,10 @@
 {
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "id": "log_command_platform_v1",
   "groupId": "log_management_api_group_v1",
   "name": "02.日志管理操作",

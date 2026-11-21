@@ -13,7 +13,12 @@
   "description": "校验应用管理权限、接收地址和认证参数，将接入配置写入控制库；仅保存配置，不发起数据传输。",
   "parameters": [],
   "method": "POST",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

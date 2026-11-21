@@ -35,9 +35,17 @@
 }
 ================================
 import '@/common/nifiTaskChainRows' as query
+import cn.hutool.extra.spring.SpringUtil
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient
 import com.linewell.dataelement.integration.nifi.canvas.pipeline.HiveSinkPublicationPolicy
+import com.linewell.dataelement.integration.nifi.canvas.pipeline.NifiNodeMapping
+import com.linewell.dataelement.integration.nifi.canvas.pipeline.Pipeline
+import com.linewell.dataelement.integration.nifi.canvas.pipeline.Pipeline$Dsl as CanvasDsl
+import com.linewell.dataelement.integration.nifi.canvas.pipeline.PipelineStatus
 import com.linewell.dataelement.integration.nifi.canvas.pipeline.PipelineResourceReferences
 import java.lang.IllegalStateException
+import java.lang.Number
 import java.nio.charset.StandardCharsets
 import java.util.ArrayList
 import java.util.LinkedHashMap
@@ -45,7 +53,6 @@ import java.util.LinkedHashSet
 import java.util.Objects
 import org.springframework.http.HttpStatus
 import org.springframework.web.server.ResponseStatusException
-import nifiTaskChainRuntime
 
 // @/common/nifiAccessTaskChain 按 identifier 和 byPipeline 读取接入任务及画布，返回展示节点、连线和原生入口。
 // 所有查库由共享函数从当前行业会话确定可信租户。普通画布只查库；nativeView 为真时才可能查 NiFi。
@@ -107,9 +114,24 @@ var authorizedSources = ids => {
     return result
 }
 
+// 保留链路历史画布的状态默认值及空节点映射。限额校验在重建结果之前完成。
+var readLong = (row, key) => {
+    var value = row.get(key)
+    return value instanceof Number ? value.longValue() : null
+}
+var canvasStatus = value => {
+    for (candidate in PipelineStatus.values()) {
+        if (candidate.name().equals(value)) {
+            return candidate
+        }
+    }
+    return PipelineStatus.SAVED
+}
+
 // 一次读取全部候选画布，先限制 DSL 总字节及节点数量，再根据精确 ID 集合验证读取范围。
 var loadPipelines = ids => {
     var result = new LinkedHashMap()
+    var json = SpringUtil.getBean(ObjectMapper.class)
     var nodeCount = 0
     var byteCount = 0
     for (row in query('pipelines', null, false, new ArrayList(ids))) {
@@ -120,7 +142,7 @@ var loadPipelines = ids => {
         }
         var dsl = null
         try {
-            dsl = nifiTaskChainRuntime.dsl(source)
+            dsl = json.readValue(source, CanvasDsl)
         } catch (invalid) {
             conflict('任务画布内容无法读取，请检查保存的配置')
         }
@@ -133,7 +155,12 @@ var loadPipelines = ids => {
             conflict('链路组件超过5000个，请分段管理')
         }
         try {
-            var pipeline = nifiTaskChainRuntime.pipeline(row, dsl)
+            var mappingSource = text(row, 'node_mapping_json')
+            var nodeMapping = mappingSource.isBlank() ? null : json.readValue(mappingSource, NifiNodeMapping)
+            var pipeline = new Pipeline(text(row, 'id'), row.get('name'), row.get('description'),
+                readLong(row, 'created_at'), readLong(row, 'updated_at'), dsl, text(row, 'nifi_process_group_id'),
+                canvasStatus(text(row, 'status')), text(row, 'last_deployed_hash'), readLong(row, 'last_deployed_at'),
+                readLong(row, 'last_stopped_at'), nodeMapping, readLong(row, 'last_bulletin_id'))
             result.put(pipeline.id(), pipeline)
         } catch (invalid) {
             conflict('任务画布内容无法读取，请检查保存的配置')
@@ -450,7 +477,9 @@ var includeNativeHierarchy = graph => {
         return
     }
     try {
-        var root = nifiTaskChainRuntime.nativeHierarchy()
+        var nifi = SpringUtil.getBean(NifiClient.class)
+        var root = nifi.getProcessGroupStatus(nifi.getRootProcessGroupId())
+            .path('processGroupStatus').path('aggregateSnapshot')
         if (!root.isObject() || root.path('id').asText('').isBlank()) {
             throw new IllegalStateException('NiFi流程组层级不完整')
         }

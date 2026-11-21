@@ -13,7 +13,12 @@
   "description": "核验统一认证账号和目标法人状态后建立成员关系，记录办理身份范围与审计。",
   "parameters": [],
   "method": "POST",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

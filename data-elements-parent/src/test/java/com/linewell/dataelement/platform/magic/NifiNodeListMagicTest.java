@@ -3,15 +3,17 @@ package com.linewell.dataelement.platform.magic;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.anyMap;
+import static org.mockito.ArgumentMatchers.eq;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.linewell.dataelement.dataservice.flowserve.module.FlowHttpModule;
 import com.linewell.dataelement.integration.nifi.canvas.config.NifiNodeRuntimeResolver;
 import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient;
+import com.linewell.dataelement.magic.runtime.route.RegisteredMagicFunctionInvoker;
 import com.linewell.dataelement.model.common.CommonResponse;
 import com.linewell.dataelement.platform.tenant.config.TenantProperties;
 import com.linewell.dataelement.platform.tenant.domain.TenantContext;
-import com.linewell.dataelement.platform.tenant.infrastructure.datasource.TenantDataSourceRegistry;
 import com.linewell.dataelement.utils.LocalCache;
 import com.sun.net.httpserver.HttpServer;
 import java.net.InetSocketAddress;
@@ -46,6 +48,7 @@ import org.ssssssss.magicapi.core.interceptor.DefaultResultProvider;
 import org.ssssssss.script.MagicScript;
 import org.ssssssss.script.MagicScriptContext;
 import org.ssssssss.script.runtime.ExitValue;
+import org.ssssssss.script.runtime.function.MagicScriptLambdaFunction;
 
 /** Execute the editable script against the actual Magic SQL module, including pagination. */
 class NifiNodeListMagicTest {
@@ -130,7 +133,7 @@ class NifiNodeListMagicTest {
             var result = assertInstanceOf(Map.class, assertInstanceOf(CommonResponse.class, response.getBody()).getData());
             assertEquals(false, result.get("success"));
             assertEquals(302, result.get("status"));
-            assertEquals(List.of("GET /api/v1/runtime/health"), paths);
+            assertEquals(List.of("GET /validation/runtime/status"), paths);
             assertEquals(1, fixture.counter.reads);
         } finally {
             upstream.stop(0);
@@ -160,9 +163,7 @@ class NifiNodeListMagicTest {
                     "baseUrl", "http://127.0.0.1:" + upstream.getAddress().getPort(), "authUsername", "", "authPassword", "");
             String id = (String) assertInstanceOf(Map.class, fixture.save(form)).get("tid");
             assertEquals(1, fixture.jdbc.queryForObject("select is_default from nifi_node_t where tid=?", Integer.class, id));
-            var registry = mock(TenantDataSourceRegistry.class);
-            when(registry.dataSourceForTenant("police")).thenReturn(fixture.jdbc.getDataSource());
-            var resolver = new NifiNodeRuntimeResolver(registry, new TenantProperties());
+            var resolver = fixture.runtimeResolver();
             var client = new NifiClient(resolver, new ObjectMapper());
             fixture.resolver = resolver;
             fixture.client = client;
@@ -170,9 +171,15 @@ class NifiNodeListMagicTest {
             try (var tenant = TenantContext.use("police")) {
                 var forbidden = fixture.probe(Map.of("action", "health", "nodeType", "sync", "nodeId", "foreign", "tenantId", "foreign"));
                 assertEquals(false, forbidden.get("success"));
+                assertEquals(1, fixture.configurationReads);
+                var diagnostic = fixture.probe(Map.of("action", "diagnostics", "nodeId", "deleted"));
+                assertEquals(false, diagnostic.get("success"));
                 assertTrue(exchanges.isEmpty());
                 var success = fixture.probe(probeRequest);
                 assertEquals(true, success.get("success"));
+                var metrics = fixture.probe(Map.of("action", "diagnostics", "nodeId", id));
+                assertEquals(false, metrics.get("success"));
+                assertEquals("NiFi 未返回系统诊断快照", metrics.get("message"));
                 var initialListRow = fixture.firstNode();
                 assertEquals("reachable", initialListRow.get("healthStatus"));
                 assertEquals(success.get("message"), initialListRow.get("healthMessage"));
@@ -197,12 +204,42 @@ class NifiNodeListMagicTest {
                 assertEquals("unknown", fixture.firstNode().get("healthStatus"));
             }
             assertEquals(List.of("GET /nifi-api/flow/process-groups/root Authorization=null",
+                    "GET /nifi-api/system-diagnostics Authorization=null",
                     "POST /nifi-api/process-groups/root/process-groups Authorization=null",
                     "GET /nifi-api/flow/process-groups/root/status Authorization=null",
                     "GET /nifi-api/flow/process-groups/root Authorization=null"), exchanges);
         } finally {
             upstream.stop(0);
         }
+    }
+
+    @Test
+    void structuredRuntimeSelectionPreservesLegacyNullsAndOneRead() throws Exception {
+        var fixture = new Fixture(0);
+        fixture.jdbc.update("""
+                insert into nifi_node_t(tid, tenant_id, is_del, node_code, base_url, is_default, enabled, updated_time) values
+                  ('fallback','police',0,'fallback','http://validation.invalid',null,1,'2026-01-06 00:00:00'),
+                  ('disabled','police',0,'disabled','http://validation.invalid',2,0,'2026-01-06 00:00:00'),
+                  ('older','police',0,'old','http://validation.invalid',1,1,'2026-01-01 00:00:00'),
+                  ('selected','police',null,'chosen','http://validation.invalid/',1,null,'2026-01-05 00:00:00')
+                """);
+        var resolver = fixture.runtimeResolver();
+        try (var tenant = TenantContext.use("police")) {
+            assertNull(fixture.readConfiguration(null, null));
+            assertEquals(0, fixture.configurationReads);
+            assertEquals("selected", resolver.resolve().id());
+            assertEquals(1, fixture.configurationReads);
+            assertEquals("http://validation.invalid", resolver.resolveAssignedNode("fallback").baseUrl());
+            assertEquals(2, fixture.configurationReads);
+            assertTrue(assertThrows(IllegalStateException.class, () -> resolver.resolveAssignedNode("selected")).getMessage().contains("已停用"));
+            assertTrue(assertThrows(IllegalStateException.class, () -> resolver.resolveAssignedNode("foreign")).getMessage().contains("不属于当前租户"));
+            assertThrows(IllegalStateException.class, () -> resolver.resolveAssignedNode("deleted"));
+            assertEquals(5, fixture.configurationReads);
+        }
+        assertNull(TenantContext.getTenantId());
+        assertEquals("selected", resolver.resolve().id());
+        assertEquals(6, fixture.configurationReads);
+        assertNull(TenantContext.getTenantId());
     }
 
     @Test
@@ -238,8 +275,31 @@ class NifiNodeListMagicTest {
         final SQLModule db;
         final Counter counter = new Counter();
         final Scope scope = new Scope();
+        int configurationReads;
         NifiNodeRuntimeResolver resolver;
         NifiClient client;
+
+        NifiNodeRuntimeResolver runtimeResolver() {
+            var bridge = mock(RegisteredMagicFunctionInvoker.class);
+            when(bridge.invoke(eq("nifi_runtime_node_read_v1"), anyMap())).thenAnswer(invocation -> {
+                Map<String, Object> inputs = invocation.getArgument(1);
+                return readConfiguration(inputs.get("nodeId"), inputs.get("consume"));
+            });
+            var properties = new TenantProperties();
+            properties.setDefaultTenantId("police");
+            return new NifiNodeRuntimeResolver(bridge, properties);
+        }
+
+        Object readConfiguration(Object id, Object consume) throws Exception {
+            var actual = CanonicalMagicSources.byPath("function/01.通用函数/78.读取NiFi运行节点配置.ms",
+                    "nifi_runtime_node_read_v1").replaceAll("(?m)^import (?:tableRead|tenantRuntime)\\R", "");
+            var bindings = new LinkedHashMap<String, Object>();
+            bindings.put("nodeId", id);
+            bindings.put("consume", consume);
+            bindings.put("tenantRuntime", new com.linewell.dataelement.platform.tenant.api.TenantMagicModule(null));
+            bindings.put("tableRead", TaskRuntimeMagicFixture.structuredReads(jdbc, sql -> configurationReads++));
+            return MagicScript.create(actual, null).execute(new MagicScriptContext(bindings));
+        }
         Fixture(int size) {
             var source = new DriverManagerDataSource("jdbc:h2:mem:nifi_nodes_" + UUID.randomUUID()
                     + ";MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1");
@@ -281,6 +341,10 @@ class NifiNodeListMagicTest {
             bindings.put("CommonResponse", CommonResponse.class);
             bindings.put("ResponseEntity", ResponseEntity.class);
             bindings.put("nodeResolver", resolver);
+            bindings.put("readConfiguration", (MagicScriptLambdaFunction) (ctx, args) -> {
+                try { return readConfiguration(args[0], args[1]); }
+                catch (Exception failure) { throw new IllegalStateException(failure); }
+            });
             bindings.put("nifi", client);
             var script = CanonicalMagicSources.byId("ods_nifi_node_page_01").replaceAll("(?m)^import [^\\r\\n]*\\r?\\n", "");
             return MagicScript.create(script,null).execute(new MagicScriptContext(bindings));
@@ -294,10 +358,14 @@ class NifiNodeListMagicTest {
             var script = CanonicalMagicSources.byId("ods_service_node_page_01").replaceAll("(?m)^import [^\\r\\n]*\\r?\\n", "");
             return MagicScript.create(script, null).execute(new MagicScriptContext(Map.of(
                     "db", db, "tenantRuntime", scope, "httpx", new FlowHttpModule(null, new ObjectMapper()), "body", body,
-                    "URI", URI.class, "CommonResponse", CommonResponse.class, "ResponseEntity", ResponseEntity.class)));
+                    "URI", URI.class, "CommonResponse", CommonResponse.class, "ResponseEntity", ResponseEntity.class,
+                    "flowRuntime", new FlowRuntimePaths())));
         }
     }
     public static class Scope { String tenant = "police"; public String id() { return tenant; } }
+    public static class FlowRuntimePaths {
+        public String runtimeHealthPath() { return "/validation/runtime/status"; }
+    }
     static class Counter implements SQLInterceptor {
         int reads;
         @Override public void preHandle(BoundSql sql, RequestEntity request) {

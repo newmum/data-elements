@@ -13,7 +13,12 @@
   "description": "读取指定应用的接收地址、认证方式和启用状态；对接入凭据脱敏，不主动连接租户。",
   "parameters": [],
   "method": "GET",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

@@ -16,18 +16,52 @@ class PackageArchitectureTest {
     private static final Path JAVA_ROOT = BackendTestSources.javaPackageRoot();
 
     @Test
+    void flowServeNodeProtocolUsesIntegrationPackageAndConfiguredPaths() {
+        Path controller = JAVA_ROOT.resolve("integration/flowserve/FlowServeRuntimeController.java");
+        assertThat(controller).exists();
+        assertThat(JAVA_ROOT.resolve("dataservice/flowserve/FlowServeRuntimeController.java")).doesNotExist();
+        assertThat(read(controller)).contains("${flowserve.runtime.protocol-base-path}").doesNotContain("/api/v1/runtime");
+        assertThat(read(JAVA_ROOT.resolve("dataservice/flowserve/FlowServeRuntimeAdapter.java"))).doesNotContain("/api/v1/runtime");
+    }
+
+    @Test
     void logMagicAdapterUsesItsModulePackageAndComponentQueriesStayInMagic() {
         assertThat(JAVA_ROOT.resolve("magic/module/LogManagementMagicModule.java")).exists();
         assertThat(JAVA_ROOT.resolve("feature/logmanagement/LogManagementMagicModule.java")).doesNotExist();
         assertThat(JAVA_ROOT.resolve("feature/logmanagement/LogComponentService.java")).doesNotExist();
-        assertThat(JAVA_ROOT.resolve("platform/web/download/LogDownloadController.java")).exists();
+        assertThat(JAVA_ROOT.resolve("platform/web/download/LogDownloadController.java")).doesNotExist();
         assertThat(JAVA_ROOT.resolve("feature/logmanagement/PlatformLogDownloadController.java")).doesNotExist();
+    }
+
+    @Test
+    void niFiRuntimeStreamUsesMagicAndPlatformAsyncTransport() {
+        assertThat(JAVA_ROOT.resolve("magic/module/TaskRuntimeMagicModule.java")).exists();
+        Path oldPackage = JAVA_ROOT.resolve("integration/nifi/canvas/runtime");
+        assertThat(oldPackage.resolve("TaskRuntimeMagicModule.java")).doesNotExist();
+        assertThat(oldPackage.resolve("TaskRuntimeController.java")).doesNotExist();
+        assertThat(oldPackage.resolve("TaskRuntimeAsyncConfiguration.java")).doesNotExist();
+        assertThat(read(JAVA_ROOT.resolve("platform/web/config/WebConfiguration.java")))
+                .doesNotContain("/nifi/", "task-runtime");
+    }
+
+    @Test
+    void niFiNodeQueriesAndStartStateStayInMagic() {
+        Path integration = JAVA_ROOT.resolve("integration/nifi/canvas");
+        assertThat(integration.resolve("lifecycle/PipelineRuntimeStatusResolver.java")).doesNotExist();
+        assertThat(integration.resolve("lifecycle/PipelineTaskLifecycleSynchronizer.java")).doesNotExist();
+        assertThat(read(integration.resolve("config/NifiNodeRuntimeResolver.java")))
+                .contains("RegisteredMagicFunctionInvoker")
+                .doesNotContain("JdbcTemplate", "select tid", "ConfiguredNode");
     }
 
     @Test
     void tenantAndReconciliationDoNotReturnToLegacyRootPackages() throws Exception {
         assertThat(javaFiles(JAVA_ROOT.resolve("tenant"))).isEmpty();
         assertThat(javaFiles(JAVA_ROOT.resolve("reconciliation"))).isEmpty();
+        assertThat(JAVA_ROOT.resolve("feature/identity/api/IdentityAccountAdminMagicModule.java")).doesNotExist();
+        assertThat(JAVA_ROOT.resolve("feature/identity/api/ControlIdentityMagicModule.java")).doesNotExist();
+        assertThat(JAVA_ROOT.resolve("feature/identity/application/IdentityAccountAdminService.java")).doesNotExist();
+        assertThat(JAVA_ROOT.resolve("feature/identity/application/IdentityTenantRelationService.java")).doesNotExist();
     }
 
     @Test
@@ -143,6 +177,16 @@ class PackageArchitectureTest {
         Path controllers = JAVA_ROOT.resolve("integration/nifi/canvas/controller");
         assertThat(controllers.resolve("PipelineController.java")).doesNotExist();
         assertThat(controllers.resolve("PipelineRunController.java")).doesNotExist();
+        assertThat(JAVA_ROOT.resolve("integration/nifi/canvas/lifecycle/NifiTaskChainRuntime.java")).doesNotExist();
+    }
+
+    @Test
+    void retiredPipelineFileImporterAndItsPersistenceTypesAreAbsent() {
+        Path persistence = JAVA_ROOT.resolve("feature/dataaccess/infrastructure/persistence");
+        assertThat(JAVA_ROOT.resolve("integration/nifi/canvas/migration/PipelineFileToDbMigrationRunner.java"))
+                .doesNotExist();
+        assertThat(persistence.resolve("entity/NifiPipelineMigrationMarkT.java")).doesNotExist();
+        assertThat(persistence.resolve("mapper/NifiPipelineMigrationMarkTMapper.java")).doesNotExist();
     }
 
     @Test
@@ -154,8 +198,13 @@ class PackageArchitectureTest {
         assertThat(JAVA_ROOT.resolve("feature/approval/application/ApprovalLifecyclePort.java")).doesNotExist();
         assertThat(JAVA_ROOT.resolve("feature/approval/infrastructure/magic/MagicApprovalLifecycleAdapter.java")).doesNotExist();
         assertThat(JAVA_ROOT.resolve("platform/configuration/NodeConfigurationController.java")).doesNotExist();
-        assertThat(JAVA_ROOT.resolve("magic/runtime/result/CustomJsonValueProvider.java")).exists();
+        assertThat(JAVA_ROOT.resolve("platform/tenant/api/IdentityPolicyInvoker.java")).doesNotExist();
+        assertThat(read(JAVA_ROOT.resolve("platform/tenant/protocol/IdentityProtocolBridge.java")))
+                .contains("RegisteredMagicFunctionInvoker")
+                .doesNotContain("MagicAPIService", "\"/idaas/");
+        assertThat(JAVA_ROOT.resolve("magic/runtime/result/CustomJsonValueProvider.java")).doesNotExist();
         assertThat(JAVA_ROOT.resolve("magic/runtime/result/MagicApiResultProvider.java")).exists();
+        assertThat(JAVA_ROOT.resolve("integration/nifi/canvas/controller/NifiProxyController.java")).doesNotExist();
         assertThat(JAVA_ROOT.resolve("magic/module/MagicResourceLinkModule.java")).exists();
         assertThat(JAVA_ROOT.resolve("magic/module/SystemConfigMagicModule.java")).exists();
         assertThat(JAVA_ROOT.resolve("magic/module/UiComponentCacheMagicModule.java")).exists();
@@ -164,6 +213,7 @@ class PackageArchitectureTest {
         assertThat(JAVA_ROOT.resolve("integration/metadata/TableInventoryProbe.java")).exists();
         assertThat(JAVA_ROOT.resolve("metautil/controller/TableMetadataCollectionController.java")).doesNotExist();
         assertThat(JAVA_ROOT.resolve("metautil/service/TableMetadataCollectionService.java")).doesNotExist();
+        assertThat(JAVA_ROOT.resolve("metautil/model/dto/DirectPageQueryRequest.java")).doesNotExist();
         assertThat(JAVA_ROOT.resolve("platform/configuration/SystemConfigMagicModule.java")).doesNotExist();
         assertThat(JAVA_ROOT.resolve("platform/configuration/UiComponentCacheController.java")).doesNotExist();
         assertThat(JAVA_ROOT.resolve("platform/configuration/UiComponentCacheMagicModule.java")).doesNotExist();
@@ -183,17 +233,23 @@ class PackageArchitectureTest {
         assertThat(JAVA_ROOT.resolve("integration/transfer/FtpsClientFactory.java")).exists();
         assertThat(JAVA_ROOT.resolve("metautil/structured/FtpsClientFactory.java")).doesNotExist();
         assertThat(JAVA_ROOT.resolve("integration/transfer/haitong/HaitongStandaloneRegistryClient.java")).exists();
-        assertThat(JAVA_ROOT.resolve("integration/transfer/haitong/DataPushFjghccDeliveryService.java")).exists();
+        assertThat(JAVA_ROOT.resolve("integration/transfer/haitong/HaitongPushCredentialClient.java")).doesNotExist();
+        assertThat(JAVA_ROOT.resolve("integration/transfer/haitong/DataPushFjghccDeliveryService.java")).doesNotExist();
+        assertThat(JAVA_ROOT.resolve("integration/transfer/haitong/RelayRequestAuthentication.java")).doesNotExist();
         assertThat(JAVA_ROOT.resolve("config/DataPushRegistryConfiguration.java")).exists();
         assertThat(JAVA_ROOT.resolve("dataservice/push/DataPushRegistryController.java")).doesNotExist();
         assertThat(JAVA_ROOT.resolve("dataservice/push/DataPushSchemaService.java")).doesNotExist();
     }
 
     @Test
-    void mvcConfigurationDoesNotOwnLegacyRouteRewrites() {
+    void sharedBackendHasNoLegacyRouteRewriter() throws IOException {
         assertThat(read(JAVA_ROOT.resolve("platform/web/config/WebConfiguration.java")))
                 .doesNotContain("HttpServletRequestWrapper", "legacyResourceRoutes", "LegacyRouteConfiguration");
-        assertThat(JAVA_ROOT.resolve("platform/web/compat/LegacyRouteConfiguration.java")).exists();
+        assertThat(javaFiles(JAVA_ROOT.resolve("platform/web/compat"))).isEmpty();
+        assertThat(JAVA_ROOT.resolve("integration/nifi/canvas/config/CorsConfig.java")).doesNotExist();
+        assertThat(JAVA_ROOT.resolve("integration/workflow/WarmFlowDesignerAccess.java")).exists();
+        assertThat(JAVA_ROOT.resolve("integration/workflow/HandlerSelectServiceImpl.java")).exists();
+        assertThat(javaFiles(JAVA_ROOT.resolve("feature/approval/infrastructure/warmflow/designer"))).isEmpty();
     }
 
     @Test

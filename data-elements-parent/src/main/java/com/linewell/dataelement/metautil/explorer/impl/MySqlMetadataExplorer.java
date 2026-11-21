@@ -3,6 +3,7 @@ package com.linewell.dataelement.metautil.explorer.impl;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -402,27 +403,8 @@ public class MySqlMetadataExplorer extends AbstractMetadataExplorer {
             return result;
         }
 
-        String placeholders = String.join(",", java.util.Collections.nCopies(result.size(), "?"));
-        String sql = "SELECT TABLE_NAME, COLUMN_NAME, COLUMN_COMMENT, DATA_TYPE, COLUMN_TYPE, "
-                + "CHARACTER_MAXIMUM_LENGTH, NUMERIC_PRECISION, NUMERIC_SCALE, IS_NULLABLE, "
-                + "COLUMN_DEFAULT, COLUMN_KEY, EXTRA, ORDINAL_POSITION, CHARACTER_SET_NAME, COLLATION_NAME "
-                + "FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME IN ("
-                + placeholders + ") ORDER BY TABLE_NAME, ORDINAL_POSITION";
-        try (Connection conn = getConnection(config);
-             PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setString(1, config.getDatabase());
-            int parameter = 2;
-            for (String tableName : requestedNames) {
-                ps.setString(parameter++, tableName);
-            }
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    ColumnInfo column = readColumnInfo(rs);
-                    result.computeIfAbsent(
-                            rs.getString("TABLE_NAME").toLowerCase(Locale.ROOT),
-                            ignored -> new ArrayList<>()).add(column);
-                }
-            }
+        try (Connection conn = getConnection(config)) {
+            readColumnsByTables(conn, config.getDatabase(), requestedNames, result, false);
             return result;
         } catch (Exception e) {
             log.error("Batch column lookup failed: {}", e.getMessage(), e);
@@ -430,7 +412,49 @@ public class MySqlMetadataExplorer extends AbstractMetadataExplorer {
         }
     }
 
-    private ColumnInfo readColumnInfo(ResultSet rs) throws Exception {
+    /** Reads exact names from the connected catalog, preserving case for case-sensitive servers. */
+    public static Map<String, List<ColumnInfo>> getColumnsInCatalog(
+            Connection conn, String catalog, List<String> tableNames) throws SQLException {
+        Map<String, List<ColumnInfo>> result = new LinkedHashMap<>();
+        tableNames.forEach(name -> result.put(name, new ArrayList<>()));
+        readColumnsByTables(conn, catalog, tableNames, result, true);
+        return result;
+    }
+
+    private static void readColumnsByTables(Connection conn, String catalog, List<String> requestedNames,
+                                            Map<String, List<ColumnInfo>> result, boolean exact) throws SQLException {
+        String placeholders = String.join(",", java.util.Collections.nCopies(requestedNames.size(), "?"));
+        String sql = "SELECT TABLE_NAME, COLUMN_NAME, COLUMN_COMMENT, DATA_TYPE, COLUMN_TYPE, "
+                + "CHARACTER_MAXIMUM_LENGTH, NUMERIC_PRECISION, NUMERIC_SCALE, IS_NULLABLE, "
+                + "COLUMN_DEFAULT, COLUMN_KEY, EXTRA, ORDINAL_POSITION, CHARACTER_SET_NAME, COLLATION_NAME "
+                + "FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME IN ("
+                + placeholders + ")" + (exact ? " AND BINARY TABLE_SCHEMA = BINARY ?" : "")
+                + " ORDER BY TABLE_NAME, ORDINAL_POSITION";
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, catalog);
+            int parameter = 2;
+            for (String tableName : requestedNames) {
+                ps.setString(parameter++, tableName);
+            }
+            if (exact) {
+                ps.setString(parameter, catalog);
+                ps.setQueryTimeout(30);
+            }
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    String tableName = rs.getString("TABLE_NAME");
+                    if (exact) {
+                        if (result.containsKey(tableName)) result.get(tableName).add(readColumnInfo(rs));
+                    } else {
+                        result.computeIfAbsent(tableName.toLowerCase(Locale.ROOT), ignored -> new ArrayList<>())
+                                .add(readColumnInfo(rs));
+                    }
+                }
+            }
+        }
+    }
+
+    private static ColumnInfo readColumnInfo(ResultSet rs) throws SQLException {
         ColumnInfo column = new ColumnInfo();
         column.setColumnName(rs.getString("COLUMN_NAME"));
         column.setColumnComment(rs.getString("COLUMN_COMMENT"));

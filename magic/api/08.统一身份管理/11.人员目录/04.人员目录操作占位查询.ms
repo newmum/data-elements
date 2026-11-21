@@ -13,7 +13,12 @@
   "description": "当前仅核验平台会话具有中央人员写入权限，然后返回空列表；尚未读取或生成操作记录，此接口保留旧调用兼容。",
   "parameters": [],
   "method": "GET",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

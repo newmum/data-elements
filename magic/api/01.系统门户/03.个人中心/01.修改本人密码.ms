@@ -12,7 +12,10 @@
   "path": "/password",
   "method": "POST",
   "parameters": [],
-  "options": [],
+  "options": [
+    { "name": "access", "value": "TENANT_SESSION" },
+    { "name": "sessionRequiredMessage", "value": "登录已过期，请重新登录" }
+  ],
   "requestBody": "{\"oldPassword\":\"SM3摘要\",\"newPassword\":\"SM3摘要\"}",
   "headers": [],
   "paths": [],
@@ -29,12 +32,6 @@ import com.linewell.dataelement.utils.PwdRuleUtil;
 // POST /portal/profile/password 修改本人密码。
 // 请求：{ oldPassword: SM3(当前密码), newPassword: SM3(新密码) }
 // 仅使用服务端会话确定租户与用户；不得接受客户端传入的用户 ID 或租户 ID。
-
-try {
-    tenantAccounts.session();
-} catch (e) {
-    exit 401, '登录已过期，请重新登录';
-}
 
 var tenantId = (tenantRuntime.id() || '') + '';
 if (tenantId == '' || !tenantAccounts.isLocal(tenantId)) {

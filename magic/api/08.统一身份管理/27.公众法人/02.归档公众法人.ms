@@ -13,7 +13,12 @@
   "description": "按标识加载公众法人并检查所属范围与版本；执行软删除或撤销关联，保留审计历史。管理公众法人资料及法人账号成员关系；成员启用或撤销须核验当前办理身份。",
   "parameters": [],
   "method": "POST",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

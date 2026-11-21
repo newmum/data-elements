@@ -13,7 +13,12 @@
   "description": "按标识加载应用分组并检查所属范围与版本；执行软删除或撤销关联，保留审计历史。只操作控制库的应用分组，并维护排序和软删除状态；关联应用仍按独立应用记录管理。",
   "parameters": [],
   "method": "POST",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

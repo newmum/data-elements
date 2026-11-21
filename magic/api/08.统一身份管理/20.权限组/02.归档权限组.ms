@@ -13,7 +13,12 @@
   "description": "按标识加载权限组并检查所属范围与版本；执行软删除或撤销关联，保留审计历史。维护业务应用的权限组及成员关系，用于聚合可授权的人员范围。",
   "parameters": [],
   "method": "POST",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

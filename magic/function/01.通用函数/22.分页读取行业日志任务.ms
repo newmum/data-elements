@@ -86,7 +86,8 @@ if (!status.isBlank()) {
     }
     query.where(tableRead.equal(column('status', 'TEXT'), status))
 }
-var created = column('created_time', 'TIME')
+// 导出按提交时冻结的 UTC 截点筛选、排序和展示，兼容旧通用填充写入本地墙钟的记录。
+var created = column(exporting ? 'cutoff_time' : 'created_time', 'TIME')
 if (get('startTime') != null && get('endTime') != null) {
     var start = Instant.parse(get('startTime'))
     var end = Instant.parse(get('endTime'))
@@ -106,7 +107,7 @@ var textFields = ['tid', 'actor_name', 'actor_account', 'actor_org_name', 'statu
     kindField, exporting ? 'last_error_code' : 'hold_status']
 for (name in textFields) { fields.put(name, column(name, 'TEXT')) }
 var times = exporting ? ['created_time', finished, 'expires_at'] : ['created_time', finished, 'range_start', 'range_end']
-for (name in times) { fields.put(name, column(name, 'TIME')) }
+for (name in times) { fields.put(name, name == 'created_time' ? created : column(name, 'TIME')) }
 fields.put(count, column(count, 'NUMBER'))
 var extraCount = exporting ? 'row_limit' : 'byte_count'
 fields.put(extraCount, column(extraCount, 'NUMBER'))

@@ -13,31 +13,19 @@
   "description": "校验 Bearer 令牌的签名、受众、应用权限和撤销状态，返回当前接口调用身份及有效授权。",
   "parameters": [],
   "method": "GET",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_API_BEARER"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],
   "responseBody": null
 }
 ================================
-// 接口：01.查询接口调用身份
-// 路由：GET /idaas/api/whoami
-// 业务说明：校验 Bearer 令牌的签名、受众、应用权限和撤销状态，返回当前接口调用身份及有效授权。
-import identityRuntime;
 import identityApi;
-import request;
-import org.slf4j.LoggerFactory;
-import '@/idaas/api-call' as apiCall;
 
-// Executable JWT integration contract. appId must match the token audience;
-// permissions and revocation are recalculated on the server for this real path.
-return identityRuntime.control(()=>apiCall(()=>{
-    try {
-        var values=request.getValues('appId');
-        return identityApi.authorize(values==null || values.size()!=1?null:values[0]);
-    }
-    catch(e) {
-        LoggerFactory.getLogger('idaas.protocol').warn('API integration rejected: '+e.getClass().getSimpleName());
-        exit 403,'访问令牌或当前接口授权无效';
-    }
-}));
+// 返回框架已核验的当前接口调用身份。来源、配额和 Bearer 权限由注册资源的准入策略校验。
+return identityApi.verifiedCaller();

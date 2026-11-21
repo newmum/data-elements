@@ -12,7 +12,12 @@
   "path": "/inventory",
   "method": "GET",
   "parameters": [],
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

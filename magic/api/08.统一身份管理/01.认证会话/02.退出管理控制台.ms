@@ -13,7 +13,12 @@
   "description": "识别当前平台会话并撤销服务端令牌，记录退出事件，后续使用该令牌访问平台接口将失败。",
   "parameters": [],
   "method": "POST",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

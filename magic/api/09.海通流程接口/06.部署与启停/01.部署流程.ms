@@ -23,6 +23,10 @@
   ],
   "options": [
     {
+      "name": "jsonBody",
+      "value": "CACHED"
+    },
+    {
       "name": "wrap_request_parameter",
       "value": "param"
     }

@@ -13,7 +13,12 @@
   "description": "按应用和状态查询手动创建的资料下发任务、执行结果与失败原因；不执行待处理任务。",
   "parameters": [],
   "method": "GET",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

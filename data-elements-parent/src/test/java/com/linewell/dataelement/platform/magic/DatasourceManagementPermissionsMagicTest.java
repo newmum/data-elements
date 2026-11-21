@@ -500,7 +500,7 @@ class DatasourceManagementPermissionsMagicTest {
             var registry = mock(TenantDataSourceRegistry.class);
             when(registry.targets()).thenReturn(Map.of(TENANT, source));
             when(registry.dataSourceForTenant(TENANT)).thenReturn(source);
-            identityRuntime = new IdentityRuntimeMagicModule(null, null, properties, registry, source);
+            identityRuntime = new IdentityRuntimeMagicModule(properties, registry, source);
             createSchema();
             jdbc.update("""
                     INSERT INTO db_datasource_t(tid,tenant_id,org_id,created_by,is_del,asset_status) VALUES

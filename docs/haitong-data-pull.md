@@ -77,14 +77,14 @@ Magic 编辑器登录、`/internal/**` 运维及签发、`REGISTRY_SYNC` 服务�
 
 唯一可维护源码位于 [`magic/haitong/`](../magic/haitong)，独立索引为该目录 `.manifest.json`。Maven 将它打包到 JAR 的 `magic-api-bootstrap/`；该目录只是类路径资源名称，工程内不再维护第二份脚本。运行源仍是独立 MySQL `haitong.ht_magic_api_file`，不会写入共享控制库 `baseline.api_file_t`。启动只补缺失目录和资源，不覆盖编辑器已有内容。
 
-编辑器分组和接口用中文显示名称，文件传输诊断、历史推送与普通文件兼容入口沿用其既有 HTTP 地址。在 18083 冷启动后，已逐项回读所选目录与脚本，并核对 63 条方法和路由及 10 项真实 HTTP 响应。
+编辑器分组和接口用中文显示名称，文件传输诊断、历史推送与普通文件兼容入口沿用其既有 HTTP 地址。18083 冷启动后，已回读 61 项 API、8 项 Function、21 个 API 分组及与本地一致的 91 条索引。
 
 | 编辑器分组 | 方法/路径数量 | 职责 |
 | --- | ---: | --- |
 | 05.数据接收入口 | 9 | 统一推送、FTP/Kafka/日志兼容入口、通道接收、消息状态、文件批量导入与操作执行 |
 | 06.运维管理 | 14 | 概览、配置摘要、任务分页、失败重试、UNKNOWN 核实、文件扫描、协议探测、隔离消息、原文、OpenAPI、日志与对账 |
 | 07.推送密钥 | 1 | 平台服务签发和显式轮换数据源业务密钥 |
-| 08.附件传输 | 13 | 单次上传、初始化、分片、完成、提交、取消、状态、分页、批量状态、回执及 GET/HEAD 内容读取 |
+| 02.附件传输 | 12 | 单次上传、初始化、分片、完成、提交、取消、状态、分页、批量状态、回执及同一个 GET 资源提供的 GET/HEAD 内容读取 |
 
 `01.零信任网关对接`、`02.文件传输诊断` 和 `03.数据推送调试` 提供网关与联调入口。数据推送调试与正式入口共用脚本业务函数。调试入口使用 Magic 成功信封和规范化 JSON 幂等校验，正式入口使用原生 HTTP/JSON 响应和原始 JSON 字节幂等校验。
 
@@ -127,7 +127,7 @@ python tools/resource-sync.py publish --project haitong-data-pull --file "magic/
 
 首次接管使用 `pull --project haitong-data-pull` 只读核对并登记当前基准，不覆盖本地源。发布前比较资源 ID、路径及基准摘要，备份到仓库外私有目录；编辑器保存后核对运行脚本和数据库正文。分组元数据通过有条件更新保存后要求冷加载，不能将持久化成功当作运行已刷新。日常脚本发布不需要重启；新增 Java、依赖或目录变更须重新打包部署并回读。此迁移没有增加或修改数据库结构。
 
-`MagicBusinessHttpTest` 通过实际 Magic HTTP 处理器覆盖登记 20/100 项固定 4 次读取 SQL（含两次 HTTP 审计时钟读取）、批次授权收紧、故障事务回滚、原始字节幂等、运维查询与原文下载。`PushOperationsMagicTest` 编译全部脚本，核对 62 个路由无重复、API 自身 path 均为单段，并确认没有业务 `@RestController`。`FileUploadHttpTest` 的阻塞 HTTP 用例覆盖附件完整生命周期、回执、Range/HEAD 与单次流式上传，需显式启用 `-Dhaitong.loopback.tests=true`。3GiB 压力测试和 Python 流式客户端测试分别由 `haitong.large-file.tests` 和 `haitong.example-client.tests` 开启。默认使用隔离数据库，通过 `haitong.mysql.config` 可指定 MySQL 测试配置。
+`MagicBusinessHttpTest` 通过实际 Magic HTTP 处理器覆盖登记 20/100 项固定 4 次读取 SQL（含两次 HTTP 审计时钟读取）、批次授权收紧、故障事务回滚、原始字节幂等、运维查询与原文下载。`PushOperationsMagicTest` 编译全部脚本，核对 61 个注册路由无重复、API 自身 path 均为单段，并确认没有业务 `@RestController`。`FileUploadHttpTest` 的阻塞 HTTP 用例覆盖附件完整生命周期、回执、Range/HEAD 与单次流式上传，需显式启用 `-Dhaitong.loopback.tests=true`。3GiB 压力测试和 Python 流式客户端测试分别由 `haitong.large-file.tests` 和 `haitong.example-client.tests` 开启。默认使用隔离数据库，通过 `haitong.mysql.config` 可指定 MySQL 测试配置。
 
 <a id="unstructured-design"></a>
 
@@ -245,7 +245,7 @@ flowchart LR
 | `GET/HEAD /api/file/content?id={uploadId}` | 就绪文件鉴权回读，支持单 Range、后缀 Range、ETag 和 If-Range；无权限 404，非法范围 416，附件方式返回 |
 | `POST /api/file/receipt?id={uploadId}` | 已指定接收方身份回执；校验 deliveryId、目标、传输 SUCCEEDED、文件摘要和幂等键；业务状态为 ACCEPTED/REJECTED |
 
-这些附件资源位于「02.附件传输」。已有调用可沿用 `/api/v1/file-uploads` 的原 HTTP 方法、路径参数和响应链接。新请求使用 `/api/file`，响应中的状态和内容链接也使用该分组。定位旧请求的上传 ID 与片号时，以路径中的值为准。
+这些附件资源位于「02.附件传输」。内容读取由 GET 资源声明同址 HEAD，实际 HEAD 经过同一附件授权和就绪检查，响应携带对应的 Range、长度、媒体类型、ETag、缓存与附件头，正文零字节。416 的 Content-Range 返回 `bytes */总长度`，GET 的 Content-Length 为 0，HEAD 沿用容器省略该头的行为。已有调用可沿用 `/api/v1/file-uploads` 的原 HTTP 方法、路径参数和响应链接。新请求使用 `/api/file`，响应中的状态和内容链接也使用该分组。定位旧请求的上传 ID 与片号时，以路径中的值为准。
 
 整文件默认上限20MiB，由 `relay.files.single-upload-max-bytes` 配置，并同时满足字段绑定集合的大小和格式限制；超限返回413 `SINGLE_UPLOAD_TOO_LARGE`。调用方只传 `datasourceId、tableName、fieldName、fileName` 和原始文件正文，不再传 `collectionId、size、sha256`，旧参数会被拒绝。文件名须URL编码，不接受租户或目标地址。服务端先按可信配置校验数据源、表、字段和调用方授权，再以64KiB缓冲有界暂存、统计实际字节数并计算SHA-256，支持没有Content-Length的流；空文件、超限、断线和长度不符会清理暂存。接收阶段不占用长数据库事务，暂存并发受max-streams限制，额外临时磁盘上界为max-streams × single-upload-max-bytes，并预留磁盘安全余量；启动持有节点锁后清理断电遗留的incoming文件。测得大小后才创建持久会话和两倍大小的配额预留，复用原有分片落盘、异步格式/扫描、下载和业务提交机制。该方案增加一次有界磁盘拷贝，以避免整文件占用堆内存；大文件仍走原分片续传协议。重复请求比较服务端计算的实际正文摘要，同键不同文件409；中断后使用相同幂等键重发整文件，两种模式不能混用同一初始化幂等键。
 
@@ -2254,7 +2254,9 @@ token: <当前平台登录会话>
 
 服务器使用 `tenantRuntime.id()` 确认当前认证租户，并逐对象校验数据源、表及字段归属。同步登记接口沿用节点管理的租户数据边界。数据源管理页面的菜单角色范围按其独立接口执行。同步仅允许 `pool_cfg` 标记为数据推送接入的有效数据源，兼容已有同义字段，任一启用配置显式为 `false` 时拒绝推送。来源登记状态为 1 或 2 时，只纳入状态 2 的有效表及其有效字段。应用系统标识和名称也从当前租户有效主表读取。
 
-单源同步与契约发布共用 Magic 的 `/pushregistry/prepare` 和 `/pushregistry/persist`，由 `HaitongStandaloneRegistryClient` 发送 `REGISTRY_SYNC`。同步以当前会话租户的登记表和服务端节点配置生成快照，固定调用方为 `push-<datasourceId>`。业务密钥使用 `POST /dws/push/issue` 和 `POST /dws/push/rotate`，登记第五步自动调用签发入口。初次签发及成功占用新版本的轮换请求各回显一次，节点接收当前登记表完整快照和密钥摘要。空表快照可以登记凭据，后续完成表登记才授予表访问权限。节点暂时不可用时，重复签发重试同一摘要，轮换先确认节点当前摘要再生成下一版。旧登记和回调地址按原 HTTP 方法兼容。
+单源同步与契约发布共用 Magic 的 `/pushregistry/prepare` 和 `/pushregistry/persist`，由 `HaitongStandaloneRegistryClient` 发送 `REGISTRY_SYNC`。同步以当前会话租户的登记表和服务端节点配置生成快照，固定调用方为 `push-<datasourceId>`。业务密钥使用 `POST /dws/push/issue` 和 `POST /dws/push/rotate`，登记第五步自动调用签发入口。初次签发及成功占用新版本的轮换请求各回显一次，节点接收当前登记表完整快照和密钥摘要。空表快照可以登记凭据，后续完成表登记才授予表访问权限。节点暂时不可用时，重复签发重试同一摘要，轮换先确认节点当前摘要再生成下一版。共享平台登记与契约查询调用上述正式地址。第 170 批在共享 86 退役平台代理校验和 FTP 投递回调及旧地址。18083 的现役启动配置使用本地投递，历史 `PLATFORM_FTP` 投递记录仍可回读。
+
+共享后端的登记同步和历史密钥签发共用一个 HTTP 客户端。该客户端从 `data-element.push-registry.registry-sync-path` 和 `data-element.push-registry.credential-issue-path` 取得外部协议路径，默认分别为 `/api/v1/push` 和 `/internal/credentials/issue`。登记同步与历史签发各使用专用认证头。Magic 节点专用同步使用当前租户绑定节点的基础地址，并通过同一客户端取得登记同步路径。部署可以用 Spring 配置覆盖路径，保留基础地址的网关前缀；节点网关须使该路径可达。批量同步确认使用预览返回的 `planHash`。路径变更会使旧清单失效，节点配置页从新的预览响应展示接收地址。
 
 成功响应示例：
 

@@ -3,7 +3,6 @@ package com.linewell.dataelement.platform.tenant.application;
 import com.linewell.dataelement.platform.persistence.id.NumericId;
 import com.linewell.dataelement.platform.tenant.config.TenantProperties;
 import com.linewell.dataelement.platform.tenant.domain.TenantAccessException;
-import com.linewell.dataelement.platform.tenant.domain.TenantContext;
 import com.linewell.dataelement.platform.tenant.infrastructure.persistence.entity.RmUserTenantRelaT;
 import com.linewell.dataelement.platform.tenant.infrastructure.persistence.mapper.SymTenantTMapper;
 import com.linewell.dataelement.platform.tenant.infrastructure.persistence.mapper.RmUserTenantRelaTMapper;
@@ -76,33 +75,6 @@ public class TenantAccessService {
             );
         }
         return new TenantIdentity(activeTenantId);
-    }
-
-    /**
-     * Assign a user only within the tenant carried by the authenticated request.
-     * Keep this normal tenant-bound operation independent of role-based administrator gates.
-     */
-    @Transactional
-    public void assignUserInCurrentTenant(String userId, String tenantId, String operator) {
-        requireLegacyCompatibility();
-        String currentTenantId = TenantContext.requireTenantId();
-        if (!currentTenantId.equals(tenantId)) {
-            throw new TenantAccessException("TENANT-FORBIDDEN", "禁止跨租户分配用户");
-        }
-        LocalDateTime now = LocalDateTime.now();
-        String relationId = relationMapper.selectRelationId(userId, tenantId);
-        RmUserTenantRelaT relation = assignment(
-                relationId, userId, tenantId, false, operator, now
-        );
-        if (relationId == null) {
-            relation.setTid(NumericId.nextId());
-            relation.setCreatedBy(operator);
-            relation.setCreatedTime(now);
-            relation.setIsDel(0);
-            relationMapper.insert(relation);
-        } else {
-            relationMapper.updateAssignment(relation);
-        }
     }
 
     private void autoBindDefault(String loginId) {

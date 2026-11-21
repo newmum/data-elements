@@ -3,8 +3,6 @@ package com.linewell.dataelement.integration.nifi.canvas.controller;
 import com.linewell.dataelement.integration.nifi.canvas.compile.DslCompiler;
 import com.linewell.dataelement.integration.nifi.canvas.errors.ErrorService;
 import com.linewell.dataelement.integration.nifi.canvas.lifecycle.PipelineGroupOrganizer;
-import com.linewell.dataelement.integration.nifi.canvas.lifecycle.PipelineRuntimeStatusResolver;
-import com.linewell.dataelement.integration.nifi.canvas.lifecycle.PipelineTaskLifecycleSynchronizer;
 import com.linewell.dataelement.integration.nifi.canvas.lifecycle.TargetTableCleanupService;
 import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient;
 import com.linewell.dataelement.integration.nifi.canvas.pipeline.Pipeline;
@@ -32,11 +30,15 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 final class NifiDeploymentMagicFixture {
+    interface TaskOperations {
+        void associate(String catalogId, String pipelineId, String pipelineName, Pipeline.Dsl dsl);
+        void syncState(String pipelineId, String operation, Object value);
+    }
+
     private static final String COMMON = "function/01.通用函数/";
     private static final String API = "api/09.海通流程接口/";
     private static final String TENANT = "deployment-validation";
     private final PipelineRepository repository;
-    private final PipelineTaskLifecycleSynchronizer tasks;
     private final Map<String, Object> bindings = new LinkedHashMap<>();
     private final MagicScript deploy = script(COMMON + "56.海通部署画布.ms", "nifi_canvas_deploy_v1");
     private final MagicScript bind = script(COMMON + "54.海通部署候选绑定.ms", "nifi_candidate_bind_v1");
@@ -48,17 +50,16 @@ final class NifiDeploymentMagicFixture {
     private final MagicScript oneShot = script(COMMON + "57.海通一次性来源处理器.ms", "nifi_one_shot_sources_v1");
 
     NifiDeploymentMagicFixture(PipelineRepository repository, DslCompiler compiler, NifiClient nifi,
-            ErrorService errors, PipelineTaskLifecycleSynchronizer tasks, PipelineGroupOrganizer groups,
+            ErrorService errors, TaskOperations tasks, PipelineGroupOrganizer groups,
             TargetTableCleanupService cleanup) {
         this(repository, compiler, nifi, errors, tasks, groups, cleanup, false);
     }
 
     NifiDeploymentMagicFixture(PipelineRepository repository, DslCompiler compiler, NifiClient nifi,
-            ErrorService errors, PipelineTaskLifecycleSynchronizer tasks, PipelineGroupOrganizer groups,
+            ErrorService errors, TaskOperations tasks, PipelineGroupOrganizer groups,
             TargetTableCleanupService cleanup, boolean nativeScope) {
         this.repository = repository;
-        this.tasks = tasks;
-        bindings.putAll(Map.of("compiler", compiler, "nifi", nifi, "errorStore", errors, "tasks", tasks,
+        bindings.putAll(Map.of("compiler", compiler, "nifi", nifi, "errorStore", errors,
                 "groups", groups, "targetCleanup", new Cleanup(cleanup), "tenantRuntime", new TenantMagicModule(null),
                 "lineage", mock(com.linewell.dataelement.feature.metadatagovernance.application.LineageAnalysisService.class),
                 "versions", mock(com.linewell.dataelement.integration.nifi.canvas.mapping.MappingVersionStore.class),
@@ -68,7 +69,6 @@ final class NifiDeploymentMagicFixture {
         bindings.put("transactions", transactions);
         bindings.put("mappingVersions", bindings.get("versions"));
         bindings.put("mutation", new Lock());
-        bindings.put("statusResolver", nativeScope ? new PipelineRuntimeStatusResolver(nifi) : mock(PipelineRuntimeStatusResolver.class));
         bindings.put("organizer", groups);
         bindings.put("tableRead", new TaskGroups());
         if (nativeScope) {
@@ -80,6 +80,10 @@ final class NifiDeploymentMagicFixture {
                     .map(target -> Map.of("id", ((Map<?, ?>) target).get("id"), "parentId", "")).toList());
         }
         bindings.put("findCanvas", (MagicScriptLambdaFunction) (ctx, args) -> repository.findById((String) args[0]).orElse(null));
+        bindings.put("associateTask", (MagicScriptLambdaFunction) (ctx, args) -> {
+            tasks.associate((String) args[0], (String) args[1], (String) args[2], (Pipeline.Dsl) args[3]);
+            return null;
+        });
         bindings.put("syncTask", (MagicScriptLambdaFunction) (ctx, args) -> {
             tasks.syncState((String) args[0], (String) args[1], args[2]);
             return null;
@@ -169,7 +173,7 @@ final class NifiDeploymentMagicFixture {
         try {
             String source = CanonicalMagicSources.byPath(path, id);
             MagicScript.create(source, null).compile();
-            return MagicScript.create(source.replaceAll("(?m)^import (?:'@/[^']+' as \\w+|(?:tableRead|tableWrite|tenantRuntime)|[^\\r\\n]+ as (?:lineage|compiler|errorStore|mutation|groups|tasks|mappingBinder|versions|nifi|transactions|mappingVersions|targetCleanup|statusResolver|organizer))\\R", ""), null);
+            return MagicScript.create(source.replaceAll("(?m)^import (?:'@/[^']+' as \\w+|(?:tableRead|tableWrite|tenantRuntime)|[^\\r\\n]+ as (?:lineage|compiler|errorStore|mutation|groups|mappingBinder|versions|nifi|transactions|mappingVersions|targetCleanup|organizer))\\R", ""), null);
         } catch (java.io.IOException e) {
             throw new IllegalStateException(e);
         }

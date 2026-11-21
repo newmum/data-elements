@@ -10,6 +10,10 @@
     {
       "name": "access",
       "value": "TENANT_SESSION"
+    },
+    {
+      "name": "head",
+      "value": "true"
     }
   ],
   "description": "按当前行业会话分页读取日志归档任务。权限、筛选及排序由 /common/logtaskpage 共用。"

@@ -13,7 +13,12 @@
   "description": "校验请求字段、所属范围和版本；新建或更新中央机构及必要关联记录，写入审计并返回保存结果。处理控制库的中央机构和层级关系；不因本次读写自动修改租户机构。",
   "parameters": [],
   "method": "POST",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

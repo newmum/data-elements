@@ -67,7 +67,7 @@ class PipelineNativeLifecycleTest {
                             p.lastStoppedAt(), p.nodeMapping(), p.lastBulletinId())));
             var compiler = new DslCompiler(nifi, mock(ManifestRegistry.class), mock(FieldMappingService.class), mock(HiveModule.class));
             var errors = mock(ErrorService.class);
-            var lifecycle = mock(PipelineTaskLifecycleSynchronizer.class);
+            var lifecycle = mock(NifiDeploymentMagicFixture.TaskOperations.class);
             var deployment = new NifiDeploymentMagicFixture(repo, compiler, nifi, errors, lifecycle, groups,
                     mock(TargetTableCleanupService.class), true);
             assertThat(deployment.deploy("one", null, false).getStatusCode().value()).isEqualTo(200);

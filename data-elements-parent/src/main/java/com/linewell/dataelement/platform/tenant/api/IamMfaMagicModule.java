@@ -1,4 +1,7 @@
 package com.linewell.dataelement.platform.tenant.api;
+import com.linewell.dataelement.magic.runtime.security.MagicAccessPolicy;
+import com.linewell.dataelement.platform.audit.AuditIdentityResolver;
+import com.linewell.dataelement.platform.web.security.GlobalInterceptor;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.*;
@@ -23,6 +26,12 @@ public class IamMfaMagicModule {
  /** Isolated unit tests only. Spring always uses the Redis constructor. */
  public IamMfaMagicModule(){this.redis=null;}
  @Autowired public IamMfaMagicModule(StringRedisTemplate redis){this.redis=redis;}
+ public Map<?, ?> verifiedSession() {
+     return GlobalInterceptor.verifiedIdentityProof(AuditIdentityResolver.request(), MagicAccessPolicy.MFA_SESSION);
+ }
+ public Map<?, ?> verifiedChallenge() {
+     return GlobalInterceptor.verifiedIdentityProof(AuditIdentityResolver.request(), MagicAccessPolicy.MFA_LOGIN_CHALLENGE);
+ }
  private static final DefaultRedisScript<Long> CREATE=new DefaultRedisScript<>("redis.call('HSET',KEYS[1],'kind',ARGV[1],'id',ARGV[2],'version',ARGV[3],'purpose',ARGV[4],'expires',ARGV[5],'attempts','0');redis.call('EXPIRE',KEYS[1],300);return 1",Long.class);
  @SuppressWarnings("rawtypes") private static final DefaultRedisScript<List> ATTEMPT=new DefaultRedisScript<>("if redis.call('EXISTS',KEYS[1])==0 then return {} end;if redis.call('HGET',KEYS[1],'purpose')~=ARGV[1] or tonumber(redis.call('HGET',KEYS[1],'attempts'))>=5 then redis.call('DEL',KEYS[1]);return {} end;redis.call('HINCRBY',KEYS[1],'attempts',1);return redis.call('HMGET',KEYS[1],'kind','id','version','purpose','expires','attempts')",List.class);
  private static final DefaultRedisScript<Long> CONSUME=new DefaultRedisScript<>("return redis.call('DEL',KEYS[1])",Long.class);

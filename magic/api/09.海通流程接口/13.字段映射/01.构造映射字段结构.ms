@@ -7,7 +7,12 @@
   "path": "/schema",
   "description": "批量核验来源与目标登记字段结构。",
   "parameters": [],
-  "options": [],
+  "options": [
+    {
+      "name": "jsonBody",
+      "value": "EXACT_TREE"
+    }
+  ],
   "method": "POST",
   "headers": [],
   "paths": []

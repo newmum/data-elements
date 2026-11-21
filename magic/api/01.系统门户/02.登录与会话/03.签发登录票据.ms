@@ -12,7 +12,12 @@
   "path": "/ticket",
   "method": "GET",
   "parameters": [],
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "LEGACY_SSO_TICKET"
+    }
+  ],
   "requestBody": "{\n}",
   "headers": [],
   "paths": [],
@@ -22,43 +27,7 @@
   "responseBodyDefinition": null
 }
 ================================
-import tenantAccounts
-import cn.hutool.core.util.StrUtil
-import cn.dev33.satoken.stp.StpUtil;
-import jsons
-import '@/common/configData' as configData
-import systemConfig
-import http
-import cn.hutool.crypto.digest.DigestUtil
+import legacySso;
 
-// GET /portal/sso/ticket 签发登录票据。
-// 业务说明：核验当前登录会话，为已登录用户生成业务系统可使用的短期登录票据并返回。
-
-
-
-configData().minio_url
-var name = tenantAccounts.session().get("name")
-var pwd =  tenantAccounts.session().get("pwd")
-
-url = `${configData().ssoServerUrl}/oauth/token?client_id=${configData().client_id}&client_secret=${systemConfig.legacySsoClientSecret()}&grant_type=password&username=${name}&password=${pwd}&scope=all`
-tokenInfo =  http.connect(url)
-    .post()
-    .getBody()
-
-if(tokenInfo.access_token == null){
-    // 参数或业务状态不满足要求时立即终止请求。
-    exit 500,"获取token令牌报错"
-}
-//获取ticket    
-url = `${configData().ssoServerUrl}/ticket/getTicket?access_token=${tokenInfo.access_token}`
-ticketInfo = http.connect(url)
-    .get()
-    .getBody()
-
-if(ticketInfo.data == null){
-    // 参数或业务状态不满足要求时立即终止请求。
-    exit 500,"获取ticket报错"
-}
-
-// 返回当前业务分支的标准结果。
-return ticketInfo.data
+// 返回框架已在当前会话中向上游签发的票据。
+return legacySso.verifiedTicket();

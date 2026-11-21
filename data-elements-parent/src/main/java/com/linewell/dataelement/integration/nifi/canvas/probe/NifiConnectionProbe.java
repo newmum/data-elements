@@ -3,10 +3,12 @@ package com.linewell.dataelement.integration.nifi.canvas.probe;
 import com.jcraft.jsch.ChannelSftp;
 import com.jcraft.jsch.JSch;
 import com.jcraft.jsch.Session;
+import com.mysql.cj.MysqlType;
 import com.linewell.dataelement.integration.nifi.canvas.compile.RegisteredDatasourceType;
 import com.linewell.dataelement.magic.runtime.route.RegisteredMagicApiInvoker;
 import com.linewell.dataelement.metautil.explorer.impl.ElasticsearchMetadataExplorer;
 import com.linewell.dataelement.metautil.explorer.impl.MongoDbMetadataExplorer;
+import com.linewell.dataelement.metautil.explorer.impl.MySqlMetadataExplorer;
 import com.linewell.dataelement.metautil.model.dto.ColumnInfo;
 import com.linewell.dataelement.metautil.model.dto.DataSourceConfig;
 import com.linewell.dataelement.metautil.model.enums.DatabaseType;
@@ -198,6 +200,75 @@ public class NifiConnectionProbe {
                     "url", r.url,
                     "columns", columns);
         }
+    }
+
+    /** MySQL protocol read for one already authorized, server-resolved datasource. */
+    public Map<String, Object> mysqlColumnsByTable(Map<String, Object> registered, List<?> tables) throws SQLException {
+        if (tables.isEmpty() || tables.size() > 100) {
+            throw new IllegalArgumentException("单次须探查 1 至 100 张表");
+        }
+        String url = str(registered.get("jdbcURL"));
+        if (!"mysql".equalsIgnoreCase(str(registered.get("dbType"))) || url == null || !url.startsWith("jdbc:mysql://")) {
+            throw new IllegalArgumentException("批量字段探查需要已登记的 MySQL 连接");
+        }
+        Map<String, ProbeTableName> requested = new LinkedHashMap<>();
+        for (Object item : tables) {
+            if (!(item instanceof String table) || table.isBlank() || table.length() > 256) {
+                throw new IllegalArgumentException("表名无效");
+            }
+            ProbeTableName name = splitTableName(table);
+            if (name.table().isBlank()) throw new IllegalArgumentException("表名无效");
+            requested.putIfAbsent(table.trim(), name);
+        }
+        Properties properties = new Properties();
+        properties.setProperty("connectTimeout", "30000");
+        properties.setProperty("socketTimeout", "30000");
+        if (registered.get("username") != null) properties.setProperty("user", str(registered.get("username")));
+        if (registered.get("password") != null) properties.setProperty("password", str(registered.get("password")));
+        try (Connection conn = new com.mysql.cj.jdbc.Driver().connect(url, properties)) {
+            if (conn == null) throw new SQLException("无法连接已登记的 MySQL 数据源");
+            String catalog = conn.getCatalog();
+            if (catalog == null || catalog.isBlank()) throw new IllegalArgumentException("登记连接缺少数据库名");
+            return mysqlCatalogColumns(conn, catalog, requested);
+        }
+    }
+
+    private static Map<String, Object> mysqlCatalogColumns(Connection conn, String catalog,
+                                                            Map<String, ProbeTableName> requested) throws SQLException {
+        for (ProbeTableName name : requested.values()) {
+            if (name.schema() != null && !catalog.equals(name.schema())) {
+                throw new IllegalArgumentException("表所属数据库与所选数据源不一致");
+            }
+        }
+        List<String> tableNames = requested.values().stream().map(ProbeTableName::table).distinct().toList();
+        var columnsByTable = MySqlMetadataExplorer.getColumnsInCatalog(conn, catalog, tableNames);
+        List<Map<String, Object>> results = new ArrayList<>();
+        for (var entry : requested.entrySet()) {
+            var columns = columnsByTable.get(entry.getValue().table());
+            if (columns.isEmpty()) {
+                return Map.of("success", false, "error", entry.getKey() + ": 未探查到字段，请确认表名或当前用户权限");
+            }
+            results.add(Map.of("success", true, "table", entry.getKey(),
+                    "columns", columns.stream().map(NifiConnectionProbe::mysqlProbeColumn).toList()));
+        }
+        return Map.of("success", true, "results", results);
+    }
+
+    private static Map<String, Object> mysqlProbeColumn(ColumnInfo column) {
+        MysqlType type = MysqlType.getByName(column.getColumnType());
+        String typeName = type.getName();
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("columnName", column.getColumnName());
+        result.put("columnComment", firstNonBlank(column.getColumnComment(), column.getColumnName()));
+        result.put("dataType", jdbcTypeName(type.getJdbcType(), typeName));
+        result.put("typeName", typeName);
+        result.put("columnSize", column.getLength() > 0 ? column.getLength() : column.getPrecision());
+        result.put("decimalDigits", column.getScale());
+        result.put("nullable", column.getNullable());
+        result.put("primaryKey", column.getPrimaryKey());
+        result.put("ordinalPosition", column.getOrdinalPosition());
+        result.put("defaultValue", column.getDefaultValue());
+        return result;
     }
 
     public Map<String, Object> tables(String manifestKey, Map<String, Object> config, String keyword, int limit) throws Exception {

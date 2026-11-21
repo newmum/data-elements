@@ -13,7 +13,12 @@
   "description": "读取符合请求筛选条件的平台操作账号，应用权限及身份域过滤后返回可展示字段；不发生写入。平台操作账号只用于统一身份管理控制台；凭据与安全状态独立保存，不创建或修改租户本地账号。",
   "parameters": [],
   "method": "GET",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

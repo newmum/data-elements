@@ -232,7 +232,7 @@ class MaterializationLoadMagicTest {
                     }
                 }
             }));
-            command = loadScript("2ebdc2a6af4b5e2989cd8add98c849fa");
+            command = loadScript("b6aaff9e31925977b94369d347e7c32a");
             validate = loadScript("779419e5edd654dd9f851a610cdb6033");
         }
 
@@ -318,8 +318,8 @@ class MaterializationLoadMagicTest {
                     "id", "binding-a", "databaseId", "domain-a", "sourceId", "registered-target", "category", "RELATIONAL",
                     "state", "VALID", "checkedHash", "validation-hash", "currentHash", "validation-hash", "schema", "validation")),
                     "databases", List.of(Map.of("id", "domain-a", "state", "ACTIVE", "mode", "MANAGED")));
-            var vars = Map.of("input", input, "db", db, "tenantRuntime", session, "StpUtil", session, "jsons", jsons,
-                    "fusionJdbc", fusion, "connectionProperties", new Registration(), "readPlanning", readPlanning,
+            var vars = Map.of("body", input, "db", db, "tenantRuntime", session, "StpUtil", session, "jsons", jsons,
+                    "fusionJdbc", fusion, "connectionProperties", new Registration(), "planningRead", readPlanning,
                     "validateModel", validateModel);
             return TenantContext.call("tenant-a", () -> command.execute(new MagicScriptContext(vars)));
         }

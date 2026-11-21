@@ -37,7 +37,7 @@ import org.ssssssss.script.MagicScriptContext;
 import org.ssssssss.script.runtime.ExitValue;
 
 class PlanningCommandMagicTest {
-    private static final String COMMAND_ID = "fa237a4aca795e95b6a1086b2e3ed012";
+    private static final String COMMAND_ID = "b6aaff9e31925977b94369d347e7c32a";
     private static final String READ_ID = "4e0ee97e906054229d56e22da830272e";
 
     @Test
@@ -298,8 +298,8 @@ class PlanningCommandMagicTest {
                 input.put("version", version);
             }
             Function<Object[], Object> readPlanning = args -> result(runRead());
-            var vars = Map.of("input", input, "db", db, "tenantRuntime", session, "tableRead", tableRead,
-                    "jsons", jsons, "StpUtil", session, "readPlanning", readPlanning);
+            var vars = Map.of("body", input, "db", db, "tenantRuntime", session, "tableRead", tableRead,
+                    "jsons", jsons, "StpUtil", session, "planningRead", readPlanning);
             return TenantContext.call("tenant-a", () -> command.execute(new MagicScriptContext(vars)));
         }
     }

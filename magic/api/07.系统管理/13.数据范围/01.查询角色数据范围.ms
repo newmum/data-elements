@@ -7,7 +7,12 @@
   "path": "/role",
   "method": "POST",
   "parameters": [],
-  "options": [],
+  "options": [
+    {
+      "name": "jsonBody",
+      "value": "CACHED"
+    }
+  ],
   "headers": [],
   "paths": [],
   "description": "读取当前租户有效角色的数据范围。历史未配置或非法值按 OWNER 返回。"

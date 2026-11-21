@@ -24,7 +24,7 @@ class CatalogProjectionWriterMagicTest {
     void allTouchedCanonicalMagicResourcesCompile() throws IOException {
         for (String id : List.of("datapd_asset_refresh_01", "datapd_assets_batch_refresh_01",
                 "datapd_table_catalog_save_01", "datapd_registered_table_catalog_projection_01",
-                "084a92c02bd05f8bb8507cc4c4660e40", "0454d01c38ab5d66aafdaf02d9b547d6",
+                "084a92c02bd05f8bb8507cc4c4660e40", "b6aaff9e31925977b94369d347e7c32a",
                 "e3320ec899a24426adf5f77e2dab36f9", "f12fde8d078541abb7083a4cfc6fb3b4",
                 "64c0bb65fad54c538d5b80423623cbf7", "bc7ab46f70354dab95ca7deb785d72fd")) {
             MagicScript.create(CanonicalMagicSources.byId(id), null).compile();

@@ -24,8 +24,8 @@
                r.description,
                r.status,
                r.sort_num,
-               r.created_time,
-               r.updated_time
+               r.create_time as created_time,
+               r.update_time as updated_time
           from rm_role_t r
          where r.tenant_id = #{tenantId}
            and r.deleted = 0
@@ -35,7 +35,7 @@
         <if test="name != null and name != ''">
            and r.name like concat('%', #{name}, '%')
         </if>
-         order by r.sort_num, r.created_time desc
+         order by r.sort_num, r.create_time desc
     </select>
 
     <select id="selectOrganizationPage" resultMap="directoryEntry">
@@ -73,7 +73,7 @@
 
     <select id="selectRoles" resultMap="directoryEntry">
         select r.id, r.code_num as code, r.name, r.app_id, r.description, r.status,
-               r.sort_num, r.created_time, r.updated_time
+               r.sort_num, r.create_time as created_time, r.update_time as updated_time
           from rm_role_t r
          where r.id in
         <foreach collection="ids" item="id" open="(" separator="," close=")">#{id}</foreach>

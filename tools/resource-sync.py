@@ -102,17 +102,34 @@ def magic_access_policy(meta):
     declarations = [option.get('value') for option in options
                     if isinstance(option, dict) and option.get('name') == 'access']
     if not declarations:
+        session_required_message(meta, None)
         return None
-    post_only = {'SESSION_LOGIN', 'SESSION_LOGOUT', 'HAITONG_RELAY'}
+    post_only = {'PUBLIC_ACTION', 'SESSION_LOGIN', 'SESSION_LOGOUT', 'MFA_SESSION', 'MFA_LOGIN_CHALLENGE',
+                 'IDAAS_RECEIVER_SIGNATURE'}
+    read_only = {'PUBLIC', 'IDAAS_API_BEARER'}
+    get_only = {'LEGACY_SSO_TICKET', 'LEGACY_SSO_REDEEM'}
     if (len(declarations) != 1 or not isinstance(declarations[0], str)
-            or declarations[0] not in {'PUBLIC', 'TENANT_SESSION', 'IDAAS_PLATFORM_SESSION'} | post_only):
+            or declarations[0] not in {'TENANT_SESSION', 'IDAAS_PLATFORM_SESSION', 'IDAAS_ACCOUNT_SESSION'} | post_only | read_only | get_only):
         raise ValueError('Invalid or duplicate Magic API access declaration')
     method = meta.get('method')
     if (method not in ('GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS')
-            or declarations[0] == 'PUBLIC' and method not in ('GET', 'HEAD')
+            or declarations[0] in read_only and method not in ('GET', 'HEAD')
+            or declarations[0] in get_only and method != 'GET'
             or declarations[0] in post_only and method != 'POST'):
         raise ValueError('Magic API access does not match the HTTP method')
+    session_required_message(meta, declarations[0])
     return declarations[0]
+
+
+def session_required_message(meta, policy):
+    messages = [option.get('value') for option in meta.get('options') or []
+                if isinstance(option, dict) and option.get('name') == 'sessionRequiredMessage']
+    if not messages:
+        return None
+    if (policy != 'TENANT_SESSION' or len(messages) != 1
+            or not isinstance(messages[0], str) or not messages[0].strip()):
+        raise ValueError('Magic API session-required message must be a unique non-blank TENANT_SESSION option')
+    return messages[0]
 
 
 def local_segment(value):
@@ -514,8 +531,11 @@ def verify_runtime_magic(loaded, meta, script):
     loaded_script = loaded.get('script')
     if not isinstance(loaded_script, str) or digest(loaded_script.strip()) != digest(script):
         raise ValueError('Runtime source differs from control database; do not publish')
-    if meta.get('method') and magic_access_policy(loaded) != magic_access_policy(meta):
-        raise ValueError('Runtime access policy differs from control database; inspect before publication')
+    if meta.get('method'):
+        active_policy, expected_policy = magic_access_policy(loaded), magic_access_policy(meta)
+        if (active_policy != expected_policy
+                or session_required_message(loaded, active_policy) != session_required_message(meta, expected_policy)):
+            raise ValueError('Runtime access policy differs from control database; inspect before publication')
 
 
 def readback_magic(config, meta, script):

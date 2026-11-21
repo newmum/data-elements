@@ -13,7 +13,12 @@
   "description": "当前直接返回业务错误 503，说明旧人员目录重试流程尚未开通；不读取或修改人员资料，也不会后台执行任务。",
   "parameters": [],
   "method": "POST",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

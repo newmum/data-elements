@@ -7,7 +7,12 @@
   "path": "/sample",
   "description": "读取和预览登记来源样本，返回脱敏数据。",
   "parameters": [],
-  "options": [],
+  "options": [
+    {
+      "name": "jsonBody",
+      "value": "EXACT_TREE"
+    }
+  ],
   "method": "POST",
   "headers": [],
   "paths": []

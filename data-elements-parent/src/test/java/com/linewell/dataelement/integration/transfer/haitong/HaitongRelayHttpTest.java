@@ -1,6 +1,7 @@
 package com.linewell.dataelement.integration.transfer.haitong;
 
 import com.linewell.dataelement.config.DataPushRegistryProperties;
+import com.linewell.dataelement.config.DataPushRegistryConfiguration;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.linewell.dataelement.model.common.BizException;
@@ -11,6 +12,7 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import static org.assertj.core.api.Assertions.*;
 
 class HaitongRelayHttpTest {
@@ -23,7 +25,7 @@ class HaitongRelayHttpTest {
             new HaitongStandaloneRegistryClient(properties, json).synchronize("source-1",
                     Map.of("datasourceId", "source-1", "tables", java.util.List.of()));
             String request = server.request.get(5, TimeUnit.SECONDS);
-            assertThat(request).startsWith("POST /api/v1/push HTTP/1.1")
+            assertThat(request).startsWith("POST /relay/test/snapshot HTTP/1.1")
                     .contains("X-Standalone-Registry-Key: test-sync-key", "Idempotency-Key: registry-sync-source-1-")
                     .doesNotContain("X-Relay-Registry-Key:");
             assertThat(json.readTree(request.substring(request.indexOf("\r\n\r\n") + 4)).path("deliveryType").asText())
@@ -34,19 +36,55 @@ class HaitongRelayHttpTest {
     @Test
     void credentialIssuePreservesOneTimeRevealAndRotateBody() throws Exception {
         try (var server = new Reply(200, "{\"data\":{\"clientId\":\"push-source-1\",\"revealed\":true,\"apiKey\":\"test-business-key\"}}")) {
-            var issued = new HaitongPushCredentialClient(properties(server), json).issue("push-source-1", true);
+            var issued = new HaitongStandaloneRegistryClient(properties(server), json).issue("push-source-1", true);
             assertThat(issued.apiKey()).isEqualTo("test-business-key");
             assertThat(issued.revealed()).isTrue();
             String request = server.request.get(5, TimeUnit.SECONDS);
-            assertThat(request).startsWith("POST /internal/credentials/issue HTTP/1.1")
+            assertThat(request).startsWith("POST /relay/test/credential HTTP/1.1")
                     .contains("X-Relay-Registry-Key: test-issuer-key").doesNotContain("X-Standalone-Registry-Key:");
             assertThat(json.readTree(request.substring(request.indexOf("\r\n\r\n") + 4)).path("rotate").asBoolean()).isTrue();
         }
         try (var server = new Reply(200, "{\"data\":{\"clientId\":\"push-source-1\",\"revealed\":false}}")) {
-            var issued = new HaitongPushCredentialClient(properties(server), json).issue("push-source-1", false);
+            var issued = new HaitongStandaloneRegistryClient(properties(server), json).issue("push-source-1", false);
             assertThat(issued.revealed()).isFalse();
             assertThat(issued.apiKey()).isEmpty();
         }
+    }
+
+    @Test
+    void configurationLoadsRelayContractDefaultsAndBindsBothExistingBeanNames() {
+        new ApplicationContextRunner()
+                .withUserConfiguration(DataPushRegistryConfiguration.class)
+                .withBean(ObjectMapper.class, () -> json)
+                .run(context -> {
+                    assertThat(context).hasSingleBean(HaitongStandaloneRegistryClient.class);
+                    assertThat(context.getBean("haitongPushCredentialClient"))
+                            .isSameAs(context.getBean("haitongStandaloneRegistryClient"));
+                    var settings = context.getBean(DataPushRegistryProperties.class);
+                    assertThat(settings.getRegistrySyncPath()).isEqualTo("/api/v1/push");
+                    assertThat(settings.getCredentialIssuePath()).isEqualTo("/internal/credentials/issue");
+                });
+        new ApplicationContextRunner()
+                .withUserConfiguration(DataPushRegistryConfiguration.class)
+                .withBean(ObjectMapper.class, () -> json)
+                .withPropertyValues("data-element.push-registry.credential-issue-path=/configured/issue")
+                .run(context -> assertThat(context.getBean(DataPushRegistryProperties.class).getCredentialIssuePath())
+                        .isEqualTo("/configured/issue"));
+    }
+
+    @Test
+    void invalidEndpointConfigurationFailsBeforeSendingEitherServiceKey() {
+        var settings = new DataPushRegistryProperties();
+        settings.setRelayBaseUrl("http://127.0.0.1:1/relay");
+        settings.setStandaloneSyncKey("test-sync-key");
+        settings.setSharedKey("test-issuer-key");
+        settings.setRegistrySyncPath("//invalid.example/endpoint");
+        settings.setCredentialIssuePath("/issue?invalid=true");
+        var transport = new HaitongStandaloneRegistryClient(settings, json);
+        assertThatThrownBy(() -> transport.synchronize("source-1", Map.of())).isInstanceOfSatisfying(BizException.class,
+                error -> assertThat(error.getCode()).isEqualTo(503));
+        assertThatThrownBy(() -> transport.issue("push-source-1", false)).isInstanceOfSatisfying(BizException.class,
+                error -> assertThat(error.getCode()).isEqualTo(503));
     }
 
     @Test
@@ -57,7 +95,7 @@ class HaitongRelayHttpTest {
                     .hasMessageContaining("HTTP 302").hasMessageNotContaining("do-not-expose-response");
         }
         try (var server = new Reply(401, "do-not-expose-response")) {
-            assertThatThrownBy(() -> new HaitongPushCredentialClient(properties(server), json).issue("push-source-1", false))
+            assertThatThrownBy(() -> new HaitongStandaloneRegistryClient(properties(server), json).issue("push-source-1", false))
                     .isInstanceOf(BizException.class).hasMessageContaining("HTTP 401")
                     .hasMessageNotContaining("test-issuer-key").hasMessageNotContaining("do-not-expose-response");
         }
@@ -74,14 +112,16 @@ class HaitongRelayHttpTest {
                     .synchronize("source-1", Map.of())).isInstanceOf(BizException.class).hasMessageContaining("数据源不匹配");
         }
         try (var server = new Reply(200, "{\"data\":{\"clientId\":\"push-other\",\"revealed\":false}}")) {
-            assertThatThrownBy(() -> new HaitongPushCredentialClient(properties(server), json).issue("push-source-1", false))
+            assertThatThrownBy(() -> new HaitongStandaloneRegistryClient(properties(server), json).issue("push-source-1", false))
                     .isInstanceOf(BizException.class).hasMessageContaining("调用方不匹配");
         }
     }
 
     private DataPushRegistryProperties properties(Reply server) {
         var properties = new DataPushRegistryProperties();
-        properties.setRelayBaseUrl(server.url());
+        properties.setRelayBaseUrl(server.url() + "/relay/");
+        properties.setRegistrySyncPath("/test/snapshot");
+        properties.setCredentialIssuePath("/test/credential");
         properties.setStandaloneSyncKey("test-sync-key");
         properties.setSharedKey("test-issuer-key");
         properties.setRelayTimeoutSeconds(3);

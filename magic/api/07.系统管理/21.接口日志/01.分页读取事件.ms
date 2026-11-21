@@ -10,6 +10,10 @@
     {
       "name": "access",
       "value": "TENANT_SESSION"
+    },
+    {
+      "name": "head",
+      "value": "true"
     }
   ],
   "description": "接口日志分页读取事件。按可信行业会话和当前角色限定范围，接收分页、筛选和排序参数，复用 /common/logeventsearch。"

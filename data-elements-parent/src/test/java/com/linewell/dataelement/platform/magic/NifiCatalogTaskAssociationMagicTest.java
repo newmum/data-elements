@@ -1,7 +1,10 @@
 package com.linewell.dataelement.platform.magic;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.*;
 
+import com.linewell.dataelement.dataassets.runtime.DataAssetRuntimeAdapter;
 import com.linewell.dataelement.integration.nifi.canvas.pipeline.Pipeline;
 import com.linewell.dataelement.platform.tenant.api.TenantMagicModule;
 import com.linewell.dataelement.platform.tenant.config.TenantDatabaseProperties;
@@ -18,8 +21,11 @@ import java.util.Map;
 import java.util.UUID;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.ssssssss.magicapi.core.interceptor.DefaultResultProvider;
@@ -64,6 +70,42 @@ class NifiCatalogTaskAssociationMagicTest {
                     .containsEntry("target_db_id", expectedDb).containsEntry("target_table_id", expectedTable)
                     .containsEntry("data_catalog_id", null);
         }
+        verifyNoInteractions(fixture.projection);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"stale", "current", "read-failure"})
+    void canonicalAssociationMirrorsOnlyAChangedCatalogLink(String projectionState) throws Exception {
+        var db = fixture.withActualTaskAssociation();
+        fixture.jdbc.update("INSERT INTO data_access_agg_task_t(tid,tenant_id,data_catalog_id,is_del) VALUES('linked-task',?,?,0)", TENANT, CATALOG);
+        if (projectionState.equals("read-failure")) {
+            when(fixture.projection.queryById(CATALOG)).thenThrow(new IllegalStateException("projection unavailable"));
+        } else {
+            when(fixture.projection.queryById(CATALOG)).thenReturn(Map.of("accessTaskId",
+                    projectionState.equals("current") ? "linked-task" : "older-task"));
+        }
+        try (var scope = TenantContext.use(TENANT)) {
+            var link = fixture.executeTask(db, Map.of("rawCatalogTid", " " + CATALOG + " ", "pipelineId", PIPELINE,
+                    "pipelineName", "流程", "dsl", new Pipeline.Dsl(1, List.of(), List.of())));
+            assertThat(link).isEqualTo(Map.of("taskId", "linked-task", "catalogId", CATALOG, "mirrorEligible", true));
+            assertThat(fixture.jdbc.queryForObject("SELECT pipeline_id FROM data_access_agg_task_t WHERE tid='linked-task'", String.class))
+                    .isEqualTo(PIPELINE);
+        }
+        verify(fixture.projection).queryById(CATALOG);
+        verify(fixture.projection, times(projectionState.equals("stale") ? 1 : 0))
+                .propBatchSaveOrUpdate(List.of(CATALOG), Map.of("accessTaskId", "linked-task"));
+        verifyNoMoreInteractions(fixture.projection);
+    }
+
+    @Test
+    void rejectsForeignCatalogBeforeProjectionAndPreservesAssociationFailureMessage() throws Exception {
+        var db = fixture.withActualTaskAssociation();
+        try (var scope = TenantContext.use("other-tenant")) {
+            assertThatThrownBy(() -> fixture.executeTask(db, Map.of("rawCatalogTid", CATALOG, "pipelineId", PIPELINE)))
+                    .hasStackTraceContaining("无法关联接入任务：目录或来源表不存在或不属于当前租户");
+        }
+        verifyNoInteractions(fixture.projection);
+        assertThat(fixture.jdbc.queryForObject("SELECT count(*) FROM data_access_agg_task_t", Integer.class)).isZero();
     }
 
     private static final class MySqlModeDataSource extends DriverManagerDataSource {
@@ -99,6 +141,7 @@ class NifiCatalogTaskAssociationMagicTest {
 
     static final class Fixture {
         final JdbcTemplate jdbc;
+        final DataAssetRuntimeAdapter projection = mock(DataAssetRuntimeAdapter.class);
         private final Map<String, Object> modules;
         private MagicScript taskScript;
 
@@ -162,16 +205,19 @@ class NifiCatalogTaskAssociationMagicTest {
             String canonical = CanonicalMagicSources.byPath("function/01.通用函数/27.海通画布接入任务关联.ms",
                     "fbbbebbeee9346e1813e9b1bf635eb09");
             MagicScript.create(canonical, null).compile();
-            var task = MagicScript.create(canonical.replaceAll("(?m)^import (tenantRuntime|tableRead|tableWrite)\\R", ""), null);
+            var task = MagicScript.create(canonical.replaceAll(
+                    "(?m)^import (?:tenantRuntime|tableRead|tableWrite|log|[^\\r\\n]+ as catalogProjection)\\R", ""), null);
             taskScript = task;
             return db;
         }
 
-        private void executeTask(SQLModule db, Map<String, Object> values) {
+        private Object executeTask(SQLModule db, Map<String, Object> values) {
             var bindings = new LinkedHashMap<String, Object>(modules);
             bindings.put("db", db);
+            bindings.put("log", LoggerFactory.getLogger(NifiCatalogTaskAssociationMagicTest.class));
+            bindings.put("catalogProjection", projection);
             bindings.putAll(values);
-            taskScript.execute(new MagicScriptContext(bindings));
+            return taskScript.execute(new MagicScriptContext(bindings));
         }
 
     }

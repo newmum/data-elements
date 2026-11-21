@@ -13,7 +13,12 @@
   "description": "校验失败任务及应用权限，重新准备可重试下发步骤；由本次请求触发，不创建自动轮询。",
   "parameters": [],
   "method": "POST",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

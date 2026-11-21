@@ -1,5 +1,6 @@
 package com.linewell.dataelement.platform.tenant.protocol;
 
+import com.linewell.dataelement.platform.web.security.ProtocolAccess;
 import java.util.*;
 import jakarta.servlet.http.*;
 import org.springframework.stereotype.Controller;
@@ -12,13 +13,14 @@ import org.springframework.security.oauth2.server.authorization.settings.Authori
 
 /** Escaped protocol consent view. Pending state, principal and scopes come from the framework store. */
 @Controller
+@ProtocolAccess(bindTenant = false, auditIdentityAccount = true)
 @ConditionalOnProperty(prefix="idaas.protocol",name="enabled",havingValue="true")
 public class IdentityConsentController {
  private final IdentityProtocolBridge bridge;private final MagicOAuth2AuthorizationService authorizations;private final MagicRegisteredClientRepository clients;private final AuthorizationServerSettings settings;
  public IdentityConsentController(IdentityProtocolBridge bridge,MagicOAuth2AuthorizationService authorizations,MagicRegisteredClientRepository clients,AuthorizationServerSettings settings){this.bridge=bridge;this.authorizations=authorizations;this.clients=clients;this.settings=settings;}
- @GetMapping("/idaas/oauth2/consent") public void consent(@RequestParam("client_id")String clientId,@RequestParam("state")String state,HttpServletRequest request,HttpServletResponse response)throws java.io.IOException{
+ @GetMapping("${idaas.protocol.consent-path}") public void consent(@RequestParam("client_id")String clientId,@RequestParam("state")String state,HttpServletRequest request,HttpServletResponse response)throws java.io.IOException{
   String token=request.getHeader("idaas-auth-token");if(token==null && request.getCookies()!=null)for(Cookie c:request.getCookies())if("IDAAS_AUTH".equals(c.getName()))token=c.getValue();
-  var principal=token==null?null:bridge.call("protocol-access",Map.of("operation","principal","token",token));
+  var principal=token==null?null:bridge.access(Map.of("operation","principal","token",token));
   var pending=authorizations.findByToken(state,new OAuth2TokenType("state"));var client=clients.findByClientId(clientId);
   if(principal==null || !Boolean.TRUE.equals(principal.get("allowed")) || pending==null || client==null || !pending.getRegisteredClientId().equals(client.getId()) || !pending.getPrincipalName().equals(principal.get("accountId"))){response.sendError(403,"授权确认已失效，请重新发起登录");return;}
   OAuth2AuthorizationRequest original=pending.getAttribute(OAuth2AuthorizationRequest.class.getName());if(original==null){response.sendError(403);return;}

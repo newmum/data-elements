@@ -3,6 +3,8 @@ package com.linewell.dataelement.platform.audit.infrastructure.magic;
 import cn.dev33.satoken.exception.SaTokenContextException;
 import cn.dev33.satoken.stp.StpUtil;
 import java.time.LocalDateTime;
+import java.util.Locale;
+import java.util.Set;
 import org.springframework.stereotype.Component;
 import org.ssssssss.magicapi.modules.db.inteceptor.NamedTableInterceptor;
 import org.ssssssss.magicapi.modules.db.model.SqlMode;
@@ -15,6 +17,10 @@ import org.ssssssss.magicapi.modules.db.table.NamedTable;
 @Component
 public class AuditNamedTableInterceptor implements NamedTableInterceptor {
 
+    private static final Set<String> CALLER_AUDITED_TABLES = Set.of(
+            "iam_audit_event_t", "log_user_login_t", "log_system_t", "log_request_t", "log_batch_item_t",
+            "log_audit_outbox_t", "log_export_job_t", "log_archive_batch_t");
+
     private final AuditTableRegistry tableRegistry;
 
     public AuditNamedTableInterceptor(AuditTableRegistry tableRegistry) {
@@ -23,11 +29,11 @@ public class AuditNamedTableInterceptor implements NamedTableInterceptor {
 
     @Override
     public void preHandle(SqlMode sqlMode, NamedTable namedTable) {
-        if(java.util.Set.of("iam_audit_event_t","log_user_login_t","log_system_t","log_request_t","log_batch_item_t","log_audit_outbox_t").contains(namedTable.getTableName().toLowerCase(java.util.Locale.ROOT))) {
-            // Event writer has frozen its actor and UTC timestamps inside the caller's transaction.
+        if (sqlMode != SqlMode.INSERT && sqlMode != SqlMode.UPDATE) {
             return;
         }
-        if (sqlMode != SqlMode.INSERT && sqlMode != SqlMode.UPDATE) {
+        if (CALLER_AUDITED_TABLES.contains(namedTable.getTableName().toLowerCase(Locale.ROOT))) {
+            // Audit events and log jobs carry their own actor and UTC timestamps.
             return;
         }
         AuditTableRegistry.AuditColumns columns = tableRegistry.columnsOf(namedTable.getTableName());

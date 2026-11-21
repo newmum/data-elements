@@ -13,7 +13,12 @@
   "description": "单次最多停用 100 人；在同一事务中逐 ID 校验身份域、版本及机构范围，批量写入人员与应用期望状态。",
   "parameters": [],
   "method": "POST",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

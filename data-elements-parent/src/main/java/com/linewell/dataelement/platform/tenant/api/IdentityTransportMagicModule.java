@@ -68,8 +68,12 @@ public class IdentityTransportMagicModule {
         return HexFormat.of().formatHex(mac.doFinal(input.getBytes(StandardCharsets.UTF_8)));
     }
     public boolean verify2(String stored, String keyId, String app, String instance, long timestamp, String nonce, String payload, String signature) throws Exception {
-        if (Math.abs(Instant.now().getEpochSecond()-timestamp)>300 || nonce==null || !nonce.matches("[a-f0-9]{32}") || payload==null || payload.length()>65536 || signature==null || !signature.matches("[a-f0-9]{64}")) return false;
+        if (!acceptsTimestamp(timestamp) || nonce==null || !nonce.matches("[a-f0-9]{32}") || payload==null || payload.length()>65536 || signature==null || !signature.matches("[a-f0-9]{64}")) return false;
         return MessageDigest.isEqual(signature2(decrypt(stored),keyId,app,instance,timestamp,nonce,payload).getBytes(StandardCharsets.US_ASCII),signature.getBytes(StandardCharsets.US_ASCII));
+    }
+    public static boolean acceptsTimestamp(long timestamp) {
+        long now = Instant.now().getEpochSecond();
+        return timestamp >= now - 300 && timestamp <= now + 300;
     }
     public String receiptSignature(String stored, Object receipt) throws Exception { return signature2(decrypt(stored),"ACK","","",0,"",canonicalJson(receipt)); }
     public boolean verifyReceipt(String stored, Object receipt, String signature) throws Exception {

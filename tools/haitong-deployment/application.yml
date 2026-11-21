@@ -70,8 +70,6 @@ warm-flow:
 nifi:
   monitor-enabled: false
   provenance-sync-enabled: false
-  pipeline-migration:
-    enabled: false
 es:
   init:
     enabled: false

@@ -13,7 +13,12 @@
   "description": "校验当前账号具备目标身份域的管理范围，切换会话使用的域并返回更新后的上下文；不改变账号本身权限。",
   "parameters": [],
   "method": "POST",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

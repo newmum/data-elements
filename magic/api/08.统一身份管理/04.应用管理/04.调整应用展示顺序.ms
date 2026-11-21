@@ -13,7 +13,12 @@
   "description": "核验当前操作人对应用的管理范围，按提交的应用顺序更新控制库排序号；不会触发租户数据同步。",
   "parameters": [],
   "method": "POST",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

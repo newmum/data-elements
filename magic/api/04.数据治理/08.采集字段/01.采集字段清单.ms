@@ -6,15 +6,24 @@
   "name": "01.采集字段清单",
   "path": "/list",
   "method": "GET",
-  "description": "与对应的 HEAD 共用 metadataCatalogColumns；该函数执行本租户授权查询。",
+  "description": "核对采集表及数据源权限，与分页入口共用 /common/metadataCatalogColumns，返回字段清单。",
   "parameters": [],
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "TENANT_SESSION"
+    },
+    {
+      "name": "head",
+      "value": "true"
+    }
+  ],
   "headers": [],
   "paths": []
 }
 ================================
 import '@/common/metadataCatalogColumns' as read
 
-// GET /dwm/column/list 采集字段清单。
-// 与对应的 HEAD 共用 metadataCatalogColumns；该函数执行本租户授权查询。
+// GET /dwm/column/list。核对采集表及数据源权限，与分页入口共用 /common/metadataCatalogColumns，返回字段清单。
+
 return read(false)

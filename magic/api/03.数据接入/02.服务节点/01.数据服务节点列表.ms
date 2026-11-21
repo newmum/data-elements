@@ -18,6 +18,7 @@
 import tableSort
 import tenantRuntime
 import httpx
+import flowRuntime
 import com.linewell.dataelement.model.common.CommonResponse
 import java.net.URI
 import org.springframework.http.ResponseEntity
@@ -67,7 +68,7 @@ if (body?.action == 'health') {
             return respond(false, 0, 0, '服务地址无效：地址缺少主机名', target)
         }
         if (uri.getPath() == null || uri.getPath() == '' || uri.getPath() == '/') {
-            uri = URI.create(normalized + '/api/v1/runtime/health')
+            uri = URI.create(normalized + flowRuntime.runtimeHealthPath())
         }
     } catch (error) {
         return respond(false, 0, 0, '服务地址无效', target)

@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.linewell.dataelement.integration.nifi.canvas.compile.DslCompiler;
 import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiException;
@@ -21,6 +22,7 @@ import java.util.function.UnaryOperator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 class PipelineRedeployTest {
@@ -54,7 +56,7 @@ class PipelineRedeployTest {
     private final DslCompiler compiler = mock(DslCompiler.class);
     private final NifiClient nifi = mock(NifiClient.class);
     private final PipelineGroupOrganizer groups = mock(PipelineGroupOrganizer.class);
-    private final PipelineTaskLifecycleSynchronizer tasks = mock(PipelineTaskLifecycleSynchronizer.class);
+    private final NifiDeploymentMagicFixture.TaskOperations tasks = mock(NifiDeploymentMagicFixture.TaskOperations.class);
     private final AtomicReference<Pipeline> stored = new AtomicReference<>();
     private final TargetTableCleanupService cleanup = mock(TargetTableCleanupService.class);
     private final ErrorService errors = mock(ErrorService.class);
@@ -316,6 +318,47 @@ class PipelineRedeployTest {
         verifyNoInteractions(compiler);
         verify(nifi, never()).cleanupProcessGroup(anyString());
         verify(nifi).setProcessGroupState("old-group", "RUNNING");
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+        "RUNNING, absent, absent, true",
+        "STOPPED, absent, absent, false",
+        "STOPPED, '3 / 10', absent, true",
+        "STOPPED, '4 / 9', STOPPED, false",
+        "STOPPING, '4 / 9', DISABLED, false",
+        "RUNNING, '4 / 9', INVALID, true",
+        "STOPPED, 0, running, true",
+        "STOPPED, 0, STARTING, true",
+        "RUNNING, unknown, absent, false",
+        "STOPPED, 12, disconnected, true"
+    })
+    void startOnlyRetriesWhenNativeStateRequiresIt(PipelineStatus local, String activeThreads, String processorState,
+                                                  boolean alreadyRunning) throws Exception {
+        stored.set(pipeline("old-group", "old-hash", local));
+        if (!activeThreads.equals("absent")) {
+            var mapper = new ObjectMapper();
+            var raw = mapper.createObjectNode();
+            var snapshot = raw.putObject("processGroupStatus").putObject("aggregateSnapshot");
+            if (activeThreads.matches("[0-9]+")) snapshot.put("activeThreadCount", Integer.parseInt(activeThreads));
+            else snapshot.put("activeThreadCount", activeThreads);
+            when(nifi.getProcessGroupStatus("old-group")).thenReturn(raw);
+            if (processorState.equals("disconnected")) {
+                when(nifi.get("/flow/process-groups/old-group", JsonNode.class))
+                        .thenThrow(new NifiException("unavailable", 503, null));
+            } else {
+                var flow = mapper.createObjectNode();
+                var processors = flow.putObject("processGroupFlow").putObject("flow").putArray("processors");
+                if (!processorState.equals("absent")) processors.addObject().putObject("component").put("state", processorState);
+                when(nifi.get("/flow/process-groups/old-group", JsonNode.class)).thenReturn(flow);
+            }
+        }
+        var response = deployment.start("p1");
+        assertThat(response.getStatusCode().value()).isEqualTo(200);
+        assertThat(((Map<?, ?>) response.getBody()).get("mode")).isEqualTo(alreadyRunning ? "already-running" : "fast-restart");
+        verify(nifi, times(alreadyRunning ? 0 : 1)).setProcessGroupState("old-group", "RUNNING");
+        verify(nifi, times(activeThreads.equals("absent") ? 0 : 1)).get("/flow/process-groups/old-group", JsonNode.class);
+        assertThat(stored.get().status()).isEqualTo(PipelineStatus.RUNNING);
     }
 
     @Test

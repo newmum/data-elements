@@ -7,6 +7,10 @@
   "parameters": [],
   "options": [
     {
+      "name": "jsonBody",
+      "value": "OBJECT_MAP"
+    },
+    {
       "name": "access",
       "value": "TENANT_SESSION"
     }

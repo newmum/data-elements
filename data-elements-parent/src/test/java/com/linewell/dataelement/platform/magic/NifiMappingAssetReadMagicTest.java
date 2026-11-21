@@ -31,6 +31,7 @@ import com.linewell.dataelement.integration.nifi.canvas.mapping.UnifiedMappingSe
 import com.linewell.dataelement.mapping.core.DictionarySpec;
 import com.linewell.dataelement.mapping.core.MappingEngine;
 import com.linewell.dataelement.mapping.core.MappingException;
+import com.linewell.dataelement.magic.runtime.route.MagicJsonBody;
 import com.linewell.dataelement.platform.configuration.MagicBootConfiguration;
 import com.linewell.dataelement.platform.tenant.api.TenantMagicModule;
 import com.linewell.dataelement.platform.tenant.domain.TenantAccessException;
@@ -107,8 +108,6 @@ class NifiMappingAssetReadMagicTest {
             assertThat(rows(plans).getFirst()).containsEntry("node_id", "row-000").containsEntry("row_no", 1L);
             assertThat(page(plans)).containsEntry("total", (long) size);
 
-            assertThat(fixture.run("plansHead", sorted, Map.of())).isEqualTo(plans);
-            assertThat(fixture.queries).hasSize(6);
             var second = fixture.run("plans", Map.of("pipelineId", "canvas", "sortField", "node_id", "sortDir", "asc",
                     "page", "2", "size", "10"), Map.of());
             assertThat(rows(second).getFirst()).containsEntry("node_id", "row-010").containsEntry("row_no", 11L);
@@ -197,6 +196,10 @@ class NifiMappingAssetReadMagicTest {
         var attributes = new ServletRequestAttributes(request);
         RequestContextHolder.setRequestAttributes(attributes);
         try {
+            assertThat(converter.canRead(Object.class, MediaType.APPLICATION_JSON)).isFalse();
+            String matched = MagicJsonBody.class.getName() + ".matched";
+            request.setRequestURI("/validation/registered-mapping");
+            request.setAttribute(matched, MagicJsonBody.EXACT_TREE);
             assertThat(converter.canRead(Object.class, MediaType.APPLICATION_JSON)).isTrue();
             String source = "{\"fraction\":0.123456789123456789,\"padding\":\"" + "a".repeat(70000) + "\"}";
             var input = new MockHttpInputMessage(source.getBytes(StandardCharsets.UTF_8));
@@ -211,7 +214,7 @@ class NifiMappingAssetReadMagicTest {
                     .isInstanceOf(HttpMessageNotReadableException.class);
             assertThat(request.getAttribute(MagicBootConfiguration.MAGIC_MAPPING_JSON_ERROR))
                     .isInstanceOf(HttpMessageNotReadableException.class);
-            request.setRequestURI("/nifi/life/deploy");
+            request.setAttribute(matched, MagicJsonBody.CACHED);
             assertThat(converter.canRead(Object.class, MediaType.APPLICATION_JSON)).isFalse();
         } finally {
             RequestContextHolder.resetRequestAttributes();
@@ -571,7 +574,6 @@ class NifiMappingAssetReadMagicTest {
     void validationBindingAndCapabilityRoutesPreserveThePublicContracts() throws Throwable {
         var fixture = new Fixture();
         var caps = fixture.run("capabilities",Map.of(),Map.of());
-        assertThat(fixture.run("capabilitiesHead",Map.of(),Map.of())).isEqualTo(caps);
         assertThat(page(caps)).containsEntry("engineVersion",MappingEngine.engineVersion()).containsEntry("maxPreviewRows",100);
         var functions = pageBody(caps).path("functions");
         assertThat(functions.size()).isEqualTo(com.linewell.dataelement.mapping.core.FunctionRegistry.NAMES.size());
@@ -735,41 +737,31 @@ class NifiMappingAssetReadMagicTest {
             function("nifiMappingReadHttp", "61.海通映射读取响应.ms", "nifi_mapping_read_http_v1", "action");
             function("nifiMappingPlanScope", "62.海通映射计划范围.ms", "nifi_mapping_plan_scope_v1", "pipelineId", "tenantId");
             function("nifiReadMappingTemplate", "63.海通读取映射模板.ms", "nifi_mapping_template_read_v1", "templateId", "tenantId");
-            function("nifiMappingPlans", "64.海通映射计划历史.ms", "nifi_mapping_plans_v1");
-            function("nifiMappingPlanDetail", "65.海通映射计划版本.ms", "nifi_mapping_plan_v1", "planId");
-            function("nifiMappingTemplates", "66.海通映射模板版本.ms", "nifi_mapping_templates_v1");
-            function("nifiMappingTemplateDetail", "67.海通映射模板详情.ms", "nifi_mapping_template_v1", "templateId");
-            function("nifiMappingRetention", "68.海通映射版本保留策略.ms", "nifi_mapping_retention_v1");
-            function("nifiMappingDictionaryTables", "69.海通字典候选表.ms", "nifi_mapping_dict_tables_v1");
-            function("nifiMappingDictionaryColumns", "70.海通字典候选字段.ms", "nifi_mapping_dict_cols_v1");
             function("nifiSaveMappingVersion", "71.海通追加映射资源版本.ms", "nifi_mapping_save_version_v1",
                     "kind", "key", "definition", "content");
             function("nifiReadMappingPlans", "72.海通批量读取映射计划.ms", "nifi_mapping_plan_read_v1",
                     "pipelineId", "tenantId", "ids");
-            function("nifiFieldMappingCapabilities", "73.海通字段映射能力.ms", "nifi_field_map_capabilities_v1");
             route("capabilities", "13.字段映射/03.查询字段映射能力.ms", "nifi_field_map_caps_get_v1");
-            route("capabilitiesHead", "13.字段映射/04.核验字段映射能力.ms", "nifi_field_map_caps_head_v1");
-            route("validateRules", "13.字段映射/05.校验字段映射.ms", "nifi_field_map_validate_v1");
-            route("previewRules", "13.字段映射/06.预览字段映射.ms", "nifi_field_map_preview_v1");
-            route("recommendRules", "13.字段映射/07.推荐字段映射.ms", "nifi_field_map_recommend_v1");
-            route("compileRules", "13.字段映射/08.编译字段映射.ms", "nifi_field_map_compile_v1");
-            route("legacyRules", "13.字段映射/09.转换旧字段映射.ms", "nifi_field_map_legacy_v1");
-            route("lookupRules", "12.映射字典/06.生成字典查询模板.ms", "nifi_field_map_lookup_v1");
-            route("restore", "10.映射计划/07.恢复映射计划草稿.ms", "nifi_map_restore_post_v1");
+            route("validateRules", "13.字段映射/04.校验字段映射.ms", "nifi_field_map_validate_v1");
+            route("previewRules", "13.字段映射/05.预览字段映射.ms", "nifi_field_map_preview_v1");
+            route("recommendRules", "13.字段映射/06.推荐字段映射.ms", "nifi_field_map_recommend_v1");
+            route("compileRules", "13.字段映射/07.编译字段映射.ms", "nifi_field_map_compile_v1");
+            route("legacyRules", "13.字段映射/08.转换旧字段映射.ms", "nifi_field_map_legacy_v1");
+            route("lookupRules", "12.映射字典/04.生成字典查询模板.ms", "nifi_field_map_lookup_v1");
+            route("restore", "10.映射计划/04.恢复映射计划草稿.ms", "nifi_map_restore_post_v1");
             route("upgrade", "14.映射运行/01.升级运行字段节点.ms", "nifi_map_upgrade_post_v1");
             route("published", "14.映射运行/02.启动已发布映射流程.ms", "nifi_map_start_pub_post_v1");
-            route("saveTemplate", "11.映射模板/06.保存映射模板.ms", "nifi_map_templates_post_v1");
-            route("snapshot", "12.映射字典/05.生成字典快照.ms", "nifi_map_dict_snapshot_post_v1");
+            route("saveTemplate", "11.映射模板/04.保存映射模板.ms", "nifi_map_templates_post_v1");
+            route("snapshot", "12.映射字典/03.生成字典快照.ms", "nifi_map_dict_snapshot_post_v1");
             route("schema", "13.字段映射/01.构造映射字段结构.ms", "nifi_map_schema_post_v1");
             route("sample", "13.字段映射/02.取样预览映射.ms", "nifi_map_sample_post_v1");
             route("plans", "10.映射计划/01.查询映射计划历史.ms", "nifi_map_plans_get_v1");
-            route("plansHead", "10.映射计划/02.核验映射计划历史.ms", "nifi_map_plans_head_v1");
-            route("plan", "10.映射计划/03.查询映射计划版本.ms", "nifi_map_plan_get_v1");
+            route("plan", "10.映射计划/02.查询映射计划版本.ms", "nifi_map_plan_get_v1");
             route("templates", "11.映射模板/01.查询映射模板版本.ms", "nifi_map_templates_get_v1");
-            route("template", "11.映射模板/03.查询映射模板详情.ms", "nifi_map_template_get_v1");
+            route("template", "11.映射模板/02.查询映射模板详情.ms", "nifi_map_template_get_v1");
             route("tables", "12.映射字典/01.查询字典候选表.ms", "nifi_map_dict_tables_get_v1");
-            route("columns", "12.映射字典/03.查询字典候选字段.ms", "nifi_map_dict_cols_get_v1");
-            route("import", "11.映射模板/05.导入映射模板.ms", "nifi_map_template_import_v1");
+            route("columns", "12.映射字典/02.查询字典候选字段.ms", "nifi_map_dict_cols_get_v1");
+            route("import", "11.映射模板/03.导入映射模板.ms", "nifi_map_template_import_v1");
         }
 
         void nativeCanvas() throws Throwable {

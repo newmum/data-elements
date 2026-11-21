@@ -13,7 +13,12 @@
   "description": "仅有操作账号或认证账号写入权限的管理员可按身份域查看待核验申请。",
   "parameters": [],
   "method": "GET",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

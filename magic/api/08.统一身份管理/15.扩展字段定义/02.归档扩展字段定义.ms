@@ -13,7 +13,12 @@
   "description": "按标识加载扩展字段定义并检查所属范围与版本；执行软删除或撤销关联，保留审计历史。只维护白名单内的人员或机构扩展字段定义；校验字段类型与版本，并保护保留字段。",
   "parameters": [],
   "method": "POST",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

@@ -202,7 +202,7 @@ class MaterializationExecutionMagicTest {
             db.setRowMapColumnMapper(value -> value);
             db.setNamedTableInterceptors(List.of());
             db.setSqlInterceptors(List.of());
-            String body = CanonicalMagicSources.byId("2ebdc2a6af4b5e2989cd8add98c849fa")
+            String body = CanonicalMagicSources.byId("b6aaff9e31925977b94369d347e7c32a")
                     .replaceAll("(?m)^import (?!cn\\.hutool\\.|java\\.)[^\\r\\n]*\\r?\\n", "");
             script = MagicScript.create("var generateDDL = () => render(body);\n"
                     + "var createPhysicalTable = () => physical(body);\n" + body, null);
@@ -220,11 +220,11 @@ class MaterializationExecutionMagicTest {
             var session = new Session();
             var variables = Map.<String, Object>ofEntries(
                     Map.entry("db", db), Map.entry("tableRead", new StructuredTableReadMagicModule(jdbc)),
-                    Map.entry("input", Map.of("method", "PUT", "id", "plan-a", "action", action, "version", version,
-                            "body", Map.of("confirmExecution", true))), Map.entry("body", Map.of()),
+                    Map.entry("body", Map.of("kind", "materializations", "method", "PUT", "id", "plan-a", "action", action, "version", version,
+                            "body", Map.of("confirmExecution", true))),
                     Map.entry("tenantRuntime", session), Map.entry("StpUtil", session), Map.entry("jsons", new Jsons()),
                     Map.entry("connectionProperties", new Connections()),
-                    Map.entry("readPlanning", (Function<Object[], Object>) args -> {
+                    Map.entry("planningRead", (Function<Object[], Object>) args -> {
                         planningCalls++;
                         onPlanning.run();
                         if (removeBindingAfterPrecheck && planningCalls > 1) {

@@ -6,16 +6,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
-import org.ssssssss.magicapi.core.service.MagicAPIService;
+import com.linewell.dataelement.magic.runtime.route.RegisteredMagicFunctionInvoker;
 
 /** 为日志文件传输和后台任务绑定可信租户，读取 Magic 授权规则。 */
 @Service
 public class LogAccessService {
-    private final ObjectProvider<MagicAPIService> magic;
+    private final RegisteredMagicFunctionInvoker magic;
 
-    public LogAccessService(ObjectProvider<MagicAPIService> magic) {
+    public LogAccessService(RegisteredMagicFunctionInvoker magic) {
         this.magic = magic;
     }
     public LogScope current(String capability) {
@@ -26,7 +25,7 @@ public class LogAccessService {
     }
     public LogScope tenant(String tenant,String user,String app,String capability) {
         // 后台任务复核已冻结的主体。显式绑定任务租户，执行完恢复调用方上下文。
-        Object decision = TenantContext.call(tenant, () -> magic.getObject().invoke("/common/loggrants",
+        Object decision = TenantContext.call(tenant, () -> magic.invoke("log_tenant_grants_v1",
                 Map.of("actor", user, "appId", app, "capability", capability)));
         if (!(decision instanceof Map<?, ?> result) || !(result.get("modes") instanceof Map<?, ?> modes)
                 || !(modes.get(capability) instanceof String mode)) {
@@ -48,7 +47,7 @@ public class LogAccessService {
     }
     public LogScope refresh(LogScope scope,String capability) {
         if(!scope.platform()) return tenant(scope.tenantId(),scope.actorId(),scope.sourceApp(),capability);
-        var decision=magic.getObject().invoke("/idaas/log-scope-for-actor",Map.of("actorId",scope.actorId(),"permission",platformPermission(capability),"domain",scope.domain(),"appId",Objects.toString(scope.appId(),"")));
+        var decision=magic.invoke("log_scope_for_actor_v1",Map.of("actorId",scope.actorId(),"permission",platformPermission(capability),"domain",scope.domain(),"appId",Objects.toString(scope.appId(),"")));
         if(!(decision instanceof Map<?,?> result)||!Boolean.TRUE.equals(result.get("allowed"))) throw new SecurityException("日志权限已变更，请重新提交");
         return new LogScope(null,scope.actorId(),scope.sourceApp(),scope.domain(),scope.appId(),"ALL",List.of(),capability);
     }

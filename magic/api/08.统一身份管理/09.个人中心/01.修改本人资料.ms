@@ -13,7 +13,12 @@
   "description": "以当前平台会话确定账号，仅更新允许本人修改的资料字段，防止越权修改角色或身份域。",
   "parameters": [],
   "method": "POST",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

@@ -13,7 +13,12 @@
   "description": "读取符合请求筛选条件的应用人员资料分配，应用权限及身份域过滤后返回可展示字段；不发生写入。管理中央人员资料与指定应用的分配关系；资料分配和访问授权分别维护。",
   "parameters": [],
   "method": "GET",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

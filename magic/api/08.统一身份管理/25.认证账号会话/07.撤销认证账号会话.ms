@@ -13,7 +13,12 @@
   "description": "核验目标会话属于当前统一认证账号后撤销指定会话，保存撤销原因与时间。",
   "parameters": [],
   "method": "POST",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_ACCOUNT_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],
@@ -28,7 +33,6 @@ import iamMfa;
 import cn.hutool.core.util.IdUtil;
 import cn.hutool.crypto.digest.DigestUtil;
 import cn.hutool.json.JSONUtil;
-import '@/idaas/auth-account-context' as context;
 import '@/idaas/password-policy' as passwordPolicy;
 import '@/idaas/audit' as audit;
 import '@/idaas/auth-session-policy' as sessionPolicy;
@@ -66,7 +70,7 @@ where p.subject_id=#{a.subject_id}
             id:a.id,subjectId:a.subject_id,username:a.username,name:a.name,domain:a.identity_domain,realm:'auth-account',mustChangePassword:a.must_change_password==1,verificationStatus:status,legalEntityId:a.legal_entity_id,version:a.version
         };
     };
-    var ctx=context();
+    var ctx=authSession.verifiedContext();
     var a=ctx.account;
     var id=a.id;
     if(operation=='revoke-session') {

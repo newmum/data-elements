@@ -40,8 +40,10 @@ class PushOperationsMagicTest {
             }
         }}
         // The standalone transport maps both legacy single-file addresses to one Magic resource.
-        assertEquals(43,migrated);
-        assertEquals(62,routes.size());
+        assertEquals(42,migrated);
+        assertEquals(61,routes.size());
+        assertTrue(routes.contains("GET /api/file/content"));
+        assertFalse(routes.contains("HEAD /api/file/content"));
         assertTrue(routes.containsAll(Set.of(
             "GET /gateway/config/check", "POST /gateway/token/status", "POST /gateway/data/push",
             "POST /ftp/connect/probe", "POST /push/debug/send", "POST /push/message/status", "POST /push/template/test",

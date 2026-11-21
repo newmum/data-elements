@@ -9,12 +9,27 @@ import org.junit.jupiter.api.Test;
 class WhiteListPropTest {
 
     @Test
-    void includesFrameworkPublicEndpointsAndConfiguredPatterns() {
+    void nodeProtocolDoesNotUseConfiguredWildcard() {
+        WhiteListProp properties = new WhiteListProp();
+        properties.setFlowServeFallbackPattern("/api/v1/runtime/**");
+        properties.setWhiteList(List.of("/api/v1/runtime/**", "/public/**"));
+        assertFalse(properties.isWhiteListed("/api/v1/runtime/health"));
+        assertFalse(properties.isWhiteListed("/api/v1/runtime/unknown"));
+        assertTrue(properties.isWhiteListed("/public/example"));
+    }
+
+    @Test
+    void keepsAutomaticProtocolPrefixExemptionsOutOfTheBusinessWhitelist() {
         WhiteListProp properties = new WhiteListProp();
         properties.setWhiteList(List.of("/public/**"));
 
-        assertTrue(properties.isWhiteListed("/portal/sso/ticket"));
+        assertFalse(properties.isWhiteListed("/portal/sso/ticket"));
         assertFalse(properties.isWhiteListed("/portal/sso/options"));
+        assertFalse(properties.isWhiteListed("/idaas/oauth2/consent"));
+        assertFalse(properties.isWhiteListed("/idaas/oauth2/unregistered"));
+        assertFalse(properties.isWhiteListed("/idaas/connect/userinfo"));
+        assertFalse(properties.isWhiteListed("/.well-known/openid-configuration"));
+        assertFalse(properties.isWhiteListed("/.well-known/oauth-authorization-server/extra"));
         assertTrue(properties.isWhiteListed("/public/demo"));
         assertFalse(properties.isWhiteListed("/private/demo"));
     }
@@ -23,7 +38,7 @@ class WhiteListPropTest {
     void handlesMissingExternalWhitelist() {
         WhiteListProp properties = new WhiteListProp();
 
-        assertTrue(properties.isWhiteListed("/portal/sso/redeem"));
+        assertFalse(properties.isWhiteListed("/portal/sso/redeem"));
         assertFalse(properties.isWhiteListed("/private/demo"));
     }
 
@@ -37,17 +52,26 @@ class WhiteListPropTest {
         assertFalse(properties.isWhiteListed("/portal/sso/settings"));
         assertFalse(properties.isWhiteListed("/portal/sso/login"));
         assertFalse(properties.isWhiteListed("/portal/sso/logout"));
+        assertFalse(properties.isWhiteListed("/portal/profile/password"));
+        assertFalse(properties.isWhiteListed("/idaas/receiver/admin"));
+        assertFalse(properties.isWhiteListed("/idaas/api/whoami"));
+        assertFalse(properties.isWhiteListed("/idaas/receiver/v2"));
         assertFalse(properties.isWhiteListed("/idaas/auth/login"));
     }
 
     @Test
-    void identityRecoveryKeepsItsExistingLegacyAccess() {
+    void identityAccountAndRecoveryUseResourceAccessInsteadOfLegacyPaths() {
         WhiteListProp properties = new WhiteListProp();
-        assertTrue(properties.isWhiteListed("/idaas/recovery/request"));
+        assertFalse(properties.isWhiteListed("/idaas/recovery/request"));
         assertFalse(properties.isWhiteListed("/idaas/recovery/requests"));
         assertFalse(properties.isWhiteListed("/idaas/auth/session"));
         assertFalse(properties.isWhiteListed("/idaas/users/save"));
         assertFalse(properties.isWhiteListed("/idaas/auth/login/anything"));
+        assertFalse(properties.isWhiteListed("/idaas/identity/login"));
+        assertFalse(properties.isWhiteListed("/idaas/identity/me"));
+        assertFalse(properties.isWhiteListed("/idaas/verifications/submit"));
+        assertFalse(properties.isWhiteListed("/idaas/mfa/status"));
+        assertFalse(properties.isWhiteListed("/idaas/mfa/verify"));
     }
 
     @Test

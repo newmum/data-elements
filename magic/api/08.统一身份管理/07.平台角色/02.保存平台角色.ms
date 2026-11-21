@@ -13,7 +13,12 @@
   "description": "校验请求字段、所属范围和版本；新建或更新平台角色及必要关联记录，写入审计并返回保存结果。核验平台功能权限与对象范围；角色资源和分配范围不得超过当前操作人的可管理权限。",
   "parameters": [],
   "method": "POST",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

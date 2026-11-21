@@ -48,7 +48,6 @@ import com.linewell.dataelement.integration.nifi.canvas.errors.FlowError$ErrorLe
 import com.linewell.dataelement.integration.nifi.canvas.errors.FlowError$ErrorPhase as ErrorPhase
 import com.linewell.dataelement.integration.nifi.canvas.errors.FlowFailureDetails
 import com.linewell.dataelement.integration.nifi.canvas.lifecycle.NifiMutationAspect as mutation
-import com.linewell.dataelement.integration.nifi.canvas.lifecycle.PipelineRuntimeStatusResolver as statusResolver
 import com.linewell.dataelement.integration.nifi.canvas.mapping.AccessTaskFieldMappingBinder as mappingBinder
 import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient as nifi
 import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiException
@@ -57,6 +56,7 @@ import com.linewell.dataelement.integration.nifi.canvas.pipeline.PipelineStatus
 import com.linewell.dataelement.platform.tenant.domain.TenantAccessException
 import com.linewell.dataelement.platform.tenant.domain.TenantContext
 import java.lang.IllegalStateException
+import java.lang.Integer
 import java.time.Instant
 import java.util.LinkedHashSet
 import java.util.Objects
@@ -66,6 +66,36 @@ import tenantRuntime
 
 // @/common/nifiStartCanvas 为画布启动和登记表单任务启动共用。
 // 锁内读取可信租户的保存态，先确认已有部署及清空策略，再按部署记录执行启动或显式重建。
+
+var activeThreads = count => {
+    if (count.isInt() || count.isLong()) { return count.asInt(0) }
+    var text = count.asText('').trim()
+    var separator = text.indexOf('/')
+    if (separator > 0) { text = text.substring(0, separator).trim() }
+    try { return Integer.parseInt(text) } catch (invalid) { return 0 }
+}
+
+var isRunning = (localStatus, raw, groupId) => {
+    if (raw == null) { return localStatus == PipelineStatus.RUNNING }
+    var count = raw.path('processGroupStatus').path('aggregateSnapshot').path('activeThreadCount')
+    var stoppedProcessor = false
+    try {
+        var flow = nifi.get('/flow/process-groups/' + groupId, JsonNode)
+        var processors = flow.path('processGroupFlow').path('flow').path('processors')
+        if (processors.isArray()) {
+            for (processor in processors.elements()) {
+                var state = processor.path('component').path('state').asText('')
+                if ('RUNNING'.equalsIgnoreCase(state) || 'STARTING'.equalsIgnoreCase(state)) { return true }
+                stoppedProcessor = stoppedProcessor || 'STOPPED'.equalsIgnoreCase(state)
+                    || 'DISABLED'.equalsIgnoreCase(state) || 'INVALID'.equalsIgnoreCase(state)
+            }
+        }
+    } catch (unavailable) {
+        // 流程图暂时不可读时，仍以已经取得的活跃线程信号判断是否需要重新启动。
+    }
+    var stopping = localStatus == PipelineStatus.STOPPING || localStatus == PipelineStatus.STOPPED
+    return activeThreads(count) > 0 && !(stoppedProcessor && stopping)
+}
 
 return respond(rootCause => mutation.withMutationLock(() => {
     var tenantId = tenantRuntime.id()
@@ -149,7 +179,7 @@ return respond(rootCause => mutation.withMutationLock(() => {
                 // 请求重试时识别 NiFi 已启动的组，只补齐保存状态与任务关联。
                 try {
                     var raw = nifi.getProcessGroupStatus(groupId)
-                    alreadyRunning = statusResolver.resolve(canvas.status(), raw, groupId) == PipelineStatus.RUNNING
+                    alreadyRunning = isRunning(canvas.status(), raw, groupId)
                 } catch (failure) {
                     alreadyRunning = false
                 }

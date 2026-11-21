@@ -17,7 +17,7 @@ import '@/common/nifiCanvasWriteRequest' as withRequest
 import '@/common/nifiCatalogPipeline' as existingCanvas
 import '@/common/nifiWriteCanvas' as writeCanvas
 import com.linewell.dataelement.integration.nifi.canvas.lifecycle.NifiMutationAspect as mutation
-import com.linewell.dataelement.integration.nifi.canvas.lifecycle.PipelineTaskLifecycleSynchronizer as tasks
+import '@/common/ensureNifiCatalogAccessTask' as associateTask
 import java.lang.IllegalArgumentException
 import java.lang.IllegalStateException
 import org.springframework.transaction.PlatformTransactionManager as transactionManager
@@ -187,7 +187,7 @@ return withRequest(bodySignature, body, (submitted, tenantId, parameterValues, t
         dsl_hash: dsl == null ? null : DslHasher.hash(dsl),
         dsl_version: dsl == null ? null : dsl.version()
     })
-    tasks.ensureCatalogAccessTask(catalogId, saved)
+    associateTask(catalogId, saved.id(), saved.name(), saved.dsl())
     if (scope != null && scope.catalog && scope.datasourceId != null && scope.sourceTableId != null) {
         try {
             var isolated = new TransactionTemplate(transactionManager)

@@ -241,7 +241,7 @@ const searchUsers = async (keyword) => {
       handlerType: "用户", handlerName: keyword, pageNum: 1, pageSize: 50,
     });
     const data = response?.data || response;
-    state.users = data?.handlerAuths?.list || data?.handlerAuths?.records || [];
+    state.users = data?.handlerAuths?.rows || data?.handlerAuths?.list || data?.handlerAuths?.records || [];
   } finally {
     state.userLoading = false;
   }

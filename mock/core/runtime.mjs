@@ -642,7 +642,7 @@ export class ChengtianMockRuntime {
     const archiveAction = key === "POST /sym/logarchive/action";
     const logPolicy = /^(?:GET|HEAD) \/sym\/logpolicy\/list$/.test(key)
       || /^(?:PUT|POST) \/sym\/logpolicy\/save$/.test(key);
-    const logDownload = /^GET \/sym\/logs\/exports\/[a-f0-9]{32}\/download$/.test(key);
+    const logDownload = /^(GET|HEAD) \/sym\/logexport\/download$/.test(key);
     const logRoute = logBootstrap || logEvent || logTask || exportCreate || archiveCreate || archiveAction || logPolicy || logDownload;
     const head = (portal || collection || logBootstrap || logEvent || logTask) && verb === "HEAD";
     const headResponse = () => ({ raw: true, status: 200, body: null, headers: {
@@ -656,12 +656,12 @@ export class ChengtianMockRuntime {
       if (portal || componentRefresh) return { status: 200, body: { code: 0, msg: "success", success: true, data } };
       if (collection) return { status: 200, body: { code: 0, msg: "success", data } };
       if (logBootstrap || logEvent || logTask || exportCreate) return { status: 200, body: { code: 0, success: true, data } };
-      if (logDownload && data?.raw === true) return data;
+      if (logDownload && data?.raw === true) return verb === "HEAD" ? { ...data, body: null } : data;
       return { status: 200, body: { code: 0, message: "操作成功", data } };
     } catch (error) {
       if (!(error instanceof MockError)) throw error;
-      if (head) return headResponse();
-      if (portal || componentRefresh || (logBootstrap || logEvent || logTask || exportCreate) && error.status === 401) return { status: 200, body: {
+      if (head || logDownload && verb === "HEAD") return headResponse();
+      if (portal || componentRefresh || (logBootstrap || logEvent || logTask || exportCreate || logDownload) && error.status === 401) return { status: 200, body: {
         code: error.status === 401 ? 100120 : error.status,
         msg: error.status === 401 ? "user_no_login" : error.message,
         success: false, data: null,

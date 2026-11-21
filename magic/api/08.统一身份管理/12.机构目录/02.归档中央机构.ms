@@ -13,7 +13,12 @@
   "description": "按标识加载中央机构并检查所属范围与版本；执行软删除或撤销关联，保留审计历史。处理控制库的中央机构和层级关系；不因本次读写自动修改租户机构。",
   "parameters": [],
   "method": "POST",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],

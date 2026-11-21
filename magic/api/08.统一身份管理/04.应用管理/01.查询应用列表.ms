@@ -13,7 +13,12 @@
   "description": "读取符合请求筛选条件的应用，应用权限及身份域过滤后返回可展示字段；不发生写入。限定当前身份域与可管理应用范围；应用主档、运行绑定及界面配置分别持久化，绝不写租户本地登录凭据。",
   "parameters": [],
   "method": "GET",
-  "options": [],
+  "options": [
+    {
+      "name": "access",
+      "value": "IDAAS_PLATFORM_SESSION"
+    }
+  ],
   "requestBody": "{}",
   "headers": [],
   "paths": [],
