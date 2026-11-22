@@ -6,7 +6,7 @@ export const ORDER_EXAMPLE_ID='builtin-cross-database-orders-v1';
 export function openOrderExample(storage?:ModelStorage){
  const existing=loadModelDocument(ORDER_EXAMPLE_ID,storage);
  if(existing){
-  if(existing.revision!==1||existing.name!=='跨库客户订单示例'||existing.category!=='客户订单分析'||existing.startPosition||existing.sourceId||existing.sourceLabel||existing.executionSettings.engine!=='flink'||existing.executionSettings.mode!=='batch'||existing.executionSettings.scheduleEnabled)return existing;
+  if(existing.revision!==1||existing.name!=='跨库客户订单示例'||existing.category!=='客户订单分析'||existing.startName||existing.startPosition||existing.sourceId||existing.sourceLabel||existing.executionSettings.engine!=='flink'||existing.executionSettings.mode!=='batch'||existing.executionSettings.scheduleEnabled)return existing;
   const legacy=createModelingDemo({legacy:true});
   if(JSON.stringify(existing.nodes)!==JSON.stringify(legacy.nodes)||JSON.stringify(existing.importedTables)!==JSON.stringify(legacy.tables))return existing;
   const upgraded=createModelingDemo();

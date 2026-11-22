@@ -111,7 +111,7 @@
 .modeling-toolbar :is(.modeling-save,.modeling-run,.modeling-start-action){color:inherit!important}.modeling-toolbar button:disabled .anticon{color:var(--model-muted,#999)!important}
 .execution-design-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}.execution-design-header small{font-size:10px;letter-spacing:1.2px;color:#4a7d9d}.execution-design h3{font-size:21px;margin:7px 0}.execution-design-header p{margin:0;color:#86909a;font-size:12px}.execution-design-grid{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(220px,1fr);gap:22px;margin-top:20px}.execution-fields h4{font-size:13px;margin:0 0 14px}.execution-field-pair{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px}.execution-field-pair label{display:flex;flex-direction:column;gap:7px;font-size:12px;color:#727d89}.execution-field-pair :is(.model-ant-select,.model-ant-input-number){width:100%}.execution-switch{display:flex;align-items:center;justify-content:space-between;margin-bottom:17px}.execution-summary{background:#8098ac0b;border:1px solid #8098ac22;border-radius:10px;padding:18px;align-self:start}.execution-summary h4{margin:0 0 18px;font-size:13px}.execution-summary dl>div{display:flex;justify-content:space-between;margin:12px 0;font-size:12px}.execution-summary dt{color:#84909a}.execution-summary dd{margin:0}.execution-summary h5{border-top:1px solid #8098ac22;padding-top:18px;margin-bottom:12px}.execution-summary ol{padding-left:19px;font-size:12px;line-height:2.4}.execution-summary small{color:#8a939c;font-size:11px;line-height:1.7}.execution-actions{display:flex;align-items:center;gap:8px;border-top:1px solid #8098ac22;padding-top:16px;margin-top:18px}.execution-actions>span{margin-right:auto;font-size:11px;color:#87939e}.execution-status{font-size:12px;padding:10px 12px;background:#1677c808;border-radius:6px;margin-top:12px}@media(max-width:700px){.execution-design-grid{grid-template-columns:1fr}.execution-field-pair{grid-template-columns:1fr}}
 
-.execution-dialog .model-ant-modal-body{max-height:calc(100vh - 150px);overflow:auto;padding-right:4px}.execution-dialog .execution-actions{position:sticky;bottom:0;background:var(--model-bg,#fff);padding-bottom:4px;z-index:2}.execution-dialog .execution-design-header{margin-bottom:12px}.execution-dialog .execution-design h3{font-size:19px}.execution-dialog .execution-design-grid{gap:18px;margin-top:16px}.execution-dialog .execution-field-pair{margin-bottom:12px}.execution-dialog .model-ant-alert-with-description{padding:12px}
+
 
 .modeling-start-label{display:grid;gap:2px;text-align:left}.modeling-start-label .modeling-start-configure:hover{color:#428267}.modeling-preview-running{display:flex;align-items:center;justify-content:center;gap:10px;min-height:80px;color:var(--model-text)}
 
@@ -139,3 +139,24 @@
 .modeling-operator-list.modeling-operator-grid .modeling-palette-item{min-height:64px}
 .modeling-semantic-icon{display:inline-flex;align-items:center;justify-content:center;line-height:1;flex-shrink:0}
 .modeling-semantic-icon>svg,.modeling-semantic-icon>.anticon{width:1em;height:1em}
+
+/* Selected-node naming and task configuration share the existing right sidebar. */
+.modeling-node-heading{display:flex;align-items:center;gap:3px;min-width:0;flex:1;margin-right:6px}
+.modeling-node-heading>strong{font-size:13px;font-weight:600;line-height:20px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.modeling-node-heading>.model-ant-btn{flex-shrink:0}
+.modeling-node-heading>.model-ant-input{min-width:0;font-size:13px}
+.modeling-start-node.is-selected{outline:2px solid #428267;outline-offset:2px}
+.modeling-start-label{min-width:0;max-width:67px}
+.modeling-start-label strong{display:block;max-width:67px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.modeling-properties .execution-design{padding:14px;min-width:0;font-size:12px}
+.modeling-properties .execution-design-header{align-items:flex-start;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+.modeling-properties .execution-design h3{font-size:15px;line-height:1.5;margin:5px 0}
+.modeling-properties .execution-design-grid,.modeling-properties .execution-field-pair{grid-template-columns:minmax(0,1fr);gap:12px}
+.modeling-properties .execution-design-grid{margin-top:14px}
+.modeling-properties .execution-field-pair{margin-bottom:14px}
+.modeling-properties .execution-summary{padding:12px;min-width:0;width:100%;box-sizing:border-box}
+.modeling-properties .execution-summary ol{line-height:1.8}
+.modeling-properties .execution-actions{flex-wrap:wrap;gap:8px}
+.modeling-properties .execution-actions>span{flex-basis:100%}
+.modeling-properties .execution-actions>.model-ant-btn{flex:1;padding-inline:8px}
+.modeling-properties .execution-status{line-height:1.7}
