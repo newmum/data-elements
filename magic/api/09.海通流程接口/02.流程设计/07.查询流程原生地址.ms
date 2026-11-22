@@ -35,8 +35,7 @@
 ================================
 import '@/common/nifiFindCanvas' as findCanvas
 import '@/common/nifiPipelineReadHttp' as withHttpResponse
-import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiNativeView as nativeView
-import org.springframework.http.HttpHeaders
+import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient as nifi
 import dataScope
 import com.linewell.dataelement.platform.tenant.domain.TenantAccessException
 import com.linewell.dataelement.platform.tenant.domain.TenantContext
@@ -44,7 +43,8 @@ import org.springframework.http.ResponseEntity
 import tenantRuntime
 
 // 按查询参数 id 返回当前行业租户已部署流程的 NiFi 原生链接。
-// 通过当前平台会话签发十分钟只读详情，按任务绑定节点访问，凭据留在服务端。
+// 按部署记录中的节点返回完整原生页面，由 NiFi 自己处理登录和操作权限。
+// 不签发代理会话、不改写原生权限，也不把节点账号、密码或认证 token 交给浏览器。
 
 var flowId = param.id
 
@@ -67,7 +67,10 @@ return withHttpResponse((parameterValues, textParameter, rootCause) => {
         return ResponseEntity.badRequest().body({error: '当前任务尚未部署到 NiFi，请先部署流程'})
     }
     var nodeId = canvas.nodeMapping()?.runtimeNodeId()
-    return ResponseEntity.ok().header(HttpHeaders.SET_COOKIE, nativeView.open(nodeId, groupId)).body({
-        url: '/nifi-ui/#/process-groups/' + groupId, processGroupId: groupId,
-        reusesBrowserSession: true, authenticatedByBackend: true, readOnly: true})
+    if (nodeId == null || nodeId.isBlank()) {
+        return ResponseEntity.badRequest().body({error: '当前任务缺少部署节点记录，请先核对任务的节点关联'})
+    }
+    return ResponseEntity.ok().body({
+        url: nifi.assignedNodeUiUrl(nodeId, groupId), processGroupId: groupId,
+        directNode: true, reusesBrowserSession: false, authenticatedByBackend: false, readOnly: false})
 })

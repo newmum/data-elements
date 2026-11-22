@@ -17,7 +17,7 @@ export function nativeDetailsAccess(
     return { canOpen: false, tooltip: '登录状态已失效，请重新登录' };
   }
   if (status?.id === pipelineId && status.deployed && status.processGroupId?.trim()) {
-    return { canOpen: true, tooltip: '在 NiFi 原生页面中查看当前任务' };
+    return { canOpen: true, tooltip: '在任务所属节点打开完整 NiFi，按需登录后操作' };
   }
   if (query.isError) return { canOpen: false, tooltip: '无法确认 NiFi 部署状态，请稍后重试' };
   if (query.isPending || status?.id !== pipelineId) {

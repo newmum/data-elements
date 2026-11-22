@@ -35,7 +35,6 @@ import {
   ArrowLeftOutlined,
 } from '@ant-design/icons';
 import { useCanvasStore } from '@/stores/canvasStore';
-import { standaloneNifiUiUrl } from '../../app/deployment';
 import { notifyClose, requestIntegratedCanvasClose, getTid } from '@/api/iframeBridge';
 import {
   useSavePipeline,
@@ -53,7 +52,6 @@ import {
   previewRuntimeAttributes,
   applyRuntimeAttributes,
 } from '@/api/pipelines';
-import { apiClient } from '@/api/client';
 import { resolveNifiNativeUiUrl } from '@/api/nifiNativeUrl';
 import { useErrorPanelStore } from '@/stores/errorPanelStore';
 import { flowActionFailure } from '../utils/flowActionFailure';
@@ -650,16 +648,10 @@ export default function Toolbar() {
     try {
       const target = await getNifiUiLink(currentPipelineId);
       if (!isCurrentSession()) { nativeWindow.close(); return; }
-      // The canvas is embedded below /haitong/, whereas the native UI is
-      // served by the same public gateway's /nifi-ui proxy. Do not resolve
-      // this browser navigation against VITE_APP_API_URL: that variable is a
-      // build-time Vite dev-server target and may point at localhost or a
-      // development service after the bundle reaches production.
-      const nifiUiUrl = target.directNode ? target.url : standaloneNifiUiUrl(target.processGroupId) ?? resolveNifiNativeUiUrl(
-        target.url,
-        String(apiClient.defaults.baseURL ?? ''),
-        window.location.origin,
-      );
+      // Only the deployed task's node decides navigation. No default-node or
+      // platform read-only proxy fallback: the native application handles login.
+      if (!target.directNode) throw new Error('当前服务尚未提供完整 NiFi 地址，请更新服务后重试');
+      const nifiUiUrl = resolveNifiNativeUiUrl(target.url);
       nativeWindow.location.replace(nifiUiUrl);
     } catch (error: any) {
       nativeWindow.close();

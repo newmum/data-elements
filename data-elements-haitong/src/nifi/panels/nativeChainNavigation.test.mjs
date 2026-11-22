@@ -3,12 +3,12 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import { compiler } from '../../../scripts/compiler.mjs';
-import { routes } from '../../app/routes.ts';
 import { resolveNifiNativeUiUrl } from '../api/nifiNativeUrl.ts';
 
 function nativeUiTarget(pipelineId) {
   const processGroupId = `group-${pipelineId}`;
-  return { url: `/nifi-ui/#/process-groups/${processGroupId}`, processGroupId, reusesBrowserSession: true };
+  return { url: `https://node-${pipelineId}.example/nifi/#/process-groups/${processGroupId}`,
+    processGroupId, directNode: true, reusesBrowserSession: false, readOnly: false, authenticatedByBackend: false };
 }
 
 function nativeDetailsHandler({ deployment, resolveUiLink = async id => nativeUiTarget(id), ...overrides } = {}) {
@@ -30,19 +30,11 @@ function nativeDetailsHandler({ deployment, resolveUiLink = async id => nativeUi
     location: { origin: 'http://demo.example' },
   };
   const compilerOptions = { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS };
-  const deploymentSource = fs.readFileSync(new URL('../../app/deployment.ts', import.meta.url), 'utf8');
-  const deploymentExports = {};
-  vm.runInNewContext(ts.transpileModule(deploymentSource, { compilerOptions }).outputText, {
-    window, URL, exports: deploymentExports,
-    require(name) { assert.equal(name, './routes'); return { routes }; },
-  });
   const scope = { currentPipelineId: 'p1', canOpenNative: true,
     nativeDetails: { tooltip: '当前任务尚未部署到 NiFi' }, isCurrentSession: () => true,
     window,
     getNifiUiLink: id => { events.push(['request', id]); return resolveUiLink(id); },
-    standaloneNifiUiUrl: deploymentExports.standaloneNifiUiUrl,
     resolveNifiNativeUiUrl,
-    apiClient: { defaults: { baseURL: '/prod-api/nifi/api' } },
     setNativeChecking: value => events.push(['checking', value]),
     message: { error: value => events.push(['error', value]), warning: value => events.push(['warning', value]) },
     ...overrides };
@@ -60,13 +52,13 @@ test('details opens the selected pipeline directly and reserves the tab before a
     link.resolve(nativeUiTarget(currentPipelineId));
     await navigation;
     assert.deepEqual(events.slice(3), [
-      ['navigate', `http://demo.example/prod-api/nifi-ui/#/process-groups/group-${currentPipelineId}`],
+      ['navigate', `https://node-${currentPipelineId}.example/nifi/#/process-groups/group-${currentPipelineId}`],
       ['checking', false],
     ]);
   }
 });
 
-test('standalone details uses the configured HTTPS NiFi path and the resolved process group', async () => {
+test('standalone details also uses the deployed task node instead of a configured default', async () => {
   const { run, events } = nativeDetailsHandler({
     deployment: {
       tenantId: 'validation-tenant', appId: 'validation-app',
@@ -76,7 +68,7 @@ test('standalone details uses the configured HTTPS NiFi path and the resolved pr
   await run();
   assert.deepEqual(events.slice(2), [
     ['request', 'p1'],
-    ['navigate', 'https://nifi.example/gateway/nifi/#/process-groups/group-p1'],
+    ['navigate', 'https://node-p1.example/nifi/#/process-groups/group-p1'],
     ['checking', false],
   ]);
 });
@@ -89,6 +81,25 @@ test('the deployed node link takes precedence over the standalone default NiFi a
   });
   await run();
   assert.deepEqual(events.slice(2), [['request', 'p1'], ['navigate', url], ['checking', false]]);
+});
+
+test('details never falls back to the retired read-only platform proxy', async () => {
+  const { run, events } = nativeDetailsHandler({
+    resolveUiLink: async id => ({ ...nativeUiTarget(id), url: '/nifi-ui/#/process-groups/group-p1', directNode: false }),
+  });
+  await run();
+  assert.ok(events.includes('closed'));
+  assert.equal(events.some(value => Array.isArray(value) && value[0] === 'navigate'), false);
+  assert.ok(events.some(value => Array.isArray(value) && value[0] === 'error'));
+});
+
+test('native browser links allow HTTP and HTTPS but never script URLs or embedded credentials', () => {
+  for (const url of ['http://node.example/nifi/#/process-groups/group', 'https://node.example/gateway/nifi/#/process-groups/group']) {
+    assert.equal(resolveNifiNativeUiUrl(url), url);
+  }
+  for (const url of ['javascript:alert(1)', 'data:text/html,example', 'https://user:password@node.example/nifi/', '/nifi-ui/']) {
+    assert.throws(() => resolveNifiNativeUiUrl(url));
+  }
 });
 
 test('details never falls back to another deployed task when the selected task cannot be opened', async () => {

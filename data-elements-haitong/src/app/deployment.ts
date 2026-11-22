@@ -19,19 +19,6 @@ export const deploymentLanding = enabledRoutes?.has(deploymentHome)
   ? deploymentHome
   : routes.find(route => enabledRoutes?.has(route.path))?.path;
 
-export function standaloneNifiUiUrl(processGroupId: string): string | undefined {
-  if (!standaloneDeployment) return undefined;
-  if (!deployment?.nifiUiUrl) throw new Error('请在 deployment.js 设置 NiFi 浏览器访问地址');
-  const address = new URL(deployment.nifiUiUrl);
-  if (address.protocol !== 'https:' || address.username || address.password) {
-    throw new Error('NiFi 浏览器访问地址须为不含凭据的 HTTPS 地址');
-  }
-  address.pathname = address.pathname.replace(/\/+$|\/nifi\/?$/g, '') + '/nifi/';
-  address.search = '';
-  address.hash = '/process-groups/' + encodeURIComponent(processGroupId);
-  return address.href;
-}
-
 /** Only applies to the standalone menu profile. The server still authorizes each request. */
 export function deploymentAllows(path: string): boolean {
   if (!enabledRoutes) return true;

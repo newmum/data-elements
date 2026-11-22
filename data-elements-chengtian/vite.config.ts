@@ -115,18 +115,6 @@ export default defineConfig(async ({ mode, command }: ConfigEnv): Promise<UserCo
       open: !mockEnabled,
       strictPort: mockEnabled,
       proxy: mockEnabled ? {} : {
-        // “NiFi”工具栏按钮会在新窗口打开原生 NiFi。画布返回的地址必须
-        // 保持平台同源，开发环境由这里转发至后端的 NifiNativeUiProxyController。
-        // 原生页面的 API 基址是相对 ../nifi-api，因此两个前缀必须成对代理；
-        // 否则 /nifi-ui 会被 Vite 的 SPA 回退处理为平台路由并显示“未授权”。
-        "/nifi-ui": {
-          changeOrigin: true,
-          target: env.VITE_APP_API_URL,
-        },
-        "/nifi-api": {
-          changeOrigin: true,
-          target: env.VITE_APP_API_URL,
-        },
         // 代理 /dev-api 的请求
         [env.VITE_APP_BASE_API]: {
           changeOrigin: true,

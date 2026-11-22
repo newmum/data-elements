@@ -12,7 +12,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
@@ -30,7 +29,6 @@ import cn.dev33.satoken.stp.StpUtil;
 import com.linewell.dataelement.dataservice.flowserve.FlowServeRuntimeAdapter;
 import com.linewell.dataelement.feature.identity.application.TenantIdentityQueryService;
 import com.linewell.dataelement.integration.flowserve.FlowServeRuntimeController;
-import com.linewell.dataelement.integration.nifi.canvas.controller.NifiNativeUiProxyController;
 import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient;
 import com.linewell.dataelement.magic.runtime.result.MagicApiResultProvider;
 import com.linewell.dataelement.magic.runtime.route.HeadFallbackMagicRegistry;
@@ -217,35 +215,6 @@ class MagicAccessPolicyTest {
                 assertThat(mapped.matches(request)).isEqualTo(!path.startsWith("/tools/editor/"));
             }
         }
-    }
-
-    @Test
-    void nativeNifiProxyUsesMatchedProtocolAndConfiguredUpstreamPaths() throws Exception {
-        var view = mock(com.linewell.dataelement.integration.nifi.canvas.nifi.NifiNativeView.class);
-        when(view.proxy(any(), anyString(), anyBoolean())).thenReturn(ResponseEntity.ok(new byte[] {1, 2}));
-        var tenants = mock(TenantAccessService.class);
-        var accounts = mock(TenantIdentityQueryService.class);
-        var tenant = new TenantWebInterceptor(tenants, new TenantProperties(), accounts, functions);
-        var proxy = new NifiNativeUiProxyController(view, "/node-ui", "/node-api", "/native-ui", "/native-api");
-        var mvc = MockMvcBuilders.standaloneSetup(proxy)
-                .addPlaceholderValue("nifi.native-proxy.ui-path", "/node-ui")
-                .addPlaceholderValue("nifi.native-proxy.api-path", "/node-api")
-                .addInterceptors(access, tenant)
-                .build();
-        try (var session = mockStatic(StpUtil.class)) {
-            TenantContext.bind("previous-request");
-            mvc.perform(get("/host/node-ui/asset?version=1").contextPath("/host")).andExpect(status().isOk());
-            mvc.perform(get("/node-api/flow/about")).andExpect(status().isOk());
-            mvc.perform(get("/node-ui")).andExpect(status().isOk());
-            assertThat(TenantContext.getTenantId()).isNull();
-            session.verifyNoInteractions();
-            verifyNoInteractions(tenants, accounts, platformSession);
-        } finally {
-            TenantContext.clear();
-        }
-        verify(view).proxy(any(), eq("/native-ui/asset"), eq(true));
-        verify(view).proxy(any(), eq("/native-api/flow/about"), eq(false));
-        verify(view).proxy(any(), eq("/native-ui"), eq(true));
     }
 
     @Test

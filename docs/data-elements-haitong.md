@@ -63,6 +63,8 @@ pnpm run dev
 
 浏览器打开 `http://localhost:3002/#/integration/overview`。这个端口和入口与数据中台“数据集成中心”菜单一致；跨端口登录态通过平台现有的 `capability-session.html` 获取，不在地址栏传递 Token。生产环境使用同源 `/haitong/` 入口；源数据管理平台默认位于同一Nginx的根路径`/#/`，顶部小房子返回该首页。生产构建在`.env.production`显式维护`VITE_SOURCE_PLATFORM_HOME_URL=/#/`，源平台部署在子路径或其他域名时由构建环境覆盖，例如`/source-platform/#/`；不能沿用历史`/wanxiang/`地址推断实际入口。首页、登录、上报返回地址校验和iframe来源解析共用同一地址规则。项目沿用 React 18、Ant Design 5、X6 2、TypeScript 5 和 Vite 5；NiFi 画布直接复用同一安装树中的版本。依赖风险预检由 `predev` 和 `prebuild` 执行。依赖声明基准与风险阻断清单维护在工程 `scripts/dependency-baseline.json`、`scripts/dependency-risk.json`，历史检查报告放根 `logs/`。
 
+画布工具栏保留“详情”按钮名称，通过 `GET /nifi/flow/link?id=...` 获取所选任务实际部署节点的完整原生地址。接口保留当前行业、有效画布和已有 ALL 数据范围校验，按 `nodeMapping.runtimeNodeId` 读取当前租户启用节点；缺少部署组或节点关联时明确报错，不回退到默认节点。浏览器新标签页直接打开该节点的 `/nifi/#/process-groups/<id>`，需要时使用 NiFi 自身账号登录，可使用该账号获准的全部原生界面和功能。平台不再签发只读代理 Cookie、改写 `canWrite` 或过滤原生 API；不同节点各自维护 NiFi 登录态。`directNode=true`、`authenticatedByBackend=false`、`readOnly=false`，响应不含凭据或 NiFi token；前端不再使用独立部署的默认地址或已退役的平台代理兜底。浏览器须能访问节点登记地址，网络不通时应配置真实可达的节点发布入口。原生修改不会反向同步海通 DSL，后续重新部署仍按海通设计生成，应先核对原生修改。
+
 左上角的系统切换入口与万象使用同一组中心地址约定。数据计算中心打开风驰首页，地址由 `VITE_FENGCHI_BASE_URL` 配置，开发默认 `http://localhost:3020/`，生产默认 `/fengchi/`。治理、资源和资产中心使用 `VITE_WANXIANG_GOVERNANCE_URL`，开发默认 `http://localhost:3010/`，生产默认 `/wanxiang-governance/`。启智及可视化中心使用 `VITE_QIZHI_BASE_URL`，开发默认 `http://localhost:3001/`，生产默认 `/qizhi/`。可视化路由与主平台的 `/visualization/screens` 一致。云搜和统一身份管理平台分别可由 `VITE_SEARCH_APP_URL`、`VITE_IDAAS_CENTER_URL` 覆盖。切换在当前标签页进行，不传递会话令牌。
 
 

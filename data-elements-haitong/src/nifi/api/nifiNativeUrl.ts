@@ -1,24 +1,8 @@
-/**
- * Resolve the native NiFi proxy through the same public gateway that served
- * the canvas. `VITE_APP_API_URL` is a Vite development-proxy target and must
- * never decide a browser navigation in a production bundle.
- */
-export function resolveNifiNativeUiUrl(
-  target: string,
-  apiBaseUrl: string | undefined,
-  pageOrigin: string,
-): string {
-  const nativeTarget = new URL(target, pageOrigin);
-  if (nativeTarget.origin !== pageOrigin) {
-    throw new Error('NiFi 原生页面地址必须通过当前系统的同源代理访问');
+/** Open the deployed node's complete native UI; NiFi owns its login and permissions. */
+export function resolveNifiNativeUiUrl(target: string): string {
+  const address = new URL(target);
+  if (!['http:', 'https:'].includes(address.protocol) || address.username || address.password) {
+    throw new Error('NiFi 浏览器访问地址须为不含凭据的 HTTP 或 HTTPS 地址');
   }
-
-  const apiBasePath = new URL(apiBaseUrl || '/', pageOrigin).pathname.replace(/\/+$/, '');
-  // The native proxy is a sibling of `nifi` within the public gateway.
-  // The standalone canvas also accepts the existing `/nifi/api` base.
-  const matched = apiBasePath.match(/^(.*)\/nifi(?:\/api)?$/);
-  const gatewayPrefix = matched?.[1] ?? '';
-  const proxyPath = `${gatewayPrefix}${nativeTarget.pathname}`.replace(/\/\/{2,}/g, '/');
-
-  return new URL(`${proxyPath}${nativeTarget.search}${nativeTarget.hash}`, pageOrigin).toString();
+  return address.href;
 }

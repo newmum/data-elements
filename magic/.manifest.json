@@ -7540,7 +7540,7 @@
         "fd00594c2ebd4e23a98a67e56ec7d0eb"
       ],
       "kind": "api",
-      "baseSha256": "8654296f186a76555081324c45ab316c3b2fed9936b21af8a95c30797ad01f3e",
+      "baseSha256": "c938b3303eba249ccc74961a52956c388aa3d6a013d39e078d17089d5a1decac",
       "metadataId": "nifi_pipeline_ui_link_get_v1"
     },
     {

@@ -58,16 +58,36 @@ class NifiPipelineReadMagicTest {
         fixture.flow("foreign", "外部画布", "STOPPED", "tenant-b", 0, 50L, 60L);
         fixture.jdbc.update("UPDATE nifi_pipeline_t SET nifi_process_group_id=?, node_mapping_json=?",
                 "group-a", "{\"runtimeNodeId\":\"secondary\"}");
-        var view = mock(com.linewell.dataelement.integration.nifi.canvas.nifi.NifiNativeView.class);
-        var bindings = Map.<String, Object>of("nativeView", view);
-        when(view.open("secondary", "group-a")).thenReturn("haitong_nifi_view=opaque; HttpOnly");
+        var nifi = mock(NifiClient.class);
+        var bindings = Map.<String, Object>of("nifi", nifi);
+        when(nifi.assignedNodeUiUrl("secondary", "group-a"))
+                .thenReturn("https://secondary-nifi.test/nifi/#/process-groups/group-a");
 
         assertThat(fixture.link("foreign", bindings).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
-        verifyNoInteractions(view);
-        assertThat(body(fixture.link("selected", bindings)))
-                .containsEntry("url", "/nifi-ui/#/process-groups/group-a").containsEntry("readOnly", true)
-                .containsEntry("processGroupId", "group-a").containsEntry("authenticatedByBackend", true);
-        verify(view).open("secondary", "group-a");
+        verifyNoInteractions(nifi);
+        var response = fixture.link("selected", bindings);
+        assertThat(response.getHeaders()).doesNotContainKey("Set-Cookie");
+        assertThat(body(response))
+                .containsEntry("url", "https://secondary-nifi.test/nifi/#/process-groups/group-a")
+                .containsEntry("readOnly", false).containsEntry("directNode", true)
+                .containsEntry("processGroupId", "group-a").containsEntry("authenticatedByBackend", false);
+        verify(nifi).assignedNodeUiUrl("secondary", "group-a");
+    }
+
+    @Test void nativeLinkRejectsMissingDeploymentBindingsAndKeepsTheExistingRoleBoundary() throws Exception {
+        var fixture = new Fixture();
+        fixture.flow("unbound", "历史流程", "STOPPED", "tenant-a", 0, 50L, 60L);
+        fixture.flow("draft", "尚未部署", "SAVED", "tenant-a", 0, 50L, 60L);
+        fixture.jdbc.update("UPDATE nifi_pipeline_t SET nifi_process_group_id='group-a' WHERE id='unbound'");
+        var nifi = mock(NifiClient.class);
+        var bindings = Map.<String, Object>of("nifi", nifi);
+        assertThat(fixture.link("unbound", bindings).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(fixture.link("draft", bindings).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        var scope = mock(com.linewell.dataelement.feature.identity.api.DataScopeMagicModule.class);
+        when(scope.dataSource()).thenReturn(Map.of("scope", "OWNER"));
+        assertThat(fixture.link("unbound", Map.of("nifi", nifi, "dataScope", scope)).getStatusCode())
+                .isEqualTo(HttpStatus.FORBIDDEN);
+        verifyNoInteractions(nifi);
     }
 
     @Test void runtimeReadUsesSavedBindingAndCompilerFingerprintWithoutExposingForeignRows() throws Exception {
@@ -78,8 +98,8 @@ class NifiPipelineReadMagicTest {
         fixture.flow("invalid", "损坏画布", "RUNNING", "tenant-a", 0, 50L, 60L);
         fixture.flow("draft", "未部署画布", "DRAFT", "tenant-a", 0, null, null);
         var design = new Pipeline.Dsl(1, List.of(), List.of());
-        fixture.jdbc.update("UPDATE nifi_pipeline_t SET nifi_process_group_id=?, dsl_json=? WHERE id=?",
-                "group-a", JSON.writeValueAsString(design), "design");
+        fixture.jdbc.update("UPDATE nifi_pipeline_t SET nifi_process_group_id=?, dsl_json=?, node_mapping_json=? WHERE id=?",
+                "group-a", JSON.writeValueAsString(design), "{\"runtimeNodeId\":\"secondary\"}", "design");
         fixture.jdbc.update("UPDATE nifi_pipeline_t SET dsl_json='broken' WHERE id='invalid'");
         var runtime = mock(TaskRuntimeStatusService.class);
         var index = mock(RuntimeStatusIndex.class);
@@ -87,13 +107,14 @@ class NifiPipelineReadMagicTest {
         when(index.rawStatus("group-a")).thenReturn(nativeStatus);
         var fresh = Map.<String, Object>of("revision", 8, "index", index, "fresh", true);
         when(runtime.snapshot()).thenReturn(fresh);
+        when(runtime.snapshotForNode("secondary")).thenReturn(fresh);
         when(runtime.describe(fresh, "group-a", "SAVED")).thenReturn(Map.of("runtimeState", "RUNNING", "runtimeFresh", true));
         var errors = mock(ErrorService.class);
         var bindings = Map.<String, Object>of("runtimeStatus", runtime, "errorStore", errors);
         var link = body(fixture.link("design", Map.of()));
-        assertThat(link).containsEntry("url", "/nifi-ui/#/process-groups/group-a")
-                .containsEntry("processGroupId", "group-a").containsEntry("reusesBrowserSession", true)
-                .containsEntry("authenticatedByBackend", true);
+        assertThat(link).containsEntry("url", "https://secondary-nifi.test/nifi/#/process-groups/group-a")
+                .containsEntry("processGroupId", "group-a").containsEntry("reusesBrowserSession", false)
+                .containsEntry("authenticatedByBackend", false).containsEntry("readOnly", false);
         assertThat(fixture.reads).isEqualTo(1);
         var state = body(fixture.runRead("status", "design", bindings));
         assertThat(state).containsEntry("status", "RUNNING").containsEntry("deployed", true)
@@ -468,7 +489,7 @@ class NifiPipelineReadMagicTest {
                 "com.fasterxml.jackson.databind.ObjectMapper as objectMapper", "tableRead", "tenantRuntime");
         final MagicScript link = script(PIPELINE_API + "02.流程设计/07.查询流程原生地址.ms", "nifi_pipeline_ui_link_get_v1",
                 "'@/common/nifiFindCanvas' as findCanvas", "'@/common/nifiPipelineReadHttp' as withHttpResponse",
-                "com.linewell.dataelement.integration.nifi.canvas.nifi.NifiNativeView as nativeView", "dataScope", "tenantRuntime");
+                "com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient as nifi", "dataScope", "tenantRuntime");
         final List<String> detailSql = new ArrayList<>();
         final MagicScript decodeCanvas = script(COMMON + "43.海通解码保存画布.ms", "e06d4eb123494419e67f70f2fc03bceb",
                 "com.fasterxml.jackson.databind.ObjectMapper as mapper");
@@ -585,9 +606,10 @@ class NifiPipelineReadMagicTest {
             MagicScriptLambdaFunction http = (context, args) ->
                     response.execute(new MagicScriptContext(Map.of("action", args[0], "request", request)));
             var variables = new LinkedHashMap<>(extras);
-            var defaultView = mock(com.linewell.dataelement.integration.nifi.canvas.nifi.NifiNativeView.class);
-            when(defaultView.open(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString())).thenReturn("haitong_nifi_view=validation; HttpOnly");
-            variables.putIfAbsent("nativeView", defaultView);
+            var defaultNifi = mock(NifiClient.class);
+            when(defaultNifi.assignedNodeUiUrl("secondary", "group-a"))
+                    .thenReturn("https://secondary-nifi.test/nifi/#/process-groups/group-a");
+            variables.putIfAbsent("nifi", defaultNifi);
             var scope = mock(com.linewell.dataelement.feature.identity.api.DataScopeMagicModule.class);
             when(scope.dataSource()).thenReturn(Map.of("scope", "ALL"));
             variables.putIfAbsent("dataScope", scope);
