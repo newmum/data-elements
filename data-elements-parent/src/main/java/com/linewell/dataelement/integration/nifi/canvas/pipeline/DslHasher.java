@@ -23,7 +23,7 @@ import java.util.TreeMap;
 public final class DslHasher {
 
     /** Current NiFi compiler contract; shared by deployment and safe historical lineage recovery. */
-    public static final String CURRENT_COMPILER_REVISION = "nifi-sync-policy-serial-full-v31";
+    public static final String CURRENT_COMPILER_REVISION = "nifi-sync-policy-serial-full-v32";
     private static final String DATE_FETCH_COMPILER_REVISION = "direct-date-fetch-source-record-window-v3-"
             + com.linewell.dataelement.integration.nifi.canvas.compile.DateTableFetchPolicy.BUNDLE_VERSION;
     // Retain the published fingerprint when switching to manual partition templates:
@@ -37,6 +37,7 @@ public final class DslHasher {
             + "-failure-retry-self-loop-invalid-retained-v2";
     private static final String FILE_TRANSFER_COMPILER_REVISION = "ftp-file-dataset-parser-v2";
     private static final String FILE_CONSUMPTION_COMPILER_REVISION = "file-consumption-direct-list-native-path-v2";
+    private static final String ORACLE_QUOTED_NAME_COMPILER_REVISION = "oracle-quoted-object-identity-v1";
 
     private static final ObjectMapper SORTED = new ObjectMapper()
             .configure(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS, true);
@@ -103,6 +104,14 @@ public final class DslHasher {
                 && Boolean.TRUE.equals(plan.get("enabled")))) effectiveRevision += "|" + HIVE_PARTITION_COMPILER_REVISION;
         if (usesFieldMapping(dsl)) effectiveRevision += "|" + FIELD_MAPPING_COMPILER_REVISION;
         if(usesJavaMapping(dsl))effectiveRevision+="|"+JAVA_MAPPING_COMPILER_REVISION;
+        if(dsl.nodes()!=null&&dsl.nodes().stream().anyMatch(node->{
+            if(node==null||node.config()==null)return false;
+            String type=java.util.Objects.toString(node.config().get("dbType"),"").toUpperCase(java.util.Locale.ROOT);
+            boolean oracle=List.of("source.oracle","source.dameng").contains(node.manifestKey())
+                    ||List.of("ORACLE","OCEANBASE_ORACLE","OCEANBASEORACLE","DM","DAMENG").contains(type)
+                    ||"source.oceanbase".equals(node.manifestKey())&&"ORACLE".equalsIgnoreCase(java.util.Objects.toString(node.config().get("compatibleMode"),""));
+            return oracle&&java.util.Objects.toString(node.config().getOrDefault("table",node.config().get("sourceTableName")),"").contains("\"");
+        }))effectiveRevision+="|"+ORACLE_QUOTED_NAME_COMPILER_REVISION;
         if (dsl.nodes() != null && dsl.nodes().stream().anyMatch(node -> node != null
                 && ("source.ftp".equals(node.manifestKey()) || "source.sftp".equals(node.manifestKey())))) {
             effectiveRevision += "|" + FILE_TRANSFER_COMPILER_REVISION;

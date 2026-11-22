@@ -41,8 +41,12 @@ public class FtpSourceProbeStub {
     public Map<String, Object> withFtpFileSnapshot(Object previous, Map<String, Object> resolved) {
         return com.linewell.dataelement.metautil.structured.StructuredSourceProbeService.withFtpFileSnapshot(previous, resolved);
     }
+    public Map<String,Object> withRecordShapeSnapshot(Object previous,Map<String,Object> shape) {
+        return com.linewell.dataelement.metautil.structured.StructuredSourceProbeService.withRecordShapeSnapshot(previous,shape);
+    }
 
     public Map<String, Object> resolveMinioObjectLocator(Map<String, Object> managed, String table) {
-        return Map.of("objectKey", "registered/nested/person.json", "format", "json");
+        return Map.of("objectKey", "registered/nested/person.json", "format", "json",
+                "excelSheetName", "November#2026", "jsonRecordPath", "$.data.people", "delimiter", "\t");
     }
 }

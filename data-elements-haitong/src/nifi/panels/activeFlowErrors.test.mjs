@@ -109,6 +109,7 @@ test('20/100 nodes share one live-bulletin query; rendering a node performs no r
     assert.deepEqual(requests, ['/event/live?id=selected']);
     let nodeReads = 0;
     const { default: BaseNode } = load('../canvas/BaseNode.tsx', id => {
+      if (id === 'react') return { ...React, useLayoutEffect() {} };
       if (id === 'react/jsx-runtime') return { jsx: React.createElement, jsxs: React.createElement };
       if (id === '@ant-design/icons') return new Proxy({}, { get: () => () => null });
       if (id === 'antd') return { Tooltip: props => props.children };

@@ -8,6 +8,20 @@ import org.junit.jupiter.api.Test;
 
 class DslCompilerTargetTableTest {
 
+    @Test void quotedOracleSegmentsKeepExactCaseDotsAndEscapedQuotesForSourcesAndTargets() {
+        for(String type:java.util.List.of("ORACLE","OCEANBASE_ORACLE","DAMENG")) {
+            for(var entry:Map.of("test0809.\"car\"","TEST0809.\"car\"",
+                    "\"owner.with.dot\".\"ca\"\"r.name\"","\"owner.with.dot\".\"ca\"\"r.name\"",
+                    "\"lower table\"","\"lower table\"").entrySet()) {
+                var config=new LinkedHashMap<String,Object>(Map.of("dbType",type,"table",entry.getKey()));
+                DslCompiler.normalizeJdbcSourceTableName(config);assertThat(config.get("table")).isEqualTo(entry.getValue());
+                DslCompiler.normalizeJdbcSinkTableName(config);assertThat(config.get("table")).isEqualTo(entry.getValue());
+            }
+            var config=new LinkedHashMap<String,Object>(Map.of("dbType",type,"schema","\"owner.with.dot\"","table","\"car.name\""));
+            DslCompiler.normalizeJdbcSourceTableName(config);assertThat(config.get("table")).isEqualTo("\"owner.with.dot\".\"car.name\"");
+        }
+    }
+
     @Test
     void normalizesOceanBaseOracleTableForNifiMetadataLookup() {
         Map<String, Object> config = new LinkedHashMap<>(Map.of(

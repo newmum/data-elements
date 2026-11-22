@@ -584,7 +584,6 @@ CREATE TABLE "baseline_beijing_gd"."da_catalog_item_t"
 "col_name" VARCHAR(256),
 "col_en" VARCHAR(256),
 "col_type" VARCHAR(256),
-"col_comment" VARCHAR(128),
 "col_length" BIGINT,
 "is_pk" VARCHAR(4),
 "is_masking" INT,
@@ -608,6 +607,7 @@ CREATE TABLE "baseline_beijing_gd"."da_catalog_item_t"
 "code_table_id" VARCHAR(32),
 "source_table_column_id" VARCHAR(32),
 "target_table_column_id" VARCHAR(32),
+"col_comment" CLOB,
 NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 -- TABLE da_catalog_publication_head_t
@@ -2547,6 +2547,103 @@ CREATE TABLE "baseline_beijing_gd"."kb_thesaurus_t"
 "is_del" SMALLINT DEFAULT 0 NOT NULL,
 CONSTRAINT "pk_kb_thesaurus_t" NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
+-- TABLE lake_egress_config_t
+CREATE TABLE "baseline_beijing_gd"."lake_egress_config_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32) NOT NULL,
+"zone_id" VARCHAR(32) NOT NULL,
+"zone_code" VARCHAR(32),
+"zone_name" VARCHAR(100),
+"datasource_id" VARCHAR(32) NOT NULL,
+"datasource_name" VARCHAR(128),
+"target_schema" VARCHAR(128),
+"overwrite_default" SMALLINT DEFAULT 0 NOT NULL,
+"object_count" INT DEFAULT 0 NOT NULL,
+"objects_json" CLOB,
+"status" VARCHAR(16) DEFAULT 'ENABLED' NOT NULL,
+"description" VARCHAR(500),
+"created_by" VARCHAR(32),
+"updated_by" VARCHAR(32),
+"created_time" TIMESTAMP(6),
+"updated_time" TIMESTAMP(6),
+"is_del" SMALLINT DEFAULT 0 NOT NULL,
+CONSTRAINT "pk_lake_egress_config_t" NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE lake_egress_record_t
+CREATE TABLE "baseline_beijing_gd"."lake_egress_record_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32) NOT NULL,
+"config_id" VARCHAR(32),
+"zone_id" VARCHAR(32) NOT NULL,
+"zone_code" VARCHAR(32),
+"zone_name" VARCHAR(100),
+"datasource_id" VARCHAR(32),
+"datasource_name" VARCHAR(128),
+"target_schema" VARCHAR(128),
+"trigger_type" VARCHAR(16) NOT NULL,
+"status" VARCHAR(16) DEFAULT 'PENDING' NOT NULL,
+"object_count" INT DEFAULT 0 NOT NULL,
+"row_count" BIGINT DEFAULT 0 NOT NULL,
+"detail_json" CLOB,
+"error_msg" VARCHAR(1000),
+"created_by" VARCHAR(32),
+"created_time" TIMESTAMP(6),
+"updated_time" TIMESTAMP(6),
+"is_del" SMALLINT DEFAULT 0 NOT NULL,
+CONSTRAINT "pk_lake_egress_record_t" NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE lake_sync_record_t
+CREATE TABLE "baseline_beijing_gd"."lake_sync_record_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32) NOT NULL,
+"zone_id" VARCHAR(32) NOT NULL,
+"zone_code" VARCHAR(32),
+"zone_name" VARCHAR(100),
+"trigger_type" VARCHAR(16) NOT NULL,
+"status" VARCHAR(16) DEFAULT 'PENDING' NOT NULL,
+"rule_code" VARCHAR(32),
+"started_at" TIMESTAMP(6),
+"finished_at" TIMESTAMP(6),
+"duration_ms" BIGINT,
+"table_count" INT DEFAULT 0 NOT NULL,
+"row_count" BIGINT DEFAULT 0 NOT NULL,
+"detail_json" CLOB,
+"error_msg" VARCHAR(1000),
+"created_by" VARCHAR(32),
+"created_time" TIMESTAMP(6),
+"updated_time" TIMESTAMP(6),
+"is_del" SMALLINT DEFAULT 0 NOT NULL,
+"source_summary" VARCHAR(1000),
+"target_summary" VARCHAR(500),
+"source_id" VARCHAR(32),
+"object_ref" VARCHAR(128),
+CONSTRAINT "pk_lake_sync_record_t" NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE lake_sync_task_t
+CREATE TABLE "baseline_beijing_gd"."lake_sync_task_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32) NOT NULL,
+"zone_id" VARCHAR(32) NOT NULL,
+"cron" VARCHAR(64) NOT NULL,
+"status" VARCHAR(16) DEFAULT 'DISABLED' NOT NULL,
+"last_fire_at" TIMESTAMP(6),
+"next_fire_at" TIMESTAMP(6),
+"lock_ttl_seconds" INT DEFAULT 600 NOT NULL,
+"description" VARCHAR(500),
+"created_by" VARCHAR(32),
+"updated_by" VARCHAR(32),
+"created_time" TIMESTAMP(6),
+"updated_time" TIMESTAMP(6),
+"is_del" SMALLINT DEFAULT 0 NOT NULL,
+"scope_type" VARCHAR(16) DEFAULT 'ZONE' NOT NULL,
+"source_id" VARCHAR(32),
+"object_ref" VARCHAR(128),
+CONSTRAINT "pk_lake_sync_task_t" NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
 -- TABLE lake_zone_object_t
 CREATE TABLE "baseline_beijing_gd"."lake_zone_object_t"
 (
@@ -2563,6 +2660,10 @@ CREATE TABLE "baseline_beijing_gd"."lake_zone_object_t"
 "created_time" TIMESTAMP(6),
 "updated_time" TIMESTAMP(6),
 "is_del" SMALLINT DEFAULT 0 NOT NULL,
+"target_table" VARCHAR(255),
+"sync_mode" VARCHAR(16) DEFAULT 'FULL' NOT NULL,
+"watermark_column" VARCHAR(128),
+"last_watermark" VARCHAR(255),
 CONSTRAINT "pk_lake_zone_object_t" NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 -- TABLE lake_zone_rule_t
@@ -3049,8 +3150,6 @@ CREATE TABLE "baseline_beijing_gd"."nifi_access_template_t"
 "updated_at" BIGINT NOT NULL,
 NOT CLUSTER PRIMARY KEY("tid"),
 CONSTRAINT "uk_access_template_version" UNIQUE("tenant_id", "family_id", "revision_no")) STORAGE(ON "MAIN", CLUSTERBTR) ;
-
-CREATE OR REPLACE  INDEX "idx_access_template_list" ON "baseline_beijing_gd"."nifi_access_template_t"("tenant_id" ASC,"status" ASC,"updated_at" ASC,"tid" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 -- TABLE nifi_node_t
 CREATE TABLE "baseline_beijing_gd"."nifi_node_t"
@@ -5105,6 +5204,8 @@ CREATE OR REPLACE  INDEX "ga_sec_scan_result_idx_sec_scan_result_asset_9753972a6
 
 CREATE OR REPLACE  INDEX "ga_sec_scan_result_idx_sec_scan_result_task_54474c50d472" ON "baseline_beijing_gd"."sec_scan_result"("tenant_id" ASC,"task_id" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
+CREATE OR REPLACE  INDEX "idx_access_template_list" ON "baseline_beijing_gd"."nifi_access_template_t"("tenant_id" ASC,"status" ASC,"updated_at" ASC,"tid" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
 CREATE OR REPLACE  INDEX "idx_api_source_page" ON "baseline_beijing_gd"."api_info_t"("tenant_id" ASC,"datasource_id" ASC,"is_del" ASC,"updated_time" ASC,"tid" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 CREATE OR REPLACE  INDEX "idx_da_metadata_code_set_active" ON "baseline_beijing_gd"."da_metadata_code_t"("tenant_id" ASC,"code_set" ASC,"status" ASC,"is_del" ASC,"sort_no" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
@@ -5152,6 +5253,16 @@ CREATE OR REPLACE UNIQUE  INDEX "IDX_DATA_PUSH_SCHEMA_FIELD_T_UK_DATA_PUSH_SCHEM
 CREATE OR REPLACE  INDEX "IDX_DATA_PUSH_SCHEMA_T_IDX_DATA_PUSH_SCHEMA_LOOKUP" ON "baseline_beijing_gd"."data_push_schema_t"("tenant_id" ASC,"datasource_id" ASC,"table_name" ASC,"status" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 CREATE OR REPLACE UNIQUE  INDEX "IDX_DATA_PUSH_SCHEMA_T_UK_DATA_PUSH_SCHEMA_TABLE" ON "baseline_beijing_gd"."data_push_schema_t"("tenant_id" ASC,"datasource_id" ASC,"table_id" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "idx_lake_sync_record_status" ON "baseline_beijing_gd"."lake_sync_record_t"("tenant_id" ASC,"status" ASC,"started_at" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "idx_lake_sync_record_trigger" ON "baseline_beijing_gd"."lake_sync_record_t"("tenant_id" ASC,"trigger_type" ASC,"started_at" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "idx_lake_sync_record_zone" ON "baseline_beijing_gd"."lake_sync_record_t"("tenant_id" ASC,"zone_id" ASC,"started_at" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "idx_lake_sync_task_due" ON "baseline_beijing_gd"."lake_sync_task_t"("tenant_id" ASC,"status" ASC,"next_fire_at" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "idx_lake_sync_task_zone" ON "baseline_beijing_gd"."lake_sync_task_t"("tenant_id" ASC,"zone_id" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 CREATE OR REPLACE  INDEX "idx_mapping_plan_history" ON "baseline_beijing_gd"."data_access_mapping_plan_t"("tenant_id" ASC,"pipeline_id" ASC,"node_id" ASC,"created_time" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
@@ -5459,6 +5570,16 @@ CREATE OR REPLACE  INDEX "ix_kb_tag_value_attr" ON "baseline_beijing_gd"."kb_tag
 
 CREATE OR REPLACE  INDEX "ix_kb_thesaurus_domain" ON "baseline_beijing_gd"."kb_thesaurus_t"("tenant_id" ASC,"domain_code" ASC,"status" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
+CREATE OR REPLACE  INDEX "ix_lake_egress_config_status" ON "baseline_beijing_gd"."lake_egress_config_t"("tenant_id" ASC,"status" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_lake_egress_config_zone" ON "baseline_beijing_gd"."lake_egress_config_t"("tenant_id" ASC,"zone_id" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_lake_egress_record_status" ON "baseline_beijing_gd"."lake_egress_record_t"("tenant_id" ASC,"status" ASC,"created_time" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_lake_egress_record_zone" ON "baseline_beijing_gd"."lake_egress_record_t"("tenant_id" ASC,"zone_id" ASC,"created_time" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_lake_sync_task_scope" ON "baseline_beijing_gd"."lake_sync_task_t"("tenant_id" ASC,"zone_id" ASC,"scope_type" ASC,"source_id" ASC,"object_ref" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
 CREATE OR REPLACE  INDEX "ix_lake_zone_datasource" ON "baseline_beijing_gd"."lake_zone_t"("datasource_id" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 CREATE OR REPLACE  INDEX "ix_lake_zone_object_ref" ON "baseline_beijing_gd"."lake_zone_object_t"("object_ref" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
@@ -5757,7 +5878,7 @@ CREATE OR REPLACE UNIQUE  INDEX "ux_kb_thesaurus_word" ON "baseline_beijing_gd".
 
 CREATE OR REPLACE UNIQUE  INDEX "ux_lake_zone_code" ON "baseline_beijing_gd"."lake_zone_t"("tenant_id" ASC,"zone_code" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
-CREATE OR REPLACE UNIQUE  INDEX "ux_lake_zone_object" ON "baseline_beijing_gd"."lake_zone_object_t"("tenant_id" ASC,"zone_id" ASC,"object_type" ASC,"object_ref" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+CREATE OR REPLACE UNIQUE  INDEX "ux_lake_zone_object_source" ON "baseline_beijing_gd"."lake_zone_object_t"("tenant_id" ASC,"zone_id" ASC,"object_type" ASC,"source_id" ASC,"object_ref" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 CREATE OR REPLACE UNIQUE  INDEX "ux_lake_zone_rule" ON "baseline_beijing_gd"."lake_zone_rule_t"("tenant_id" ASC,"zone_id" ASC,"rule_type" ASC,"rule_code" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
@@ -5935,6 +6056,10 @@ COMMENT ON TABLE "baseline_beijing_gd"."kb_tag_eval_model_t" IS '知识服务-�
 COMMENT ON TABLE "baseline_beijing_gd"."kb_tag_score_t" IS '知识服务-标签评分与排行';
 COMMENT ON TABLE "baseline_beijing_gd"."kb_tag_value_t" IS '知识服务-标签值';
 COMMENT ON TABLE "baseline_beijing_gd"."kb_thesaurus_t" IS '知识服务-专业词库';
+COMMENT ON TABLE "baseline_beijing_gd"."lake_egress_config_t" IS '数据资源（湖仓底座）-出湖配置';
+COMMENT ON TABLE "baseline_beijing_gd"."lake_egress_record_t" IS '数据资源（湖仓底座）-出湖执行记录';
+COMMENT ON TABLE "baseline_beijing_gd"."lake_sync_record_t" IS '数据资源（湖仓底座）-落湖执行记录';
+COMMENT ON TABLE "baseline_beijing_gd"."lake_sync_task_t" IS '数据资源（湖仓底座）-分层定时落湖任务';
 COMMENT ON TABLE "baseline_beijing_gd"."lake_zone_object_t" IS '数据资源（湖仓底座）-已纳管对象清单';
 COMMENT ON TABLE "baseline_beijing_gd"."lake_zone_rule_t" IS '数据资源（湖仓底座）-入出湖标准与交互规则';
 COMMENT ON TABLE "baseline_beijing_gd"."lake_zone_t" IS '数据资源（湖仓底座）-湖仓分层实例';
@@ -5949,6 +6074,7 @@ COMMENT ON TABLE "baseline_beijing_gd"."log_template_t" IS '日志管理-日志�
 COMMENT ON TABLE "baseline_beijing_gd"."log_user_login_t" IS '日志管理-用户登录日志';
 COMMENT ON TABLE "baseline_beijing_gd"."log_version_t" IS '日志管理-版本日志';
 COMMENT ON TABLE "baseline_beijing_gd"."metadata_table_collection_job_t" IS '数据资源登记-登记第二步数据表异步采集任务';
+COMMENT ON TABLE "baseline_beijing_gd"."nifi_access_template_t" IS '数据接入-NiFi接入模板版本';
 COMMENT ON TABLE "baseline_beijing_gd"."nifi_node_t" IS '数据接入-集成节点配置（NiFi）';
 COMMENT ON TABLE "baseline_beijing_gd"."nifi_pipeline_external_ref_t" IS '数据接入-外部流程与NiFi画布流程登记关系';
 COMMENT ON TABLE "baseline_beijing_gd"."nifi_pipeline_migration_mark_t" IS '数据接入-集成管道迁移标记（NiFi）';
@@ -8017,18 +8143,99 @@ COMMENT ON COLUMN "baseline_beijing_gd"."kb_thesaurus_t"."tid" IS '主键标识'
 COMMENT ON COLUMN "baseline_beijing_gd"."kb_thesaurus_t"."updated_by" IS '更新人';
 COMMENT ON COLUMN "baseline_beijing_gd"."kb_thesaurus_t"."updated_time" IS '更新时间';
 COMMENT ON COLUMN "baseline_beijing_gd"."kb_thesaurus_t"."word" IS '标准词';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_egress_config_t"."created_by" IS '创建人';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_egress_config_t"."created_time" IS '创建时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_egress_config_t"."datasource_id" IS '出湖目标数据源标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_egress_config_t"."datasource_name" IS '出湖目标数据源名称快照';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_egress_config_t"."description" IS '配置说明';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_egress_config_t"."is_del" IS '删除标志：0正常，1删除';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_egress_config_t"."object_count" IS '本次选择的已落湖对象数量';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_egress_config_t"."objects_json" IS '已落湖对象快照 JSON：对象标识、源表、目标表';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_egress_config_t"."overwrite_default" IS '默认覆盖同名表：0否，1是';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_egress_config_t"."status" IS '状态：ENABLED启用、DISABLED停用';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_egress_config_t"."target_schema" IS '出湖目标 schema/数据库';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_egress_config_t"."tenant_id" IS '租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_egress_config_t"."tid" IS '主键标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_egress_config_t"."updated_by" IS '更新人';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_egress_config_t"."updated_time" IS '更新时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_egress_config_t"."zone_code" IS '分层编码快照';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_egress_config_t"."zone_id" IS '湖仓分层标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_egress_config_t"."zone_name" IS '分层名称快照';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_egress_record_t"."config_id" IS '出湖配置标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_egress_record_t"."created_by" IS '触发人';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_egress_record_t"."created_time" IS '创建时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_egress_record_t"."datasource_id" IS '出湖目标数据源标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_egress_record_t"."datasource_name" IS '出湖目标数据源名称快照';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_egress_record_t"."detail_json" IS '逐对象明细 JSON：源表、目标表、行数、是否覆盖';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_egress_record_t"."error_msg" IS '失败原因';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_egress_record_t"."is_del" IS '删除标志：0正常，1删除';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_egress_record_t"."object_count" IS '本次出湖对象数量';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_egress_record_t"."row_count" IS '本次写入目标库行数';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_egress_record_t"."status" IS '状态：PENDING排队、RUNNING运行、SUCCESS成功、FAILED失败、SKIPPED跳过';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_egress_record_t"."target_schema" IS '出湖目标 schema/数据库快照';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_egress_record_t"."tenant_id" IS '租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_egress_record_t"."tid" IS '主键标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_egress_record_t"."trigger_type" IS '触发方式：MANUAL手动';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_egress_record_t"."updated_time" IS '更新时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_egress_record_t"."zone_code" IS '分层编码快照';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_egress_record_t"."zone_id" IS '湖仓分层标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_egress_record_t"."zone_name" IS '分层名称快照';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_sync_record_t"."created_by" IS '触发人';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_sync_record_t"."created_time" IS '创建时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_sync_record_t"."detail_json" IS '逐表明细 JSON：源表、目标表、模式、行数、水位';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_sync_record_t"."duration_ms" IS '执行耗时毫秒';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_sync_record_t"."error_msg" IS '失败原因';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_sync_record_t"."finished_at" IS '执行结束时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_sync_record_t"."is_del" IS '删除标志：0正常，1删除';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_sync_record_t"."object_ref" IS '本次落湖的源表名快照；分层/数据源级任务为空';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_sync_record_t"."row_count" IS '本次写入行数';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_sync_record_t"."rule_code" IS '本次落湖采用的入湖规则编号，空表示未配置规则直接落湖';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_sync_record_t"."source_id" IS '本次落湖的数据源标识快照';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_sync_record_t"."source_summary" IS '来源快照：数据源与源表范围摘要';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_sync_record_t"."started_at" IS '开始执行时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_sync_record_t"."status" IS '状态：PENDING排队、RUNNING运行、SUCCESS成功、FAILED失败、SKIPPED跳过';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_sync_record_t"."table_count" IS '本次涉及表数量';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_sync_record_t"."target_summary" IS '落湖目标快照：分层 schema 与 Iceberg 位置摘要';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_sync_record_t"."tenant_id" IS '租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_sync_record_t"."tid" IS '主键标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_sync_record_t"."trigger_type" IS '触发方式：MANUAL手动、SCHEDULED定时';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_sync_record_t"."updated_time" IS '更新时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_sync_record_t"."zone_code" IS '分层编码快照';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_sync_record_t"."zone_id" IS '湖仓分层标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_sync_record_t"."zone_name" IS '分层名称快照';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_sync_task_t"."created_by" IS '创建人';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_sync_task_t"."created_time" IS '创建时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_sync_task_t"."cron" IS 'Cron 表达式，支持 5 段或 6 段';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_sync_task_t"."description" IS '任务说明';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_sync_task_t"."is_del" IS '删除标志：0正常，1删除';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_sync_task_t"."last_fire_at" IS '最近触发时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_sync_task_t"."lock_ttl_seconds" IS '执行锁租期秒数，5-3600';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_sync_task_t"."next_fire_at" IS '下次触发时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_sync_task_t"."object_ref" IS '任务绑定的源表名；仅表级任务填写';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_sync_task_t"."scope_type" IS '任务作用域：ZONE分层、DATASOURCE数据源、TABLE落湖表';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_sync_task_t"."source_id" IS '任务绑定的数据源标识；分层级任务为空';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_sync_task_t"."status" IS '状态：ENABLED启用、DISABLED停用';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_sync_task_t"."tenant_id" IS '租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_sync_task_t"."tid" IS '主键标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_sync_task_t"."updated_by" IS '更新人';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_sync_task_t"."updated_time" IS '更新时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_sync_task_t"."zone_id" IS '湖仓分层标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."lake_zone_object_t"."created_time" IS '创建时间';
 COMMENT ON COLUMN "baseline_beijing_gd"."lake_zone_object_t"."is_del" IS '删除标志：0正常，1删除';
 COMMENT ON COLUMN "baseline_beijing_gd"."lake_zone_object_t"."last_sync_at" IS '最近同步时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_zone_object_t"."last_watermark" IS '最近一次成功同步的水位值';
 COMMENT ON COLUMN "baseline_beijing_gd"."lake_zone_object_t"."lifecycle_status" IS '生命周期：REGISTERED已登记、ONLINE在线、OFFLINE下线、ARCHIVED归档';
 COMMENT ON COLUMN "baseline_beijing_gd"."lake_zone_object_t"."object_name" IS '对象名称';
 COMMENT ON COLUMN "baseline_beijing_gd"."lake_zone_object_t"."object_ref" IS '对象引用：表标识、视图名、文件路径或接口编码';
 COMMENT ON COLUMN "baseline_beijing_gd"."lake_zone_object_t"."object_type" IS '对象类型：TABLE/VIEW/FILE/API';
 COMMENT ON COLUMN "baseline_beijing_gd"."lake_zone_object_t"."registered_by" IS '登记人';
 COMMENT ON COLUMN "baseline_beijing_gd"."lake_zone_object_t"."source_id" IS '来源数据源或来源对象标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_zone_object_t"."sync_mode" IS '落湖模式：FULL全量、INCREMENTAL增量';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_zone_object_t"."target_table" IS '落湖目标表名，默认同对象引用';
 COMMENT ON COLUMN "baseline_beijing_gd"."lake_zone_object_t"."tenant_id" IS '租户标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."lake_zone_object_t"."tid" IS '主键标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."lake_zone_object_t"."updated_time" IS '更新时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."lake_zone_object_t"."watermark_column" IS '增量同步水位字段，增量模式必填';
 COMMENT ON COLUMN "baseline_beijing_gd"."lake_zone_object_t"."zone_id" IS '湖仓分层标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."lake_zone_rule_t"."approval_required" IS '是否需要审批：0否，1是';
 COMMENT ON COLUMN "baseline_beijing_gd"."lake_zone_rule_t"."compression" IS '允许的压缩方式，逗号分隔';
@@ -8434,6 +8641,16 @@ COMMENT ON COLUMN "baseline_beijing_gd"."metadata_table_collection_job_t"."tid" 
 COMMENT ON COLUMN "baseline_beijing_gd"."metadata_table_collection_job_t"."total_count" IS '总计数量';
 COMMENT ON COLUMN "baseline_beijing_gd"."metadata_table_collection_job_t"."unchanged_count" IS '未变更数量';
 COMMENT ON COLUMN "baseline_beijing_gd"."metadata_table_collection_job_t"."updated_time" IS '更新时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."nifi_access_template_t"."created_at" IS '创建时间戳，Unix毫秒';
+COMMENT ON COLUMN "baseline_beijing_gd"."nifi_access_template_t"."created_by" IS '创建人标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."nifi_access_template_t"."definition" IS '接入拓扑、目标类型及处理器默认配置，不含连接凭据';
+COMMENT ON COLUMN "baseline_beijing_gd"."nifi_access_template_t"."display_name" IS '模板显示名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."nifi_access_template_t"."family_id" IS '模板标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."nifi_access_template_t"."revision_no" IS '模板内递增版本号';
+COMMENT ON COLUMN "baseline_beijing_gd"."nifi_access_template_t"."status" IS '版本状态：DRAFT草稿、PUBLISHED已发布、RETIRED已停用';
+COMMENT ON COLUMN "baseline_beijing_gd"."nifi_access_template_t"."tenant_id" IS '所属行业租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."nifi_access_template_t"."tid" IS '模板版本标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."nifi_access_template_t"."updated_at" IS '更新时间戳，Unix毫秒';
 COMMENT ON COLUMN "baseline_beijing_gd"."nifi_node_t"."auth_password" IS '认证密码';
 COMMENT ON COLUMN "baseline_beijing_gd"."nifi_node_t"."auth_username" IS '认证用户名';
 COMMENT ON COLUMN "baseline_beijing_gd"."nifi_node_t"."base_url" IS 'NiFi服务地址';

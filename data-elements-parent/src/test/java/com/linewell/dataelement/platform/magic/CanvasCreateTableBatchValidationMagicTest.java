@@ -39,6 +39,36 @@ class CanvasCreateTableBatchValidationMagicTest {
     private PhysicalMetadata physical;
     private CountingPartitions partitions;
 
+    @Test void freshMaterializationReturnsPhysicalClobOrStringInsteadOfSourceJsonWithOneMetadataRead() throws Exception {
+        for (String actualType : List.of("CLOB", "STRING")) {
+            for (int fields : List.of(20, 100)) {
+                scope.registered = Map.of("dbType", actualType.equals("CLOB") ? "oracle" : "hive",
+                        "hiveConnectionMode", "open-source", "database", "fixture", "host", "fixture.invalid", "username", "validation");
+                var requested = new ArrayList<Map<String,Object>>();var columns = new ArrayList<ColumnInfo>();
+                for (int i=0;i<fields;i++) {
+                    requested.add(Map.of("columnName","f"+i,"dataType","json","columnType","json","sourceDataType","json"));
+                    var column = new ColumnInfo();column.setColumnName("f"+i);column.setDataType(actualType);column.setColumnType(actualType);column.setNullable(true);columns.add(column);
+                }
+                physical.allowCreate=true;physical.columns=columns;physical.calls=0;
+                String ddl="CREATE TABLE ods_json ("+columns.stream().map(c->c.getColumnName()+" "+actualType).collect(java.util.stream.Collectors.joining(","))+")";
+                var result=assertInstanceOf(Map.class,run(Map.of("canvas",true,"dbId","target-db","tableName","ods_json",
+                        "ddl",ddl,"tableItems",requested)));
+                var items=assertInstanceOf(List.class,result.get("tableItems"));assertEquals(fields,items.size());
+                for(Object raw:items){var field=assertInstanceOf(Map.class,raw);assertEquals(actualType,field.get("dataType"));assertEquals("json",field.get("sourceDataType"));}
+                assertEquals(1,physical.calls);assertEquals(true,result.get("physicalSchemaChecked"));assertEquals(0,counter.writes);
+            }
+        }
+    }
+
+    @Test void createdTableWithoutPhysicalMetadataCannotClaimCompletedRegistration() throws Exception {
+        scope.registered=Map.of("dbType","mysql","database","fixture","host","fixture.invalid","username","validation");
+        physical.allowCreate=true;
+        var result=assertInstanceOf(ExitValue.class,run(Map.of("canvas",true,"dbId","target-db","tableName","ods_json",
+                "ddl","CREATE TABLE ods_json (payload LONGTEXT)","tableItems",List.of(Map.of("columnName","payload","dataType","json")))));
+        assertEquals(500,result.getValues()[0]);assertEquals(1,physical.createdDdls.size());assertEquals(1,physical.calls);
+        assertEquals(0,counter.writes);
+    }
+
     @Test
     void canvasEditorCreatesAndReturnsTheNameFromSubmittedSql() throws Exception {
         scope.registered = Map.of("dbType", "mysql", "database", "fixture", "host", "fixture.invalid", "username", "validation");

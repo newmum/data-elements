@@ -22,6 +22,26 @@ import org.junit.jupiter.api.Test;
 class DslCompilerJdbcWriterTest {
 
     @Test
+    void bothJdbcWritersQuoteActualMongoNamesAndKeepUnderscoreKeysDistinct() throws Exception {
+        for (String writer : List.of("LINEWELL_PUT_DATABASE_RECORD", "NIFI_PUT_DATABASE_RECORD")) {
+            var nifi = mockNifi();
+            when(nifi.findProcessorType("LinewellPutDatabaseRecord")).thenReturn(java.util.Optional.of("com.linewell.microservice.processors.database.LinewellPutDatabaseRecord"));
+            var config = new LinkedHashMap<String,Object>(oracleConfig("Oracle"));
+            config.put("writerType", writer); config.put("statementType", "INSERT");
+            config.put("targetColumns", List.of(Map.of("columnName","_id","dataType","VARCHAR2","primaryKey",true),
+                    Map.of("columnName","ID","dataType","VARCHAR2"), Map.of("columnName","@timestamp","dataType","CLOB"),
+                    Map.of("columnName","APPLICATION_ID","dataType","VARCHAR2")));
+            compile(nifi,config);
+            ArgumentCaptor<Map<String,String>> properties = ArgumentCaptor.captor();
+            verify(nifi).createProcessor(eq("pg"), anyString(), eq("目标表/put"), anyDouble(), anyDouble(), properties.capture(), nullable(String.class), nullable(String.class));
+            boolean linewell = writer.startsWith("LINEWELL");
+            org.assertj.core.api.Assertions.assertThat(properties.getValue())
+                    .containsEntry(linewell?"put-db-record-quoted-identifiers":"Quote Column Identifiers","true")
+                    .containsEntry(linewell?"put-db-record-translate-field-names":"Translate Field Names","false");
+        }
+    }
+
+    @Test
     void writerPreflightChecksTwentyAndHundredTargetsOnceAndSkipsExplicitNativeWriters() {
         for (int size : List.of(20, 100)) {
             var nifi = mock(NifiClient.class);

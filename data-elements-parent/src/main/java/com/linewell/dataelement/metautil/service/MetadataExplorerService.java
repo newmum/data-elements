@@ -119,6 +119,10 @@ public class MetadataExplorerService {
         return getExplorer(config).getTableInfo(config, tableName);
     }
 
+    public TableInfo getTableSummary(DataSourceConfig config,String tableName) {
+        return getExplorer(config).getTableSummary(config,tableName);
+    }
+
     /**
      * 获取字段列表
      */

@@ -12,6 +12,43 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class HiveTableDdlTest {
+    @Test void unquotedTextWriterRoundTripsHiveNullsQuotesBackslashesAndNewlines() throws Exception {
+        var values = java.util.Arrays.asList("中文", "a\"b", "a\\b", "line1\nline2\rnext", "left\u0001right", "", null, "\\N");
+        var output = new java.io.StringWriter();
+        var format = org.apache.commons.csv.CSVFormat.DEFAULT.builder().setDelimiter('\u0001')
+                .setRecordSeparator('\n').setQuoteMode(org.apache.commons.csv.QuoteMode.NONE)
+                .setEscape('\\').setNullString("\\N").get();
+        try (var printer = new org.apache.commons.csv.CSVPrinter(output, format)) { printer.printRecord(values); }
+        var properties = new java.util.Properties();
+        properties.setProperty("columns", "a,b,c,d,e,f,g,h");
+        properties.setProperty("columns.types", "string:string:string:string:string:string:string:string");
+        properties.setProperty("field.delim", "\u0001"); properties.setProperty("escape.delim", "\\");
+        properties.setProperty("serialization.escape.crlf", "true");
+        var serde = new org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe();
+        serde.initialize(new org.apache.hadoop.conf.Configuration(false), properties);
+        String row = output.toString(); assertThat(row.chars().filter(c -> c == '\n').count()).isEqualTo(1);
+        Object decoded = serde.deserialize(new org.apache.hadoop.io.Text(row.substring(0, row.length() - 1)));
+        Object standard = org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils.copyToStandardJavaObject(decoded, serde.getObjectInspector());
+        assertThat(standard).isEqualTo(values);
+    }
+
+    @Test void explicitOpenSourceModeUsesNewlineEvenWithAResidualMrsProfile() {
+        var config = new DataSourceConfig(); config.setDatabaseType(DatabaseType.HIVE); config.setDatabase("validation");
+        config.setConnectorProperties(java.util.Map.of("hiveConnectionMode", "open-source", "hiveProfile", "default"));
+        var field = column("occurred_at", "TIMESTAMP");
+        String plain = new HiveMetadataExplorer().generateCreateTableDdl(config, "events", List.of(field), "事件");
+        var partitions = new TablePartitions();
+        var plan = partitions.normalize(new java.util.LinkedHashMap<>(java.util.Map.of("enabled", true,
+                "strategy", "MONTH", "field", "occurred_at", "startMonth", "2024-01", "months", 2)),
+                List.of(field), DatabaseType.HIVE);
+        for (String sql : List.of(plain, partitions.apply(plain, plan, config))) {
+            assertThat(sql).containsOnlyOnce("LINES TERMINATED BY '\\n'").doesNotContain("\\002", "\\003");
+            assertThat(sql).contains("ESCAPED BY '\\\\'");
+            assertThat(sql).containsPattern("'serialization\\.escape\\.crlf'\\s*=\\s*'true'");
+            assertThat(new CanvasTableDdl().submitted(sql, "events", config).get("ddl")).isEqualTo(sql);
+        }
+    }
+
     @Test void generatedPlainAndPartitionedDdlKeepTheProductionLineDelimiter() {
         String terminator="LINES TERMINATED BY '\\002\\002\\002\\003\\003\\003\\n'";
         var config=new DataSourceConfig();config.setDatabaseType(DatabaseType.HIVE);config.setDatabase("warehouse");

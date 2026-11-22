@@ -4,6 +4,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Statement;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -13,6 +14,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import com.linewell.dataelement.metautil.explorer.AbstractMetadataExplorer;
+import com.linewell.dataelement.metautil.ddl.DdlDialect;
 import com.linewell.dataelement.metautil.model.dto.*;
 import lombok.extern.slf4j.Slf4j;
 
@@ -246,7 +248,7 @@ public class OracleMetadataExplorer extends AbstractMetadataExplorer {
             
             while (rs.next()) {
                 TableInfo table = new TableInfo();
-                table.setTableName(rs.getString("TABLE_NAME"));
+                table.setTableName(externalTableName(config,schema,rs.getString("TABLE_NAME")));
                 table.setTableComment(rs.getString("TABLE_COMMENT"));
                 table.setTableType(rs.getString("TABLE_TYPE"));
                 table.setSchemaName(schema);
@@ -306,7 +308,7 @@ public class OracleMetadataExplorer extends AbstractMetadataExplorer {
         if (schema == null || schema.trim().isEmpty()) {
             schema = config.getUsername();
         }
-        return schema == null ? null : schema.trim().toUpperCase();
+        return schema == null ? null : normalizeOracleIdentifier(schema);
     }
 
     /**
@@ -380,11 +382,11 @@ public class OracleMetadataExplorer extends AbstractMetadataExplorer {
      * table names unambiguous and reusable by column/sample/NiFi operations.
      */
     private String externalTableName(DataSourceConfig config, String owner, String tableName) {
-        if (owner == null || owner.isBlank() || tableName == null || tableName.isBlank()) {
-            return tableName;
-        }
+        if(tableName==null||tableName.isBlank())return tableName;
+        if(owner==null||owner.isBlank())return DdlDialect.oraclePhysicalName(tableName);
         String configuredOwner = resolveSchema(config);
-        return owner.equalsIgnoreCase(configuredOwner) ? tableName : owner + "." + tableName;
+        String exactTable=DdlDialect.oraclePhysicalName(tableName);
+        return owner.equals(configuredOwner) ? exactTable : DdlDialect.oraclePhysicalName(owner) + "." + exactTable;
     }
 
     private OracleObjectReference resolveOracleObject(Connection conn, DataSourceConfig config, String requestedName) throws Exception {
@@ -397,15 +399,11 @@ public class OracleMetadataExplorer extends AbstractMetadataExplorer {
         if (requestedName == null || requestedName.isBlank()) {
             throw new IllegalArgumentException("Oracle对象名不能为空");
         }
-        String value = requestedName.trim();
-        int separator = value.indexOf('.');
-        if (separator > 0 && separator < value.length() - 1
-                && value.indexOf('.', separator + 1) < 0) {
-            return new OracleObjectReference(
-                    normalizeOracleIdentifier(value.substring(0, separator)),
-                    value.substring(separator + 1).trim());
-        }
-        return new OracleObjectReference(resolveSchema(config), value);
+        var parts=DdlDialect.names(requestedName);
+        if(parts.size()>2)throw new IllegalArgumentException("Oracle对象名最多包含所有者和表名");
+        var object=parts.getLast();String exact=object.quoted()?object.value():object.value().toUpperCase(Locale.ROOT);
+        String owner=parts.size()==2?(parts.getFirst().quoted()?parts.getFirst().value():parts.getFirst().value().toUpperCase(Locale.ROOT)):resolveSchema(config);
+        return new OracleObjectReference(owner,exact);
     }
 
     private String normalizeOracleIdentifier(String value) {
@@ -642,7 +640,11 @@ public class OracleMetadataExplorer extends AbstractMetadataExplorer {
         Set<String> normalized = new LinkedHashSet<>();
         for (String tableName : tableNames) {
             if (tableName != null && !tableName.isBlank()) {
-                normalized.add(tableName.trim().toLowerCase(Locale.ROOT));
+                var parts=DdlDialect.names(tableName);
+                if(parts.size()>2)throw new IllegalArgumentException("Oracle排除表名最多包含所有者和表名");
+                String exact=parts.stream().map(part->DdlDialect.quote(com.linewell.dataelement.metautil.model.enums.DatabaseType.ORACLE,
+                        part.quoted()?part.value():part.value().toUpperCase(Locale.ROOT))).collect(java.util.stream.Collectors.joining("."));
+                normalized.add(java.util.HexFormat.of().withUpperCase().formatHex(exact.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
             }
         }
         return new ArrayList<>(normalized);
@@ -656,14 +658,14 @@ public class OracleMetadataExplorer extends AbstractMetadataExplorer {
         int remaining = exclusionCount;
         while (remaining > 0) {
             int chunkSize = Math.min(remaining, 900);
-            sql.append(" AND LOWER(q.OWNER || '.' || q.TABLE_NAME) NOT IN (");
+            sql.append(" AND ").append(oracleMetadataIdentity(true)).append(" NOT IN (");
             for (int i = 0; i < chunkSize; i++) {
                 if (i > 0) {
                     sql.append(',');
                 }
                 sql.append('?');
             }
-            sql.append(") AND LOWER(q.TABLE_NAME) NOT IN (");
+            sql.append(") AND ").append(oracleMetadataIdentity(false)).append(" NOT IN (");
             for (int i = 0; i < chunkSize; i++) {
                 if (i > 0) {
                     sql.append(',');
@@ -674,6 +676,12 @@ public class OracleMetadataExplorer extends AbstractMetadataExplorer {
             remaining -= chunkSize;
         }
         return sql.toString();
+    }
+
+    private String oracleMetadataIdentity(boolean qualified) {
+        String object="'\"' || REPLACE(q.TABLE_NAME, '\"', '\"\"') || '\"'";
+        String reference=qualified?"'\"' || REPLACE(q.OWNER, '\"', '\"\"') || '\".' || "+object:object;
+        return "RAWTOHEX(UTL_RAW.CAST_TO_RAW("+reference+"))";
     }
 
     private int bindOracleExclusions(
@@ -713,8 +721,9 @@ public class OracleMetadataExplorer extends AbstractMetadataExplorer {
     @Override
     public TableInfo getTableInfo(DataSourceConfig config, String tableName) {
         List<TableInfo> tables = getTables(config);
+        OracleObjectReference expected=parseOracleObjectReference(config,tableName);
         TableInfo tableInfo = tables.stream()
-                .filter(t -> t.getTableName().equalsIgnoreCase(tableName))
+                .filter(t -> parseOracleObjectReference(config,t.getTableName()).equals(expected))
                 .findFirst()
                 .orElseThrow(() -> new RuntimeException("表不存在: " + tableName));
         
@@ -722,6 +731,32 @@ public class OracleMetadataExplorer extends AbstractMetadataExplorer {
         tableInfo.setIndexes(getIndexes(config, tableName));
         
         return tableInfo;
+    }
+
+    @Override
+    public TableInfo getTableSummary(DataSourceConfig config,String tableName) {
+        var object=parseOracleObjectReference(config,tableName);
+        String sql="SELECT t.OWNER,t.TABLE_NAME,t.COMMENTS,t.TABLE_TYPE,"
+                +"(SELECT COUNT(*) FROM ALL_TAB_COLUMNS c WHERE c.OWNER=t.OWNER AND c.TABLE_NAME=t.TABLE_NAME) AS COLUMN_COUNT,"
+                +"(SELECT MIN(o.CREATED) FROM ALL_OBJECTS o WHERE o.OWNER=t.OWNER AND o.OBJECT_NAME=t.TABLE_NAME) AS CREATE_TIME,"
+                +"(SELECT MAX(o.LAST_DDL_TIME) FROM ALL_OBJECTS o WHERE o.OWNER=t.OWNER AND o.OBJECT_NAME=t.TABLE_NAME) AS UPDATE_TIME "
+                +"FROM ALL_TAB_COMMENTS t WHERE t.OWNER=? AND t.TABLE_NAME=?";
+        try(Connection connection=getConnection(config)) {
+            TableInfo info=new TableInfo();
+            try(PreparedStatement statement=connection.prepareStatement(sql)) {
+                statement.setQueryTimeout(30);statement.setString(1,object.owner());statement.setString(2,object.name());
+                try(ResultSet rows=statement.executeQuery()) {
+                    if(!rows.next())throw new IllegalArgumentException("Oracle对象不存在: "+tableName);
+                    info.setTableName(externalTableName(config,object.owner(),object.name()));info.setSchemaName(object.owner());
+                    info.setTableComment(rows.getString("COMMENTS"));info.setTableType(rows.getString("TABLE_TYPE"));
+                    info.setColumnCount(rows.getInt("COLUMN_COUNT"));info.setCreateTime(rows.getTimestamp("CREATE_TIME"));info.setUpdateTime(rows.getTimestamp("UPDATE_TIME"));
+                }
+            }
+            try(PreparedStatement statement=connection.prepareStatement("SELECT COUNT(*) FROM "+qualifyOracleObject(object.owner(),object.name()))) {
+                statement.setQueryTimeout(30);try(ResultSet rows=statement.executeQuery()){if(!rows.next())throw new SQLException("Oracle行数查询没有结果");info.setRowCount(rows.getLong(1));}
+            }
+            return info;
+        } catch(Exception error) {throw new RuntimeException("获取Oracle单表概览失败: "+tableName,error);}
     }
 
     @Override
@@ -942,17 +977,12 @@ public class OracleMetadataExplorer extends AbstractMetadataExplorer {
     }
 
     private String resolveOracleObjectName(Connection conn, String schema, String requestedName) throws Exception {
-        String sql = "SELECT OBJECT_NAME FROM ("
-                + "SELECT OBJECT_NAME, CASE WHEN OBJECT_NAME = ? THEN 0 ELSE 1 END AS MATCH_ORDER "
-                + "FROM ALL_OBJECTS WHERE OWNER = ? "
+        String sql = "SELECT OBJECT_NAME FROM ALL_OBJECTS WHERE OWNER = ? "
                 + "AND OBJECT_TYPE IN ('TABLE', 'VIEW', 'MATERIALIZED VIEW') "
-                + "AND (OBJECT_NAME = ? OR UPPER(OBJECT_NAME) = UPPER(?)) "
-                + "ORDER BY MATCH_ORDER) WHERE ROWNUM = 1";
+                + "AND OBJECT_NAME = ? AND ROWNUM = 1";
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setString(1, requestedName);
-            ps.setString(2, schema);
-            ps.setString(3, requestedName);
-            ps.setString(4, requestedName);
+            ps.setString(1, schema);
+            ps.setString(2, requestedName);
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
                     return rs.getString("OBJECT_NAME");

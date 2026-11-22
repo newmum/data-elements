@@ -50,12 +50,12 @@ export const EMPTY_CANVAS_DSL: CanvasDsl = Object.freeze({
 });
 
 // Keep the initial three-step flow visually readable at the canvas's native
-// node size (360 × 220).  The horizontal gap leaves room for ports and the
-// connection label, while the vertical step leaves room for a second branch.
+// rendered cards: mapping cards contain configuration, input and output sections.
+// Reserve their full height plus a gap rather than X6's former 220px placeholder.
 const INITIAL_NODE_WIDTH = 360;
-const INITIAL_NODE_HEIGHT = 220;
+const INITIAL_NODE_HEIGHT = 440;
 const INITIAL_NODE_GAP_X = 180;
-const INITIAL_NODE_GAP_Y = 80;
+const INITIAL_NODE_GAP_Y = 120;
 const INITIAL_NODE_START_X = 0;
 const INITIAL_NODE_START_Y = 120;
 
@@ -166,6 +166,15 @@ export function arrangeInitialPipelineLayout(dsl: CanvasDsl): CanvasDsl {
     });
   });
 
+  // Center a shared source over its parallel branches.
+  for (const [stage, count] of laneByStage) {
+    if (count !== 1) continue;
+    const node = ordered.find(item => stageById.get(item.id) === stage);
+    const next = ordered.filter(item => stageById.get(item.id) === stage + 1);
+    if (!node || next.length < 2) continue;
+    const positions = next.map(item => positioned.get(item.id)!.y);
+    positioned.get(node.id)!.y = (Math.min(...positions) + Math.max(...positions)) / 2;
+  }
   return { ...dsl, nodes: nodes.map((node) => positioned.get(node.id) ?? node) };
 }
 
@@ -190,7 +199,16 @@ export function arrangeLegacyGeneratedPipelineLayout(dsl: CanvasDsl): CanvasDsl 
     node.x === 520 && node.y === 120 + index * 180,
   );
 
-  return isLegacySource && isLegacyTransform && isLegacySinks
+  // Repair the exact compact coordinates emitted by released access templates.
+  const transforms = dsl.nodes.filter(node => node.category === 'transform');
+  const compactTemplate = source?.x === 0 && source.y === 120
+    && transforms.length === sinks.length && sinks.length > 0
+    && dsl.nodes.length === 1 + transforms.length + sinks.length
+    && dsl.nodes.every(node => Boolean(node.config?.templateBinding))
+    && transforms.every((node, index) => node.x === 320 && node.y === (sinks.length === 1 ? 120 : 50 + index * 180))
+    && sinks.every((node, index) => node.x === 640 && node.y === (sinks.length === 1 ? 120 : 50 + index * 180));
+
+  return (isLegacySource && isLegacyTransform && isLegacySinks) || compactTemplate
     ? arrangeInitialPipelineLayout(dsl)
     : dsl;
 }

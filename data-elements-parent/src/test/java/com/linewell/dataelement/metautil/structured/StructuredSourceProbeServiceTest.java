@@ -27,6 +27,74 @@ import static org.mockito.Mockito.doReturn;
 
 class StructuredSourceProbeServiceTest {
 
+    @Test void rawPathsAndFlatHeadersAreAuthoritativeAndCannotBeOverwrittenByPolicy() throws Exception {
+        var sample=service.parseRemoteFileSampleForTest("nested.json",100,"[{\"@timestamp\":\"time\",\"agent\":{\"id\":\"a\"},\"tags\":[\"x\",null]}]".getBytes(StandardCharsets.UTF_8));
+        var shape=sample.getTables().getFirst().getRecordShape();
+        var paths=(Map<?,?>)shape.get("fieldPaths");assertThat(paths.get("timestamp")).isEqualTo(List.of("@timestamp"));assertThat(paths.get("agent_id")).isEqualTo(List.of("agent","id"));
+        var saved=StructuredSourceProbeService.withRecordShapeSnapshot(Map.of("policy","kept"),shape);
+        var protectedValue=(Map<?,?>)StructuredSourceProbeService.preserveRegisteredSourceSnapshot(saved,Map.of("sourceRecordShape",Map.of("evil",true),"policy","updated"));
+        assertThat(protectedValue.get("sourceRecordShape")).isEqualTo(shape);assertThat(protectedValue.get("policy")).isEqualTo("updated");
+        var headers=service.parseRemoteFileSampleForTest("years.csv",100,"月份,2021年,2022年\n一月,10,20\n".getBytes(StandardCharsets.UTF_8)).getTables().getFirst();
+        assertThat(((Map<?,?>)headers.getRecordShape().get("fieldPaths")).get("f_2021年")).isEqualTo(List.of("2021年"));
+        assertThatThrownBy(()->service.parseRemoteFileSampleForTest("collision.json",100,"[{\"agent_id\":1,\"agent\":{\"id\":2}}]".getBytes(StandardCharsets.UTF_8))).hasMessageContaining("原始JSON路径");
+    }
+
+    @Test
+    void minioWorkbookLocatorKeepsObjectAndSheetHashesSeparate() throws Exception {
+        byte[] bytes;
+        try (var workbook = new org.apache.poi.xssf.usermodel.XSSFWorkbook();
+             var output = new java.io.ByteArrayOutputStream()) {
+            for (String name : List.of("月#统计", "Other")) {
+                var sheet = workbook.createSheet(name);
+                sheet.createRow(0).createCell(0).setCellValue("month");
+                sheet.createRow(1).createCell(0).setCellValue("November");
+            }
+            workbook.write(output); bytes = output.toByteArray();
+        }
+        var sample = service.parseRemoteFileSampleForTest("Report#2026.xlsx", bytes.length, bytes);
+        var resolving = spy(service);
+        doReturn(sample).when(resolving).probe(any(), org.mockito.ArgumentMatchers.eq(false));
+        String name = sample.getTables().getFirst().getTable().getTableName();
+        var locator = resolving.resolveMinioObjectLocator(Map.of("dbType", "minio", "password", "validation-only"), name);
+        assertThat(locator).containsEntry("objectKey", "/Report#2026.xlsx").containsEntry("format", "xlsx")
+                .containsEntry("excelSheetName", "月#统计").containsEntry("jsonRecordPath", "$");
+        assertThat(locator).doesNotContainKeys("password", "columns", "sampleRows");
+        verify(resolving).probe(org.mockito.ArgumentMatchers.argThat(cfg -> name.equals(cfg.get("_registeredTableName"))),
+                org.mockito.ArgumentMatchers.eq(false));
+        assertThrows(IllegalArgumentException.class,
+                () -> resolving.resolveMinioObjectLocator(Map.of("dbType", "minio"), "outside_registered_scope"));
+    }
+
+    @Test
+    void minioNestedJsonLocatorKeepsLiteralObjectKeyAndExactDataset() throws Exception {
+        var sample = service.parseRemoteFileSampleForTest("People#2026.json", 64,
+                "{\"data\":{\"people\":[{\"id\":7}]}}".getBytes(StandardCharsets.UTF_8));
+        var resolving = spy(service);
+        doReturn(sample).when(resolving).probe(any(), org.mockito.ArgumentMatchers.eq(false));
+        var locator = resolving.resolveMinioObjectLocator(Map.of("dbType", "minio"),
+                sample.getTables().getFirst().getTable().getTableName());
+        assertThat(locator).containsEntry("objectKey", "/People#2026.json").containsEntry("format", "json")
+                .containsEntry("excelSheetName", "").containsEntry("jsonRecordPath", "$.data.people");
+        assertThrows(IllegalArgumentException.class,
+                () -> resolving.resolveMinioObjectLocator(Map.of("dbType", "ftp"), "people"));
+    }
+
+    @Test
+    void selectedMinioDatasetReadsOneObjectForTwentyAndHundredCandidates() throws Exception {
+        for (int size : List.of(20, 100)) {
+            var files = java.util.stream.IntStream.range(0, size).mapToObj(i ->
+                    new StructuredSourceProbeService.RemoteFile("managed/People#" + i + ".json", "People#" + i + ".json", 64)).toList();
+            var reads = new AtomicInteger();
+            var result = new StructuredProbeResult();
+            service.parseRemoteFiles(Map.of("dbType", "minio", "_registeredTableName", "people_7_people"), files,
+                    file -> { reads.incrementAndGet(); return new ByteArrayInputStream(
+                            "{\"data\":{\"people\":[{\"id\":7}]}}".getBytes(StandardCharsets.UTF_8)); }, result);
+            assertThat(reads).hasValue(1);
+            assertThat(result.getTables().getFirst().getFilePath()).isEqualTo("managed/People#7.json");
+            assertThat(result.getTables().getFirst().getJsonRecordPath()).isEqualTo("$.data.people");
+        }
+    }
+
     @Test
     void savedFileLocatorUsesRegistrationWithoutListingOrSampling() {
         var listing = new AtomicInteger();
@@ -81,10 +149,10 @@ class StructuredSourceProbeServiceTest {
         assertThat(((Map<?, ?>) saved.get("sourceFile")).containsKey("password")).isFalse();
         var changed = Map.of("fields", List.of(Map.of("columnName", "name")),
                 "sourceFile", Map.of("fileName", "malicious.csv", "password", "untrusted"));
-        var preserved = (Map<?, ?>) StructuredSourceProbeService.preserveFtpFileSnapshot(saved, changed);
+        var preserved = (Map<?, ?>) StructuredSourceProbeService.preserveRegisteredSourceSnapshot(saved, changed);
         assertThat(preserved.get("sourceFile")).isEqualTo(saved.get("sourceFile"));
         assertThat(preserved.get("fields")).isEqualTo(changed.get("fields"));
-        assertThat(((Map<?, ?>) StructuredSourceProbeService.preserveFtpFileSnapshot(null, changed)).containsKey("sourceFile")).isFalse();
+        assertThat(((Map<?, ?>) StructuredSourceProbeService.preserveRegisteredSourceSnapshot(null, changed)).containsKey("sourceFile")).isFalse();
     }
 
     @Test

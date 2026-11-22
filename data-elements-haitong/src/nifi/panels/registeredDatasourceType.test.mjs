@@ -1,7 +1,17 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFile, readdir } from 'node:fs/promises';
-import { normalizeSourceManifestKey, sinkDbType, buildJdbcUrl } from './registeredDatasourceType.ts';
+import { normalizeSourceManifestKey, sinkDbType, buildJdbcUrl, connectionFieldVisible } from './registeredDatasourceType.ts';
+
+test('open-source Hive source and target hide the unrelated MRS profile', () => {
+  for (const manifest of ['source.hive', 'sink.hive']) {
+    assert.equal(connectionFieldVisible(manifest, 'hiveProfile', { hiveConnectionMode: 'open-source' }), false);
+    assert.equal(connectionFieldVisible(manifest, 'hiveProfile', { hiveConnectionMode: 'huawei-mrs' }), true);
+    assert.equal(connectionFieldVisible(manifest, 'hiveProfile', {}), true);
+    assert.equal(connectionFieldVisible(manifest, 'keytabPath', { hiveConnectionMode: 'open-source', authMode: 'none' }), false);
+    assert.equal(connectionFieldVisible(manifest, 'keytabPath', { hiveConnectionMode: 'open-source', authMode: 'KERBEROS' }), true);
+  }
+});
 
 test('all shipped source manifests can be selected without substituting MySQL', async () => {
   const directory = new URL('../../../../data-elements-parent/src/main/resources/manifests/sources/', import.meta.url);

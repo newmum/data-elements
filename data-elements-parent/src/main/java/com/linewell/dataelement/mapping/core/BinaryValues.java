@@ -49,6 +49,8 @@ public final class BinaryValues {
             try {length(clob.length());return clob.getSubString(1,(int)clob.length());}
             catch(SQLException error){throw invalid("无法读取CLOB文本");}
         }
+        if(value instanceof Map<?,?>||value instanceof Collection<?>||value.getClass().isArray())
+            return StructuredJsonRecords.jsonText(value);
         return value.toString();
     }
     private static byte octet(Object value){

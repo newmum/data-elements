@@ -251,7 +251,7 @@ if (!blank(body.schemaAction)) {
 var props = body.propList == null ? {} : body.propList
 var governance = body.fieldGovernanceConfig == null ? props.fieldGovernanceConfig : body.fieldGovernanceConfig
 // 文件定位由登记采集保存；治理编辑保留它，不能由客户端更换文件或带入连接凭据。
-governance = StructuredSourceProbeService.preserveFtpFileSnapshot(
+governance = StructuredSourceProbeService.preserveRegisteredSourceSnapshot(
     rowValue(table, ['fieldGovernanceConfig', 'field_governance_config']), governance)
 // 附件限制由第一步模板登记维护，后续治理保存不能丢失或静默修改。
 var previousGovernance = rowValue(table, ['fieldGovernanceConfig', 'field_governance_config'])

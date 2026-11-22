@@ -250,17 +250,19 @@ mysql --host=127.0.0.1 --port=3306 --user=DBA_USER --password --default-characte
 | 角色 | 实际数据库 | 方言 | 表数量 |
 | --- | --- | --- | ---: |
 | 控制库 | `baseline` | MySQL | 55 |
-| 公安 | `baseline_ga` | MySQL | 206 |
-| 澄天 | `baseline_ct`，schema `public` | 人大金仓 KingbaseES | 163 |
-| 海渔 | `baseline_sea_fishery` | MySQL | 206 |
-| 广电 | `baseline_beijing_gd`，运行配置绑定 `BASELINE_BEIJING_GD` | 达梦 | 206 |
+| 公安 | `baseline_ga` | MySQL | 212 |
+| 澄天 | `baseline_ct`，schema `public` | 人大金仓 KingbaseES | 165 |
+| 海渔 | `baseline_sea_fishery` | MySQL | 212 |
+| 广电 | `baseline_beijing_gd`，运行配置绑定 `BASELINE_BEIJING_GD` | 达梦 | 212 |
 | 海通数据推送服务（独立工程） | `haitong` | MySQL | 15 |
+
+当前86完整结构导出与比较以本节表格为准。公安、海渔、广电各212表，表列、主键、索引及外键比较零差异；澄天165表仍有62项既有差异（缺47表、13列、2项索引语义），不是四行业已同构。目录字段`da_catalog_item_t.col_comment`从128字符扩为与来源注释相应的长文本：MySQL LONGTEXT、金仓TEXT、达梦CLOB，保留全文、NULL及中文注释。四库原值逐项核对一致，达梦依赖视图重新绑定；五库结构重新导出后，相对变更前实库只改变该列，既有澄天差异清单未增加。已有库分别使用[MySQL增量](../db/increments/000013_catalog_column_comment.mysql.sql)、[金仓增量](../db/increments/000013_catalog_column_comment.kingbase.sql)、[达梦增量](../db/increments/000013_catalog_column_comment.dameng.sql)，先按脚本核对绑定、备份和停写，不能直接执行完整初始化文件。达梦禁止VARCHAR直接改CLOB，须复制核对、换列、恢复视图后再清理原列；已有长值时不能缩回128或截断。14演示库未随本批升级。
 
 `haitong-data-pull` 对应的独立库完整结构为 [haitong/init.sql](../db/haitong/init.sql)，已通过真实 MySQL 的 `SHOW CREATE` 导出：15 张表、51 个索引（含主键及唯一索引）、5 个外键，没有视图、触发器、例程或事件。它不属于四行业同构基线。历史工程内 `sql/` 已整合移除，后续只在本目录更新完整定义；对账查询归入[海通推送服务文档](haitong-data-pull.md#reconciliation-queries)。
 
 原有达梦适配定义保存在 [haitong/compatibility/dameng.sql](../db/haitong/compatibility/dameng.sql)，明确标记为未连接实库核验的 9 表模板，缺少 MySQL 中的推送凭据和 Magic 资源表；不能作为当前 15 表结构、完整兼容承诺或已有库升级脚本。应用打包使用的 H2 本地初始化资源继续保留在应用 `src/main/resources/db/h2.sql`，不作为生产 MySQL 基线。
 
-**当前实测（第 99 批）**：86 的四个行业库各移除 13 张布控专用表及其索引。控制库与行业库完整导出见[结构清单](../db/schema-manifest.json)。[全库结构检查](../tools/check-db.py)在执行前后均报告澄天缺 43 张表、9 列和 1 个索引差异。其余三行业结果为零差异。公安历史记录和各库原生恢复定义已存入受限备份。已有库按 [MySQL 增量](../db/increments/000010_retire_surveillance_tables.mysql.sql)、[达梦增量](../db/increments/000010_retire_surveillance_tables.dameng.sql)和 [金仓增量](../db/increments/000010_retire_surveillance_tables.kingbase.sql)核对绑定及依赖后执行。
+**此前第 99 批核验**：86 的四个行业库各移除 13 张布控专用表及其索引。控制库与行业库完整导出见[结构清单](../db/schema-manifest.json)。[全库结构检查](../tools/check-db.py)在执行前后均报告澄天缺 43 张表、9 列和 1 个索引差异。其余三行业结果为零差异。公安历史记录和各库原生恢复定义已存入受限备份。已有库按 [MySQL 增量](../db/increments/000010_retire_surveillance_tables.mysql.sql)、[达梦增量](../db/increments/000010_retire_surveillance_tables.dameng.sql)和 [金仓增量](../db/increments/000010_retire_surveillance_tables.kingbase.sql)核对绑定及依赖后执行。
 
 86 的 `da_asset_t` 兼容视图已在公安、海渔和广电退役，澄天金仓原无此对象。该批验收时三库各为 219 张表和 4 个业务视图，`da_catalog_t` 的列与全量数据指纹一致。五库重新导出后，完整定义只移除这三个视图。结构比较的澄天 53 项既有差异仍记录在案。已有库分别按 [MySQL 增量](../db/increments/000009_retire_legacy_asset_view.mysql.sql) 和 [达梦增量](../db/increments/000009_retire_legacy_asset_view.dameng.sql) 的前置核对和恢复要求升级，具体部署目标以实际绑定为准。
 
@@ -361,6 +363,14 @@ python tools/export-db.py --project haitong-data-pull
 - 目标集合沿用 ODS 分域选择及物化预检。预览返回受限的集合创建指令，应用账号需能创建集合和索引，执行账号需能写入集合。任务会按已映射业务键更新或插入；没有可映射业务键时执行追加。全量读取不会向下游同步删除。
 - 在登记表或物化目标的“数据预览”中可分页查看集合文档，支持字段投影、排序、等值和包含过滤。
 - NiFi 执行节点需加载 MongoDB NAR 和 MongoDB Controller Service。MongoDB 认证信息与连接端点分别传递。
+
+### Oracle物理对象身份
+
+Oracle／OB Oracle的物理对象采用数据库引号语义：未引号段按大写解析，引号段精确保留；`CAR`与`"CAR"`同对象，`"car"`、`"Car"`分别是独立对象。采集的非规范大写或特殊物理名称保留引号，不能在采集、已登记快照、缺失/改名匹配、分页去重、字段/预览查询中统一转小写或用忽略大小写兜底。规范名称迁移只更新已匹配登记的名称，保留原表ID、字段ID与治理内容；新增的独立物理对象单独登记，不清空旧资产。平台数据库排序规则可能忽略大小写，分页/匹配使用结构化查询适配层提供的精确字节键；MySQL、金仓和达梦各用原生等价表达式，不在Magic拼接方言SQL。Oracle原生探查的排除列表同样按精确物理身份比较，不能排除`CAR`时连带隐藏`"car"`。规则依据[Oracle对象名称与限定符](https://docs.oracle.com/en/database/oracle/oracle-database/19/sqlrf/Database-Object-Names-and-Qualifiers.html)。
+
+旧版快照可能直接保存未加引号的元数据原名（例如数字开头的表名）。重新采集时，只通过本次物理清单的精确原名别名恢复这些历史记录，匹配后仍保留登记ID与标注。已经消失或有多个物理对象对应的历史名称保留为缺失候选，不能让单条旧名称中止整库，也不能放宽真实SQL查询的标识符语法或猜测关联。
+
+同一身份规则延续到NiFi提取和来源SQL下推：按引号逐段解析所有者与表名，保留段内大小写、点号及转义引号，不能对整条限定名称转大写或直接按点号拆分。只有单段表名才补配置的Schema。含引号的Oracle族对象采用独立编译指纹，修复后需要重新发布对应提取流程；普通表的部署指纹不因这项规则变化而改变。
 
 ### 登记接入申请字段
 

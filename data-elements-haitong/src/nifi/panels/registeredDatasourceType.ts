@@ -103,7 +103,7 @@ export function connectionProductPatch(current: Record<string, unknown>, key: st
 }
 
 export function connectionFieldVisible(manifest: string, field: string, config: Record<string, unknown>) {
-  if (manifest !== 'source.hive') return true;
+  if (manifest !== 'source.hive' && manifest !== 'sink.hive') return true;
   const mrs = (config.hiveConnectionMode || 'huawei-mrs') === 'huawei-mrs';
   if (field === 'hiveProfile') return mrs;
   if (['host', 'port', 'username', 'password', 'transportMode', 'authMode', 'ssl', 'driverLocations'].includes(field)) return !mrs;

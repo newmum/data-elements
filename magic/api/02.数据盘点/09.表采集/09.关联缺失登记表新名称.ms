@@ -33,6 +33,7 @@ import request
 import tableRead
 import tableWrite
 import tenantRuntime
+import com.linewell.dataelement.metautil.ddl.DdlDialect
 
 // POST /dst/collect/rename。登记表保留原 ID 和治理属性，合并快照与历史差异同事务保存。
 return respond(() => {
@@ -41,7 +42,6 @@ return respond(() => {
         throw jsonError
     }
     var text = value => value == null ? '' : (value + '').trim()
-    var normalize = value => text(value).toLowerCase(Locale.ROOT)
     var sourceId = text(body?.dbId)
     var tableId = text(body?.tableId)
     var nextName = text(body?.tableName)
@@ -63,10 +63,13 @@ return respond(() => {
     var validationOnly = body?.dryRun == true
     return db.transaction(() => {
         var source = tableWrite.lockRow('db_datasource_t', tenantId, 'tid', sourceId,
-            ['tid', 'org_id', 'created_by'], active)
+            ['tid', 'org_id', 'created_by', 'db_type'], active)
         if (source == null || !dataScope.canReadDataSource(source)) {
             throw new IllegalArgumentException('登记表不存在或无访问权限')
         }
+        var kind = text(source.db_type == null ? source.dbType : source.db_type).toUpperCase(Locale.ROOT)
+        var oracleObjects = kind == 'ORACLE' || kind == 'OCEANBASE_ORACLE'
+        var normalize = value => oracleObjects ? DdlDialect.oracleObjectKey(text(value)) : text(value).toLowerCase(Locale.ROOT)
         var target = tableWrite.lockRow('db_table_t', tenantId, 'tid', tableId, ['tid', 'table_name'], scoped)
         if (target == null) {
             throw new IllegalArgumentException('登记表不存在或无访问权限')
@@ -103,7 +106,7 @@ return respond(() => {
         if (validationOnly) {
             merged.dryRun = true
         }
-        if (oldName.equalsIgnoreCase(nextName)) {
+        if (oldKey == normalize(nextName)) {
             return merged
         }
 
@@ -113,7 +116,9 @@ return respond(() => {
         matches.where(tableRead.equal(tableRead.column('t', 'datasource_id', 'TEXT'), sourceId))
         matches.where(tableRead.equal(tableRead.column('t', 'is_del', 'NUMBER'), 0))
         matches.where(tableRead.not(tableRead.equal(candidateId, tableId)))
-        matches.where(tableRead.equal(tableRead.lower(tableRead.column('t', 'table_name', 'TEXT')), normalize(nextName)))
+        var tableName = tableRead.column('t', 'table_name', 'TEXT')
+        var nameKey = oracleObjects ? tableRead.exactTextKey(tableRead.when(tableRead.like(tableName, '%"%'), tableRead.trim(tableName), tableRead.upper(tableRead.trim(tableName)))) : tableRead.lower(tableName)
+        matches.where(tableRead.equal(nameKey, normalize(nextName)))
         var unmarked = []
         var unknown = []
         matches.forEachOrderedRow({tid: candidateId, annotated: annotated}, [candidateId], ['asc'], false, row => {

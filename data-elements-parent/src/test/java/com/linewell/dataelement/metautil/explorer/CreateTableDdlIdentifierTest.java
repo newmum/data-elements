@@ -17,6 +17,55 @@ import org.junit.jupiter.api.Test;
 class CreateTableDdlIdentifierTest {
 
     @Test
+    void mongoNamesAreQuotedConsistentlyWithoutChangingOrdinaryOracleCaseFolding() {
+        for (DatabaseType type : List.of(DatabaseType.ORACLE, DatabaseType.OCEANBASE_ORACLE, DatabaseType.DAMENG)) {
+            var config = new DataSourceConfig(); config.setDatabaseType(type);
+            var id = field("_id", "varchar", 24); id.setPrimaryKey(true); id.setNullable(false);
+            var timestamp = field("@timestamp", "text", 0);
+            var ordinary = field("application_id", "varchar", 64);
+            String raw = new OracleMetadataExplorer().generateCreateTableDdl(config, "ODS_VALIDATION", List.of(id,timestamp,ordinary), "现有集合字段");
+            String ddl = new com.linewell.dataelement.metautil.ddl.TablePartitions().constraints(raw, List.of(), config);
+            assertThat(ddl).contains("\"_id\" VARCHAR2(24 CHAR)", "\"@timestamp\" CLOB", "PRIMARY KEY (\"_id\")",
+                    "COMMENT ON COLUMN ODS_VALIDATION.\"_id\"", "COMMENT ON COLUMN ODS_VALIDATION.\"@timestamp\"",
+                    "application_id VARCHAR2(64 CHAR)", "COMMENT ON COLUMN ODS_VALIDATION.application_id");
+            assertThat(ddl).doesNotContain("\"application_id\"", "PRIMARY KEY (_id)");
+        }
+    }
+
+    @Test
+    void generatedOracleNamesKeepTheirActualSpellingThroughJdbcMetadataAndBindings() throws Exception {
+        var config = new DataSourceConfig(); config.setDatabaseType(DatabaseType.ORACLE);
+        var id = field("_id", "varchar", 24); id.setPrimaryKey(true); id.setNullable(false);
+        var timestamp = field("@timestamp", "text", 0);
+        var ordinary = field("application_id", "varchar", 64);
+        String ddl = new OracleMetadataExplorer().generateCreateTableDdl(config, "ODS_VALIDATION", List.of(id,timestamp,ordinary), "集合字段");
+        try (var connection = java.sql.DriverManager.getConnection("jdbc:h2:mem:validation_mongo_identifiers;MODE=Oracle")) {
+            try (var sql = connection.createStatement()) {
+                for (String statement : com.linewell.dataelement.metautil.ddl.NativeDdlStatements.split(ddl)) sql.execute(statement);
+            }
+            var names = new java.util.ArrayList<String>();
+            try (var columns = connection.getMetaData().getColumns(null, null, "ODS_VALIDATION", null)) {
+                while (columns.next()) names.add(columns.getString("COLUMN_NAME"));
+            }
+            assertThat(names).containsExactly("_id", "@timestamp", "APPLICATION_ID");
+            try (var insert = connection.prepareStatement("INSERT INTO ODS_VALIDATION (\"_id\",\"@timestamp\",\"APPLICATION_ID\") VALUES (?,?,?)")) {
+                insert.setString(1,"0123456789abcdef01234567"); insert.setString(2,"2026-11-22T00:00:00Z"); insert.setString(3,"validation");
+                assertThat(insert.executeUpdate()).isEqualTo(1);
+            }
+            try (var sql = connection.createStatement(); var rows = sql.executeQuery("SELECT \"_id\",\"@timestamp\",APPLICATION_ID FROM ODS_VALIDATION")) {
+                assertThat(rows.next()).isTrue(); assertThat(rows.getString(1)).isEqualTo("0123456789abcdef01234567");
+                assertThat(rows.getString(2)).isEqualTo("2026-11-22T00:00:00Z"); assertThat(rows.getString(3)).isEqualTo("validation");
+            }
+        }
+    }
+
+    private static ColumnInfo field(String name, String type, long length) {
+        var field = new ColumnInfo(); field.setColumnName(name); field.setColumnType(type);
+        field.setDataType(type); field.setLength(length); field.setColumnComment(name); field.setSourceDatabaseType("mongodb");
+        return field;
+    }
+
+    @Test
     void usesSeparateLowCodeLengthForMySqlVarchar() {
         DataSourceConfig config = new DataSourceConfig();
         config.setDatabaseType(DatabaseType.MYSQL);

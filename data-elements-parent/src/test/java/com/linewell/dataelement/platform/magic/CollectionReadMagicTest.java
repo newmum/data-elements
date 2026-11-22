@@ -411,7 +411,7 @@ class CollectionReadMagicTest {
                 entered.countDown();
                 assertTrue(release.await(12, TimeUnit.SECONDS));
             }
-            return new TableInventoryProbe.Inventory(List.of(physicalTable("new_table")), "");
+            return new TableInventoryProbe.Inventory(List.of(physicalTable("new_table")), "", com.linewell.dataelement.metautil.model.enums.DatabaseType.MYSQL);
         });
 
         var priorContext = SaManager.getSaTokenContext();
@@ -522,7 +522,7 @@ class CollectionReadMagicTest {
         source("allowed", TENANT, "team-a", "operator", 0);
         var probe = mock(TableInventoryProbe.class);
         when(probe.scan("allowed")).thenReturn(new TableInventoryProbe.Inventory(IntStream.range(0, size)
-                .mapToObj(index -> physicalTable("validation_table_" + index)).toList(), ""));
+                .mapToObj(index -> physicalTable("validation_table_" + index)).toList(), "", com.linewell.dataelement.metautil.model.enums.DatabaseType.MYSQL));
         var locks = new ConcurrentHashMap<String, AtomicLong>();
         var redis = mock(RedissonClient.class);
         when(redis.getLock(anyString())).thenAnswer(call -> mockedLease(locks.computeIfAbsent(call.getArgument(0), key -> new AtomicLong())));
@@ -552,7 +552,59 @@ class CollectionReadMagicTest {
         }
     }
 
+    @Test void oracleCollectionPreservesCaseDistinctObjectsAndTheOriginalRegisteredIdAtTwentyAndHundred()throws Exception {
+        for(int count:List.of(20,100)) {
+            database("MySQL");installCollectionWrites();source("allowed",TENANT,"team-a","operator",0);
+            table("original","TEST0809.CAR","原有普通表",TENANT,"allowed",0,1,START,0);
+            var physical=new ArrayList<TableInfo>();
+            for(int i=0;i<count;i++) {
+                String name=i==0?"TEST0809.CAR":i==1?"TEST0809.\"car\"":i==2?"TEST0809.\"Car\"":"TEST0809.T"+i;
+                var row=physicalTable(name);row.setSchemaName("TEST0809");physical.add(row);
+            }
+            var probe=mock(TableInventoryProbe.class);when(probe.scan("allowed")).thenReturn(new TableInventoryProbe.Inventory(physical,"TEST0809",com.linewell.dataelement.metautil.model.enums.DatabaseType.ORACLE));
+            var locks=new ConcurrentHashMap<String,AtomicLong>();var redis=mock(RedissonClient.class);when(redis.getLock(anyString())).thenAnswer(call->mockedLease(locks.computeIfAbsent(call.getArgument(0),key->new AtomicLong())));
+            var module=new MetadataScanMagicModule(probe,redis);bindings.put("metadataScan",module);bindings.put("metadataAsset",new MetadataAssetPersistenceModule(jdbc.getDataSource()));
+            try {
+                String id=acceptedId(Map.of("dbId","allowed"));await(()->!"RUNNING".equals(jobStatus(id)));assertEquals("SUCCEEDED",jobStatus(id),jobError(id));
+                assertEquals(count,jdbc.queryForObject("select count(*) from db_table_t",Integer.class));
+                assertEquals("TEST0809.CAR",jdbc.queryForObject("select table_name from db_table_t where tid='original'",String.class));
+                assertEquals(3,jdbc.queryForList("select table_name from db_table_t where table_name in (?,?,?)","TEST0809.CAR","TEST0809.\"car\"","TEST0809.\"Car\"").size());
+            } finally {org.springframework.test.util.ReflectionTestUtils.invokeMethod(module,"stop");}
+        }
+    }
+
+    @Test void oracleRefreshCanonicalizesExactLegacyMetadataNamesWithoutLosingIdsOrRejectingMissingNames()throws Exception {
+        for(int count:List.of(20,100)) {
+            database("MySQL");installCollectionWrites();source("allowed",TENANT,"team-a","operator",0);
+            table("digit","TAOTEST.1dat_accw_copy1","旧登记",TENANT,"allowed",0,1,START,0);
+            table("special","TAOTEST.A=B","保留标注",TENANT,"allowed",1,1,START,0);
+            table("bare","9daily","裸名历史",TENANT,"allowed",1,1,START,0);
+            table("missing","TAOTEST.8dropped","已消失历史",TENANT,"allowed",1,1,START,0);
+            table("ambiguous","A.B.C","旧名不能唯一还原",TENANT,"allowed",1,1,START,0);
+            var physical=new ArrayList<TableInfo>();
+            String[] names={"TAOTEST.\"1dat_accw_copy1\"","TAOTEST.\"A=B\"","TAOTEST.\"9daily\"","\"A.B\".C","A.\"B.C\""};
+            for(int i=0;i<count;i++) {
+                String name=i<names.length?names[i]:"TAOTEST.T"+i;
+                var row=physicalTable(name);row.setSchemaName(i==3?"A.B":i==4?"A":"TAOTEST");physical.add(row);
+            }
+            var probe=mock(TableInventoryProbe.class);when(probe.scan("allowed")).thenReturn(new TableInventoryProbe.Inventory(physical,"TAOTEST",com.linewell.dataelement.metautil.model.enums.DatabaseType.ORACLE));
+            var locks=new ConcurrentHashMap<String,AtomicLong>();var redis=mock(RedissonClient.class);when(redis.getLock(anyString())).thenAnswer(call->mockedLease(locks.computeIfAbsent(call.getArgument(0),key->new AtomicLong())));
+            var module=new MetadataScanMagicModule(probe,redis);bindings.put("metadataScan",module);bindings.put("metadataAsset",new MetadataAssetPersistenceModule(jdbc.getDataSource()));
+            try {
+                String id=acceptedId(Map.of("dbId","allowed","mode","REFRESH"));await(()->!"RUNNING".equals(jobStatus(id)));assertEquals("SUCCEEDED",jobStatus(id),jobError(id));
+                assertEquals(count+2,jdbc.queryForObject("select count(*) from db_table_t",Integer.class));
+                assertEquals(names[0],jdbc.queryForObject("select table_name from db_table_t where tid='digit'",String.class));
+                assertEquals(names[1],jdbc.queryForObject("select table_name from db_table_t where tid='special'",String.class));
+                assertEquals(names[2],jdbc.queryForObject("select table_name from db_table_t where tid='bare'",String.class));
+                assertEquals(1,jdbc.queryForObject("select annotated from db_table_t where tid='special'",Integer.class));
+                assertEquals(2,jdbc.queryForObject("select deleted_count from metadata_table_collection_job_t where tid=?",Integer.class,id));
+                assertEquals(0,jdbc.queryForObject("select count(*) from db_table_t where tid in ('missing','ambiguous') and is_del<>0",Integer.class));
+            } finally {org.springframework.test.util.ReflectionTestUtils.invokeMethod(module,"stop");}
+        }
+    }
+
     private void installCollectionWrites() {
+        jdbc.execute("alter table db_datasource_t add db_type varchar(32) default 'mysql'");
         jdbc.execute("alter table metadata_table_collection_job_t add updated_time timestamp");
         jdbc.execute("alter table db_datasource_t add updated_time timestamp");
         jdbc.execute("alter table db_datasource_t add table_num int default 0");

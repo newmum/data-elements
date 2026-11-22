@@ -45,6 +45,25 @@ test("澄天契约指向真实实现及当前审阅版本", async () => {
   assert.deepEqual(result.errors, []);
 });
 
+test("Oracle审查范围20/100项按引号身份去重并保留来源权限", async () => {
+  for (const count of [20, 100]) {
+    const { runtime } = setup("admin");
+    const source = runtime.database.sources.find((row) => !row.isDel && row.tenantId === runtime.session.tenantId);
+    source.dbType = "oracle";
+    const original = runtime.database.tables.find((row) => row.datasourceId === source.tid && !row.isDel);
+    runtime.database.tables = runtime.database.tables.filter((row) => row.datasourceId !== source.tid);
+    const names = ["TEST0809.CAR", 'TEST0809."car"', 'TEST0809."Car"', ...Array.from({ length: count - 3 }, (_, i) => `TEST0809.T${i}`)];
+    for (const [index, tableName] of names.entries()) runtime.database.tables.push({ ...original, tid: `validation-case-${index}`, tableName, tenantId: runtime.session.tenantId, datasourceId: source.tid, annotated: 1, isDel: 0 });
+    runtime.database.tables.push({ ...original, tid: "validation-same-object", tableName: 'TEST0809."CAR"', tenantId: runtime.session.tenantId, datasourceId: source.tid, annotated: 0, isDel: 0 });
+    runtime.persist(runtime.database);
+    const result = await request(runtime, "/dst/collect/order", { dbId: source.tid, allTables: true, pageSize: count });
+    assert.equal(result.body.code, 0); assert.equal(result.body.data.total, count); assert.equal(result.body.data.keys.length, count);
+    assert.ok(result.body.data.keys.includes('TEST0809."car"')); assert.ok(result.body.data.keys.includes('TEST0809."Car"'));
+    const rejected = await request(runtime, "/dst/collect/order", { dbId: source.tid, names: [names[0], "validation-foreign-table"] });
+    assert.equal(rejected.body.code, 500);
+  }
+});
+
 test("接入模板下拉按行业、发布状态和名称分页", async () => {
   const { runtime } = setup("registrar");
   const tenantId = runtime.session.tenantId;

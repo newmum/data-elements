@@ -253,6 +253,7 @@ class AccessTemplateMagicTest {
         String canonical=source("api/03.数据接入/03.接入任务/05.按来源表补齐接入任务.ms");
         int start=canonical.indexOf("var applyTemplateSourceDefaults ="),end=canonical.indexOf("return db.transaction",start);
         String program="import cn.hutool.json.JSONUtil as poolJsons\nvar text = value => value == null ? '' : value.toString()\n"
+                +"var blank = value => value == null || text(value).trim() == ''\n"
                 +"var parseGovernanceConfig = value => poolJsons.parseObj(value)\n"+canonical.substring(start,end)
                 +"\nreturn poolJsons.toJsonStr(instantiateTemplateFlow(template,pipelines,tasks))";
         for(String type:List.of("ftp","sftp","api","kafka","minio","mongodb","elasticsearch","hdfs","hbase","mysql")) {
@@ -260,14 +261,16 @@ class AccessTemplateMagicTest {
                     {"sourceType":"ANY","sourceSchedule":"REGISTERED","intervalSeconds":60,"fetchSize":5000,
                      "flow":{"version":1,"nodes":[
                      {"id":"source","manifestKey":"source.mysql","category":"source","config":{"templateBinding":"source","hostname":"wrong","topic":"wrong","remotePath":"wrong","schedulingPeriod":"999 sec"}},
-                     {"id":"sink","manifestKey":"sink.jdbc","category":"sink","config":{"templateBinding":"target:0"}}],
+                     {"id":"sink","manifestKey":"sink.jdbc","category":"sink","config":{"templateBinding":"target:0","writerType":"","statementType":"MERGE"}}],
                      "edges":[{"id":"edge","source":"source","target":"sink"}]}}
                     """);
-            var runtime=Map.<String,Object>of("hostname","registered-host","remotePath","/registered/events","topic","registered-topic",
+            var runtime=new java.util.LinkedHashMap<String,Object>(Map.<String,Object>of("hostname","registered-host","remotePath","/registered/events","topic","registered-topic",
                     "schedulingPeriod",type.equals("kafka")?"0 sec":"15 min","fileConsumptionPolicy","DELETE_AFTER_DATABASE_COMMIT",
-                    "fileFormat","json","fileHeaderMode","registered-chinese","minioBucket","registered-bucket");
+                    "fileFormat","json","fileHeaderMode","registered-chinese","minioBucket","registered-bucket"));
+            runtime.putAll(Map.of("minioObjectKey","registered/Report#2026.xlsx","excelSheetName","月#统计","jsonRecordPath","$.data.people"));
             var dsl=Map.of("nodes",List.of(Map.of("id","source","manifestKey","source."+type,"category","source","config",runtime),
-                    Map.of("id","sink","manifestKey","sink.jdbc","category","sink","config",Map.of("targetTableId","authorized"))));
+                    Map.of("id","sink","manifestKey","sink.jdbc","category","sink","config",Map.of("targetTableId","authorized",
+                            "writerType","LINEWELL_PUT_DATABASE_RECORD","statementType","INSERT","updateKeys",""))));
             var result=JSONUtil.parseObj(MagicScript.create(program,null).execute(new MagicScriptContext(Map.of(
                     "template",Map.of("spec",spec),"pipelines",List.of(Map.of("dsl_json",JSONUtil.toJsonStr(dsl))),"tasks",List.of(Map.of("tid","validation"))))).toString());
             var node=result.getJSONArray("nodes").getJSONObject(0);
@@ -275,6 +278,9 @@ class AccessTemplateMagicTest {
             var cfg=node.getJSONObject("config");
             runtime.forEach((key,value)->assertThat(cfg.get(key)).as(type+" "+key).isEqualTo(value));
             assertThat(cfg.getInt("batchSize")).isEqualTo(5000);
+            var target=result.getJSONArray("nodes").getJSONObject(1).getJSONObject("config");
+            assertThat(target.getStr("statementType")).isEqualTo("INSERT");
+            assertThat(target.getStr("writerType")).isEqualTo("LINEWELL_PUT_DATABASE_RECORD");
         }
     }
 

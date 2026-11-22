@@ -191,18 +191,36 @@ public class StructuredSourceProbeService {
     /** Resolves the selected logical table to its real object key, independent of an editable comment. */
     public Map<String,Object> resolveMinioObjectLocator(Map<String,Object> source, String tableName) {
         if (!"minio".equals(sourceType(source))) throw new IllegalArgumentException("Expected a MinIO source");
-        StructuredTableData table = findTable(source, tableName);
-        String key = table.getSourcePath();
-        if (blank(key) || key.contains("#")) throw new IllegalArgumentException("Select a single object dataset");
-        return Map.of("objectKey", key, "format", table.getFileRecordFormat());
+        Map<String,Object> selectedSource = new LinkedHashMap<>(source);
+        selectedSource.put("_registeredTableName", tableName);
+        StructuredTableData table = findTable(selectedSource, tableName);
+        if (blank(table.getFilePath())) throw new IllegalArgumentException("Select a single object dataset");
+        Map<String,Object> locator = new LinkedHashMap<>();
+        locator.put("objectKey", table.getFilePath());
+        locator.put("format", table.getFileRecordFormat());
+        locator.put("excelSheetName", defaultText(table.getExcelSheetName(), ""));
+        locator.put("jsonRecordPath", defaultText(table.getJsonRecordPath(), "$"));
+        locator.put("delimiter", defaultText(table.getFileDelimiter(), ","));
+        return locator;
+    }
+
+    /** Only the already-authorized connector's probe result can provide managed field paths. */
+    public Map<String,Object> resolveRecordShape(Map<String,Object> source,String tableName) {
+        Map<String,Object> shape=findTable(source,tableName).getRecordShape();
+        if(shape==null)return null;
+        new com.linewell.dataelement.mapping.core.StructuredJsonRecords.Contract(objectMapper.valueToTree(shape));
+        return new LinkedHashMap<>(shape);
     }
 
     /** Registration owns the field snapshot and its file locator; neither is recollected at materialization. */
-    public static Object preserveFtpFileSnapshot(Object previous, Object submitted) {
+    public static Object preserveRegisteredSourceSnapshot(Object previous, Object submitted) {
         Map<String, Object> old = snapshotObject(previous), next = snapshotObject(submitted);
-        if (!old.containsKey("sourceFile") && !next.containsKey("sourceFile")) return submitted;
-        next.remove("sourceFile");
-        if (old.get("sourceFile") instanceof Map<?, ?> locator) next.put("sourceFile", new LinkedHashMap<>(locator));
+        if (!old.containsKey("sourceFile") && !next.containsKey("sourceFile")
+                &&!old.containsKey("sourceRecordShape")&&!next.containsKey("sourceRecordShape")) return submitted;
+        for(String key:List.of("sourceFile","sourceRecordShape")) {
+            next.remove(key);
+            if(old.get(key) instanceof Map<?,?> locator)next.put(key,new LinkedHashMap<>(locator));
+        }
         return next;
     }
 
@@ -213,6 +231,16 @@ public class StructuredSourceProbeService {
             if (resolved.get(key) != null) locator.put(key, resolved.get(key));
         }
         result.put("sourceFile", locator);
+        return result;
+    }
+
+    /** Called only after an authorized connector probe, never with a request-supplied shape. */
+    public static Map<String,Object> withRecordShapeSnapshot(Object previous,Map<String,Object> shape) {
+        Map<String,Object> result=snapshotObject(previous);
+        if(shape!=null) {
+            new com.linewell.dataelement.mapping.core.StructuredJsonRecords.Contract(FILE_SNAPSHOT_JSON.valueToTree(shape));
+            result.put("sourceRecordShape",new LinkedHashMap<>(shape));
+        }
         return result;
     }
 
@@ -367,6 +395,7 @@ public class StructuredSourceProbeService {
         result.put("excelSheetName", Set.of("xls", "xlsx").contains(format) ? datasetName : "");
         result.put("jsonRecordPath", "json".equals(format) && !datasetName.isBlank() ? datasetName : "$");
         result.put("columns", dataset.getColumns());
+        result.put("recordShape",dataset.getRecordShape());
         return result;
     }
 
@@ -417,7 +446,11 @@ public class StructuredSourceProbeService {
         if (blank(tableName)) {
             throw new IllegalArgumentException("tableName cannot be empty");
         }
-        return probe(source, false).getTables().stream()
+        Map<String,Object> selected=source;
+        if(Set.of("ftp","minio").contains(sourceType(source))&&!source.containsKey("_registeredTableName")) {
+            selected=new LinkedHashMap<>(source);selected.put("_registeredTableName",tableName);
+        }
+        return probe(selected, false).getTables().stream()
                 .filter(item -> tableName.equalsIgnoreCase(item.getTable().getTableName()))
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("Structured table does not exist: " + tableName));
@@ -902,6 +935,7 @@ public class StructuredSourceProbeService {
         String tableName = uniqueName(fileStem(file.name), names);
         StructuredTableData table = buildTable(tableName, file.name, file.path, data.rows, data.headers);
         table.setFileDelimiter(String.valueOf(data.delimiter));
+        table.setRecordShape(headerShape(data.headers,data.rawHeaders));
         result.getTables().add(table);
     }
 
@@ -918,6 +952,7 @@ public class StructuredSourceProbeService {
         String tableName = uniqueName(fileStem(file.name), names);
         StructuredTableData table = buildTable(tableName, file.name, file.path, data.rows, data.headers);
         table.setFileDelimiter(String.valueOf(data.delimiter));
+        table.setRecordShape(headerShape(data.headers,data.rawHeaders));
         result.getTables().add(table);
     }
 
@@ -934,6 +969,8 @@ public class StructuredSourceProbeService {
             try {
                 parseJsonFile(text.getBytes(StandardCharsets.UTF_8), file, names, result);
                 return;
+            } catch (com.linewell.dataelement.mapping.core.MappingException invalidShape) {
+                throw invalidShape;
             } catch (Exception ignored) {
                 // Fall through to JSON Lines or delimited text.
             }
@@ -941,7 +978,10 @@ public class StructuredSourceProbeService {
         List<Map<String, Object>> jsonLines = parseJsonLines(text, MAX_SAMPLE_ROWS);
         if (!jsonLines.isEmpty()) {
             String tableName = uniqueName(fileStem(file.name), names);
-            result.getTables().add(buildTable(tableName, file.name, file.path, jsonLines));
+            StructuredTableData table=buildTable(tableName,file.name,file.path,jsonLines);
+            table.setFilePath(file.path);table.setFileRecordFormat("json");table.setJsonRecordPath("$");
+            table.setRecordShape(jsonLinesShape(text,MAX_SAMPLE_ROWS));
+            result.getTables().add(table);
             return;
         }
         addDelimitedTable(source, content, file, names, result, true);
@@ -961,6 +1001,8 @@ public class StructuredSourceProbeService {
             try {
                 parseJsonFile(text.getBytes(StandardCharsets.UTF_8), file, names, result, rowLimit);
                 return;
+            } catch (com.linewell.dataelement.mapping.core.MappingException invalidShape) {
+                throw invalidShape;
             } catch (Exception ignored) {
                 // Fall through to JSON Lines or delimited text.
             }
@@ -968,7 +1010,10 @@ public class StructuredSourceProbeService {
         List<Map<String, Object>> jsonLines = parseJsonLines(text, rowLimit);
         if (!jsonLines.isEmpty()) {
             String tableName = uniqueName(fileStem(file.name), names);
-            result.getTables().add(buildTable(tableName, file.name, file.path, jsonLines));
+            StructuredTableData table=buildTable(tableName,file.name,file.path,jsonLines);
+            table.setFilePath(file.path);table.setFileRecordFormat("json");table.setJsonRecordPath("$");
+            table.setRecordShape(jsonLinesShape(text,rowLimit));
+            result.getTables().add(table);
             return;
         }
         addDelimitedTable(source, new InputStreamReader(new ByteArrayInputStream(content), charset), file, names, result,
@@ -1006,12 +1051,17 @@ public class StructuredSourceProbeService {
             String tableName = uniqueName(fileStem(file.name) + suffix, names);
             String sourcePath = file.path + ("$".equals(path) ? "" : "#" + path);
             String comment = file.name + ("$".equals(path) ? "" : " / " + path);
+            JsonRows normalized=structuredRows(entry.getValue(),rowLimit);
             StructuredTableData table = buildTable(
                     tableName,
                     comment,
                     sourcePath,
-                    rowsFromJson(entry.getValue(), rowLimit)
+                    normalized.rows()
             );
+            table.setRecordShape(normalized.shape());
+            table.setFilePath(file.path);
+            table.setJsonRecordPath(path);
+            table.setFileRecordFormat("json");
             if (!table.getColumns().isEmpty()) result.getTables().add(table);
         }
     }
@@ -1034,15 +1084,17 @@ public class StructuredSourceProbeService {
             }
             JsonSampleCollection collection;
             if (firstToken == JsonToken.START_ARRAY) {
-                collection = new JsonSampleCollection("$", sampleJsonArray(parser));
+                JsonRows normalized=sampleJsonArray(parser);
+                collection = new JsonSampleCollection("$", normalized.rows(),normalized.shape());
             } else if (firstToken == JsonToken.START_OBJECT) {
-                Map<String, Object> objectRow = new LinkedHashMap<>();
+                com.fasterxml.jackson.databind.node.ObjectNode objectRow = objectMapper.createObjectNode();
                 collection = findFirstJsonArray(parser, "$", "", 0, objectRow);
                 if (collection == null) {
                     // A root object without a nested collection is one record.
                     // Local JSON parsing already supports this form; keep FTP's
                     // streamed probe consistent instead of rejecting valid JSON.
-                    collection = new JsonSampleCollection("$", List.of(objectRow));
+                    JsonRows normalized=structuredRows(objectRow,FTP_PROBE_SAMPLE_ROWS);
+                    collection = new JsonSampleCollection("$", normalized.rows(), normalized.shape());
                 }
             } else {
                 throw new IllegalArgumentException("JSON probe needs an object or array: " + file.path);
@@ -1056,6 +1108,10 @@ public class StructuredSourceProbeService {
             String sourcePath = file.path + ("$".equals(collection.path) ? "" : "#" + collection.path);
             String comment = file.name + ("$".equals(collection.path) ? "" : " / " + collection.path);
             StructuredTableData table = buildTable(tableName, comment, sourcePath, collection.rows);
+            table.setRecordShape(collection.shape);
+            table.setFilePath(file.path);
+            table.setJsonRecordPath(collection.path);
+            table.setFileRecordFormat("json");
             if (!table.getColumns().isEmpty()) result.getTables().add(table);
         }
     }
@@ -1065,11 +1121,11 @@ public class StructuredSourceProbeService {
             String path,
             String columnPrefix,
             int depth,
-            Map<String, Object> objectRow
+            com.fasterxml.jackson.databind.node.ObjectNode objectRow
     ) throws Exception {
         if (depth > 8) {
             JsonNode nested = objectMapper.readTree(parser);
-            flattenJson(columnPrefix, nested, objectRow);
+            objectRow.setAll((com.fasterxml.jackson.databind.node.ObjectNode)nested);
             return null;
         }
         while (parser.nextToken() != JsonToken.END_OBJECT) {
@@ -1078,36 +1134,39 @@ public class StructuredSourceProbeService {
             String childPath = path + "." + fieldName;
             String childPrefix = columnPrefix.isEmpty() ? fieldName : columnPrefix + "_" + fieldName;
             if (valueToken == JsonToken.START_ARRAY) {
-                return new JsonSampleCollection(childPath, sampleJsonArray(parser));
+                JsonRows normalized=sampleJsonArray(parser);
+                return new JsonSampleCollection(childPath, normalized.rows(),normalized.shape());
             }
             if (valueToken == JsonToken.START_OBJECT) {
+                com.fasterxml.jackson.databind.node.ObjectNode child=objectMapper.createObjectNode();
                 JsonSampleCollection nested = findFirstJsonArray(
-                        parser, childPath, childPrefix, depth + 1, objectRow);
+                        parser, childPath, childPrefix, depth + 1, child);
                 if (nested != null) return nested;
+                objectRow.set(fieldName,child);
             } else {
-                objectRow.put(cleanColumnName(childPrefix), jsonScalar(parser, valueToken));
+                objectRow.set(fieldName,objectMapper.readTree(parser));
             }
         }
         return null;
     }
 
-    private Object jsonScalar(JsonParser parser, JsonToken token) throws Exception {
-        return switch (token) {
-            case VALUE_NULL -> null;
-            case VALUE_TRUE -> true;
-            case VALUE_FALSE -> false;
-            case VALUE_NUMBER_INT -> parser.getLongValue();
-            case VALUE_NUMBER_FLOAT -> parser.getDecimalValue();
-            default -> parser.getValueAsString();
-        };
+    private JsonRows sampleJsonArray(JsonParser parser) throws Exception {
+        var nodes=objectMapper.createArrayNode();
+        while(nodes.size()<FTP_PROBE_SAMPLE_ROWS&&parser.nextToken()!=JsonToken.END_ARRAY)nodes.add((JsonNode)objectMapper.readTree(parser));
+        return structuredRows(nodes,FTP_PROBE_SAMPLE_ROWS);
     }
 
-    private List<Map<String, Object>> sampleJsonArray(JsonParser parser) throws Exception {
-        List<Map<String, Object>> rows = new ArrayList<>();
-        while (rows.size() < FTP_PROBE_SAMPLE_ROWS && parser.nextToken() != JsonToken.END_ARRAY) {
-            rows.add(rowFromJson(objectMapper.readTree(parser)));
+    private record JsonRows(List<Map<String,Object>> rows,Map<String,Object> shape) { }
+    private JsonRows structuredRows(JsonNode node,int limit) {
+        var shape=new com.linewell.dataelement.mapping.core.StructuredJsonRecords.Shape();
+        List<Map<String,Object>> rows=new ArrayList<>();
+        Iterable<JsonNode> records=node.isArray()?node:List.of(node);
+        for(JsonNode item:records) {
+            if(rows.size()>=limit)break;
+            var entry=com.linewell.dataelement.mapping.core.StructuredJsonRecords.normalize(item);
+            shape.accept(entry);rows.add(entry.values());
         }
-        return rows;
+        return new JsonRows(rows,objectMapper.convertValue(shape.json(),new TypeReference<LinkedHashMap<String,Object>>(){}));
     }
 
     private List<Map<String, Object>> parseJsonLines(String text, int rowLimit) {
@@ -1122,13 +1181,24 @@ public class StructuredSourceProbeService {
                         .with(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
                         .readTree(normalizedLine);
                 if (node == null || (!node.isObject() && !node.isValueNode())) return List.of();
-                rows.add(rowFromJson(node));
+                rows.add(com.linewell.dataelement.mapping.core.StructuredJsonRecords.normalize(node).values());
                 if (rows.size() >= rowLimit) break;
+            } catch (com.linewell.dataelement.mapping.core.MappingException invalidShape) {
+                throw invalidShape;
             } catch (Exception exception) {
                 return List.of();
             }
         }
         return rows;
+    }
+
+    private Map<String,Object> jsonLinesShape(String text,int limit) throws Exception {
+        var nodes=objectMapper.createArrayNode();
+        for(String line:text.split("\\R")) {
+            if(line.isBlank())continue;
+            nodes.add((JsonNode)objectMapper.readTree(line));if(nodes.size()>=limit)break;
+        }
+        return structuredRows(nodes,limit).shape();
     }
 
     private DelimitedData parseDelimited(
@@ -1178,9 +1248,10 @@ public class StructuredSourceProbeService {
                 .setTrim(true)
                 .get();
         List<Map<String, Object>> rows = new ArrayList<>();
-        List<String> headers;
+        List<String> headers;List<String> rawHeaders;
         try (CSVParser parser = CSVParser.parse(reader, format)) {
-            headers = parser.getHeaderNames().stream().map(this::cleanColumnName).toList();
+            rawHeaders=List.copyOf(parser.getHeaderNames());
+            headers = rawHeaders.stream().map(this::cleanColumnName).toList();
             for (CSVRecord record : parser) {
                 if (rows.size() >= rowLimit) break;
                 Map<String, Object> row = new LinkedHashMap<>();
@@ -1188,7 +1259,7 @@ public class StructuredSourceProbeService {
                 rows.add(row);
             }
         }
-        return new DelimitedData(headers, rows, delimiter);
+        return new DelimitedData(headers, rows, delimiter,rawHeaders);
     }
 
     private char detectDelimiter(String text, char configuredDelimiter) {
@@ -1286,8 +1357,10 @@ public class StructuredSourceProbeService {
                 Row header = sheet.getRow(sheet.getFirstRowNum());
                 if (header == null) continue;
                 List<String> headers = new ArrayList<>();
+                List<String> rawHeaders=new ArrayList<>();
                 for (int i = 0; i < header.getLastCellNum(); i++) {
-                    String name = cleanColumnName(formatter.formatCellValue(header.getCell(i)));
+                    String raw=formatter.formatCellValue(header.getCell(i));rawHeaders.add(raw);
+                    String name = cleanColumnName(raw);
                     headers.add(blank(name) ? "column_" + (i + 1) : uniqueColumn(name, headers));
                 }
                 List<Map<String, Object>> rows = new ArrayList<>();
@@ -1306,7 +1379,12 @@ public class StructuredSourceProbeService {
                 }
                 String sourcePath = file.path + "#" + sheet.getSheetName();
                 String tableName = uniqueName(fileStem(file.name) + "_" + sheet.getSheetName(), names);
-                result.getTables().add(buildTable(tableName, file.name + " / " + sheet.getSheetName(), sourcePath, rows));
+                StructuredTableData table = buildTable(tableName, file.name + " / " + sheet.getSheetName(), sourcePath, rows);
+                table.setFilePath(file.path);
+                table.setExcelSheetName(sheet.getSheetName());
+                table.setFileRecordFormat(extension(file.name));
+                table.setRecordShape(headerShape(headers,rawHeaders));
+                result.getTables().add(table);
             }
         }
     }
@@ -1333,7 +1411,9 @@ public class StructuredSourceProbeService {
         properties.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest");
         properties.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, String.valueOf(sampleSize));
         Map<String, List<Map<String, Object>>> rowsByTopic = new LinkedHashMap<>();
+        Map<String,com.linewell.dataelement.mapping.core.StructuredJsonRecords.Shape> shapes=new LinkedHashMap<>();
         topics.forEach(topic -> rowsByTopic.put(topic, new ArrayList<>()));
+        topics.forEach(topic -> shapes.put(topic,new com.linewell.dataelement.mapping.core.StructuredJsonRecords.Shape()));
         try (KafkaConsumer<String, String> consumer = new KafkaConsumer<>(properties)) {
             consumer.assign(partitions);
             Map<TopicPartition, Long> beginning = consumer.beginningOffsets(partitions, Duration.ofSeconds(8));
@@ -1348,10 +1428,10 @@ public class StructuredSourceProbeService {
                 for (var record : records) {
                     var rows = rowsByTopic.get(record.topic());
                     if (rows == null || rows.size() >= sampleSize) continue;
-                    for (Map<String, Object> payload : kafkaPayloadRows(record.value())) {
+                    for (var payload : kafkaPayloadEntries(record.value())) {
                         // Infer the message value's schema. Broker attributes belong to
                         // flow metadata and must not become required business columns.
-                        rows.add(payload);
+                        shapes.get(record.topic()).accept(payload);rows.add(payload.values());
                         if (rows.size() >= sampleSize) break;
                     }
                 }
@@ -1365,7 +1445,10 @@ public class StructuredSourceProbeService {
         }
         StructuredProbeResult result = baseResult("kafka", "Kafka", bootstrap + "/" + String.join(",", topics));
         result.setResponsePreview(preview(writeJson(rowsByTopic.values().iterator().next().getFirst()), 4000));
-        rowsByTopic.forEach((topic, rows) -> result.getTables().add(buildTable(safeName(topic), "Kafka topic " + topic, topic, rows)));
+        rowsByTopic.forEach((topic, rows) -> {
+            var table=buildTable(safeName(topic),"Kafka topic "+topic,topic,rows);
+            table.setRecordShape(objectMapper.convertValue(shapes.get(topic).json(),Map.class));result.getTables().add(table);
+        });
         return result;
     }
 
@@ -1472,18 +1555,36 @@ public class StructuredSourceProbeService {
         return node.asText();
     }
 
-    private List<Map<String, Object>> kafkaPayloadRows(String value) {
-        if (blank(value)) return List.of(Map.of("value", ""));
+    private List<com.linewell.dataelement.mapping.core.StructuredJsonRecords.Entry> kafkaPayloadEntries(String value) {
+        if (blank(value)) return List.of(com.linewell.dataelement.mapping.core.StructuredJsonRecords.text(defaultText(value,"")));
+        JsonNode root;
         try {
-            return rowsFromJson(objectMapper.readTree(value), MAX_SAMPLE_ROWS);
+            root=objectMapper.reader().with(DeserializationFeature.FAIL_ON_TRAILING_TOKENS).readTree(value);
         } catch (Exception ignored) {
-            return List.of(new LinkedHashMap<>(Map.of("value", value)));
+            return List.of(com.linewell.dataelement.mapping.core.StructuredJsonRecords.text(value));
         }
+        var rows=new ArrayList<com.linewell.dataelement.mapping.core.StructuredJsonRecords.Entry>();
+        if(root.isArray())for(JsonNode item:root){rows.add(com.linewell.dataelement.mapping.core.StructuredJsonRecords.normalize(item));if(rows.size()>=MAX_SAMPLE_ROWS)break;}
+        else rows.add(com.linewell.dataelement.mapping.core.StructuredJsonRecords.normalize(root));
+        return rows;
+    }
+
+    private Map<String,Object> headerShape(List<String> names,List<String> original) {
+        if(names.size()!=original.size())throw new IllegalArgumentException("来源表头快照不完整");
+        Map<String,Object> values=new LinkedHashMap<>();Map<String,List<String>> paths=new LinkedHashMap<>();Map<String,String> kinds=new LinkedHashMap<>();
+        for(int i=0;i<names.size();i++) {
+            if(paths.containsKey(names.get(i)))throw new IllegalArgumentException("原始表头对应重复的安全字段名");
+            values.put(names.get(i),null);paths.put(names.get(i),List.of(original.get(i)));kinds.put(names.get(i),"ANY");
+        }
+        var shape=new com.linewell.dataelement.mapping.core.StructuredJsonRecords.Shape();
+        shape.accept(new com.linewell.dataelement.mapping.core.StructuredJsonRecords.Entry(values,paths,kinds,Set.of(),"RECORD"));
+        return objectMapper.convertValue(shape.json(),Map.class);
     }
 
     private StructuredTableData buildTable(String name, String comment, String sourcePath, List<Map<String, Object>> rows) {
         StructuredTableData data = new StructuredTableData();
         data.setSourcePath(sourcePath);
+        data.setFilePath(sourcePath);
         data.setRows(rows);
         data.setColumns(inferColumns(rows));
         TableInfo table = new TableInfo();
@@ -1879,8 +1980,8 @@ public class StructuredSourceProbeService {
 
     private record CachedProbe(long createdAt, StructuredProbeResult result) { }
     record RemoteFile(String path, String name, long size) { }
-    private record DelimitedData(List<String> headers, List<Map<String, Object>> rows, char delimiter) { }
-    private record JsonSampleCollection(String path, List<Map<String, Object>> rows) { }
+    private record DelimitedData(List<String> headers, List<Map<String, Object>> rows, char delimiter,List<String> rawHeaders) { }
+    private record JsonSampleCollection(String path, List<Map<String, Object>> rows,Map<String,Object> shape) { }
     record RemoteFileProbeStats(int matchedFiles, List<String> skippedFiles) { }
     @FunctionalInterface interface RemoteStreamOpener { InputStream open(RemoteFile file); }
     private static final class RemoteReadException extends RuntimeException { private RemoteReadException(Exception cause) { super(cause); } private Exception unwrap() { return (Exception) getCause(); } }

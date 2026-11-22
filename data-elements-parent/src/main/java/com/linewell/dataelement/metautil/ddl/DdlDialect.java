@@ -73,6 +73,17 @@ public final class DdlDialect {
         };
     }
 
+    /** Names received from a field model are not SQL expressions. Keep ordinary case folding. */
+    public static boolean requiresQuoting(DatabaseType type, String identifier) {
+        if (identifier == null || identifier.isBlank()) return true;
+        String pattern = family(type) == Family.ORACLE
+                ? "[A-Za-z][A-Za-z0-9_$#]*" : "[A-Za-z_][A-Za-z0-9_$#]*";
+        if (!identifier.matches(pattern)) return true;
+        var lexer = com.alibaba.druid.sql.parser.SQLParserUtils.createLexer(identifier, parser(type));
+        lexer.nextToken();
+        return lexer.token() != com.alibaba.druid.sql.parser.Token.IDENTIFIER;
+    }
+
     /** Handles dots inside quoted identifiers, Unicode, escaped quotes and SQL Server catalog.schema.table. */
     public static List<Identifier> names(String value) {
         if (value == null || value.isBlank()) throw new IllegalArgumentException("表名不能为空");
@@ -118,6 +129,23 @@ public final class DdlDialect {
         List<Identifier> names = names(value);
         if (names.size() != 1) throw new IllegalArgumentException("Schema必须是单个名称");
         return names.getFirst().value();
+    }
+
+    /** Render an exact name returned by Oracle metadata, preserving quoted lowercase and special characters. */
+    public static String oraclePhysicalName(String actual) {
+        return requiresQuoting(DatabaseType.ORACLE,actual)||!actual.equals(actual.toUpperCase(Locale.ROOT))
+                ?quote(DatabaseType.ORACLE,actual):actual;
+    }
+
+    public static String oracleObjectName(String reference) {
+        return names(reference).stream().map(part->oraclePhysicalName(part.quoted()?part.value():part.value().toUpperCase(Locale.ROOT)))
+                .collect(java.util.stream.Collectors.joining("."));
+    }
+
+    /** ASCII hex keys remain distinct even in a case-insensitive platform database collation. */
+    public static String oracleObjectKey(String reference) {
+        if(reference==null||reference.isBlank())return "";
+        return java.util.HexFormat.of().withUpperCase().formatHex(oracleObjectName(reference).getBytes(java.nio.charset.StandardCharsets.UTF_8));
     }
 
     private static boolean notBlank(String value) { return value != null && !value.isBlank(); }

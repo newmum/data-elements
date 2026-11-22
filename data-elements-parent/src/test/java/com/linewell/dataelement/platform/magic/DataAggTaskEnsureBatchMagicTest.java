@@ -42,6 +42,96 @@ import org.ssssssss.script.runtime.ExitValue;
 class DataAggTaskEnsureBatchMagicTest {
     private static final String SOURCE_ID = "ods_data_agg_task_ensure_01";
 
+    @ParameterizedTest @ValueSource(strings={"CLOB","STRING","JSON","JSONB"})
+    void jsonTextUsesThePhysicalTargetContractAndPreservesNullAndLongValues(String targetType) throws Exception {
+        var fixture=Fixture.forCreation(1);
+        fixture.jdbc.execute("alter table db_table_column_t add data_type varchar(64)");
+        fixture.jdbc.execute("alter table db_table_column_t add column_type varchar(64)");
+        fixture.jdbc.update("update db_table_column_t set data_type='json',column_type='json' where table_id='source-1'");
+        fixture.jdbc.update("update db_table_column_t set data_type=?,column_type=? where table_id='target-0'",targetType,targetType);
+        assertInstanceOf(Map.class,fixture.run());
+        String saved=fixture.jdbc.queryForObject("select dsl_json from nifi_pipeline_t",String.class);
+        var nodes=cn.hutool.json.JSONUtil.parseObj(saved).getJSONArray("nodes");
+        var mapping=nodes.stream().map(cn.hutool.json.JSONUtil::parseObj).filter(n->n.getStr("manifestKey").equals("transform.field-enrichment"))
+                .findFirst().orElseThrow().getJSONObject("config").getStr("mappings");
+        var json=new com.fasterxml.jackson.databind.ObjectMapper();
+        var specification=json.readTree(mapping);
+        assertEquals(targetType.startsWith("JSON")?"STRING":targetType,specification.path("mappings").get(0).path("targetType").asText());
+        var plan=com.linewell.dataelement.mapping.core.MappingEngine.compile(specification);
+        String value="{\"label\":\"中文\\n带转义\",\"data\":\""+"x".repeat(8000)+"\"}";
+        var missing=new LinkedHashMap<String,Object>();missing.put("person_id",null);
+        var context=new com.linewell.dataelement.mapping.core.ExecutionContext(java.time.Instant.parse("2026-11-01T00:00:00Z"),
+                java.time.ZoneId.of("Asia/Shanghai"),Locale.CHINA,"validation-json");
+        var result=com.linewell.dataelement.mapping.core.MappingEngine.execute(plan,List.of(Map.of("person_id",value),missing),0,context,null);
+        assertTrue(result.rows().stream().allMatch(com.linewell.dataelement.mapping.core.MappingEngine.Row::success));
+        assertEquals(value,result.rows().getFirst().output().get("person_id"));
+        assertNull(result.rows().getLast().output().get("person_id"));
+    }
+
+    @Test void openSourceHiveTargetsKeepModeAndInsertWithFixedBatchReads() throws Exception {
+        var reads = new ArrayList<Integer>();
+        for (int count : List.of(20, 100)) {
+            var f = Fixture.forCreation(count);
+            f.jdbc.update("update db_datasource_t set db_type='hive',pool_cfg=? where tid like 'target-db-%'",
+                    "{\"database\":\"validation\",\"hiveConnectionMode\":\"open-source\",\"hiveProfile\":\"default\",\"host\":\"validation.example\",\"port\":10000,\"authMode\":\"none\"}");
+            assertInstanceOf(Map.class, f.run()); reads.add(f.readCount());
+            for (String saved : f.jdbc.queryForList("select dsl_json from nifi_pipeline_t", String.class)) {
+                var nodes = cn.hutool.json.JSONUtil.parseObj(saved).getJSONArray("nodes");
+                var sink = nodes.stream().map(cn.hutool.json.JSONUtil::parseObj)
+                        .filter(n -> "sink".equals(n.getStr("category"))).findFirst().orElseThrow();
+                assertEquals("sink.hive", sink.getStr("manifestKey"));
+                var config = sink.getJSONObject("config");
+                assertEquals("open-source", config.getStr("hiveConnectionMode"));
+                assertEquals("jdbc", config.getStr("metadataAccessMode"));
+                assertEquals("none", config.getStr("authMode"));
+                assertEquals("HDFS_BATCH", config.getStr("hiveWriteMode"));
+                assertEquals("", config.getStr("hiveProfile"));
+                assertEquals("INSERT", config.getStr("statementType"));
+                assertEquals("", config.getStr("updateKeys"));
+            }
+        }
+        assertEquals(reads.getFirst(), reads.getLast());
+        System.out.println("Open-source Hive 20/100 target reads: " + reads);
+    }
+
+    @Test void publishedParallelTemplateCannotEraseHiveModeOrReplaceRegisteredAuthentication() throws Exception {
+        var f = Fixture.forCreation(2);
+        f.jdbc.update("update db_datasource_t set db_type='hive',pool_cfg=? where tid='target-db-1'",
+                "{\"database\":\"validation\",\"hiveConnectionMode\":\"open-source\",\"host\":\"validation.example\",\"port\":10000,\"authMode\":\"none\",\"clientConfigDir\":\"/validation/apache\",\"hdfsDatabaseDirectory\":\"hdfs://validation/warehouse/validation.db\"}");
+        f.jdbc.execute("create table nifi_access_template_t(tid varchar(64),tenant_id varchar(32),display_name varchar(100),revision_no int,status varchar(32),definition clob)");
+        var nodes = new ArrayList<Map<String, Object>>();
+        nodes.add(Map.of("id", "source", "manifestKey", "source.mysql", "category", "source", "label", "登记来源",
+                "x", 0, "y", 0, "config", Map.of("templateBinding", "source")));
+        for (int index = 0; index < 2; index++) {
+            nodes.add(Map.of("id", "sink-" + index, "manifestKey", index == 0 ? "sink.jdbc" : "sink.hive", "category", "sink",
+                    "label", "目标" + index, "x", 540, "y", index * 560,
+                    "config", Map.of("templateBinding", "target:" + index, "hiveConnectionMode", "huawei-mrs",
+                            "authMode", "KERBEROS", "hiveProfile", "default", "hiveWriteMode", "HIVE_RECORD_PUT",
+                            "clientConfigDir", "/mrs/client", "hdfsDatabaseDirectory", "hdfs://mrs/warehouse/old.db", "statementType", "UPSERT")));
+        }
+        var recipe = Map.of("sourceType", "ANY", "topology", "PARALLEL", "targets", List.of("MYSQL", "HIVE"),
+                "targetDatasourceIds", List.of("target-db-0", "target-db-1"),
+                "flow", Map.of("version", 1, "nodes", nodes, "edges", List.of()));
+        f.jdbc.update("insert into nifi_access_template_t values('validation-template','police','并行验证',1,'PUBLISHED',?)",
+                cn.hutool.json.JSONUtil.toJsonStr(recipe));
+        assertInstanceOf(Map.class, f.run(Map.of("tableId", "source-1", "templateVersionId", "validation-template")));
+        String saved = f.jdbc.queryForObject("select dsl_json from nifi_pipeline_t", String.class);
+        var flow = cn.hutool.json.JSONUtil.parseObj(saved);
+        var sink = flow.getJSONArray("nodes").stream().map(cn.hutool.json.JSONUtil::parseObj)
+                .filter(n -> "sink.hive".equals(n.getStr("manifestKey"))).findFirst().orElseThrow();
+        var config = sink.getJSONObject("config");
+        assertEquals("open-source", config.getStr("hiveConnectionMode"));
+        assertEquals("jdbc", config.getStr("metadataAccessMode"));
+        assertEquals("none", config.getStr("authMode"));
+        assertEquals("", config.getStr("hiveProfile"));
+        assertEquals("target-db-1", config.getStr("targetDbId"));
+        assertEquals("/validation/apache", config.getStr("clientConfigDir"));
+        assertEquals("hdfs://validation/warehouse/validation.db", config.getStr("hdfsDatabaseDirectory"));
+        assertEquals("INSERT", config.getStr("statementType"));
+        f.scope.deniedId = "target-db-1";
+        assertThrows(MagicScriptException.class, () -> f.run(Map.of("tableId", "source-1", "templateVersionId", "validation-template")));
+    }
+
     @ParameterizedTest @CsvSource({"1,0,false","2,0,false","2,1,true"})
     void materializedHiveUsesGovernanceOnlyOnTheFirstOrSingleTarget(int count,int targetIndex,boolean raw) throws Exception {
         var f = Fixture.forCreation(count);
@@ -483,7 +573,7 @@ class DataAggTaskEnsureBatchMagicTest {
             fixture.registerApiSource("PERSON");
         } else {
             fixture.jdbc.update("update db_datasource_t set db_type=?,pool_cfg=? where tid='source-db'", type,
-                    "{\"host\":\"db-host\",\"database\":\"business\",\"compatibleMode\":\"PG\"}");
+                    "{\"host\":\"db-host\",\"database\":\"business\",\"compatibleMode\":\"PG\",\"kafkaTopic\":\"PERSON\"}");
         }
         fixture.jdbc.update("update db_datasource_t set db_type='oceanbaseoracle' where tid='target-db-0'");
         fixture.jdbc.update("update db_datasource_t set db_type='hive' where tid='target-db-1'");
@@ -605,6 +695,63 @@ class DataAggTaskEnsureBatchMagicTest {
     }
 
     @ParameterizedTest
+    @CsvSource({"wamLogServerJavaDataElement,wamlogserverjavadataelement", "Trade.Order-v2,trade_order_v2", "123Events,f_123events"})
+    void kafkaTaskRetainsTheSelectedPhysicalTopicAndNeverTheWholeScope(String topic,String table) throws Exception {
+        var f=Fixture.forCreation(1);
+        f.jdbc.update("update db_datasource_t set db_type='kafka',pool_cfg=? where tid='source-db'",
+                cn.hutool.json.JSONUtil.toJsonStr(Map.of("bootstrapServers","broker:9092","kafkaTopic","otherTopic,"+topic+",finalTopic")));
+        f.jdbc.update("update db_table_t set table_name=? where tid='source-1'",table);
+        assertInstanceOf(Map.class,f.run());
+        var config=cn.hutool.json.JSONUtil.parseObj(f.jdbc.queryForObject("select dsl_json from nifi_pipeline_t",String.class))
+                .getJSONArray("nodes").getJSONObject(0).getJSONObject("config");
+        assertEquals(topic,config.getStr("topic"));assertEquals(table,config.getStr("sourceTableName"));
+        // A historical wrong subscription is reported, never silently overwritten on an existing task.
+        var dsl=cn.hutool.json.JSONUtil.parseObj(f.jdbc.queryForObject("select dsl_json from nifi_pipeline_t",String.class));
+        dsl.getJSONArray("nodes").getJSONObject(0).getJSONObject("config").set("topic",table+"_wrong");
+        f.jdbc.update("update nifi_pipeline_t set dsl_json=?",dsl.toString());
+        var reused=assertInstanceOf(Map.class,f.run());
+        assertEquals(true,reused.get("repairRequired"));assertEquals(0,f.counter.writes);
+        assertTrue(reused.get("repairReasons").toString().contains("主题"));
+        assertTrue(f.jdbc.queryForObject("select dsl_json from nifi_pipeline_t",String.class).contains(table+"_wrong"));
+    }
+
+    @ParameterizedTest @ValueSource(strings={"", "OtherTopic", "Orders,orders", "orders,orders.*"})
+    void invalidMissingOrAmbiguousKafkaTopicNeverCreatesTasks(String scope) throws Exception {
+        var f=Fixture.forCreation(1);
+        f.jdbc.update("update db_datasource_t set db_type='kafka',pool_cfg=? where tid='source-db'",
+                cn.hutool.json.JSONUtil.toJsonStr(Map.of("bootstrapServers","broker:9092","kafkaTopic",scope)));
+        f.jdbc.update("update db_table_t set table_name='orders' where tid='source-1'");
+        assertInstanceOf(ExitValue.class,f.run());assertEquals(0,f.counter.writes);
+    }
+
+    @Test void twentyAndHundredKafkaTopicsUseTheSameMetadataReads() throws Exception {
+        var counts=new ArrayList<Integer>();
+        for(int size:List.of(20,100)) {
+            var f=Fixture.forCreation(1);var topics=new ArrayList<String>();
+            for(int i=0;i<size;i++)topics.add("BusinessTopic"+i);
+            f.jdbc.update("update db_datasource_t set db_type='kafka',pool_cfg=? where tid='source-db'",
+                    cn.hutool.json.JSONUtil.toJsonStr(Map.of("bootstrapServers","broker:9092","kafkaTopic",String.join(",",topics))));
+            f.jdbc.update("update db_table_t set table_name='businesstopic0' where tid='source-1'");
+            assertInstanceOf(Map.class,f.run());counts.add(f.counter.queries);
+            var config=cn.hutool.json.JSONUtil.parseObj(f.jdbc.queryForObject("select dsl_json from nifi_pipeline_t",String.class))
+                    .getJSONArray("nodes").getJSONObject(0).getJSONObject("config");
+            assertEquals("BusinessTopic0",config.getStr("topic"));
+        }
+        assertEquals(counts.getFirst(),counts.getLast());
+    }
+
+    @ParameterizedTest @ValueSource(strings={"oracle","oceanbaseoracle"})
+    void generatedOracleAppendTasksPersistTheWriterChoiceWithoutInventingAKey(String type) throws Exception {
+        var f=Fixture.forCreation(1);
+        f.jdbc.update("update db_datasource_t set db_type=? where tid='target-db-0'",type);
+        assertInstanceOf(Map.class,f.run());
+        var config=cn.hutool.json.JSONUtil.parseObj(f.jdbc.queryForObject("select dsl_json from nifi_pipeline_t",String.class))
+                .getJSONArray("nodes").getJSONObject(2).getJSONObject("config");
+        assertEquals("LINEWELL_PUT_DATABASE_RECORD",config.getStr("writerType"));assertEquals("INSERT",config.getStr("statementType"));
+        assertEquals("",config.getStr("updateKeys"));
+    }
+
+    @ParameterizedTest
     @CsvSource({"kingbase8,kingbase", "mysql,mysql", "oracle,oracle", "oceanbasemysql,oceanbase",
             "oceanbaseoracle,oceanbase", "gaussdb,gaussdb", "gbase8a,gbase8a", "sqlserver,sqlserver",
             "hive,hive", "hetu,hetu", "doris,doris", "starrocks,starrocks", "clickhouse,clickhouse",
@@ -618,7 +765,7 @@ class DataAggTaskEnsureBatchMagicTest {
             fixture.registerApiSource("PERSON");
         } else {
             fixture.jdbc.update("update db_datasource_t set db_type=?,pool_cfg=? where tid='source-db'", raw,
-                    "{\"host\":\"db-host\",\"database\":\"business\",\"compatibleMode\":\"PG\",\"bootstrapServers\":\"broker:9092\"}");
+                    "{\"host\":\"db-host\",\"database\":\"business\",\"compatibleMode\":\"PG\",\"bootstrapServers\":\"broker:9092\",\"kafkaTopic\":\"PERSON\"}");
         }
 
         Map<?, ?> created = assertInstanceOf(Map.class, fixture.run());
@@ -646,6 +793,10 @@ class DataAggTaskEnsureBatchMagicTest {
         }
         if (raw.equals("minio")) {
             assertEquals("registered/nested/person.json", source.getJSONObject("config").getStr("minioObjectKey"));
+            assertEquals("json", source.getJSONObject("config").getStr("fileFormat"));
+            assertEquals("November#2026", source.getJSONObject("config").getStr("excelSheetName"));
+            assertEquals("$.data.people", source.getJSONObject("config").getStr("jsonRecordPath"));
+            assertEquals("\t", source.getJSONObject("config").getStr("csvDelimiter"));
         }
         if (raw.equals("oceanbaseoracle")) {
             assertEquals("ORACLE", source.getJSONObject("config").getStr("compatibleMode"));

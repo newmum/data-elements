@@ -371,6 +371,8 @@ if (body?.batchGenerate == true) {
         catch (e) { exit 400, '目标库数据库类型不受支持' }
         var batchConfig = new DataSourceConfig()
         batchConfig.setDatabaseType(targetType)
+        // 同批预取的登记连接包含 Hive 模式；不得用请求中的模板配置覆盖实际目标。
+        batchConfig.setConnectorProperties(pool)
         batchConfig.setDatabase(firstValue(pool, ['database', 'dbName', 'dbMetaDbName'])
             || firstValue(registered, ['dbName', 'db_name']))
         batchConfig.setUsername(firstValue(registered, ['username']) || firstValue(pool, ['username', 'user']))

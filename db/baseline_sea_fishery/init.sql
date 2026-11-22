@@ -669,7 +669,7 @@ CREATE TABLE `da_catalog_item_t` (
   `col_name` varchar(256) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '字段名称',
   `col_en` varchar(256) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '字段英文',
   `col_type` varchar(256) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '字段类型',
-  `col_comment` varchar(128) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '字段注释',
+  `col_comment` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci COMMENT '字段注释',
   `col_length` bigint DEFAULT NULL COMMENT '字段长度',
   `is_pk` varchar(4) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '是否主键',
   `is_masking` int DEFAULT NULL COMMENT '是否脱敏',
@@ -2873,6 +2873,113 @@ CREATE TABLE `kb_thesaurus_t` (
   KEY `ix_kb_thesaurus_domain` (`tenant_id`,`domain_code`,`status`,`is_del`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='知识服务-专业词库';
 
+-- TABLE lake_egress_config_t
+CREATE TABLE `lake_egress_config_t` (
+  `tid` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '主键标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '租户标识',
+  `zone_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '湖仓分层标识',
+  `zone_code` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '分层编码快照',
+  `zone_name` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '分层名称快照',
+  `datasource_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '出湖目标数据源标识',
+  `datasource_name` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '出湖目标数据源名称快照',
+  `target_schema` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '出湖目标 schema/数据库',
+  `overwrite_default` smallint NOT NULL DEFAULT '0' COMMENT '默认覆盖同名表：0否，1是',
+  `object_count` int NOT NULL DEFAULT '0' COMMENT '本次选择的已落湖对象数量',
+  `objects_json` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci COMMENT '已落湖对象快照 JSON：对象标识、源表、目标表',
+  `status` varchar(16) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'ENABLED' COMMENT '状态：ENABLED启用、DISABLED停用',
+  `description` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '配置说明',
+  `created_by` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '创建人',
+  `updated_by` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '更新人',
+  `created_time` datetime(6) DEFAULT NULL COMMENT '创建时间',
+  `updated_time` datetime(6) DEFAULT NULL COMMENT '更新时间',
+  `is_del` smallint NOT NULL DEFAULT '0' COMMENT '删除标志：0正常，1删除',
+  PRIMARY KEY (`tid`),
+  KEY `ix_lake_egress_config_zone` (`tenant_id`,`zone_id`,`is_del`),
+  KEY `ix_lake_egress_config_status` (`tenant_id`,`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='数据资源（湖仓底座）-出湖配置';
+
+-- TABLE lake_egress_record_t
+CREATE TABLE `lake_egress_record_t` (
+  `tid` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '主键标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '租户标识',
+  `config_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '出湖配置标识',
+  `zone_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '湖仓分层标识',
+  `zone_code` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '分层编码快照',
+  `zone_name` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '分层名称快照',
+  `datasource_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '出湖目标数据源标识',
+  `datasource_name` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '出湖目标数据源名称快照',
+  `target_schema` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '出湖目标 schema/数据库快照',
+  `trigger_type` varchar(16) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '触发方式：MANUAL手动',
+  `status` varchar(16) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'PENDING' COMMENT '状态：PENDING排队、RUNNING运行、SUCCESS成功、FAILED失败、SKIPPED跳过',
+  `object_count` int NOT NULL DEFAULT '0' COMMENT '本次出湖对象数量',
+  `row_count` bigint NOT NULL DEFAULT '0' COMMENT '本次写入目标库行数',
+  `detail_json` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci COMMENT '逐对象明细 JSON：源表、目标表、行数、是否覆盖',
+  `error_msg` varchar(1000) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '失败原因',
+  `created_by` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '触发人',
+  `created_time` datetime(6) DEFAULT NULL COMMENT '创建时间',
+  `updated_time` datetime(6) DEFAULT NULL COMMENT '更新时间',
+  `is_del` smallint NOT NULL DEFAULT '0' COMMENT '删除标志：0正常，1删除',
+  PRIMARY KEY (`tid`),
+  KEY `ix_lake_egress_record_zone` (`tenant_id`,`zone_id`,`created_time`),
+  KEY `ix_lake_egress_record_status` (`tenant_id`,`status`,`created_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='数据资源（湖仓底座）-出湖执行记录';
+
+-- TABLE lake_sync_record_t
+CREATE TABLE `lake_sync_record_t` (
+  `tid` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '主键标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '租户标识',
+  `zone_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '湖仓分层标识',
+  `zone_code` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '分层编码快照',
+  `zone_name` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '分层名称快照',
+  `source_id` varchar(32) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '本次落湖的数据源标识快照',
+  `object_ref` varchar(128) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '本次落湖的源表名快照；分层/数据源级任务为空',
+  `trigger_type` varchar(16) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '触发方式：MANUAL手动、SCHEDULED定时',
+  `status` varchar(16) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'PENDING' COMMENT '状态：PENDING排队、RUNNING运行、SUCCESS成功、FAILED失败、SKIPPED跳过',
+  `rule_code` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '本次落湖采用的入湖规则编号，空表示未配置规则直接落湖',
+  `source_summary` varchar(1000) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '来源快照：数据源与源表范围摘要',
+  `target_summary` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '落湖目标快照：分层 schema 与 Iceberg 位置摘要',
+  `started_at` datetime(6) DEFAULT NULL COMMENT '开始执行时间',
+  `finished_at` datetime(6) DEFAULT NULL COMMENT '执行结束时间',
+  `duration_ms` bigint DEFAULT NULL COMMENT '执行耗时毫秒',
+  `table_count` int NOT NULL DEFAULT '0' COMMENT '本次涉及表数量',
+  `row_count` bigint NOT NULL DEFAULT '0' COMMENT '本次写入行数',
+  `detail_json` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci COMMENT '逐表明细 JSON：源表、目标表、模式、行数、水位',
+  `error_msg` varchar(1000) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '失败原因',
+  `created_by` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '触发人',
+  `created_time` datetime(6) DEFAULT NULL COMMENT '创建时间',
+  `updated_time` datetime(6) DEFAULT NULL COMMENT '更新时间',
+  `is_del` smallint NOT NULL DEFAULT '0' COMMENT '删除标志：0正常，1删除',
+  PRIMARY KEY (`tid`),
+  KEY `idx_lake_sync_record_zone` (`tenant_id`,`zone_id`,`started_at`),
+  KEY `idx_lake_sync_record_status` (`tenant_id`,`status`,`started_at`),
+  KEY `idx_lake_sync_record_trigger` (`tenant_id`,`trigger_type`,`started_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='数据资源（湖仓底座）-落湖执行记录';
+
+-- TABLE lake_sync_task_t
+CREATE TABLE `lake_sync_task_t` (
+  `tid` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '主键标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '租户标识',
+  `zone_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '湖仓分层标识',
+  `scope_type` varchar(16) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'ZONE' COMMENT '任务作用域：ZONE分层、DATASOURCE数据源、TABLE落湖表',
+  `source_id` varchar(32) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '任务绑定的数据源标识；分层级任务为空',
+  `object_ref` varchar(128) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '任务绑定的源表名；仅表级任务填写',
+  `cron` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT 'Cron 表达式，支持 5 段或 6 段',
+  `status` varchar(16) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'DISABLED' COMMENT '状态：ENABLED启用、DISABLED停用',
+  `last_fire_at` datetime(6) DEFAULT NULL COMMENT '最近触发时间',
+  `next_fire_at` datetime(6) DEFAULT NULL COMMENT '下次触发时间',
+  `lock_ttl_seconds` int NOT NULL DEFAULT '600' COMMENT '执行锁租期秒数，5-3600',
+  `description` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '任务说明',
+  `created_by` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '创建人',
+  `updated_by` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '更新人',
+  `created_time` datetime(6) DEFAULT NULL COMMENT '创建时间',
+  `updated_time` datetime(6) DEFAULT NULL COMMENT '更新时间',
+  `is_del` smallint NOT NULL DEFAULT '0' COMMENT '删除标志：0正常，1删除',
+  PRIMARY KEY (`tid`),
+  KEY `idx_lake_sync_task_due` (`tenant_id`,`status`,`next_fire_at`),
+  KEY `idx_lake_sync_task_zone` (`tenant_id`,`zone_id`,`is_del`),
+  KEY `ix_lake_sync_task_scope` (`tenant_id`,`zone_id`,`scope_type`,`source_id`,`object_ref`,`is_del`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='数据资源（湖仓底座）-分层定时落湖任务';
+
 -- TABLE lake_zone_object_t
 CREATE TABLE `lake_zone_object_t` (
   `tid` varchar(32) COLLATE utf8mb4_general_ci NOT NULL COMMENT '主键标识',
@@ -2882,6 +2989,10 @@ CREATE TABLE `lake_zone_object_t` (
   `object_ref` varchar(128) COLLATE utf8mb4_general_ci NOT NULL COMMENT '对象引用：表标识、视图名、文件路径或接口编码',
   `object_name` varchar(128) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '对象名称',
   `source_id` varchar(32) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '来源数据源或来源对象标识',
+  `target_table` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '落湖目标表名，默认同对象引用',
+  `sync_mode` varchar(16) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'FULL' COMMENT '落湖模式：FULL全量、INCREMENTAL增量',
+  `watermark_column` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '增量同步水位字段，增量模式必填',
+  `last_watermark` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '最近一次成功同步的水位值',
   `lifecycle_status` varchar(16) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'REGISTERED' COMMENT '生命周期：REGISTERED已登记、ONLINE在线、OFFLINE下线、ARCHIVED归档',
   `last_sync_at` datetime(6) DEFAULT NULL COMMENT '最近同步时间',
   `registered_by` varchar(32) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '登记人',
@@ -2889,7 +3000,7 @@ CREATE TABLE `lake_zone_object_t` (
   `updated_time` datetime(6) DEFAULT NULL COMMENT '更新时间',
   `is_del` tinyint NOT NULL DEFAULT '0' COMMENT '删除标志：0正常，1删除',
   PRIMARY KEY (`tid`),
-  UNIQUE KEY `uk_lake_zone_object` (`tenant_id`,`zone_id`,`object_type`,`object_ref`,`is_del`),
+  UNIQUE KEY `ux_lake_zone_object_source` (`tenant_id`,`zone_id`,`object_type`,`source_id`,`object_ref`,`is_del`),
   KEY `idx_lake_zone_object_zone` (`tenant_id`,`zone_id`,`lifecycle_status`,`is_del`),
   KEY `idx_lake_zone_object_ref` (`object_ref`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='数据资源（湖仓底座）-已纳管对象清单';

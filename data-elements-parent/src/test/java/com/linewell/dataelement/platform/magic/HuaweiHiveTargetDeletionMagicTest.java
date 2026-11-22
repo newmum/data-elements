@@ -933,7 +933,9 @@ class HuaweiHiveTargetDeletionMagicTest {
             assertEquals(false, request.get("reuseExistingOnly"));
             boolean validate = Boolean.TRUE.equals(request.get("validateOnly"));
             validationCalls.add(validate);
-            return validate ? Map.of("valid", true) : Map.of("created", !existingTable);
+            // The physical endpoint confirms actual columns before new registration proceeds.
+            return validate ? Map.of("valid", true)
+                    : Map.of("created", !existingTable, "tableItems", request.get("tableItems"));
         }
     }
 }

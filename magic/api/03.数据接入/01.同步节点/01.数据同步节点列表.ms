@@ -11,11 +11,12 @@
   "paths": [],
   "requestBody": "{\n  \"keyword\": \"主节点\"\n}",
   "responseBody": "{\n  \"list\": [],\n  \"total\": 0\n}",
-  "description": "查询当前行业的抽取和推送节点。health 检测本租户已保存节点，diagnostics 读取已保存 NiFi 节点的有限指标。列表回显当前配置版本的最近检测。",
+  "description": "查询当前行业的抽取和推送节点。health 检测本租户已保存节点，diagnostics 读取有限指标。password 仅在编辑者主动点击时读取 nodeId 指定的本租户有效节点密码，响应禁止缓存；列表仅返回是否配置密码及最近检测，不返回密码。",
   "script": null
 }
 ================================
 import tableSort
+import tableRead
 import tenantRuntime
 import '@/common/nifiruntime' as readConfiguration
 import cn.hutool.http.HttpRequest
@@ -93,6 +94,20 @@ if (text(body?.nodeType) == 'push') {
 }
 
 var action = text(body?.action)
+if (action == 'password') {
+    // 编辑者主动查看单个已保存节点的密码；名单不回传密码，节点ID不能扩大当前租户范围。
+    var nodeId = text(body?.nodeId).trim()
+    if (nodeId == '' || nodeId.length() > 64) { exit 400, '请选择需要查看密码的数据抽取节点' }
+    var query = tableRead.from('nifi_node_t', 'n', tenantId)
+    query.where(tableRead.all([
+        tableRead.equal(tableRead.column('n','tid','TEXT'),nodeId),
+        tableRead.equal(tableRead.coalesce([tableRead.column('n','is_del','NUMBER'),0]),0)
+    ]))
+    var rows = query.rows({auth_password:tableRead.column('n','auth_password','TEXT')},1)
+    if (rows.isEmpty()) { exit 404, '数据抽取节点不存在或无权访问' }
+    return ResponseEntity.ok().header('Cache-Control','no-store').header('Pragma','no-cache')
+        .body(CommonResponse.success({nodeId:nodeId,authPassword:text(rows[0].auth_password)}))
+}
 if (action == 'health' || action == 'diagnostics') {
     var nodeId = text(body?.nodeId).trim()
     var started = new Date().getTime()
@@ -219,6 +234,7 @@ for (row in (rows == null ? [] : rows)) {
         baseUrl: row.baseUrl == null ? row.base_url : row.baseUrl,
         rootProcessGroupId: row.rootProcessGroupId == null ? row.root_process_group_id : row.rootProcessGroupId,
         authUsername: row.authUsername == null ? row.auth_username : row.authUsername,
+        hasAuthPassword: text(row.authPassword == null ? row.auth_password : row.authPassword) != '',
         insecureTls: row.insecureTls == null ? row.insecure_tls : row.insecureTls,
         jdbcDriverDirectory: row.jdbcDriverLocations == null ? row.jdbc_driver_locations : row.jdbcDriverLocations,
         remark: row.remark,

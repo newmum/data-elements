@@ -33,7 +33,21 @@ import org.ssssssss.script.MagicScript;
 import org.ssssssss.script.MagicScriptContext;
 import org.ssssssss.script.runtime.ExitValue;
 
-class TableSnapshotListMagicTest {
+public class TableSnapshotListMagicTest {
+    public static String utf8Hex(String value) {return value==null?null:java.util.HexFormat.of().withUpperCase().formatHex(value.getBytes(java.nio.charset.StandardCharsets.UTF_8));}
+    @Test void oracleCaseDistinctPhysicalNamesStaySeparateInRawAndPagedSnapshotsAtTwentyAndHundred()throws Exception {
+        for(int count:List.of(20,100)) {
+            var f=new Fixture("MySQL");f.jdbc.execute("CREATE ALIAS IF NOT EXISTS HEX FOR 'com.linewell.dataelement.platform.magic.TableSnapshotListMagicTest.utf8Hex'");
+            f.jdbc.update("update db_datasource_t set db_type='oracle' where tid='source'");
+            f.table("upper","TEST0809.CAR","普通表","业务表",1,0,"2026-11-21");
+            f.table("lower","TEST0809.\"car\"","原有业务表","业务表",1,4,"2026-11-21");
+            f.table("mixed","TEST0809.\"Car\"","大小写不同表","业务表",1,3,"2026-11-21");
+            for(int i=3;i<count;i++)f.table("row-"+i,"TEST0809.T"+i,"现有表","业务表",1,i,"2026-11-21");
+            for(var options:List.of(Map.<String,Object>of("allSnapshots",true),Map.<String,Object>of("allSnapshots",true,"catalogPaged",true))) {
+                var page=f.page(count,options);assertEquals(count,number(page,"total"));assertTrue(ids(page).containsAll(List.of("upper","lower","mixed")));assertEquals(4,f.source.reads.size());
+            }
+        }
+    }
     private static final List<String> GOVERNANCE_COLUMNS = List.of(
             "field_governance_config", "dictionary_profiles", "dictionary_profile", "dictionary_categories");
     private static final List<String> GOVERNANCE_KEYS = List.of(
@@ -471,6 +485,7 @@ class TableSnapshotListMagicTest {
                     insert into db_datasource_t values ('source','police','db','app','org',0),
                         ('foreign-source','other','secret','app','org',0), ('deleted-source','police','deleted','app','org',1)
                     """);
+            jdbc.execute("alter table db_datasource_t add db_type varchar(32) default 'mysql'");
             jdbc.execute("""
                     create table db_table_t(tid varchar(64), datasource_id varchar(64), table_name varchar(255),
                         table_name_en varchar(255), table_name_cn varchar(255), table_comment varchar(500), table_type varchar(64),

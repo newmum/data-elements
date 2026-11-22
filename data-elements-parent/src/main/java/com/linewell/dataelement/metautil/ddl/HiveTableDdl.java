@@ -4,6 +4,7 @@ import com.alibaba.druid.DbType;
 import com.alibaba.druid.sql.SQLUtils;
 import com.alibaba.druid.sql.ast.statement.SQLCreateTableStatement;
 import com.linewell.dataelement.metautil.model.dto.ColumnInfo;
+import com.linewell.dataelement.metautil.model.dto.DataSourceConfig;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -16,6 +17,10 @@ public final class HiveTableDdl {
     private static final Pattern NUMERIC_ARGS = Pattern.compile("\\((\\d+)\\s*(?:,\\s*(-?\\d+))?\\)");
 
     public static String generate(String tableName, List<ColumnInfo> columns, String comment) {
+        return generate(null, tableName, columns, comment);
+    }
+
+    public static String generate(DataSourceConfig config, String tableName, List<ColumnInfo> columns, String comment) {
         if (columns == null || columns.isEmpty()) throw new IllegalArgumentException("字段列表不能为空");
         String[] names = text(tableName).split("\\.", -1);
         if (names.length > 2) throw new IllegalArgumentException("Hive 表名最多包含数据库名和表名");
@@ -38,11 +43,15 @@ public final class HiveTableDdl {
         }
         sql.append("\n)");
         if (!text(comment).isEmpty()) sql.append(" COMMENT '").append(literal(comment)).append("'");
-        // The production Hive deployment has verified this multi-character row delimiter.
-        // Keep visible escapes in the SQL sent to Hive, including the final literal backslash-n.
-        return sql.append("\nROW FORMAT DELIMITED\nFIELDS TERMINATED BY '\\001'\n")
-                .append("LINES TERMINATED BY '\\002\\002\\002\\003\\003\\003\\n'\n")
-                .append("STORED AS TEXTFILE;\n").toString();
+        // Apache Hive accepts only newline here. Preserve the verified MRS policy
+        // unless the registered connection explicitly selects open-source Hive.
+        boolean openSource = config != null && "open-source".equalsIgnoreCase(config.getHiveConnectionMode());
+        String rowTerminator = openSource ? "\\n" : "\\002\\002\\002\\003\\003\\003\\n";
+        sql.append("\nROW FORMAT DELIMITED\nFIELDS TERMINATED BY '\\001'");
+        if (openSource) sql.append(" ESCAPED BY '\\\\'");
+        sql.append("\nLINES TERMINATED BY '").append(rowTerminator).append("'\nSTORED AS TEXTFILE");
+        if (openSource) sql.append("\nTBLPROPERTIES ('serialization.escape.crlf'='true')");
+        return sql.append(";\n").toString();
     }
 
     static String type(ColumnInfo column) {

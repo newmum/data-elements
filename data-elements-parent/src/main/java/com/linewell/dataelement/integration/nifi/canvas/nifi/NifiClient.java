@@ -250,7 +250,7 @@ public class NifiClient {
         JsonNode services=extensionTypes("/flow/controller-service-types","controllerServiceTypes");
         ObjectNode required=mappingBundle();
         java.util.List<String> mismatches=new java.util.ArrayList<>();
-        for(var entry:java.util.List.of(java.util.Map.entry(processors,"com.linewell.dataelement.nifi.HaitongTransformRecord"),java.util.Map.entry(services,"com.linewell.dataelement.nifi.JdbcHaitongDictionaryService"))){
+        for(var entry:java.util.List.of(java.util.Map.entry(processors,"com.linewell.dataelement.nifi.HaitongTransformRecord"),java.util.Map.entry(processors,"com.linewell.dataelement.nifi.HaitongNormalizeJsonRecords"),java.util.Map.entry(services,"com.linewell.dataelement.nifi.JdbcHaitongDictionaryService"))){
             int count=0;
             java.util.SortedSet<String> available=new java.util.TreeSet<>();
             for(JsonNode type:entry.getKey())if(type.path("type").asText().equals(entry.getValue())){
@@ -626,7 +626,7 @@ public class NifiClient {
             if (!selected.type().equals(type)) throw new IllegalStateException("LinewellPutDatabaseRecord 类型与最新 Bundle 不一致：" + type);
             component.set("bundle", selected.bundle());
         }
-        if(type.equals("com.linewell.dataelement.nifi.HaitongTransformRecord"))component.set("bundle",mappingBundle());
+        if(type.equals("com.linewell.dataelement.nifi.HaitongTransformRecord")||type.equals("com.linewell.dataelement.nifi.HaitongNormalizeJsonRecords"))component.set("bundle",mappingBundle());
         if(type.equals(com.linewell.dataelement.integration.nifi.canvas.compile.DateTableFetchPolicy.TYPE))component.set("bundle",dateFetchBundle());
         component.put("name", name);
         ObjectNode pos = mapper.createObjectNode().put("x", x).put("y", y);

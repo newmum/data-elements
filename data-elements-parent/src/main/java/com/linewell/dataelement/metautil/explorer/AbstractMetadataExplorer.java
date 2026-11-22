@@ -312,13 +312,7 @@ public abstract class AbstractMetadataExplorer implements MetadataExplorer {
             if (identifier.quoted()) return com.linewell.dataelement.metautil.ddl.DdlDialect.quote(dbType,identifier.value());
             name = identifier.value();
         }
-        if (!name.matches("[A-Za-z_][A-Za-z0-9_$#]*"))
-            return com.linewell.dataelement.metautil.ddl.DdlDialect.quote(dbType,name);
-        var lexer = com.alibaba.druid.sql.parser.SQLParserUtils.createLexer(name,
-                com.linewell.dataelement.metautil.ddl.DdlDialect.parser(dbType));
-        lexer.nextToken();
-        return lexer.token() == com.alibaba.druid.sql.parser.Token.IDENTIFIER ? name
-                : com.linewell.dataelement.metautil.ddl.DdlDialect.quote(dbType,name);
+        return DdlDialect.requiresQuoting(dbType,name) ? DdlDialect.quote(dbType,name) : name;
     }
 
     private static String normalizeTableNameForDdl(DatabaseType type, String tableName) {

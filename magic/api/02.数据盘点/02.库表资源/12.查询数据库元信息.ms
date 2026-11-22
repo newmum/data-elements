@@ -44,6 +44,7 @@
 ================================
 import '@/common/datasourceConnectionConfig' as datasourceConnectionConfig
 import tenantRuntime
+import com.linewell.dataelement.metautil.ddl.DdlDialect
 import hwhive
 import cn.hutool.core.date.DateUtil
 import jsons
@@ -242,7 +243,19 @@ if (tableAsset != null) {
             createTime: createTime, updateTime: null }
     } else {
         var probeName = physicalName + ''
-        if (sourceConfig.getDatabaseType().isRelational()) {
+        if (sourceConfig.getDatabaseType() == DatabaseType.ORACLE || sourceConfig.getDatabaseType() == DatabaseType.OCEANBASE_ORACLE) {
+            // Oracle 单表身份保留引号；两次有界技术查询读取概览与当前行数，不扫描整个可见库。
+            var parts = DdlDialect.names(probeName)
+            if (parts.size() > 2) { exit 400, '仅支持表名或模式.表名' }
+            if (parts.size() == 2) {
+                var owner = parts[0]
+                sourceConfig.setSchema(owner.quoted() ? DdlDialect.quote(DatabaseType.ORACLE, owner.value()) : owner.value())
+            } else if (sourceConfig.getDatabaseType() == DatabaseType.OCEANBASE_ORACLE && blank(sourceConfig.getSchema())) {
+                sourceConfig.setSchema(sourceConfig.getUsername().split('@')[0].trim())
+            }
+            info = metadataExplorerService.getTableSummary(sourceConfig, probeName)
+            if (info == null) { exit 422, '未读取到当前表概览，请检查来源表和模式配置' }
+        } else if (sourceConfig.getDatabaseType().isRelational()) {
             // Normalize an owner/schema-qualified identifier before passing it to dialect explorers.
             var parts = probeName.split('\\.')
             if (parts.size() > 2) { exit 400, '仅支持表名或模式.表名' }

@@ -1,12 +1,17 @@
 import type { CanvasDsl } from '../types/dsl.ts';
 import { sameExecutableDsl } from './pipelineVersion.ts';
 
-type Mapping = { primaryProcessorIds?: Record<string, string>; processorIdToCanvasNode?: Record<string, string> } | null | undefined;
+type Mapping = { primaryProcessorIds?: Record<string, string>; processorIdToCanvasNode?: Record<string, string>;
+  candidate?: { processGroupId?: string }; runtimeNodeId?: string } | null | undefined;
 type Change = { nodeId: string; field: string; currentValue: string | null; status: string };
 
 /** 已有组但缺少映射时不能当成首次部署，否则可能破坏历史流程。 */
 export function saveSyncMode(group: string | null | undefined, mapping: Mapping, deployedHash?: string | null): 'deploy' | 'missing-mapping' | 'sync' {
-  if (!group?.trim()) return mapping || deployedHash ? 'missing-mapping' : 'deploy';
+  const hasProcessorBindings = [mapping?.primaryProcessorIds, mapping?.processorIdToCanvasNode]
+    .some(bindings => Object.values(bindings ?? {}).some(id => Boolean(id?.trim())));
+  // New tasks can carry runtimeNodeId and empty maps before their first deployment.
+  if (!group?.trim()) return hasProcessorBindings || mapping?.candidate?.processGroupId?.trim() || deployedHash?.trim()
+    ? 'missing-mapping' : 'deploy';
   if (!mapping?.primaryProcessorIds || !Object.keys(mapping.primaryProcessorIds).length || !mapping.processorIdToCanvasNode
       || !Object.keys(mapping.processorIdToCanvasNode).length) return 'missing-mapping';
   return 'sync';

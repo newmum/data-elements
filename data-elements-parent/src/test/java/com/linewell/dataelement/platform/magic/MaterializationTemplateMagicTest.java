@@ -115,6 +115,7 @@ class MaterializationTemplateMagicTest {
 
     @ParameterizedTest
     @CsvSource({"oracle,DATE,datetime", "oceanbaseoracle,DATE,datetime", "dameng,DATE,datetime",
+            "elasticsearch,date,datetime", "ELASTICSEARCH,DATE,datetime",
             "postgresql,DATE,date", "api,DATE,date", "FILE_UPLOAD,DATE,date",
             "sqlserver,TIMESTAMP,blob", "mssql,TIMESTAMP,blob", "postgresql,TIMESTAMP,datetime",
             "api,TIMESTAMP,datetime", "FILE_UPLOAD,TIMESTAMP,datetime"})
@@ -137,7 +138,7 @@ class MaterializationTemplateMagicTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"", "api", "ftp", "kafka", "minio", "FILE_UPLOAD"})
+    @ValueSource(strings = {"", "api", "ftp", "kafka", "minio", "FILE_UPLOAD", "elasticsearch"})
     void connectorIndependentSnapshotsKeepConstantReadsForTwentyAndHundredFields(String sourceType) throws Exception {
         List<Integer> reads = new ArrayList<>();
         for (int count : List.of(20, 100)) {

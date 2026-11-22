@@ -109,8 +109,41 @@ public class DslCompiler {
     private final FieldMappingService fieldMappingService;
     private UnifiedMappingService unifiedMappingService;
     @Autowired public void setUnifiedMappingService(UnifiedMappingService service){this.unifiedMappingService=service;}
+    private com.linewell.dataelement.integration.nifi.canvas.mapping.RegisteredMappingSchemaService registeredSchemas;
+    @Autowired public void setRegisteredSchemas(com.linewell.dataelement.integration.nifi.canvas.mapping.RegisteredMappingSchemaService service){registeredSchemas=service;}
     private com.linewell.dataelement.integration.nifi.canvas.mapping.MappingVersionStore mappingVersions;
     @Autowired public void setMappingVersions(com.linewell.dataelement.integration.nifi.canvas.mapping.MappingVersionStore store){mappingVersions=store;}
+
+    private Map<String,JsonNode> registeredSourceShapes(Pipeline pipeline) {
+        Map<String,JsonNode> references=new LinkedHashMap<>();ObjectMapper json=new ObjectMapper();
+        for(Pipeline.Node node:pipeline.dsl().nodes()) {
+            if(!Set.of("source.kafka","source.minio","source.ftp","source.sftp").contains(node.manifestKey()))continue;
+            String source=configText(node.config(),"registeredDatasourceId"),table=configText(node.config(),"sourceTableId");
+            if(source.isBlank()&&table.isBlank())continue;
+            if(source.isBlank()||table.isBlank())throw new MappingException("RESOURCE_FORBIDDEN","结构化来源须同时指定已登记数据源和数据表");
+            references.put(node.id(),json.createObjectNode().put("datasourceId",source).put("tableId",table));
+        }
+        if(references.isEmpty())return Map.of();
+        if(registeredSchemas==null)throw new IllegalStateException("已登记来源字段解析服务未配置");
+        Map<String,JsonNode> result=new LinkedHashMap<>();
+        // One bounded tenant/role-scoped batch, with no database calls inside the node loop.
+        var registered=registeredSchemas.resolve(references);
+        registered.forEach((node,table)->{
+            var connection=table.connections().get(table.datasourceId());
+            String type=Objects.toString(connection.getOrDefault("dbType",connection.getOrDefault("databaseType","")),"").toLowerCase(Locale.ROOT);
+            JsonNode shape=table.sourceRecordShape();
+            if(shape==null||shape.isNull()) {
+                if(Set.of("kafka","minio","ftp","sftp").contains(type))throw new MappingException("SOURCE_SHAPE_REQUIRED","结构化来源缺少原始字段路径快照，请在登记页重新采集字段");
+                return; // A traditional uploaded report can retain its existing registered relational contract.
+            }
+            new com.linewell.dataelement.mapping.core.StructuredJsonRecords.Contract(shape);
+            Set<String> names=new HashSet<>();shape.path("fieldPaths").fieldNames().forEachRemaining(names::add);
+            for(JsonNode field:table.fields())if(!names.contains(field.path("name").asText()))
+                throw new MappingException("SOURCE_SHAPE_STALE","来源字段与路径快照不一致，请重新采集字段");
+            result.put(node,shape);
+        });
+        return result;
+    }
 
     public void preflightMapping(Pipeline pipeline){
         Map<String,JsonNode> specs=javaMappingSpecifications(HiveSinkPublicationPolicy.forPublication(pipeline));
@@ -142,6 +175,8 @@ public class DslCompiler {
     public void preflightSources(Pipeline pipeline) {
         if (validateDateFetchConfigurations(pipeline)) nifi.requireDateFetchExtension();
         preflightScriptProcesses(pipeline);
+        Map<String,JsonNode> sourceShapes=registeredSourceShapes(pipeline);
+        if(!sourceShapes.isEmpty())nifi.requireMappingExtension();
     }
 
     /** All auto schedules are already persisted. Read the selected runtime timezone once per graph. */
@@ -296,6 +331,8 @@ public class DslCompiler {
         preflightSchedules(pipeline);
         preflightWriters(pipeline);
         preflightScriptProcesses(pipeline);
+        Map<String,JsonNode> sourceShapes=registeredSourceShapes(pipeline);
+        if(!sourceShapes.isEmpty())nifi.requireMappingExtension();
         Map<String,JsonNode> javaSpecs=javaMappingSpecifications(pipeline);
         Map<String,UnifiedMappingService.Compiled> preparedJavaPlans=javaSpecs.isEmpty()?Map.of():unifiedMappingService.compileBatch(javaSpecs);
         GlobalJsonRecordServices globalJson = GlobalJsonRecordServices.resolve(nifi, pipeline, usesSqlSourceRecordWriter(pipeline));
@@ -395,11 +432,22 @@ public class DslCompiler {
 
             // HDFS writers use the server-managed CSV writer and Kerberos files,
             // not the HiveServer2 connection pool declared for HiveRecordPut.
+            boolean unsecuredOpenSourceHive = Set.of("source.hive", "sink.hive").contains(m.key())
+                    && "open-source".equalsIgnoreCase(configText(cfg, "hiveConnectionMode"))
+                    && !"KERBEROS".equalsIgnoreCase(configText(cfg, "authMode"));
+            if (isHiveBatchPutHdfs(m, "put", cfg) && HIVE_BATCH_LAKE_MODE.equals(hiveHdfsWriterMode(cfg))) {
+                String principal = firstNonBlankStatic(configText(cfg, "userPrincipal"), configText(cfg, "kerberosPrincipal"), configText(cfg, "clientPrincipal"));
+                String keytab = firstNonBlankStatic(configText(cfg, "keytabPath"), configText(cfg, "keytab"));
+                if (!principal.isBlank() || !keytab.isBlank()) {
+                    if (principal.isBlank() || keytab.isBlank()) throw new IllegalStateException("原生 PutHDFS Kerberos 认证需要完整的 principal 和 keytab 配置");
+                    nc.csIds.put("hdfsKerberos", createOrReuseControllerService(pgId, controllerServiceScopeId,
+                            "org.apache.nifi.kerberos.KerberosKeytabUserService", n.label() + "/HDFS Kerberos",
+                            Map.of("Kerberos Principal", principal, "Kerberos Keytab", keytab)).id());
+                }
+            }
             if (spec.controllerServices() != null && !isHiveBatchPutHdfs(m, "put", cfg)) {
                 for (var csSpec : spec.controllerServices()) {
-                    if ("source.hive".equals(m.key()) && "open-source".equals(configText(cfg,"hiveConnectionMode"))
-                            && "kerberos".equals(csSpec.localId())
-                            && !"KERBEROS".equalsIgnoreCase(configText(cfg,"authMode"))) continue;
+                    if (unsecuredOpenSourceHive && "kerberos".equals(csSpec.localId())) continue;
                     Map<String, String> resolved = resolveProps(csSpec.properties(), cfg, nc.csIds, sharedCs);
                     String serviceType = resolveString(csSpec.type(), cfg, nc.csIds, sharedCs);
                     if ("source".equals(m.category()) && "dbcp".equals(csSpec.localId())
@@ -408,9 +456,7 @@ public class DslCompiler {
                         resolved = buildSourceDbcpProperties(cfg);
                         if (kerberosService != null) resolved.put("Kerberos User Service",kerberosService);
                     }
-                    if ("source.hive".equals(m.key()) && "dbcp".equals(csSpec.localId())
-                            && "open-source".equals(configText(cfg,"hiveConnectionMode"))
-                            && !"KERBEROS".equalsIgnoreCase(configText(cfg,"authMode")))
+                    if (unsecuredOpenSourceHive && "dbcp".equals(csSpec.localId()))
                         resolved.remove("Kerberos User Service");
                     appendJdbcDriverProperties(serviceType, cfg, resolved);
                     NifiEntity cs = createOrReuseControllerService(pgId, controllerServiceScopeId,
@@ -510,17 +556,19 @@ public class DslCompiler {
         }
         // Resolve once per deployment. Several Hive targets can share one
         // server-managed writer without a NiFi read per sink.
-        String hiveCsvWriterId = null;
+        Map<Boolean, String> hiveCsvWriterIds = new LinkedHashMap<>();
         Map<String, String> hiveHdfsWriterTypes = new LinkedHashMap<>();
         if (pipeline.dsl().nodes().stream().anyMatch(node ->
                 isHiveBatchPutHdfs(manifestByNode.get(node.id()), "put", cfgByNode.get(node.id())))) {
             // Both ordinary and partitioned Hive targets start from the same basic native template.
             // Partition routing/locations are maintained manually in NiFi, not probed at publication.
-            hiveCsvWriterId = resolveHiveCsvWriterServiceId(controllerServiceScopeId,globalJson);
             for (Pipeline.Node node : pipeline.dsl().nodes()) {
                 ComponentManifest manifest = manifestByNode.get(node.id());
                 Map<String, Object> cfg = cfgByNode.get(node.id());
                 if (!isHiveBatchPutHdfs(manifest, "put", cfg)) continue;
+                boolean openSource = "open-source".equalsIgnoreCase(configText(cfg, "hiveConnectionMode"));
+                hiveCsvWriterIds.computeIfAbsent(openSource, key ->
+                        resolveHiveCsvWriterServiceId(controllerServiceScopeId, globalJson, key));
                 String mode = hiveHdfsWriterMode(cfg);
                 hiveHdfsWriterTypes.computeIfAbsent(mode,
                         ignored -> resolveProcessorType(manifest, "put", HIVE_RECORD_PUT_TYPE, cfg));
@@ -537,7 +585,7 @@ public class DslCompiler {
         allCs.removeAll(globalJson.ids());
         // 受管服务按所属流程组批量启用，共用一次就绪期限；公共CSV Writer只核验状态。
         nifi.enableControllerServices(pgId, allCs,
-                hiveCsvWriterId == null ? Set.of() : Set.of(hiveCsvWriterId), 30_000L);
+                new LinkedHashSet<>(hiveCsvWriterIds.values()), 30_000L);
 
         // ---- PHASE 3：创建处理器，并建立节点内部连线。----
         for (Pipeline.Node n : pipeline.dsl().nodes()) {
@@ -563,7 +611,8 @@ public class DslCompiler {
             }
 
             if (isHiveBatchPutHdfs(m, "put", cfg)) {
-                buildHiveHdfsSink(pgId, n, nc, nodeLayout, cfg, sharedCs, hiveCsvWriterId,
+                buildHiveHdfsSink(pgId, n, nc, nodeLayout, cfg, sharedCs,
+                        hiveCsvWriterIds.get("open-source".equalsIgnoreCase(configText(cfg, "hiveConnectionMode"))),
                         hiveHdfsWriterTypes.get(hiveHdfsWriterMode(cfg)));
                 continue;
             }
@@ -588,8 +637,10 @@ public class DslCompiler {
                 normalizeJdbcSinkKeys(n, cfg, availableFields);
                 normalizeJdbcSinkTableName(cfg);
                 boolean typedJavaInput=pipeline.dsl().edges()!=null&&pipeline.dsl().edges().stream().anyMatch(e->e.target().equals(n.id())&&javaMappingPlans.containsKey(e.source()));
-                if (hasAvailableTemporalTargetColumns(cfg, availableFields)&&!typedJavaInput) {
-                    buildTemporalJdbcSink(pgId, n, m, spec, nc, nodeLayout, cfg, sharedCs, availableFields);
+                boolean insertAuditProjection = requiresLinewellInsertAuditProjection(m, cfg, availableFields);
+                if (insertAuditProjection || hasAvailableTemporalTargetColumns(cfg, availableFields)&&!typedJavaInput) {
+                    buildTemporalJdbcSink(pgId, n, m, spec, nc, nodeLayout, cfg, sharedCs, availableFields,
+                            !typedJavaInput, insertAuditProjection);
                     continue;
                 }
             }
@@ -720,6 +771,20 @@ public class DslCompiler {
                     nc.outlets.put(o.name(), new Outlet(nc.processorIds.get(o.processorRef()), o.relationship()));
                 }
             }
+        }
+
+        // Normalize the authorized source once, before any filter, branch or target mapping.
+        for(var source:sourceShapes.entrySet()) {
+            Pipeline.Node node=pipeline.dsl().nodes().stream().filter(item->item.id().equals(source.getKey())).findFirst().orElseThrow();
+            NodeCompilation nc=compiled.get(source.getKey());Outlet original=resolveOutlet(nc,"default");
+            NodeLayout nodeLayout=layoutByNode.get(source.getKey());
+            NifiEntity normalized=nifi.createProcessor(pgId,"com.linewell.dataelement.nifi.HaitongNormalizeJsonRecords",
+                    node.label()+"/登记字段规范化",nodeOriginX(nodeLayout)+2*PROCESSOR_COLUMN_GAP,
+                    nodeOriginY(nodeLayout)+5*PROCESSOR_ROW_GAP,Map.of("source-record-shape",source.getValue().toString()),null,null);
+            connectInternal(pgId,nc,original.processorId(),normalized.id(),original.relationship());
+            NifiEntity retained=nifi.createRetentionFunnel(pgId,nodeOriginX(nodeLayout)+3*PROCESSOR_COLUMN_GAP,nodeOriginY(nodeLayout)+5*PROCESSOR_ROW_GAP);
+            nifi.createConnection(pgId,normalized.id(),"PROCESSOR",retained.id(),"FUNNEL",List.of("failure"));
+            nc.processorIds.put("registered-normalize",normalized.id());nc.outlets.put("default",new Outlet(normalized.id(),"success"));
         }
 
         // ---- PHASE 4：创建跨组件边连接（源 outlet -> 目标 inlet）。----
@@ -947,7 +1012,7 @@ public class DslCompiler {
         // 反推工作表名，否则会错误地要求名为“report”的工作表。上报模板的
         // 数据页名称由登记表中文显示名确定；仍未带该元数据的历史/通用 FTP
         // 流程才保留原有的文件名推断，以兼容其既有约定。
-        String registeredSheetName = configText(cfg, "excelSheetName");
+        String registeredSheetName = java.util.Objects.toString(cfg.get("excelSheetName"), "");
         xlsProperties.put("Required Sheets", registeredSheetName == null || registeredSheetName.isBlank()
                 ? "${filename:replaceFirst('^(?:report_[^_]+_[^_]+_)?([^_]+)_.*$', '$1')}"
                 : registeredSheetName);
@@ -1093,7 +1158,8 @@ public class DslCompiler {
                 configText(cfg, "username"));
         String secretKey = firstNonBlankStatic(configText(cfg, "minioSecretKey"), configText(cfg, "secretKey"),
                 configText(cfg, "password"));
-        String prefix = firstNonBlankStatic(configText(cfg, "minioObjectKey"), configText(cfg, "minioPrefix"),
+        String selectedKey = java.util.Objects.toString(cfg.get("minioObjectKey"), "");
+        String prefix = firstNonBlankStatic(selectedKey, configText(cfg, "minioPrefix"),
                 configText(cfg, "objectPrefix"), configText(cfg, "prefix"));
         String schedulingPeriod = firstNonBlankStatic(configText(cfg, "schedulingPeriod"), "60 sec");
         if (bucket.isBlank() || accessKey.isBlank() || secretKey.isBlank()) {
@@ -1110,13 +1176,27 @@ public class DslCompiler {
                 listProperties, schedulingPeriod, firstNonBlankStatic(configText(cfg, "schedulingStrategy"), "TIMER_DRIVEN"));
         nc.processorIds.put("list", list.id());
 
+        String listed = list.id();
+        int selectedOffset = selectedKey.isBlank() ? 0 : 1;
+        if (!selectedKey.isBlank()) {
+            // Prefix listing can include other objects. Match the exact registered key
+            // before downloading; Base64 keeps quotes and EL syntax in names literal.
+            String encoded = java.util.Base64.getEncoder().encodeToString(selectedKey.getBytes(StandardCharsets.UTF_8));
+            NifiEntity selected = nifi.createProcessor(pgId, ROUTE_ON_ATTRIBUTE_TYPE,
+                    node.label() + "/已登记对象", x, y + PROCESSOR_ROW_GAP,
+                    Map.of("selected", "${filename:base64Encode():equals('" + encoded + "')}"), null, null);
+            nc.processorIds.put("select-object", selected.id());
+            connectInternal(pgId, nc, list.id(), selected.id(), "success");
+            listed = selected.id();
+        }
+
         Map<String, String> fetchProperties = minioS3Properties(endpoint, bucket, nc.csIds.get("minioCredentials"));
         // NiFi 2.x ListS3 emits the complete object key as filename (including
         // the registered prefix).  FetchS3Object no longer receives the legacy
         // s3.key attribute, so use filename to avoid issuing an empty-key read.
         fetchProperties.put("Object Key", "${filename}");
         NifiEntity fetch = nifi.createProcessor(pgId, "org.apache.nifi.processors.aws.s3.FetchS3Object",
-                node.label() + "/读取对象", x, y + PROCESSOR_ROW_GAP,
+                node.label() + "/读取对象", x, y + (1 + selectedOffset) * PROCESSOR_ROW_GAP,
                 fetchProperties, null, null);
         nc.processorIds.put("fetch", fetch.id());
 
@@ -1125,30 +1205,43 @@ public class DslCompiler {
         routes.put("json", "${filename:toLower():matches('.*\\.json$')}");
         routes.put("xls", "${filename:toLower():matches('.*\\.xls$')}");
         routes.put("xlsx", "${filename:toLower():matches('.*\\.xlsx$')}");
+        String textFormat = firstNonBlankStatic(configText(cfg, "fileFormat"), "csv");
+        if ("csv".equals(textFormat) || "json".equals(textFormat))
+            routes.put(textFormat, "${filename:toLower():matches('.*\\.(" + textFormat + "|txt)$')}");
         NifiEntity route = nifi.createProcessor(pgId, ROUTE_ON_ATTRIBUTE_TYPE,
-                node.label() + "/文件类型分流", x, y + 2 * PROCESSOR_ROW_GAP,
+                node.label() + "/文件类型分流", x, y + (2 + selectedOffset) * PROCESSOR_ROW_GAP,
                 routes, null, null);
         nc.processorIds.put("route-file-type", route.id());
 
         NifiEntity csv = createRecordConverter(pgId, node.label() + "/CSV 转记录",
-                x + PROCESSOR_COLUMN_GAP, y + PROCESSOR_ROW_GAP, nc.csIds.get("fileCsvReader"), sharedCs.get("jsonWriter"));
+                x + PROCESSOR_COLUMN_GAP, y + (1 + selectedOffset) * PROCESSOR_ROW_GAP, nc.csIds.get("fileCsvReader"), sharedCs.get("jsonWriter"));
         nc.processorIds.put("convert-csv", csv.id());
         NifiEntity xls = createRecordConverter(pgId, node.label() + "/XLS 转记录",
-                x + PROCESSOR_COLUMN_GAP, y + 2 * PROCESSOR_ROW_GAP, nc.csIds.get("fileXlsReader"), sharedCs.get("jsonWriter"));
+                x + PROCESSOR_COLUMN_GAP, y + (2 + selectedOffset) * PROCESSOR_ROW_GAP, nc.csIds.get("fileXlsReader"), sharedCs.get("jsonWriter"));
         nc.processorIds.put("convert-xls", xls.id());
         NifiEntity xlsx = createRecordConverter(pgId, node.label() + "/XLSX 转记录",
-                x + PROCESSOR_COLUMN_GAP, y + 3 * PROCESSOR_ROW_GAP, nc.csIds.get("fileXlsxReader"), sharedCs.get("jsonWriter"));
+                x + PROCESSOR_COLUMN_GAP, y + (3 + selectedOffset) * PROCESSOR_ROW_GAP, nc.csIds.get("fileXlsxReader"), sharedCs.get("jsonWriter"));
         nc.processorIds.put("convert-xlsx", xlsx.id());
 
         NifiEntity normalized = nifi.createProcessor(pgId, UPDATE_ATTRIBUTE_TYPE,
-                node.label() + "/规范化记录", x + 2 * PROCESSOR_COLUMN_GAP, y + 2 * PROCESSOR_ROW_GAP,
+                node.label() + "/规范化记录", x + 2 * PROCESSOR_COLUMN_GAP, y + (2 + selectedOffset) * PROCESSOR_ROW_GAP,
                 Map.of(), null, null);
         nc.processorIds.put("normalized", normalized.id());
 
-        connectInternal(pgId, nc, list.id(), fetch.id(), "success");
+        connectInternal(pgId, nc, listed, fetch.id(), selectedOffset == 0 ? "success" : "selected");
         connectInternal(pgId, nc, fetch.id(), route.id(), "success");
         connectInternal(pgId, nc, route.id(), csv.id(), "csv");
-        connectInternal(pgId, nc, route.id(), normalized.id(), "json");
+        String recordPath = firstNonBlankStatic(configText(cfg, "jsonRecordPath"), "$");
+        if (!"$".equals(recordPath)) {
+            NifiEntity json = nifi.createProcessor(pgId, EVALUATE_JSON_PATH_TYPE,
+                    node.label() + "/JSON 数据集", x + PROCESSOR_COLUMN_GAP, y + (4 + selectedOffset) * PROCESSOR_ROW_GAP,
+                    Map.of("Destination", "flowfile-content", "Return Type", "json", "dataset", recordPath), null, null);
+            nc.processorIds.put("extract-json-dataset", json.id());
+            connectInternal(pgId, nc, route.id(), json.id(), "json");
+            connectInternal(pgId, nc, json.id(), normalized.id(), "matched");
+        } else {
+            connectInternal(pgId, nc, route.id(), normalized.id(), "json");
+        }
         connectInternal(pgId, nc, route.id(), xls.id(), "xls");
         connectInternal(pgId, nc, route.id(), xlsx.id(), "xlsx");
         connectInternal(pgId, nc, csv.id(), normalized.id(), "success");
@@ -1401,20 +1494,34 @@ public class DslCompiler {
                         && availableLower.contains(column.name().toLowerCase(Locale.ROOT)));
     }
 
+    private boolean requiresLinewellInsertAuditProjection(ComponentManifest manifest, Map<String,Object> cfg, Set<String> availableFields) {
+        if (!usesLinewellJdbcWriter(manifest,"put",cfg)
+                || !"INSERT".equals(jdbcStatementType(configText(cfg,"statementType"),configText(cfg,"dbType"),cfg))) return false;
+        return targetColumnMetadata(cfg).stream().anyMatch(column -> isDatabaseClockInsertColumn(column.name())
+                && (availableFields.isEmpty() || availableFields.stream().anyMatch(field -> column.name().equalsIgnoreCase(field))));
+    }
+
+    private static boolean isDatabaseClockInsertColumn(String field) {
+        return "ODS_RKSJ".equalsIgnoreCase(field) || "ODS_GXSJ".equalsIgnoreCase(field);
+    }
+
     private void buildTemporalJdbcSink(String pgId, Pipeline.Node node, ComponentManifest manifest, CompileSpec spec, NodeCompilation nc,
                                        NodeLayout nodeLayout, Map<String, Object> cfg, Map<String, String> sharedCs,
-                                       Set<String> availableFields) {
+                                       Set<String> availableFields, boolean normalizeTemporalValues, boolean insertAuditProjection) {
         List<TargetColumnMetadata> columns = targetColumnMetadata(cfg);
         Set<String> availableLower = availableFields.stream()
                 .map(field -> field.toLowerCase(Locale.ROOT))
                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
         List<String> projections = new ArrayList<>();
         for (TargetColumnMetadata column : columns) {
+            // Linewell INSERT appends these SQL values to the column list. Its MERGE adapter
+            // removes incoming duplicates itself; INSERT requires a record projection first.
+            if (insertAuditProjection && isDatabaseClockInsertColumn(column.name())) continue;
             if (!availableLower.isEmpty() && !availableLower.contains(column.name().toLowerCase(Locale.ROOT))) {
                 continue;
             }
             String identifier = queryIdentifier(column.name());
-            projections.add(isTemporalColumn(column.type())
+            projections.add(normalizeTemporalValues && isTemporalColumn(column.type())
                     ? normalizeTemporalProjection(identifier)
                     : identifier + " AS " + identifier);
         }
@@ -1447,6 +1554,12 @@ public class DslCompiler {
         nc.processorIds.put(putSpec.localId(), put.id());
         nifi.createConnection(pgId, normalize.id(), "PROCESSOR", put.id(), "PROCESSOR", List.of("success"));
         nc.usedOutgoing.computeIfAbsent(normalize.id(), key -> new LinkedHashSet<>()).add("success");
+        if (insertAuditProjection) {
+            // Keep a failed projection's original input in a separate queue for controlled recovery.
+            NifiEntity retained=nifi.createRetentionFunnel(pgId,x+PROCESSOR_ROW_GAP,y);
+            nifi.createConnection(pgId,normalize.id(),"PROCESSOR",retained.id(),"FUNNEL",List.of("failure"));
+            nc.usedOutgoing.get(normalize.id()).add("failure");
+        }
         if (spec.outlets() != null) {
             for (CompileSpec.Outlet outlet : spec.outlets()) {
                 nc.outlets.put(outlet.name(), new Outlet(put.id(), outlet.relationship()));
@@ -1701,7 +1814,13 @@ public class DslCompiler {
         if (hdfsSink && profile.isBlank()) profile = "default";
         String mode = firstNonBlank(stringConfig(cfg, "metadataAccessMode"), stringConfig(cfg, "metadata_access_mode"));
         String connectionMode = firstNonBlank(stringConfig(cfg, "hiveConnectionMode"), stringConfig(cfg, "hive_connection_mode"));
-        if ("open-source".equalsIgnoreCase(connectionMode) && !hdfsSink) {
+        if ("open-source".equalsIgnoreCase(connectionMode)) {
+            if (hdfsSink && !Set.of("HDFS_BATCH", "BATCH").contains(configText(cfg, "hiveWriteMode").toUpperCase(Locale.ROOT))) {
+                throw new NodeConfigException("", manifestKey, "hiveWriteMode", "开源 Hive HDFS 写入请选择 NiFi 原生 PutHDFS", null);
+            }
+            if (hdfsSink && !"KERBEROS".equalsIgnoreCase(configText(cfg, "authMode"))) {
+                for (String field : List.of("userPrincipal", "kerberosPrincipal", "clientPrincipal", "keytabPath", "keytab", "krb5ConfPath")) cfg.remove(field);
+            }
             cfg.remove("hiveProfile"); cfg.remove("metadataAccessMode");
             return;
         }
@@ -1773,19 +1892,18 @@ public class DslCompiler {
             return;
         }
 
-        if (table.contains(".")) {
-            cfg.put("table", Arrays.stream(table.split("\\\\."))
-                    .map(DslCompiler::oracleIdentifier)
-                    .collect(java.util.stream.Collectors.joining(".")));
-            return;
-        }
-
+        var parts=com.linewell.dataelement.metautil.ddl.DdlDialect.names(table);
+        if(parts.size()>2)throw new IllegalArgumentException("Oracle兼容对象名最多包含Schema和表名");
         String schema = firstNonBlankStatic(configText(cfg, "schema"),
                 configText(cfg, "defaultSchema"), configText(cfg, "currentSchema"),
                 configText(cfg, "schemaName"), configText(cfg, "schema_name"),
                 configText(cfg, "owner"));
-        String normalizedTable = oracleIdentifier(table);
-        cfg.put("table", schema.isBlank() ? normalizedTable : oracleIdentifier(schema) + "." + normalizedTable);
+        if(parts.size()==1&&!schema.isBlank()) {
+            if(com.linewell.dataelement.metautil.ddl.DdlDialect.names(schema).size()!=1)
+                throw new IllegalArgumentException("Schema必须是单个名称");
+            table=schema+"."+table;
+        }
+        cfg.put("table",com.linewell.dataelement.metautil.ddl.DdlDialect.oracleObjectName(table));
     }
 
     private static String configText(Map<String, Object> cfg, String key) {
@@ -1798,13 +1916,6 @@ public class DslCompiler {
             if (value != null && !value.isBlank()) return value;
         }
         return "";
-    }
-
-    private static String oracleIdentifier(String identifier) {
-        String value = identifier == null ? "" : identifier.trim();
-        return value.startsWith("\"") && value.endsWith("\"")
-                ? value
-                : value.toUpperCase(Locale.ROOT);
     }
 
     private List<String> stableKeyColumnNames(List<TargetColumnMetadata> columns) {
@@ -2492,7 +2603,9 @@ public class DslCompiler {
         String key = node.manifestKey() == null ? "" : node.manifestKey();
         return switch (key) {
             case "source.ftp", "source.sftp" -> 3;
-            case "source.minio" -> 4;
+            case "source.minio" -> !configText(node.config(), "jsonRecordPath").isBlank()
+                    && !"$".equals(configText(node.config(), "jsonRecordPath")) ? 6
+                    : configText(node.config(), "minioObjectKey").isBlank() ? 4 : 5;
             case "branch.conditions" -> 3;
             // A lookup mapping can emit a multi-stage native chain. Reserve
             // the largest standard block rather than allowing its lower
@@ -2796,16 +2909,9 @@ public class DslCompiler {
         if (properties != null && "sink.jdbc".equals(manifest.key()) && "put".equals(localId)
                 && !usesLinewellJdbcWriter(manifest, localId, cfg)) {
             normalizeNativeJdbcTableProperties(properties);
-            // NiFi removes underscores by default. Distinct columns such as MongoDB's
-            // _id and a business id would then share one JDBC binding.
-            Set<String> translatedNames = new HashSet<>();
-            for (TargetColumnMetadata column : targetColumnMetadata(cfg)) {
-                String translated = column.name().replace("_", "").toUpperCase(Locale.ROOT);
-                if (!translatedNames.add(translated)) {
-                    properties.put("Translate Field Names", "false");
-                    break;
-                }
-            }
+        }
+        if (properties != null && "sink.jdbc".equals(manifest.key()) && "put".equals(localId)) {
+            normalizeJdbcIdentifierProperties(cfg,properties,usesLinewellJdbcWriter(manifest,localId,cfg));
         }
         if (!usesLinewellJdbcWriter(manifest, localId, cfg) || properties == null) {
             return;
@@ -2832,6 +2938,28 @@ public class DslCompiler {
         }
         properties.putAll(com.linewell.dataelement.integration.nifi.canvas.nifi.LinewellAuditProperties.defaults(
                 targetColumnMetadata(cfg).stream().map(TargetColumnMetadata::name).toList(),cfg));
+    }
+
+    private void normalizeJdbcIdentifierProperties(Map<String,Object> cfg, Map<String,String> properties, boolean linewell) {
+        com.linewell.dataelement.metautil.model.enums.DatabaseType type;
+        try { type = com.linewell.dataelement.metautil.model.enums.DatabaseType.fromCode(configText(cfg,"dbType")); }
+        catch (IllegalArgumentException unknown) { type = null; }
+        boolean oracle = com.linewell.dataelement.metautil.ddl.DdlDialect.family(type)
+                == com.linewell.dataelement.metautil.ddl.DdlDialect.Family.ORACLE;
+        Set<String> translatedNames = new HashSet<>();
+        for (TargetColumnMetadata column : targetColumnMetadata(cfg)) {
+            String name = column.name();
+            // Use the actual metadata spelling for SQL. Ordinary Oracle columns still fold to upper case;
+            // a lower-case physical name or _id/@timestamp must remain quoted when the writer uses it.
+            if (com.linewell.dataelement.metautil.ddl.DdlDialect.requiresQuoting(type,name)
+                    || oracle && !name.equals(name.toUpperCase(Locale.ROOT))) {
+                properties.put(linewell ? "put-db-record-quoted-identifiers" : "Quote Column Identifiers", "true");
+            }
+            // Preserve distinct _id/id bindings for both native and inherited Linewell properties.
+            if (!translatedNames.add(name.replace("_", "").toUpperCase(Locale.ROOT))) {
+                properties.put(linewell ? "put-db-record-translate-field-names" : "Translate Field Names", "false");
+            }
+        }
     }
 
     /** Native PutDatabaseRecord performs separate JDBC schema/table lookups. */
@@ -3082,6 +3210,12 @@ public class DslCompiler {
     private String sourceSqlTable(Map<String, Object> sourceCfg) {
         String table = firstNonBlankStatic(configText(sourceCfg, "table"), configText(sourceCfg, "sourceTableName"));
         if (table.isBlank()) throw new IllegalStateException("字段增强来源 SQL 下推需要来源表名");
+        String type=configText(sourceCfg,"dbType").toUpperCase(Locale.ROOT);
+        if(Set.of("ORACLE","OCEANBASE_ORACLE","OCEANBASEORACLE","DM","DAMENG").contains(type)) {
+            if(com.linewell.dataelement.metautil.ddl.DdlDialect.names(table).size()>2)
+                throw new IllegalArgumentException("Oracle兼容对象名最多包含Schema和表名");
+            return com.linewell.dataelement.metautil.ddl.DdlDialect.oracleObjectName(table);
+        }
         String[] parts = table.replace("`", "").replace("\"", "").split("\\.");
         List<String> identifiers = new ArrayList<>();
         for (String part : parts) {
@@ -3383,8 +3517,8 @@ public class DslCompiler {
      * to verify that this writer's delimiter, null and escaping rules match the
      * selected target table. Only an ancestor service is visible to the task PG.
      */
-    private String resolveHiveCsvWriterServiceId(String applicationScopeId,GlobalJsonRecordServices hiveGlobals) {
-        String name = System.getProperty(HIVE_HDFS_CSV_WRITER_NAME_PROPERTY,
+    private String resolveHiveCsvWriterServiceId(String applicationScopeId,GlobalJsonRecordServices hiveGlobals, boolean openSource) {
+        String name = openSource ? "PUBLIC-WRITER-HIVE-TEXT" : System.getProperty(HIVE_HDFS_CSV_WRITER_NAME_PROPERTY,
                 HIVE_HDFS_CSV_WRITER_DEFAULT_NAME).trim();
         if (name.isEmpty()) {
             throw new IllegalStateException("Hive HDFS 写入缺少服务端 CSV Record Writer 名称");
@@ -3418,10 +3552,30 @@ public class DslCompiler {
                         && !"Custom Format".equalsIgnoreCase(csvFormat)) {
                     throw new IllegalStateException("Hive HDFS Record Writer 的 CSV Format 必须为 Custom Format：" + name);
                 }
+                if (openSource) {
+                    String delimiter = separator.asText();
+                    String rowDelimiter = properties.path("Record Separator").asText();
+                    if (!Set.of("\u0001", "\\001", "\\u0001").contains(delimiter)
+                            || !Set.of("\n", "\\n").contains(rowDelimiter)
+                            || !"NONE".equalsIgnoreCase(properties.path("Quote Mode").asText())
+                            || !"\\".equals(properties.path("Escape Character").asText())
+                            // NiFi CSVUtils unescapes this property before Commons CSV sees it.
+                            // Raw \N becomes N. Validate the effective marker, not its displayed spelling.
+                            || !"\\N".equals(unescapeNifiCsvProperty(properties.path("Null String").asText()))) {
+                        throw new IllegalStateException("开源 Hive Writer 必须使用 ^A 字段、换行、无引号、反斜杠转义；Null String 须经 NiFi 解析为 \\N，推荐填两个反斜杠后接 N：" + name);
+                    }
+                }
                 return id;
             }
         }
         throw new IllegalStateException("当前 NiFi 节点缺少受管的 Hive HDFS CSV Record Writer：" + name);
+    }
+
+    // Same one-pass Java unescape semantics as NiFi CSVUtils, using the existing Lang dependency.
+    @SuppressWarnings("deprecation")
+    private static String unescapeNifiCsvProperty(String value) {
+        return value == null || value.length() < 2 ? value
+                : org.apache.commons.lang3.StringEscapeUtils.unescapeJava(value);
     }
 
     private static boolean isApplicationShareable(String type) {
@@ -3599,7 +3753,7 @@ public class DslCompiler {
         NifiEntity filename = nifi.createProcessor(pgId, UPDATE_ATTRIBUTE_TYPE, node.label() + "/filename",
                 x + PROCESSOR_COLUMN_GAP, y, Map.of("filename", "${uuid}"), null, null);
         NifiEntity put = nifi.createProcessor(pgId, putType, node.label() + "/put",
-                x + 2 * PROCESSOR_COLUMN_GAP, y, buildHiveBatchPutHdfsProperties(writerConfig, linewell), null, null);
+                x + 2 * PROCESSOR_COLUMN_GAP, y, buildHiveBatchPutHdfsProperties(writerConfig, linewell, nc.csIds.get("hdfsKerberos")), null, null);
 
         nc.processorIds.put("convert", convert.id());
         nc.processorIds.put("filename", filename.id());
@@ -3641,13 +3795,20 @@ public class DslCompiler {
      * must never be carried across to this processor.
      */
     private static Map<String, String> buildHiveBatchPutHdfsProperties(Map<String, Object> cfg,
-                                                                        boolean linewell) {
+                                                                        boolean linewell, String kerberosServiceId) {
         String clientConfigDir = configText(cfg, "clientConfigDir");
         if (clientConfigDir.isBlank()) {
-            throw new IllegalStateException("批量入湖（PutHDFS）缺少 MRS 客户端配置目录");
+            throw new IllegalStateException("批量入湖（PutHDFS）缺少执行节点的 Hadoop 配置目录");
         }
-        String directory = firstNonBlankStatic(configText(cfg, "hdfsDirectory"),
-                defaultHiveWarehouseDirectory(configText(cfg, "database"), configText(cfg, "table")));
+        boolean openSource = "open-source".equalsIgnoreCase(configText(cfg, "hiveConnectionMode"));
+        String databaseDirectory = configText(cfg, "hdfsDatabaseDirectory");
+        String directory = configText(cfg, "hdfsDirectory");
+        if (directory.isBlank() && openSource && !databaseDirectory.isBlank()) {
+            String table = configText(cfg, "table");
+            if (!table.matches("[A-Za-z_][A-Za-z0-9_]*")) throw new IllegalStateException("Hive 物理表名无效");
+            directory = databaseDirectory.replaceAll("/+$", "") + "/" + table.toLowerCase(Locale.ROOT);
+        }
+        if (directory.isBlank() && !openSource) directory = defaultHiveWarehouseDirectory(configText(cfg, "database"), configText(cfg, "table"));
         if (directory.isBlank()) {
             throw new IllegalStateException("批量入湖（PutHDFS）缺少目标 Hive 表或 HDFS 写入目录");
         }
@@ -3659,15 +3820,17 @@ public class DslCompiler {
         String principal = firstNonBlankStatic(configText(cfg, "userPrincipal"),
                 configText(cfg, "kerberosPrincipal"), configText(cfg, "clientPrincipal"));
         String keytab = firstNonBlankStatic(configText(cfg, "keytabPath"), configText(cfg, "keytab"));
-        if (!principal.isBlank()) properties.put("Kerberos Principal", principal);
-        if (!keytab.isBlank()) properties.put("Kerberos Keytab", keytab);
-        properties.put("Kerberos Relogin Period", "4 hours");
         if (linewell) {
+            if (!principal.isBlank()) properties.put("Kerberos Principal", principal);
+            if (!keytab.isBlank()) properties.put("Kerberos Keytab", keytab);
+            properties.put("Kerberos Relogin Period", "4 hours");
             String krb5ConfPath = configText(cfg, "krb5ConfPath");
             if (krb5ConfPath.isBlank()) {
                 throw new IllegalStateException("PutHwHDFS 缺少服务端 krb5.conf 路径");
             }
             properties.put("krb5 conf", krb5ConfPath);
+        } else if (kerberosServiceId != null && !kerberosServiceId.isBlank()) {
+            properties.put("Kerberos User Service", kerberosServiceId);
         }
         return properties;
     }

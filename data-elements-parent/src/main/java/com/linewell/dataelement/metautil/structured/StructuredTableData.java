@@ -13,6 +13,12 @@ public class StructuredTableData {
 
     private TableInfo table;
     private String sourcePath;
+    // Keep the physical locator separate from the human-readable dataset path.
+    // Both object keys and sheet names can contain '#'.
+    private String filePath;
+    private String excelSheetName;
+    private String jsonRecordPath;
+    private Map<String,Object> recordShape;
     private String fileRecordFormat = "csv";
     private String fileDelimiter;
     private List<ColumnInfo> columns = new ArrayList<>();

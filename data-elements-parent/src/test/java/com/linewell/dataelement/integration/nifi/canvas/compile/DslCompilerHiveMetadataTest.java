@@ -25,6 +25,82 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 
 class DslCompilerHiveMetadataTest {
+    @ParameterizedTest @ValueSource(strings = {"\\\\N", "\\u005cN", "\\134N"})
+    void openSourceHdfsUsesApacheFilesAndItsOwnWriterWithoutMrsOrJdbcServices(String rawNull) throws Exception {
+        var nifi = mock(NifiClient.class); var hive = mock(HiveModule.class);
+        var compiler = partitionCompiler(nifi, hive);
+        var globals = new ArrayList<>(HiveServiceFixtures.withCsv(publicCsvWriterService()));
+        globals.add(new ObjectMapper().valueToTree(Map.of("component", Map.of("id", "open-text", "name", "PUBLIC-WRITER-HIVE-TEXT",
+                "type", "org.apache.nifi.csv.CSVRecordSetWriter", "state", "ENABLED", "properties", Map.of(
+                        "Include Header Line", "false", "CSV Format", "custom", "Value Separator", "\\u0001",
+                        "Record Separator", "\\n", "Quote Mode", "NONE", "Escape Character", "\\", "Null String", rawNull)))));
+        when(nifi.listControllerServices("root")).thenReturn(globals);
+        when(nifi.findProcessorType("PutHDFS")).thenReturn(java.util.Optional.of("org.apache.nifi.processors.hadoop.PutHDFS"));
+        var config = new java.util.LinkedHashMap<>(partitionPipeline(1).dsl().nodes().getFirst().config());
+        config.remove("partitionPlan"); config.put("hiveConnectionMode", "open-source");
+        config.put("hiveWriteMode", "HDFS_BATCH"); config.put("hiveHdfsMerge", false);
+        config.put("authMode", "none"); config.put("userPrincipal", "old-mrs@EXAMPLE"); config.put("keytabPath", "/old/mrs.keytab");
+        config.put("clientConfigDir", "/tmp/validation-hadoop-config");
+        config.put("hdfsDatabaseDirectory", "hdfs://hdfscluster/warehouse/validation.db/");
+        compiler.compile(withSinkConfig(partitionPipeline(1), config));
+        verify(hive, never()).resolveRuntimeProfile(anyString());
+        verify(nifi, never()).createControllerService(anyString(), anyString(), anyString(), anyMap());
+        var props = ArgumentCaptor.forClass(Map.class);
+        verify(nifi).createProcessor(eq("pg"), eq("org.apache.nifi.processors.hadoop.PutHDFS"), anyString(), anyDouble(), anyDouble(), props.capture(), nullable(String.class), nullable(String.class));
+        assertThat(props.getValue()).containsEntry("Directory", "hdfs://hdfscluster/warehouse/validation.db/events")
+                .containsEntry("Hadoop Configuration Resources", "/tmp/validation-hadoop-config/core-site.xml,/tmp/validation-hadoop-config/hdfs-site.xml")
+                .doesNotContainKeys("Kerberos Principal", "Kerberos Keytab", "krb5 conf", "Kerberos Relogin Period", "Kerberos User Service");
+        assertThat(props.getValue().keySet()).containsOnly("Directory", "Hadoop Configuration Resources", "Conflict Resolution Strategy");
+        verify(nifi).createProcessor(eq("pg"), eq("org.apache.nifi.processors.standard.ConvertRecord"), anyString(), anyDouble(), anyDouble(),
+                argThat(p -> "open-text".equals(p.get("Record Writer"))), nullable(String.class), nullable(String.class));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"\\N", "N", "", "\\\\\\\\N"})
+    void openSourceHdfsRejectsNullMarkersThatNifiWouldNotWriteAsHiveNull(String rawNull) throws Exception {
+        var nifi = mock(NifiClient.class);
+        var compiler = partitionCompiler(nifi, mock(HiveModule.class));
+        var globals = new ArrayList<>(HiveServiceFixtures.withCsv(publicCsvWriterService()));
+        globals.add(new ObjectMapper().valueToTree(Map.of("component", Map.of("id", "open-text", "name", "PUBLIC-WRITER-HIVE-TEXT",
+                "type", "org.apache.nifi.csv.CSVRecordSetWriter", "properties", Map.of(
+                        "Include Header Line", "false", "CSV Format", "custom", "Value Separator", "\\u0001",
+                        "Record Separator", "\\n", "Quote Mode", "NONE", "Escape Character", "\\", "Null String", rawNull)))));
+        when(nifi.listControllerServices("root")).thenReturn(globals);
+        var config = new java.util.LinkedHashMap<>(partitionPipeline(1).dsl().nodes().getFirst().config());
+        config.remove("partitionPlan");
+        config.putAll(Map.of("hiveConnectionMode", "open-source", "hiveWriteMode", "HDFS_BATCH",
+                "hiveHdfsMerge", false, "authMode", "none", "clientConfigDir", "/validation/hadoop",
+                "hdfsDatabaseDirectory", "hdfs://validation/warehouse/validation.db"));
+        assertThatThrownBy(() -> compiler.compile(withSinkConfig(partitionPipeline(1), config)))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("两个反斜杠");
+        verify(nifi, never()).createProcessor(anyString(), anyString(), anyString(), anyDouble(), anyDouble(),
+                anyMap(), nullable(String.class), nullable(String.class));
+    }
+
+    @ParameterizedTest @ValueSource(strings = {"none", "KERBEROS"})
+    void openSourceSinkUsesRegisteredAuthenticationWithoutResolvingMrs(String authMode) throws Exception {
+        var nifi = mock(NifiClient.class); var hive = mock(HiveModule.class);
+        var compiler = partitionCompiler(nifi, hive);
+        var config = new java.util.LinkedHashMap<>(partitionPipeline(1).dsl().nodes().getFirst().config());
+        config.remove("partitionPlan");
+        config.put("hiveConnectionMode", "open-source"); config.put("hiveWriteMode", "HIVE_RECORD_PUT");
+        config.put("jdbcUrl", "jdbc:hive2://validation.example:10000/analytics;auth=none");
+        config.put("authMode", authMode); config.put("userPrincipal", "validation@EXAMPLE");
+        config.put("keytabPath", "/validation/user.keytab");
+        compiler.compile(withSinkConfig(partitionPipeline(1), config), ignored -> {});
+        verify(hive, never()).resolveRuntimeProfile(anyString());
+        var properties = ArgumentCaptor.forClass(Map.class);
+        var types = ArgumentCaptor.forClass(String.class);
+        verify(nifi, atLeastOnce()).createControllerService(eq("pg"), types.capture(), anyString(), properties.capture());
+        boolean secured = "KERBEROS".equals(authMode);
+        assertThat(types.getAllValues().stream().anyMatch(t -> t.endsWith("KerberosKeytabUserService"))).isEqualTo(secured);
+        for (int i = 0; i < types.getAllValues().size(); i++) {
+            if (types.getAllValues().get(i).endsWith("DBCPConnectionPool")) {
+                assertThat(properties.getAllValues().get(i).containsKey("Kerberos User Service")).isEqualTo(secured);
+            }
+        }
+    }
+
 
     @Test
     void reusesMatchingHiveKerberosAndDbcpServicesInsideTheApplicationScope() throws Exception {
@@ -263,8 +339,10 @@ class DslCompilerHiveMetadataTest {
         verify(nifi).createProcessor(eq("pg"), eq("org.apache.nifi.processors.hadoop.PutHDFS"),
                 eq("Hive/put"), anyDouble(), anyDouble(), properties.capture(), nullable(String.class), nullable(String.class));
         assertThat(properties.getValue()).containsEntry("Conflict Resolution Strategy", "replace")
-                .containsEntry("Kerberos Relogin Period", "4 hours")
-                .doesNotContainKey("krb5 conf");
+                .containsEntry("Kerberos User Service", "cs")
+                .doesNotContainKeys("krb5 conf", "Kerberos Relogin Period", "Kerberos Principal", "Kerberos Keytab");
+        verify(nifi).createControllerService(eq("pg"), eq("org.apache.nifi.kerberos.KerberosKeytabUserService"), anyString(),
+                eq(Map.of("Kerberos Principal", "service_user", "Kerberos Keytab", "/opt/mrs/client/user.keytab")));
         verify(nifi, times(3)).createProcessor(eq("pg"), anyString(), anyString(), anyDouble(), anyDouble(),
                 anyMap(), nullable(String.class), nullable(String.class));
     }

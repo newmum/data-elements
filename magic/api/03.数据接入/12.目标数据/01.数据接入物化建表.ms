@@ -1306,6 +1306,13 @@ var runMaterialization = () => {
             } else if (batch && physical?.created != true) {
                 return {errorCode:500, message:'目标数据库未确认物理建表结果', sideEffectsPossible:true}
             }
+            if (!confirmReuseExisting && physical?.created == true) {
+                if (physical?.tableItems == null || physical.tableItems.size() == 0) {
+                    return {errorCode:500, message:'目标表已创建，但未确认实际字段结构，未保存目标登记', sideEffectsPossible:true}
+                }
+                // 新建与复用均登记数据库确认的实际字段，来源类型仅作为来源追溯信息保留。
+                tableItems = physical.tableItems
+            }
             physicalTableReused = physical != null && physical.created == false
         }
         if (plan.validateReuseOnly && confirmReuseExisting) {

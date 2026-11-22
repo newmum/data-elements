@@ -41,10 +41,10 @@ public class TableInventoryProbe {
         var config = loadConfig(TenantContext.requireTenantId(), datasourceId);
         var tables = collectPhysicalTables(config);
         String legacyOwner = alwaysOwnerQualifiedSnapshot(config.getDatabaseType()) ? currentOwner(config) : "";
-        return new Inventory(tables == null ? List.of() : tables, legacyOwner);
+        return new Inventory(tables == null ? List.of() : tables, legacyOwner,config.getDatabaseType());
     }
 
-    public record Inventory(List<TableInfo> tables, String legacyOwner) { }
+    public record Inventory(List<TableInfo> tables, String legacyOwner,DatabaseType databaseType) { }
 
     private List<TableInfo> collectPhysicalTables(DataSourceConfig config)
             throws Exception {
@@ -126,9 +126,12 @@ public class TableInventoryProbe {
             if (table == null || blank(table.getTableName())) continue;
             String tableName = table.getTableName().trim();
             String owner = text(table.getSchemaName());
-            if (!blank(owner) && (alwaysQualify || !owner.equalsIgnoreCase(currentOwner))
-                    && tableName.indexOf('.') < 0) {
-                table.setTableName(owner + "." + tableName);
+            boolean oracle=type==DatabaseType.ORACLE||type==DatabaseType.OCEANBASE_ORACLE;
+            boolean unqualified=oracle?com.linewell.dataelement.metautil.ddl.DdlDialect.names(tableName).size()==1:tableName.indexOf('.')<0;
+            if (!blank(owner) && (alwaysQualify || !owner.equalsIgnoreCase(currentOwner)) && unqualified) {
+                String qualifiedOwner=type==DatabaseType.ORACLE||type==DatabaseType.OCEANBASE_ORACLE
+                        ?com.linewell.dataelement.metautil.ddl.DdlDialect.oraclePhysicalName(owner):owner;
+                table.setTableName(qualifiedOwner + "." + tableName);
             }
         }
         return tables;
@@ -141,6 +144,12 @@ public class TableInventoryProbe {
     }
 
     private String currentOwner(DataSourceConfig config) {
+        if(config.getDatabaseType()==DatabaseType.ORACLE||config.getDatabaseType()==DatabaseType.OCEANBASE_ORACLE) {
+            String raw=blank(config.getSchema())?text(config.getUsername()):text(config.getSchema());
+            if(!raw.startsWith("\""))raw=raw.split("[@#]",2)[0];
+            var name=com.linewell.dataelement.metautil.ddl.DdlDialect.names(raw).getFirst();
+            return name.quoted()?name.value():name.value().toUpperCase(java.util.Locale.ROOT);
+        }
         if (config.getDatabaseType() == DatabaseType.OCEANBASE_MYSQL) {
             return text(config.getDatabase());
         }

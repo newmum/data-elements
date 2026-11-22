@@ -18,6 +18,12 @@ import org.ssssssss.script.runtime.ExitValue;
 import org.ssssssss.script.runtime.function.MagicScriptLambdaFunction;
 
 class MetadataSummaryRefreshMagicTest {
+    @Test void oracleOverviewKeepsQuotedLowercaseAndDoesNotFallBackToTheUppercaseObject()throws Exception {
+        var f=new Fixture(20);f.jdbc.update("update db_datasource_t set db_type='oracle' where tid='db'");
+        f.jdbc.update("update db_table_t set table_name='TEST0809.\"car\"' where tid='table'");f.probe.returnedTableName="TEST0809.\"car\"";f.probe.summaryCount=4;
+        Map<?,?> result=(Map<?,?>)f.read("ga","db","table");assertThat(result.get("recordCount")).isEqualTo(4L);assertThat(f.probe.summaryNames).containsOnly("TEST0809.\"car\"");
+        f.probe.returnedTableName="TEST0809.CAR";assertThat(f.read("ga","db","table")).isInstanceOf(ExitValue.class);
+    }
     @Test void oneTableProbeHasConstantReadsAndPreservesZero() throws Exception {
         for (int size : List.of(20, 100)) {
             Fixture f = new Fixture(size);
@@ -190,7 +196,7 @@ class MetadataSummaryRefreshMagicTest {
             // RequestHandler binds declared GET query parameters at the script root, with no param map.
             bindings.put("tid", datasource); bindings.put("tableId",table);
             String script = CanonicalMagicSources.byId("metadata_db_info_01")
-                .replaceAll("(?m)^import (?!cn\\.hutool\\.|java\\.util\\.|com\\.linewell\\.dataelement\\.metautil\\.model\\.)[^\\r\\n]*\\r?\\n", "");
+                .replaceAll("(?m)^import (?!cn\\.hutool\\.|java\\.util\\.|com\\.linewell\\.dataelement\\.metautil\\.(?:model\\.|ddl\\.DdlDialect))[^\\r\\n]*\\r?\\n", "");
             script = "var datasourceConnectionConfig = (a,b,c,d)=>connection.read()\n" + script;
             return MagicScript.create(script, null).execute(new MagicScriptContext(bindings));
         }
@@ -241,7 +247,16 @@ class MetadataSummaryRefreshMagicTest {
     public static class Connection { public Map<String,Object> read() { return Map.of("host","localhost","database","fixture","username","user"); } }
     public static class Probe {
         int pages,counts,databases; String schema; String returnedTableName = "sample";
+        long summaryCount;List<String> summaryNames=new ArrayList<>();
         Runnable duringProbe = () -> {};
+        public TableInfo getTableSummary(DataSourceConfig cfg,String name) {
+            pages++;schema=cfg.getSchema();summaryNames.add(name);
+            var requested=com.linewell.dataelement.metautil.ddl.DdlDialect.names(name);
+            String expected=requested.size()==2?name:cfg.getSchema()+"."+name;
+            String returned=com.linewell.dataelement.metautil.ddl.DdlDialect.names(returnedTableName).size()==2?returnedTableName:cfg.getSchema()+"."+returnedTableName;
+            if(!com.linewell.dataelement.metautil.ddl.DdlDialect.oracleObjectKey(expected).equals(com.linewell.dataelement.metautil.ddl.DdlDialect.oracleObjectKey(returned)))return null;
+            counts++;duringProbe.run();var info=new TableInfo();info.setTableName(returnedTableName);info.setColumnCount(2);info.setRowCount(summaryCount);return info;
+        }
         public TablePageResult getTablesPage(DataSourceConfig cfg,Integer page,Integer size,String name) {
             pages++; schema=cfg.getSchema(); assertThat(name).isEqualTo("sample"); assertThat(size).isEqualTo(100);
             var info = new TableInfo(); info.setTableName(returnedTableName); info.setColumnCount(2); info.setTotalSizeBytes(0L); info.setTotalSizeFormatted("0 B");

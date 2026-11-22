@@ -814,6 +814,7 @@ var isServerManagedHuaweiMrsHive = (dbType, cfg) => {
     if (normalizeConfigType(dbType, cfg) != 'HIVE') { return false }
     var mode = text(first(cfg, ['metadataAccessMode', 'metadata_access_mode'])).trim().toLowerCase()
     var connectionMode = text(first(cfg, ['hiveConnectionMode', 'hive_connection_mode'])).trim().toLowerCase()
+    if (connectionMode == 'open-source') { return false }
     var profile = text(first(cfg, ['hiveProfile', 'hive_profile'])).trim()
     return mode == 'server-managed-mrs' || connectionMode == 'huawei-mrs' || !blank(profile)
 }
@@ -1027,7 +1028,11 @@ var mappingDsl = (sourceColumns, targetColumns, sourceTable, lookupSources, tran
         var targetColumn = targetsByName[text(mapping.to).replace('/', '').toLowerCase()]
         if (targetColumn != null) {
             var targetType = first(targetColumn, ['columnType', 'column_type', 'dataType', 'data_type'])
-            if (!blank(targetType)) { mapping.targetType = text(targetType) }
+            if (!blank(targetType)) {
+                // 真正的JSON/JSONB物理列仍以JDBC/JSON文本承载；CLOB/STRING使用已登记实际类型。
+                // 不扩展规则内核的逻辑类型集合，不解析或重写原JSON文本。
+                mapping.targetType = ['json','jsonb'].contains(text(targetType).trim().toLowerCase()) ? 'STRING' : text(targetType)
+            }
             var nullableText = text(targetColumn.nullable).toLowerCase()
             if (nullableText == 'false' || nullableText == '0') { mapping.targetNullable = false }
         }
@@ -1086,8 +1091,37 @@ var resolveElasticsearchConnection = (sourceCfg) => {
     return { nodes: String.join(',', hosts), protocol: protocol, authMethod: authMethod }
 }
 
-// 仅判断已保存画布中的来源节点，无需额外读取任务记录。
-var sourceRepairReasons = (dsl) => {
+// Kafka显式登记的主题区分大小写，登记表名只用于查找，不能直接作为物理订阅名。
+// 与结构化探查的safeName规则一致；仅在当前来源已读取的最多100个显式主题中唯一匹配，不访问broker。
+var resolveKafkaPhysicalTopic = (cfg, tableName) => {
+    var configured = text(first(cfg, ['kafkaTopic', 'topic'])).trim()
+    if (blank(configured)) { exit 400, 'Kafka 来源缺少已登记的显式主题，请先完善数据源配置' }
+    var topics = []
+    for (entry in configured.split('[,\\r\\n]')) {
+        var topic = entry.trim()
+        if (!topic.matches('[a-zA-Z0-9._-]{1,249}') || topic == '.' || topic == '..') {
+            exit 400, 'Kafka 主题必须为明确名称，不能使用通配符或空名称'
+        }
+        if (!topics.contains(topic)) { topics.add(topic) }
+    }
+    if (topics.size() == 0 || topics.size() > 100) { exit 400, 'Kafka 来源须配置1到100个显式主题' }
+    var matches = []
+    for (topic in topics) {
+        var normalized = topic.replaceAll('[^a-zA-Z0-9_]+', '_').replaceAll('_+', '_')
+            .replaceAll('^_+|_+$', '').toLowerCase(Locale.ROOT)
+        if (blank(normalized)) { normalized = 'data' }
+        if (normalized.matches('^[0-9].*')) { normalized = 'f_' + normalized }
+        if (normalized.length() > 120) { normalized = normalized.substring(0,120) }
+        if (normalized.equalsIgnoreCase(text(tableName))) { matches.add(topic) }
+    }
+    if (matches.size() != 1) {
+        exit 409, '当前登记表无法唯一匹配Kafka物理主题，请确认来源主题范围后重新探查，不能按规范表名订阅'
+    }
+    return matches[0]
+}
+
+// 判断已保存画布与当前登记来源的差异，复用已授权的来源快照，不额外查询数据库。
+var sourceRepairReasons = (dsl, registeredConfig, registeredTableName) => {
     var taskReasons = []
     for (existingNode in (dsl.nodes == null ? [] : dsl.nodes)) {
         if (['source.ftp', 'source.sftp'].contains(text(existingNode.manifestKey))
@@ -1097,6 +1131,10 @@ var sourceRepairReasons = (dsl) => {
         if (existingNode.manifestKey == 'source.elasticsearch'
                 && (blank(existingNode.config?.nodes) || text(existingNode.config.nodes).matches('(?i)^https?://.*'))) {
             taskReasons.add('Elasticsearch 来源缺少可部署的节点配置，需确认后按登记连接重新生成')
+        }
+        if (existingNode.manifestKey == 'source.kafka'
+                && text(existingNode.config?.topic) != resolveKafkaPhysicalTopic(registeredConfig, registeredTableName)) {
+            taskReasons.add('Kafka 订阅主题与当前登记表的物理主题不一致，请停止旧流程后受控修复订阅配置')
         }
     }
     return taskReasons
@@ -1114,7 +1152,7 @@ var applyIndexAndTopicSourceConfig = (manifestKey, sourceNodeConfig, sourceCfg, 
         // Keep polling the consumer so partition assignment and heartbeats can complete.
         sourceNodeConfig.schedulingPeriod = '0 sec'
         sourceNodeConfig.bootstrapServers = first(sourceCfg, ['kafkaBootstrapServers','bootstrapServers'])
-        sourceNodeConfig.topic = sourceTableName
+        sourceNodeConfig.topic = resolveKafkaPhysicalTopic(sourceCfg, sourceTableName)
         sourceNodeConfig.groupId = 'ingestion-' + tenantId + '-' + sourceTableId
         sourceNodeConfig.securityProtocol = first(sourceCfg, ['kafkaSecurityProtocol','securityProtocol']) || 'PLAINTEXT'
         sourceNodeConfig.syncMode = 'FULL'
@@ -1166,6 +1204,20 @@ var instantiateTemplateFlow = (template, pipelineRows, taskRows) => {
         config.putAll(preset)
         if (runtime != null) {
             for (field in protectedFields) { config[field] = runtime.config[field] }
+            if (binding.startsWith('target:') && runtime.config.statementType == 'INSERT' && blank(runtime.config.updateKeys)) {
+                // 无业务主键的新增任务是追加写入，不能因模板默认MERGE或空writerType变成需要主键的更新。
+                config.statementType = 'INSERT'
+                if (blank(config.writerType) && !blank(runtime.config.writerType)) { config.writerType = runtime.config.writerType }
+            }
+            if (binding.startsWith('target:') && runtime.config.hiveConnectionMode == 'open-source') {
+                // Hive 认证来自已授权的登记连接，模板不得替换真实目标的认证方式。
+                for (field in ['authMode','userPrincipal','krb5ConfPath']) { config[field] = runtime.config[field] }
+                config.statementType = 'INSERT'
+                // 执行节点的 Hadoop 文件路径可在模板预设；登记目标有明确值时优先使用登记值。
+                for (field in ['clientConfigDir','hdfsDatabaseDirectory']) {
+                    config[field] = first(runtime.config, [field]) || preset[field]
+                }
+            }
             if (binding.startsWith('governance:') && preset.useRegisteredMappings != false) {
                 config.mappings = runtime.config.mappings
             }
@@ -1185,6 +1237,30 @@ var instantiateTemplateFlow = (template, pipelineRows, taskRows) => {
         edge.target = remappedIds[edge.target]
     }
     return definition
+}
+
+// 来源预检只使用已在事务中校验的登记对象，不创建任务或物化目标。
+var preflightRegisteredSource = (sourceDb, sourceTable, sourceTableId) => {
+    var sourceDbId = text(first(sourceTable, ['datasourceId', 'datasource_id']))
+    var preflightCfg = readCfg(sourceDb)
+    var preflightType = first(sourceDb, ['dbType', 'db_type', 'databaseType', 'database_type'])
+    var preflightMode = pushAccessMode(sourceDb, preflightCfg)
+    var preflightFile = ['receive', 'upload', 'push'].contains(preflightMode)
+        ? resolveOdsPushFtp(sourceDbId, first(sourceTable, ['tableName','table_name'])) : null
+    var preflightManifest = preflightFile == null ? normalizeSourceKey(preflightType, preflightCfg)
+        : normalizeSourceKey(preflightFile.dbType, preflightFile.config)
+    var needsFileLocator = ['source.ftp', 'source.sftp'].contains(preflightManifest)
+        && !['receive', 'upload', 'push'].contains(preflightMode)
+    if (preflightManifest == 'source.api') {
+        readApiPullConfiguration(sourceDb, sourceDbId, text(first(sourceTable, ['tableName', 'table_name'])))
+    }
+    if (preflightManifest == 'source.kafka') {
+        resolveKafkaPhysicalTopic(preflightCfg, first(sourceTable, ['tableName', 'table_name']))
+    }
+    if (needsFileLocator) { directFileLocator(preflightCfg, sourceTable) }
+    return {valid:true, sourcePreflight:true, sourceTableId:sourceTableId,
+        sourceManifestKey:preflightManifest, fileLocatorRequired:needsFileLocator,
+        dryRun:true, sideEffectsApplied:false}
 }
 
 return db.transaction(() => {
@@ -1232,22 +1308,7 @@ var sourceGovernanceConfig = governanceConfigOf(sourceTable)
 // 抽屉提交前的一次来源预检。无需已有目标表，不创建表、目录、任务或NiFi流程。
 // JDBC来源按真实登记类型直接返回，不进入FTP文件定位分支。
 if (body?.validateSourceOnly == true) {
-    var preflightCfg = readCfg(sourceDb)
-    var preflightType = first(sourceDb, ['dbType', 'db_type', 'databaseType', 'database_type'])
-    var preflightMode = pushAccessMode(sourceDb, preflightCfg)
-    var preflightFile = ['receive', 'upload', 'push'].contains(preflightMode)
-        ? resolveOdsPushFtp(sourceDbId, first(sourceTable, ['tableName','table_name'])) : null
-    var preflightManifest = preflightFile == null ? normalizeSourceKey(preflightType, preflightCfg)
-        : normalizeSourceKey(preflightFile.dbType, preflightFile.config)
-    var needsFileLocator = ['source.ftp', 'source.sftp'].contains(preflightManifest)
-        && !['receive', 'upload', 'push'].contains(preflightMode)
-    if (preflightManifest == 'source.api') {
-        readApiPullConfiguration(sourceDb, sourceDbId, text(first(sourceTable, ['tableName', 'table_name'])))
-    }
-    if (needsFileLocator) { directFileLocator(preflightCfg, sourceTable) }
-    return {valid:true, sourcePreflight:true, sourceTableId:sourceTableId,
-        sourceManifestKey:preflightManifest, fileLocatorRequired:needsFileLocator,
-        dryRun:true, sideEffectsApplied:false}
+    return preflightRegisteredSource(sourceDb, sourceTable, sourceTableId)
 }
 var sourceTemporalMappings = temporalMappingsOf(sourceColumns, sourceGovernanceConfig)
 var dictionaryTableIds = []
@@ -1727,7 +1788,8 @@ for (existingTask in existingTasks) {
     }
     var taskReasons = []
     if (changedNode && !hasNativeGroup) { taskReasons.add('已有草稿绑定的接入节点与本次选择不同，需确认后按所选节点重建') }
-    taskReasons.addAll(sourceRepairReasons(existingDslObject))
+    taskReasons.addAll(sourceRepairReasons(existingDslObject, readCfg(rootSourceDb),
+        first(rootSourceTable, ['tableName', 'table_name'])))
     if (wrongHopSource) { taskReasons.add('已有任务的来源与所选目标顺序不一致，需确认后按级联链路重建') }
     if (template != null && (!templateMatches || (templateParallel && !sameParallelTargets))) {
         taskReasons.add('所选接入模板版本或目标与已有任务不同，需确认后重建')
@@ -1962,6 +2024,12 @@ if (sourceManifestKey == 'source.minio') {
     sourceNodeConfig.minioPrefix = first(sourceCfg, ['minioPrefix', 'objectPrefix', 'prefix'])
     sourceNodeConfig.minioFilePattern = first(sourceCfg, ['minioFilePattern', 'filePattern', 'fileFilterRegex'])
     sourceNodeConfig.minioObjectKey = minioObjectKey
+    // 对象、工作表及JSON子数据集分别来自服务端探查，不拆展示路径，也不采纳前端任意位置。
+    sourceNodeConfig.fileFormat = objectLocator.format
+    sourceNodeConfig.excelSheetName = objectLocator.excelSheetName
+    sourceNodeConfig.jsonRecordPath = objectLocator.jsonRecordPath
+    sourceNodeConfig.csvDelimiter = objectLocator.delimiter
+    sourceNodeConfig.csvEncoding = 'UTF-8'
     sourceNodeConfig.syncMode = 'FULL'
 }
 applyIndexAndTopicSourceConfig(sourceManifestKey, sourceNodeConfig, sourceCfg, sourceTableName, tenantId, sourceTableId)
@@ -2178,8 +2246,10 @@ for (targetIndex, targetCandidate in [targetTable]) {
     var candidateTargetPrimaryKeys = candidateTargetKeys.join(',')
     var candidateSinkId = 'sink-' + candidateTargetId
     var candidateIsHuaweiMrsHive = isServerManagedHuaweiMrsHive(candidateTargetDbType, candidateTargetCfg)
+    var candidateIsOpenSourceHive = normalizeSinkType(candidateTargetDbType, candidateTargetCfg) == 'HIVE'
+        && text(first(candidateTargetCfg, ['hiveConnectionMode', 'hive_connection_mode'])).trim().toLowerCase() == 'open-source'
     var candidateIsMongo = normalizeSinkType(candidateTargetDbType, candidateTargetCfg) == 'MONGODB'
-    var candidateSinkManifestKey = candidateIsHuaweiMrsHive ? 'sink.hive' : (candidateIsMongo ? 'sink.mongodb' : 'sink.jdbc')
+    var candidateSinkManifestKey = (candidateIsHuaweiMrsHive || candidateIsOpenSourceHive) ? 'sink.hive' : (candidateIsMongo ? 'sink.mongodb' : 'sink.jdbc')
     var candidateSinkConfig = {}
     if (candidateIsHuaweiMrsHive) {
         var candidateHiveDatabase = first(candidateTargetCfg, ['database', 'dbName', 'dbMetaDbName', 'serviceName'])
@@ -2245,6 +2315,24 @@ for (targetIndex, targetCandidate in [targetTable]) {
             targetColumns: columnList(candidateTargetColumns),
             statementType: candidateTargetPrimaryKeys == '' ? 'INSERT' : 'UPSERT',
             updateKeys: candidateTargetPrimaryKeys
+        }
+        if (candidateTargetPrimaryKeys == ''
+                && ['ORACLE', 'ORACLE 12+', 'OCEANBASE_ORACLE'].contains(text(candidateSinkConfig.dbType).toUpperCase(Locale.ROOT))) {
+            candidateSinkConfig.writerType = 'LINEWELL_PUT_DATABASE_RECORD'
+        }
+        if (candidateIsOpenSourceHive) {
+            // 显式开源 Hive 使用登记的 JDBC/认证信息，不继承 MRS 默认配置集或关系库 UPSERT。
+            candidateSinkConfig.putAll({
+                database: first(candidateTargetCfg, ['database', 'dbName', 'dbMetaDbName']),
+                hiveConnectionMode: 'open-source', metadataAccessMode: 'jdbc', hiveProfile: '',
+                authMode: first(candidateTargetCfg, ['authMode', 'auth_mode']) || 'none',
+                userPrincipal: first(candidateTargetCfg, ['userPrincipal', 'kerberosPrincipal', 'principal']),
+                keytabPath: first(candidateTargetCfg, ['keytabPath']),
+                krb5ConfPath: first(candidateTargetCfg, ['krb5ConfPath']),
+                clientConfigDir: first(candidateTargetCfg, ['clientConfigDir']),
+                hdfsDatabaseDirectory: first(candidateTargetCfg, ['hdfsDatabaseDirectory']),
+                hiveWriteMode: 'HDFS_BATCH', statementType: 'INSERT', updateKeys: ''
+            })
         }
     }
     // Persist topology on the sink: each independently saved hop has only one sink.

@@ -88,7 +88,7 @@ public class HaitongTransformRecord extends AbstractProcessor {
                 DynamicOutput dynamic=plan.outputContracts().values().stream().anyMatch(type->type.logicalType().equals("ANY")||type.logicalType().equals("ARRAY")||type.logicalType().equals("DECIMAL")&&type.precision()==0)?new DynamicOutput(session,original,writers,schema,derived,dynamicFiles):null;
                 try(RecordSetWriter writer=writers.createWriter(getLogger(),schema,out,original.getAttributes());BufferedWriter errors=new BufferedWriter(new OutputStreamWriter(bad,java.nio.charset.StandardCharsets.UTF_8))){
                     writer.beginRecordSet();List<Map<String,Object>>window=new ArrayList<>();List<Long>indices=new ArrayList<>();long bytes=0,memory=0,offset=0;Record record;
-                    while((record=reader.nextRecord())!=null){Map<String,Object>row=record.toMap();var size=RecordBudget.record(row,"输入记录，inputRecordIndex="+offset);
+                    while((record=reader.nextRecord())!=null){@SuppressWarnings("unchecked") Map<String,Object>row=(Map<String,Object>)NifiTemporalValues.inputValue(record);var size=RecordBudget.record(row,"输入记录，inputRecordIndex="+offset);
                         if(!window.isEmpty()&&(window.size()>=MappingEngine.WINDOW_RECORDS||bytes+size.utf8()>MappingEngine.WINDOW_BYTES||memory+size.memory()>RecordBudget.MEMORY_BYTES)){writeWindow(window,indices,execution,dictionaries,writer,errors,schema,counts,dynamic);window.clear();indices.clear();bytes=0;memory=0;}
                         window.add(row);indices.add(reader instanceof MappingErrorRecords envelope?envelope.originalIndex():offset);offset++;bytes+=size.utf8();memory+=size.memory();
                     }

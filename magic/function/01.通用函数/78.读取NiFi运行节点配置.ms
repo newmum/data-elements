@@ -5,8 +5,8 @@
   "path": "/nifiruntime",
   "parameters": [
     {"name": "nodeId", "dataType": "Object"},
-    {"name": "allNodes", "dataType": "Object"},
-    {"name": "consume", "dataType": "Object", "required": true}
+    {"name": "consume", "dataType": "Object", "required": true},
+    {"name": "allNodes", "dataType": "Object"}
   ],
   "description": "供运行采样、流程编译和节点探查共用。可信行业上下文读取指定节点或最多100个启用节点，由服务端回调消费凭据。"
 }
@@ -15,6 +15,7 @@ import tableRead
 import tenantRuntime
 
 // 默认、指定节点及共享采样共用凭据读取。配置只交给服务端回调。
+// @/common/nifiruntime(nodeId, consume, allNodes)：前两个位置参数保持不变，第三个可选参数控制批量采样。
 if (consume == null) { return null }
 var tenantId = tenantRuntime.id()
 var node = tableRead.from('nifi_node_t', 'n', tenantId)

@@ -8,6 +8,12 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ValueTypesTest {
+    @Test void atPrefixedTopLevelFieldsRemainLiteralAndCannotBecomePathsOrSql() {
+        assertEquals("@timestamp",ValueTypes.field("/@timestamp"));
+        assertEquals("_id",ValueTypes.field("/_id"));
+        for(String invalid:List.of("/@timestamp/value","@timestamp.value","@timestamp[0]","@timestamp;DROP TABLE t","@timestamp\nvalue"))
+            assertEquals("INVALID_FIELD",assertThrows(MappingException.class,()->ValueTypes.field(invalid)).code());
+    }
     private static final ObjectMapper JSON=new ObjectMapper();
     private static final ExecutionContext CONTEXT=new ExecutionContext(Instant.EPOCH,ZoneId.of("Asia/Shanghai"),Locale.CHINA,"synthetic");
     @Test void portableCharacterAliasesIncludingDimensionsWhitespaceAndNationalForms() {

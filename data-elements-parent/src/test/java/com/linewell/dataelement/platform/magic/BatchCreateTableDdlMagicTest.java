@@ -39,6 +39,26 @@ import org.ssssssss.script.runtime.ExitValue;
 /** Runs the canonical DDL API's batch branch with a real tenant metadata query. */
 class BatchCreateTableDdlMagicTest {
     @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings={"datetime","date"})
+    void elasticNativeDateDoesNotOverrideTheSelectedTimePrecision(String selected) throws Exception {
+        var f=new Fixture(2);f.ddlGenerator.expectedColumns=1;
+        for(int i=0;i<2;i++) {
+            f.jdbc.update("update db_datasource_t set db_type=? where tid=?",i==0?"oracle":"hive","db-"+i);
+            var target=new LinkedHashMap<>(f.targets.get(i));
+            target.put("tableItems",List.of(Map.of("columnName","createTime","dataType",selected,"columnType",selected,
+                    "sourceDataType","date","sourceColumnType","date","sourceDatabaseType","elasticsearch","nullable",1)));
+            f.targets.set(i,target);
+        }
+        var response=assertInstanceOf(Map.class,f.run());
+        var results=assertInstanceOf(List.class,response.get("results"));assertEquals(2,results.size());
+        for(var entry:results) {
+            String ddl=assertInstanceOf(Map.class,entry).get("ddl").toString();
+            assertTrue(java.util.regex.Pattern.compile("(?i)[`\"]?createTime[`\"]?\\s+"+(selected.equals("date")?"DATE\\b":"TIMESTAMP\\b")).matcher(ddl).find(),ddl);
+        }
+        assertEquals(1,f.counter.reads);assertEquals(0,f.counter.writes);
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
     @org.junit.jupiter.params.provider.CsvSource({",receive", "'',receive", "' ',receive", "oracle,receive",
             ",push", ",upload", ",report", ",capture", ",pull", ",proxy", ",agent", ",explore", ","})
     void optionalSourceDialectNeverBlocksSnapshotPartitionPreview(String sourceType,String mode) throws Exception {
@@ -341,11 +361,13 @@ class BatchCreateTableDdlMagicTest {
         }
     }
 
-    @Test
-    void hiveRowTerminatorSurvivesBatchGenerationWithTwentyAndHundredFieldsAndScopedTargets() throws Exception {
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"huawei-mrs", "open-source"})
+    void hiveRowTerminatorSurvivesBatchGenerationWithTwentyAndHundredFieldsAndScopedTargets(String mode) throws Exception {
         for(int count:List.of(20,100)) {
             Fixture fixture=new Fixture(20);
-            fixture.jdbc.update("update db_datasource_t set db_type='hive'");
+            fixture.jdbc.update("update db_datasource_t set db_type='hive',pool_cfg=?",
+                    "{\"hiveConnectionMode\":\"" + mode + "\",\"hiveProfile\":\"default\"}");
             fixture.ddlGenerator.expectedColumns=count;
             var fields=new ArrayList<Map<String,Object>>();
             for(int i=0;i<count;i++)fields.add(Map.of("columnName","f"+i,"dataType","varchar","length",64));
@@ -355,7 +377,8 @@ class BatchCreateTableDdlMagicTest {
             var result=assertInstanceOf(Map.class,fixture.run());
             for(Object raw:(List<?>)result.get("results")) {
                 String ddl=((Map<?,?>)raw).get("ddl").toString();
-                assertTrue(ddl.contains("LINES TERMINATED BY '\\002\\002\\002\\003\\003\\003\\n'"),ddl);
+                assertTrue(ddl.contains("open-source".equals(mode) ? "LINES TERMINATED BY '\\n'"
+                        : "LINES TERMINATED BY '\\002\\002\\002\\003\\003\\003\\n'"),ddl);
                 assertEquals(ddl.indexOf("ROW FORMAT"),ddl.lastIndexOf("ROW FORMAT"));
             }
             assertEquals(1,fixture.counter.reads);assertEquals(0,fixture.counter.writes);
@@ -366,7 +389,7 @@ class BatchCreateTableDdlMagicTest {
     }
 
     @Test
-    void everyHivePreviewIncludesTheProductionRowTerminatorWithoutExtraMetadataReads() throws Exception {
+    void hivePreviewSelectsTheRegisteredRowTerminatorWithoutExtraMetadataReads() throws Exception {
         for (String configuration : List.of("{\"hiveConnectionMode\":\"huawei-mrs\"}",
                 "{\"hiveProfile\":\"default\"}", "{\"usePlatformHiveConfig\":true}")) {
             Fixture fixture = new Fixture(2);
@@ -388,7 +411,10 @@ class BatchCreateTableDdlMagicTest {
         Map<?, ?> response = assertInstanceOf(Map.class, plainHive.run());
         String ddl = ((Map<?, ?>) ((List<?>) response.get("results")).getFirst()).get("ddl").toString();
         assertTrue(ddl.contains("TEXTFILE"), "The requested storage policy applies to every Hive target");
-        assertTrue(ddl.contains("LINES TERMINATED BY '\\002\\002\\002\\003\\003\\003\\n'"),ddl);
+        assertTrue(ddl.contains("LINES TERMINATED BY '\\n'"),ddl);
+        assertFalse(ddl.contains("\\002"),ddl);
+        assertEquals(1, plainHive.counter.reads);
+        assertEquals(0, plainHive.counter.writes);
     }
 
     @Test

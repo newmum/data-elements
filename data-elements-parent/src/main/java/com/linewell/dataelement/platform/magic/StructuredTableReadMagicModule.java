@@ -141,6 +141,19 @@ public class StructuredTableReadMagicModule {
         return call("LOWER", List.of(term), term.kind);
     }
 
+    public Expression upper(Expression term) { return call("UPPER",List.of(term),term.kind); }
+
+    @Comment("将有界普通文本转换为精确字节键，避免平台排序规则合并大小写不同的物理标识符")
+    public Expression exactTextKey(Expression term) {
+        if(term.kind!=Kind.TEXT)throw new IllegalArgumentException("精确文本键只支持普通文本列");
+        return new Expression(context->{
+            String value=term.sql(context);
+            if(context.postgres)return "UPPER(ENCODE(CONVERT_TO(CAST("+value+" AS TEXT), 'UTF8'), 'hex'))";
+            if(context.oracle)return "RAWTOHEX(UTL_RAW.CAST_TO_RAW("+value+"))";
+            return "HEX("+value+")";
+        },Kind.TEXT);
+    }
+
     public Expression trim(Expression term) {
         return call("TRIM", List.of(term), term.kind);
     }

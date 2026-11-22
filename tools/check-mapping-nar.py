@@ -25,7 +25,7 @@ def check(path):
     duplicates={name:owners for name,owners in classes.items() if len(owners)>1}
     if duplicates:
         raise ValueError('Duplicate class definitions: '+json.dumps(dict(list(duplicates.items())[:5])))
-    expected={'com.linewell.dataelement.nifi.HaitongTransformRecord','com.linewell.dataelement.nifi.JdbcHaitongDictionaryService'}
+    expected={'com.linewell.dataelement.nifi.HaitongTransformRecord','com.linewell.dataelement.nifi.HaitongNormalizeJsonRecords','com.linewell.dataelement.nifi.JdbcHaitongDictionaryService'}
     if not expected.issubset(registrations):
         raise ValueError('Processor/controller service registration missing')
     if sum('haitong-mapping-core-' in name for name in jars)!=1 or sum('haitong-mapping-runtime-' in name for name in jars)!=1:

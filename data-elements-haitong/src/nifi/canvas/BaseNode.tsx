@@ -1,4 +1,5 @@
 import type { Node as X6Node } from '@antv/x6';
+import { useLayoutEffect, useRef } from 'react';
 import {
   DatabaseOutlined,
   FunctionOutlined,
@@ -125,6 +126,20 @@ interface BaseNodeProps {
 }
 
 export default function BaseNode({ node: cell }: BaseNodeProps) {
+  const card = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const element = card.current;
+    if (!element) return;
+    const measure = () => {
+      const width = element.offsetWidth, height = element.offsetHeight;
+      const size = cell.size();
+      if (width > 0 && height > 0 && (size.width !== width || size.height !== height)) cell.resize(width, height);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [cell]);
   const data = cell.getData<{ node?: CanvasNode; runtime?: NodeRuntimeMetric; manifest?: ComponentManifest; errors?: FlowError[]; mode?: string; readonly?: boolean; taskName?: string } | undefined>();
   const cn = data?.node;
   const runtime = data?.runtime;
@@ -167,6 +182,7 @@ export default function BaseNode({ node: cell }: BaseNodeProps) {
 
   return (
     <div
+      ref={card}
       className={[
         'coze-node',
         data?.readonly ? 'is-context' : '',

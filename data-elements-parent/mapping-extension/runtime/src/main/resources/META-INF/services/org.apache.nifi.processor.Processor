@@ -1,1 +1,2 @@
 com.linewell.dataelement.nifi.HaitongTransformRecord
+com.linewell.dataelement.nifi.HaitongNormalizeJsonRecords

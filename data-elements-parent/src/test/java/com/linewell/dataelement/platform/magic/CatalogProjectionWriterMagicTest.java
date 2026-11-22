@@ -21,6 +21,42 @@ import org.ssssssss.script.MagicScriptContext;
 /** Executes changed projection boundaries without touching a live index or business row. */
 class CatalogProjectionWriterMagicTest {
     @Test
+    void registeredProjectionPreservesFullCommentsThroughLongTextForTwentyAndHundredFields() throws Exception {
+        String canonical = CanonicalMagicSources.byId("datapd_registered_table_catalog_projection_01");
+        String itemValues = canonical.substring(canonical.indexOf("var itemValues ="), canonical.indexOf("var syncCatalogItems ="));
+        String helpers = """
+                var tenantId = 'validation-tenant'
+                var rowValue = (row, keys) => {
+                    for (key in keys) { if (row[key] != null) { return row[key] } }
+                    return null
+                }
+                var firstText = values => {
+                    for (value in values) { if (value != null && (value + '').trim() != '') { return value + '' } }
+                    return ''
+                }
+                """;
+        var jdbc = new JdbcTemplate(new DriverManagerDataSource("jdbc:h2:mem:validation_comments_" + UUID.randomUUID()
+                + ";MODE=MySQL;DB_CLOSE_DELAY=-1", "sa", ""));
+        jdbc.execute("CREATE TABLE da_catalog_item_t(tid VARCHAR(32),col_comment LONGTEXT)");
+        for (int count : List.of(20, 100)) {
+            jdbc.update("DELETE FROM da_catalog_item_t");
+            String comment = "完整来源字段注释含换行\n".repeat(400);
+            List<Object[]> parameters = new ArrayList<>();
+            for (int i = 0; i < count; i++) {
+                var column = Map.of("tid", "column-" + i, "columnName", "field_" + i,
+                        "catalogItemName", "业务字段" + i, "columnComment", comment, "columnType", "varchar");
+                var output = assertInstanceOf(Map.class, MagicScript.create(helpers + itemValues
+                        + "\nreturn itemValues('item', 'catalog', source, 0)", null)
+                        .execute(new MagicScriptContext(Map.of("source", column))));
+                assertThat(output.get("col_comment")).isEqualTo(comment);
+                parameters.add(new Object[]{"field-" + i, output.get("col_comment")});
+            }
+            jdbc.batchUpdate("INSERT INTO da_catalog_item_t(tid,col_comment) VALUES (?,?)", parameters);
+            assertThat(jdbc.queryForList("SELECT col_comment FROM da_catalog_item_t", String.class))
+                    .hasSize(count).allMatch(comment::equals);
+        }
+    }
+    @Test
     void allTouchedCanonicalMagicResourcesCompile() throws IOException {
         for (String id : List.of("datapd_asset_refresh_01", "datapd_assets_batch_refresh_01",
                 "datapd_table_catalog_save_01", "datapd_registered_table_catalog_projection_01",

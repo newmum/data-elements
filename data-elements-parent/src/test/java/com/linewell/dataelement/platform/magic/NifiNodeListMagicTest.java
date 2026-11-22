@@ -52,6 +52,25 @@ import org.ssssssss.script.runtime.function.MagicScriptLambdaFunction;
 
 /** Execute the editable script against the actual Magic SQL module, including pagination. */
 class NifiNodeListMagicTest {
+    @Test void storedPasswordIsReadOnlyOnExplicitSingleNodeRequestAndNeverInLists() throws Exception {
+        var fixture=new Fixture(1);
+        var listed=fixture.firstNode();
+        assertEquals(true,listed.get("hasAuthPassword"));
+        assertFalse(listed.containsKey("authPassword"));assertFalse(listed.containsKey("auth_password"));
+        try(var tenant=TenantContext.use("police")) {
+            fixture.counter.reads=0;
+            var response=assertInstanceOf(ResponseEntity.class,fixture.runRaw(Map.of("action","password","nodeId","own-0")));
+            assertEquals("no-store",response.getHeaders().getFirst("Cache-Control"));
+            var data=assertInstanceOf(Map.class,assertInstanceOf(CommonResponse.class,response.getBody()).getData());
+            assertEquals(Map.of("nodeId","own-0","authPassword","must-not-return"),data);
+            assertEquals(1,fixture.counter.reads);
+            for(String id:List.of("foreign","deleted")) {
+                var denied=assertInstanceOf(ExitValue.class,fixture.runRaw(Map.of("action","password","nodeId",id,"tenantId","foreign")));
+                assertEquals(404,denied.getValues()[0]);
+            }
+            assertEquals(400,assertInstanceOf(ExitValue.class,fixture.runRaw(Map.of("action","password"))).getValues()[0]);
+        }
+    }
     @ParameterizedTest @ValueSource(ints={20,100})
     void samplingConfigurationsUseOneTenantScopedRead(int size) throws Exception {
         var fixture=new Fixture(size);
@@ -306,15 +325,26 @@ class NifiNodeListMagicTest {
         }
 
         Object readConfiguration(Object id, Object consume) throws Exception {
-            return readConfiguration(id,consume,false);
+            // Magic imports bind positional arguments using the published parameter order.
+            // Do not replace this boundary with named arguments: that hid the health regression.
+            String content=java.nio.file.Files.readString(java.nio.file.Path.of("..","magic","function","01.通用函数","78.读取NiFi运行节点配置.ms"));
+            var metadata=new ObjectMapper().readTree(content.substring(0,content.indexOf("================================")));
+            Object[] arguments={id,consume};
+            var inputs=new LinkedHashMap<String,Object>();
+            for(int i=0;i<metadata.path("parameters").size();i++)
+                inputs.put(metadata.path("parameters").get(i).path("name").asText(),i<arguments.length?arguments[i]:null);
+            return executeConfiguration(inputs);
         }
         Object readConfiguration(Object id, Object consume,Object allNodes) throws Exception {
+            var inputs=new LinkedHashMap<String,Object>();
+            inputs.put("nodeId",id);inputs.put("allNodes",allNodes);inputs.put("consume",consume);
+            return executeConfiguration(inputs);
+        }
+        Object executeConfiguration(Map<String,Object> inputs) throws Exception {
             var actual = CanonicalMagicSources.byPath("function/01.通用函数/78.读取NiFi运行节点配置.ms",
                     "nifi_runtime_node_read_v1").replaceAll("(?m)^import (?:tableRead|tenantRuntime)\\R", "");
             var bindings = new LinkedHashMap<String, Object>();
-            bindings.put("nodeId", id);
-            bindings.put("allNodes",allNodes);
-            bindings.put("consume", consume);
+            bindings.putAll(inputs);
             bindings.put("tenantRuntime", new com.linewell.dataelement.platform.tenant.api.TenantMagicModule(null));
             bindings.put("tableRead", TaskRuntimeMagicFixture.structuredReads(jdbc, sql -> configurationReads++));
             return MagicScript.create(actual, null).execute(new MagicScriptContext(bindings));
@@ -352,6 +382,7 @@ class NifiNodeListMagicTest {
         Object runRaw(Map<String, Object> body) throws Exception {
             var bindings = new LinkedHashMap<String, Object>();
             bindings.put("db",db); bindings.put("tenantRuntime",scope); bindings.put("tableSort",new TableSortMagicModule()); bindings.put("body",body);
+            bindings.put("tableRead",TaskRuntimeMagicFixture.structuredReads(jdbc,sql->counter.reads++));
             bindings.put("ObjectMapper", ObjectMapper.class);
             bindings.put("Map", Map.class);
             bindings.put("Timestamp", Timestamp.class);

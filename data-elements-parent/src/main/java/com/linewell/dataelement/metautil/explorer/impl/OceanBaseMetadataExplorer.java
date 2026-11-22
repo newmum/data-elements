@@ -436,6 +436,11 @@ public class OceanBaseMetadataExplorer extends AbstractMetadataExplorer {
     }
 
     @Override
+    public TableInfo getTableSummary(DataSourceConfig config,String tableName) {
+        return isOracleMode(config)?new OracleMetadataExplorer().getTableSummary(config,tableName):getTableInfo(config,tableName);
+    }
+
+    @Override
     public TableInfo getTableInfo(DataSourceConfig config, String tableName) {
         if (isOracleMode(config)) {
             return new OracleMetadataExplorer().getTableInfo(config, tableName);

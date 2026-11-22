@@ -170,6 +170,9 @@ public interface MetadataExplorer {
      */
     TableInfo getTableInfo(DataSourceConfig config, String tableName);
 
+    /** A single object overview can avoid loading full column/index detail. */
+    default TableInfo getTableSummary(DataSourceConfig config,String tableName) { return getTableInfo(config,tableName); }
+
     /**
      * 获取表的字段列表
      * 

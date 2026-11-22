@@ -25,6 +25,76 @@ import org.junit.jupiter.api.Test;
 
 class DslCompilerFileTransferProtocolTest {
 
+    @Test void registeredSourceShapesUseOneAuthorizedBatchAndRejectMissingOrStaleSnapshots() throws Exception {
+        for(int count:List.of(20,100)) {
+            var json=new ObjectMapper();var nifi=mock(NifiClient.class);var schemas=mock(com.linewell.dataelement.integration.nifi.canvas.mapping.RegisteredMappingSchemaService.class);
+            var compiler=new DslCompiler(nifi,mock(ManifestRegistry.class),mock(FieldMappingService.class),mock(HiveModule.class));compiler.setRegisteredSchemas(schemas);
+            var shape=new com.linewell.dataelement.mapping.core.StructuredJsonRecords.Shape();shape.accept(com.linewell.dataelement.mapping.core.StructuredJsonRecords.normalize(json.readTree("{\"@timestamp\":\"time\"}")));
+            var nodes=new java.util.ArrayList<Pipeline.Node>();var resolved=new java.util.LinkedHashMap<String,com.linewell.dataelement.integration.nifi.canvas.mapping.RegisteredMappingSchemaService.Resolved>();
+            var fields=json.createArrayNode();fields.addObject().put("name","timestamp");
+            for(int i=0;i<count;i++) {
+                String id="source-"+i;nodes.add(new Pipeline.Node(id,"source.kafka","Kafka","source",0,0,Map.of("registeredDatasourceId","db","sourceTableId","table-"+i,"sourceRecordShape",Map.of("untrusted",true))));
+                resolved.put(id,new com.linewell.dataelement.integration.nifi.canvas.mapping.RegisteredMappingSchemaService.Resolved("db","table-"+i,"","topic",fields,Map.of("db",Map.of("dbType","kafka")),false,false,shape.json()));
+            }
+            when(schemas.resolve(anyMap())).thenReturn(resolved);
+            var pipeline=new Pipeline("task","批量来源",null,null,null,new Pipeline.Dsl(1,nodes,List.of()),null,null,null,null,null,null,null);
+            compiler.preflightSources(pipeline);
+            verify(schemas,org.mockito.Mockito.times(1)).resolve(argThat(refs->refs.size()==count&&refs.values().stream().allMatch(ref->ref.path("datasourceId").asText().equals("db"))));
+            verify(nifi).requireMappingExtension();
+            resolved.put("source-0",new com.linewell.dataelement.integration.nifi.canvas.mapping.RegisteredMappingSchemaService.Resolved("db","table-0","","topic",fields,Map.of("db",Map.of("dbType","kafka"))));
+            var error=org.junit.jupiter.api.Assertions.assertThrows(com.linewell.dataelement.mapping.core.MappingException.class,()->compiler.preflightSources(pipeline));org.junit.jupiter.api.Assertions.assertEquals("SOURCE_SHAPE_REQUIRED",error.code());
+            when(schemas.resolve(anyMap())).thenThrow(new com.linewell.dataelement.mapping.core.MappingException("RESOURCE_FORBIDDEN","无权访问某一来源"));
+            org.junit.jupiter.api.Assertions.assertEquals("RESOURCE_FORBIDDEN",org.junit.jupiter.api.Assertions.assertThrows(com.linewell.dataelement.mapping.core.MappingException.class,()->compiler.preflightSources(pipeline)).code());
+            org.mockito.Mockito.verify(nifi,org.mockito.Mockito.never()).createProcessGroup(anyString(),anyString(),anyDouble(),anyDouble());
+        }
+    }
+
+    @Test
+    void minioSelectsExactRegisteredObjectBeforeFetchAndExtractsTheSelectedDataset() throws Exception {
+        for (String format : List.of("xlsx", "json")) {
+            var nifi = mock(NifiClient.class);
+            var registry = mock(ManifestRegistry.class);
+            when(registry.get("source.minio")).thenReturn(manifest("/manifests/sources/minio.json"));
+            when(nifi.getRootProcessGroupId()).thenReturn("root");
+            HiveServiceFixtures.stubGlobals(nifi);
+            when(nifi.listProcessGroups("root")).thenReturn(List.of());
+            when(nifi.createProcessGroup(anyString(), anyString(), anyDouble(), anyDouble())).thenReturn(entity("pg"));
+            when(nifi.createControllerService(anyString(), anyString(), anyString(), anyMap())).thenReturn(entity("cs"));
+            var ids = new java.util.LinkedHashMap<String, String>();
+            var properties = new java.util.LinkedHashMap<String, Map<String, String>>();
+            when(nifi.createProcessor(anyString(), anyString(), anyString(), anyDouble(), anyDouble(), anyMap(),
+                    nullable(String.class), nullable(String.class))).thenAnswer(call -> {
+                String name = call.getArgument(2); String id = "processor-" + ids.size();
+                ids.put(name, id); properties.put(name, call.getArgument(5)); return entity(id);
+            });
+            String key = " managed/Report#'${literal}." + format;
+            var config = Map.<String, Object>of("minioEndpoint", "http://validation.invalid:9000",
+                    "minioBucket", "validation", "minioAccessKey", "validation", "minioSecretKey", "validation-only",
+                    "minioObjectKey", key, "fileFormat", format, "excelSheetName", "月#统计",
+                    "jsonRecordPath", format.equals("json") ? "$.data.people" : "$");
+            var pipeline = new Pipeline("task", "已登记MinIO数据集", null, null, null,
+                    new Pipeline.Dsl(1, List.of(new Pipeline.Node("source", "source.minio", "MinIO", "source", 0, 0, config)), List.of()),
+                    null, null, null, null, null, null, null);
+            new DslCompiler(nifi, registry, mock(FieldMappingService.class), mock(HiveModule.class)).compile(pipeline);
+            String encoded = java.util.Base64.getEncoder().encodeToString(key.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            org.assertj.core.api.Assertions.assertThat(properties.get("MinIO/已登记对象"))
+                    .containsEntry("selected", "${filename:base64Encode():equals('" + encoded + "')}");
+            verify(nifi).createConnection("pg", ids.get("MinIO/列出对象"), "PROCESSOR", ids.get("MinIO/已登记对象"), "PROCESSOR", List.of("success"));
+            verify(nifi).createConnection("pg", ids.get("MinIO/已登记对象"), "PROCESSOR", ids.get("MinIO/读取对象"), "PROCESSOR", List.of("selected"));
+            org.assertj.core.api.Assertions.assertThat(properties.get("MinIO/读取对象")).containsEntry("Object Key", "${filename}");
+            verify(nifi).createControllerService(eq("pg"), anyString(), anyString(), argThat(p ->
+                    "XLSX".equals(p.get("Input File Type")) && "月#统计".equals(p.get("Required Sheets"))));
+            if (format.equals("json")) {
+                org.assertj.core.api.Assertions.assertThat(properties.get("MinIO/JSON 数据集"))
+                        .containsEntry("dataset", "$.data.people").containsEntry("Destination", "flowfile-content");
+                verify(nifi).createConnection("pg", ids.get("MinIO/文件类型分流"), "PROCESSOR", ids.get("MinIO/JSON 数据集"), "PROCESSOR", List.of("json"));
+                verify(nifi).createConnection("pg", ids.get("MinIO/JSON 数据集"), "PROCESSOR", ids.get("MinIO/规范化记录"), "PROCESSOR", List.of("matched"));
+            } else {
+                org.assertj.core.api.Assertions.assertThat(properties).doesNotContainKey("MinIO/JSON 数据集");
+            }
+        }
+    }
+
     @Test
     void nativeWriterSeparatesSchemaFromTableForJdbcMetadataLookup() {
         Map<String, String> properties = new java.util.LinkedHashMap<>(

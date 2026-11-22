@@ -453,7 +453,8 @@ export default function Canvas() {
     // centerContent() runs on an empty canvas. Re-center once nodes appear.
     if (addedAny && !initialGraphFitRef.current) {
       initialGraphFitRef.current = true;
-      setTimeout(() => taskChain && taskChain.items.length > 1 ? g.zoomToFit({ maxScale: 1, padding: 60 }) : g.centerContent(), 0);
+      requestAnimationFrame(() => requestAnimationFrame(() =>
+        Object.keys(composite.nodes).length > 1 ? g.zoomToFit({ maxScale: 1, padding: 60 }) : g.centerContent()));
     }
 
     // selection highlight

@@ -170,6 +170,7 @@ import java.util.Map
 import jsons
 import tableRead
 import tenantRuntime
+import com.linewell.dataelement.metautil.ddl.DdlDialect
 
 // GET /dst/db/tables 获取表列表。
 /**
@@ -297,13 +298,19 @@ if (blank(dbId)) {
 }
 
 var datasource = db.table('db_datasource_t')
-    .columns('tid', 'db_name', 'app_id', 'org_id', 'tenant_id')
+    .columns('tid', 'db_name', 'db_type', 'app_id', 'org_id', 'tenant_id')
     .where().eq('tid', dbId).eq('tenant_id', tenantId).eq('is_del', 0).selectOne()
 // 登记步骤读取数据源快照，不再叠加元数据管理菜单的角色范围校验。
 // tenantRuntime 与 SQL 租户条件仍限定本次读取的数据归属。
 if (datasource == null) {
     exit 404, '数据源不存在或已删除'
 }
+var oracleObjects = textOf(firstValue(datasource, ['dbType', 'db_type'])).toUpperCase() == 'ORACLE'
+    || textOf(firstValue(datasource, ['dbType', 'db_type'])).toUpperCase() == 'OCEANBASE_ORACLE'
+var tableIdentity = value => oracleObjects ? DdlDialect.oracleObjectKey(textOf(value).trim()) : textOf(value).trim().toLowerCase()
+var snapshotNameKey = column => oracleObjects
+    ? tableRead.exactTextKey(tableRead.when(tableRead.like(column, '%"%'), tableRead.trim(column), tableRead.upper(tableRead.trim(column))))
+    : tableRead.lower(tableRead.trim(column))
 
 // 登记目录抽屉复用第二步的已保存快照，按有效目录关联状态在库内分页。
 if (textOf(catalogPaged) == '1' || textOf(catalogPaged).toLowerCase() == 'true') {
@@ -321,7 +328,7 @@ if (textOf(catalogPaged) == '1' || textOf(catalogPaged).toLowerCase() == 'true')
     var tableName = snapshotColumn('table_name', 'TEXT')
     var annotated = snapshotColumn('annotated', 'NUMBER')
     var isAnnotated = tableRead.equal(annotated, 1)
-    var nameKey = tableRead.lower(tableRead.trim(tableName))
+    var nameKey = snapshotNameKey(tableName)
 
     // 目录关联必须在当前租户且未删除，失效引用按待登记处理。
     var snapshots = tableRead.from('db_table_t', snapshotAlias, tenantId)
@@ -343,7 +350,7 @@ if (textOf(catalogPaged) == '1' || textOf(catalogPaged).toLowerCase() == 'true')
         var detail = rowValue(job, ['deletedDetail', 'deleted_detail'])
         if (!blank(detail)) {
             for (missing in jsons.toJSONArray(textOf(detail))) {
-                var name = textOf(rowValue(missing, ['tableName', 'table_name'])).trim().toLowerCase()
+                var name = tableIdentity(rowValue(missing, ['tableName', 'table_name']))
                 if (!blank(name)) { missingNames.add(name) }
             }
         }
@@ -502,7 +509,7 @@ if (pagedMode) {
     }
 
     // 按原表名的小写值分组，依次比较标注状态、字段数、更新时间和表 ID。
-    var nameKey = tableRead.lower(snapshotColumn('table_name', 'TEXT'))
+    var nameKey = snapshotNameKey(snapshotColumn('table_name', 'TEXT'))
     var rankOrder = [
         tableRead.coalesce([annotatedColumn, 0]),
         tableRead.coalesce([snapshotColumn('field_count', 'NUMBER'), 0]),
@@ -612,7 +619,7 @@ var updatedValue = (row) => {
     return blank(value) ? '' : textOf(value)
 }
 for (row in tableRows == null ? [] : tableRows) {
-    var tableNameKey = textOf(firstValue(row, ['tableName', 'table_name'])).trim().toLowerCase()
+    var tableNameKey = tableIdentity(firstValue(row, ['tableName', 'table_name']))
     if (tableNameKey == '') { continue }
     var current = latestByTableName[tableNameKey]
     if (current == null || updatedValue(row) > updatedValue(current)) {
@@ -621,7 +628,7 @@ for (row in tableRows == null ? [] : tableRows) {
 }
 var rows = []
 for (row in tableRows == null ? [] : tableRows) {
-    var tableNameKey = textOf(firstValue(row, ['tableName', 'table_name'])).trim().toLowerCase()
+    var tableNameKey = tableIdentity(firstValue(row, ['tableName', 'table_name']))
     if (tableNameKey != '' && latestByTableName[tableNameKey] == row) {
         rows.add(tableItem(row, datasource))
     }

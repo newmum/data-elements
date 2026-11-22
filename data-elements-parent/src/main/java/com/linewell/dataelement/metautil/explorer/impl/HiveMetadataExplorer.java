@@ -21,7 +21,7 @@ public class HiveMetadataExplorer extends AbstractMetadataExplorer {
 
     @Override
     public String generateCreateTableDdl(DataSourceConfig config, String tableName, List<ColumnInfo> columns, String tableComment) {
-        return com.linewell.dataelement.metautil.ddl.HiveTableDdl.generate(tableName, columns, tableComment);
+        return com.linewell.dataelement.metautil.ddl.HiveTableDdl.generate(config, tableName, columns, tableComment);
     }
 
     @Override

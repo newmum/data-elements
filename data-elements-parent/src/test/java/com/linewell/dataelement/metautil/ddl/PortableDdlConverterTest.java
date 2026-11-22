@@ -18,6 +18,35 @@ import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 class PortableDdlConverterTest {
+    @ParameterizedTest @ValueSource(strings={"elasticsearch","ELASTICSEARCH"})
+    void elasticDateDefaultsPreserveTimestampWhileExplicitDateRemainsAvailable(String source) throws Exception {
+        var converter=new PortableDdlConverter();
+        assertEquals("datetime",converter.logicalType("date",source));
+        assertNull(converter.originTypeForEditor("datetime","date",source));
+        assertNull(converter.originTypeForEditor("date","date",source));
+        assertEquals("date",converter.logicalType("date","mysql"));
+        for(var target:List.of(DatabaseType.HIVE,DatabaseType.ORACLE)) {
+            for(String selected:List.of("datetime","date")) {
+                var column=new ColumnInfo();column.setColumnName("createTime");column.setSourceDatabaseType(source);
+                column.setColumnType(selected);column.setDataType(selected);
+                @SuppressWarnings("unchecked")var ready=((List<ColumnInfo>)converter.prepare(List.of(column),target).get("columns")).getFirst();
+                assertEquals(selected.equals("date")?"DATE":"TIMESTAMP",ready.getColumnType());
+            }
+        }
+        var json=new com.fasterxml.jackson.databind.ObjectMapper();
+        var specification=json.createObjectNode().put("version","1.0");
+        specification.putArray("mappings").addObject().put("from","createTime").put("to","createTime")
+                .put("targetType",converter.logicalType("date",source));
+        var expected=java.time.LocalDateTime.of(2026,11,21,16,17,18);
+        var zone=java.time.ZoneId.of("Asia/Shanghai");
+        var context=new com.linewell.dataelement.mapping.core.ExecutionContext(java.time.Instant.EPOCH,zone,java.util.Locale.ROOT,"validation-es-date");
+        var result=com.linewell.dataelement.mapping.core.MappingEngine.execute(
+                com.linewell.dataelement.mapping.core.MappingEngine.compile(specification),
+                List.of(Map.of("createTime","2026-11-21 16:17:18"),Map.of("createTime",expected.atZone(zone).toInstant().toEpochMilli())),0,context,null);
+        assertTrue(result.rows().stream().allMatch(com.linewell.dataelement.mapping.core.MappingEngine.Row::success));
+        for(var row:result.rows())assertEquals(expected,row.output().get("createTime"));
+    }
+
     @ParameterizedTest
     @CsvSource({
         "字符串(64),VARCHAR,varchar", "字符串(200),VARCHAR,varchar", "字符(8),CHAR,varchar",

@@ -36,6 +36,25 @@ class MaterializationBatchSubmitMagicTest {
     private static final String DDL_SCRIPT = "a0b5bba38fbf428c8e3646864d83d56b";
     private static final String TARGET_CONTEXT = "ods.materialization.targets";
 
+    @Test void newlyCreatedRegistrationUsesPhysicalTypesAndKeepsSourceTypeTrace() throws Exception {
+        var fixture = new Fixture(1);
+        fixture.jdbc.update("update db_table_column_t set data_type='json',column_type='json' where table_id='source-1'");
+        var target = fixture.target(0, "ods_json");
+        var field = new LinkedHashMap<String, Object>(Map.of("columnName", "field_0", "dataType", "json", "columnType", "json",
+                "sourceDataType", "json", "sourceColumnType", "json", "nullable", 1));
+        target.put("tableItems", List.of(field));
+        var actual = new LinkedHashMap<>(field); actual.put("dataType", "CLOB"); actual.put("columnType", "CLOB");
+        fixture.actualFields = List.of(actual);
+        var result = success(fixture.batch(List.of(target)));
+        assertThat(result.get("complete")).isEqualTo(true);
+        assertThat(fixture.jdbc.queryForList("select c.data_type from db_table_column_t c join db_table_t t on t.tid=c.table_id and t.tenant_id=c.tenant_id where c.column_name='field_0' and c.tenant_id='police' and t.datasource_id='db-0'", String.class))
+                .containsExactly("CLOB");
+        assertThat(field.get("sourceDataType")).isEqualTo("json");
+        assertThat(fixture.jdbc.queryForList("select c.source_table_column_id from db_table_column_t c join db_table_t t on t.tid=c.table_id and t.tenant_id=c.tenant_id where c.column_name='field_0' and c.tenant_id='police' and t.datasource_id='db-0'", String.class))
+                .doesNotContainNull();
+        assertThat(fixture.jdbc.queryForObject("select data_type from db_table_column_t where table_id='source-1'", String.class)).isEqualTo("json");
+    }
+
     @Test
     void metadataReadsStayBoundedForOneAndTwentyTargets() throws Exception {
         var one = new Fixture(1);
@@ -354,6 +373,7 @@ class MaterializationBatchSubmitMagicTest {
         final Set<String> physicalTables = new HashSet<>();
         final List<String> esDatasourceIds = new ArrayList<>();
         final List<List<String>> statusRefreshes = new ArrayList<>();
+        List<Map<String,Object>> actualFields;
         int columnWrites;
         int connectionReads;
         int structuredReads;
@@ -514,13 +534,19 @@ class MaterializationBatchSubmitMagicTest {
             if (dbId.equals(failure)) {
                 return Map.of("status", "failed", "code", 500, "message", "Validation physical create failed");
             }
-            return Map.of("created", physicalTables.add(dbId));
+            var returned = new ArrayList<Map<String,Object>>();
+            for (var field : (List<Map<String,Object>>)request.get("tableItems")) {
+                var physical = new LinkedHashMap<>(field);
+                if (actualFields != null) actualFields.stream().filter(actual -> actual.get("columnName").equals(field.get("columnName"))).findFirst().ifPresent(physical::putAll);
+                returned.add(physical);
+            }
+            return Map.of("created", physicalTables.add(dbId), "tableItems", returned);
         }
 
         Object runCanonicalDdl(Map<String, Object> body, String dbId) {
             var inputs = Map.<String, Object>of("body", body, "tenantRuntime", base.scope,
                     "request", request, "db", base.db, "connectionProperties", connections,
-                    "canvasTableDdl", new CanvasTableDdl(), "metadataExplorerService", new PhysicalTarget(this, dbId));
+                    "canvasTableDdl", new CanvasTableDdl(), "metadataExplorerService", new PhysicalTarget(this, dbId, (List<Map<String,Object>>)body.get("tableItems")));
             return ddlScript.execute(new MagicScriptContext(inputs));
         }
 
@@ -564,7 +590,16 @@ class MaterializationBatchSubmitMagicTest {
         }
     }
 
-    public record PhysicalTarget(Fixture fixture, String dbId) {
+    public record PhysicalTarget(Fixture fixture, String dbId, List<Map<String,Object>> fields) {
+        public Map<String,List<com.linewell.dataelement.metautil.model.dto.ColumnInfo>> getColumnsByTables(DataSourceConfig config,List<String> names) {
+            var columns = fields.stream().map(field -> {
+                var column = new com.linewell.dataelement.metautil.model.dto.ColumnInfo();
+                column.setColumnName(field.get("columnName").toString());column.setDataType(field.get("dataType").toString());
+                column.setColumnType(String.valueOf(field.get("columnType") == null ? field.get("dataType") : field.get("columnType")));
+                column.setNullable(!Integer.valueOf(0).equals(field.get("nullable")));return column;
+            }).toList();
+            return Map.of(names.getFirst().toLowerCase(java.util.Locale.ROOT),columns);
+        }
         public void createTable(DataSourceConfig config, String ddl) {
             assertThat(config.getDatabase()).isEqualTo("validation_target");
             assertThat(ddl).contains("ods_batch_" + dbId.substring(3));

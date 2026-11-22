@@ -5,6 +5,21 @@ import java.time.*;
 /** NiFi/JDBC transport carries absolute instants; unzoned business values use the plan zone. */
 final class NifiTemporalValues {
     private NifiTemporalValues() {}
+    /** Strip NiFi Record wrappers before the transport-independent engine sees containers. */
+    static Object inputValue(Object value) { return inputValue(value,0); }
+    private static Object inputValue(Object value,int depth) {
+        if(depth>32)throw new com.linewell.dataelement.mapping.core.MappingException("BUDGET_EXCEEDED","输入记录嵌套超过32层");
+        if(value instanceof org.apache.nifi.serialization.record.Record record)value=record.toMap();
+        if(value instanceof java.util.Map<?,?> map) {
+            var result=new java.util.LinkedHashMap<String,Object>();
+            for(var item:map.entrySet())result.put(item.getKey().toString(),inputValue(item.getValue(),depth+1));
+            return result;
+        }
+        if(value instanceof Byte[])return value;
+        if(value instanceof Object[] items){Object[] result=new Object[items.length];for(int i=0;i<items.length;i++)result[i]=inputValue(items[i],depth+1);return result;}
+        if(value instanceof java.util.Collection<?> items){var result=new java.util.ArrayList<Object>();for(Object item:items)result.add(inputValue(item,depth+1));return result;}
+        return value;
+    }
     static Object writerValue(Object value,ZoneId zone) {
         if(value instanceof LocalDate date)return java.sql.Date.valueOf(date);
         if(value instanceof LocalTime time)return java.sql.Time.valueOf(time);

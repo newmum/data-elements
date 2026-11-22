@@ -122,7 +122,10 @@ export function collectionRename(database, session, body) {
 }
 
 export function collectionReviewOrder(database, session, body) {
-  const existing = sourceSnapshot(database, session, String(body.dbId ?? "").trim());
+  const sourceId = String(body.dbId ?? "").trim();
+  const existing = sourceSnapshot(database, session, sourceId);
+  const source = database.sources.find((row) => row.tid === sourceId && row.tenantId === session.tenantId && !row.isDel);
+  const oracle = ["oracle", "oceanbaseoracle"].includes(String(source?.dbType ?? "").replaceAll(/[_\s-]/g, "").toLowerCase());
   const pageNo = Number(body.pageNo ?? 1), size = Number(body.pageSize ?? 20);
   assert(Number.isInteger(pageNo) && pageNo >= 1 && pageNo <= 100000 && Number.isInteger(size) && size >= 1 && size <= 100,
     500, "分页参数无效，每页最多100张表");
@@ -131,7 +134,7 @@ export function collectionReviewOrder(database, session, body) {
     compareFields(left.updatedTime, right.updatedTime, "desc") || String(right.tid).localeCompare(String(left.tid)));
   const distinct = new Map();
   for (const row of ranked) {
-    const key = row.tableName.toLowerCase();
+    const key = oracle ? oracleObjectIdentity(row.tableName) : row.tableName.toLowerCase();
     if (!distinct.has(key)) distinct.set(key, row);
   }
   const fields = { ...collectionFields, name: (row) => row.tableNameCn || row.tableComment || row.tableName,
@@ -150,6 +153,32 @@ export function collectionReviewOrder(database, session, body) {
   const matched = rows.filter((row) => requested.has(row.tableName));
   assert(matched.length === names.length, 500, "审查范围包含不存在或无权访问的数据表，请刷新清单");
   return { keys: matched.slice(start, start + size).map((row) => row.tableName), total: matched.length };
+}
+
+function oracleObjectIdentity(reference) {
+  const text = String(reference).trim(), parts = []; let cursor = 0;
+  while (cursor < text.length) {
+    while (/\s/u.test(text[cursor] ?? "") && cursor < text.length) cursor += 1;
+    let value = "";
+    if (text[cursor] === '"') {
+      cursor += 1; let closed = false;
+      while (cursor < text.length) {
+        const character = text[cursor++];
+        if (character !== '"') value += character;
+        else if (text[cursor] === '"') { value += '"'; cursor += 1; }
+        else { closed = true; break; }
+      }
+      assert(closed, 500, "物理表名引号未闭合");
+    } else {
+      while (cursor < text.length && text[cursor] !== ".") value += text[cursor++];
+      value = value.trim().toUpperCase(); assert(/^[\p{L}_][\p{L}\p{N}_$#]*$/u.test(value), 500, "物理表名格式不正确");
+    }
+    assert(value && !/[\u0000-\u001f]/u.test(value), 500, "物理表名格式不正确"); parts.push(value);
+    while (/\s/u.test(text[cursor] ?? "") && cursor < text.length) cursor += 1;
+    if (cursor < text.length) { assert(text[cursor++] === "." && cursor < text.length, 500, "物理表名格式不正确"); }
+  }
+  assert(parts.length > 0 && parts.length <= 2, 500, "仅支持表名或模式.表名");
+  return JSON.stringify(parts);
 }
 
 export function requireTable(database, session, id) {

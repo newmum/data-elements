@@ -13,8 +13,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.Map;
-
 /**
  * Same-origin proxy for the native NiFi application. Authentication is supplied
  * by the session-bound native view, so NiFi credentials never reach the browser.
@@ -69,14 +67,13 @@ public class NifiNativeUiProxyController {
         try {
             return nativeView.proxy(request, path, path.equals(upstreamUiPath) || path.startsWith(upstreamUiPath + "/"));
         } catch (org.springframework.web.server.ResponseStatusException rejected) {
-            return ResponseEntity.status(rejected.getStatusCode()).contentType(MediaType.APPLICATION_JSON)
-                    .body(Map.of("error", rejected.getReason() == null ? "原生详情访问被拒绝" : rejected.getReason(),
-                            "status", rejected.getStatusCode().value()));
+            return ResponseEntity.status(rejected.getStatusCode()).contentType(MediaType.TEXT_PLAIN)
+                    .body(rejected.getReason() == null ? "原生详情访问被拒绝" : rejected.getReason());
         } catch (NifiException e) {
             int status = e.status() > 0 ? e.status() : 502;
             return ResponseEntity.status(status)
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(Map.of("error", e.getMessage(), "status", status));
+                    .contentType(MediaType.TEXT_PLAIN)
+                    .body(e.getMessage());
         }
     }
 }

@@ -27,8 +27,8 @@ public class RegisteredMappingSchemaService {
     private final UnifiedMappingService engine;
     private final com.linewell.dataelement.platform.persistence.TenantIdentifierSql identifiers;
     public RegisteredMappingSchemaService(JdbcTemplate jdbc,DataSourceConnectionPropertyResolver sources,UnifiedMappingService engine){this.jdbc=jdbc;this.sources=sources;this.engine=engine;identifiers=new com.linewell.dataelement.platform.persistence.TenantIdentifierSql(jdbc);}
-    public record Resolved(String datasourceId,String tableId,String schema,String table,JsonNode fields,Map<String,Map<String,Object>> connections,boolean schemaQuoted,boolean tableQuoted) {
-        public Resolved(String datasourceId,String tableId,String schema,String table,JsonNode fields,Map<String,Map<String,Object>> connections){this(datasourceId,tableId,schema,table,fields,connections,false,false);}
+    public record Resolved(String datasourceId,String tableId,String schema,String table,JsonNode fields,Map<String,Map<String,Object>> connections,boolean schemaQuoted,boolean tableQuoted,JsonNode sourceRecordShape) {
+        public Resolved(String datasourceId,String tableId,String schema,String table,JsonNode fields,Map<String,Map<String,Object>> connections){this(datasourceId,tableId,schema,table,fields,connections,false,false,NullNode.getInstance());}
     }
     public Map<String,Resolved> resolve(Map<String,JsonNode> references){
         if(references.isEmpty())return Map.of();if(references.size()>MAX_REFERENCES)throw new MappingException("BUDGET_EXCEEDED","Schema引用超过100个");Set<String> sourceIds=new LinkedHashSet<>();references.values().forEach(ref->sourceIds.add(ref.path("datasourceId").asText()));if(sourceIds.contains("")||sourceIds.size()>MAX_DATASOURCES)throw new MappingException("RESOURCE_FORBIDDEN","Schema须使用最多8个已登记的数据源ID");
@@ -45,7 +45,19 @@ public class RegisteredMappingSchemaService {
         applyRegisteredFormats(matched.values(),columns,fields);
         Map<String,Resolved> result=new LinkedHashMap<>();matched.forEach((key,row)->{String source=String.valueOf(row.get("datasource_id")),tableId=String.valueOf(row.get("tid"));var names=DdlDialect.names(String.valueOf(row.get("table_name")));if(names.size()>2)throw new MappingException("INVALID_SCHEMA","登记表须明确schema和表名");String schema=names.size()==2?names.getFirst().value():"";String table=names.getLast().value();boolean schemaQuoted=names.size()==2?names.getFirst().quoted():configuredSchemaQuoted(connections.get(source));if(schema.isBlank()){schema=Objects.toString(JdbcMetadataScope.configuredSchema(connections.get(source)),"");}
             if(schema.isBlank()){String url=String.valueOf(connections.get(source).getOrDefault("jdbcURL",connections.get(source).getOrDefault("jdbcUrl","")));var database=java.util.regex.Pattern.compile("^jdbc:(?:mysql|mariadb)://[^/]+/([^?;]+)").matcher(url);if(database.find())schema=database.group(1);}
-            JsonNode declared=fields.getOrDefault(tableId,JSON.createArrayNode());if(declared.isEmpty())throw new MappingException("INVALID_SCHEMA","登记字段缺失");result.put(key,new Resolved(source,tableId,schema,table,declared,connections,schemaQuoted,names.getLast().quoted()));});if(result.values().stream().mapToInt(value->value.fields().size()).sum()>MAX_TOTAL_FIELDS)throw new MappingException("BUDGET_EXCEEDED","登记Schema响应字段总数超过20000个");return result;
+            JsonNode declared=fields.getOrDefault(tableId,JSON.createArrayNode());if(declared.isEmpty())throw new MappingException("INVALID_SCHEMA","登记字段缺失");result.put(key,new Resolved(source,tableId,schema,table,declared,connections,schemaQuoted,names.getLast().quoted(),registeredRecordShape(row.get("field_governance_config"))));});if(result.values().stream().mapToInt(value->value.fields().size()).sum()>MAX_TOTAL_FIELDS)throw new MappingException("BUDGET_EXCEEDED","登记Schema响应字段总数超过20000个");return result;
+    }
+    private static JsonNode registeredRecordShape(Object raw) {
+        if(raw==null)return NullNode.getInstance();
+        try {
+            String text=raw instanceof Clob clob?clob.getSubString(1,Math.toIntExact(Math.min(clob.length(),2_097_153))):raw.toString();
+            if(text.isBlank())return NullNode.getInstance();
+            if(text.length()>2_097_152)throw new MappingException("BUDGET_EXCEEDED","登记治理快照超过2MiB");
+            JsonNode document=raw instanceof Map<?,?>?JSON.valueToTree(raw):JSON.readTree(text);
+            JsonNode shape=document.path("sourceRecordShape");
+            return shape.isObject()?shape.deepCopy():NullNode.getInstance();
+        } catch(MappingException error){throw error;}
+        catch(Exception invalid){return NullNode.getInstance();}
     }
     /** Governance changes output precision, never the physical input type or a field-name heuristic. */
     private static void applyRegisteredFormats(Collection<Map<String,Object>> tables,List<Map<String,Object>> columns,Map<String,ArrayNode> fields) {

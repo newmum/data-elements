@@ -8,6 +8,10 @@ const row = (field, status, currentValue = '5') => ({ nodeId: 'n', field, status
 
 test('first deployment and historical missing mappings take different paths', () => {
   assert.equal(saveSyncMode(null, null), 'deploy');
+  assert.equal(saveSyncMode(null, {}), 'deploy');
+  assert.equal(saveSyncMode(null, { runtimeNodeId: 'assigned-node' }), 'deploy');
+  assert.equal(saveSyncMode(null, { primaryProcessorIds: {}, processorIdToCanvasNode: {} }), 'deploy');
+  assert.equal(saveSyncMode(null, { candidate: { processGroupId: 'candidate' } }), 'missing-mapping');
   assert.equal(saveSyncMode(null, mapping, 'old-hash'), 'missing-mapping');
   assert.equal(saveSyncMode(null, null, 'old-hash'), 'missing-mapping');
   assert.equal(saveSyncMode('group', null), 'missing-mapping');

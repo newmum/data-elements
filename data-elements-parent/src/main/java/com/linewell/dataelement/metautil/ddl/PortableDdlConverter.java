@@ -185,6 +185,10 @@ public class PortableDdlConverter {
                 default -> kind;
             };
         }
+        // Elasticsearch date is a timestamp carrier (formatted date/time or epoch milliseconds).
+        // The native snapshot stays intact; the materialization editor defaults to a time-preserving type.
+        if (source == DatabaseType.ELASTICSEARCH && "DATE".equals(PortableColumnType.base(raw)))
+            kind = PortableColumnType.Kind.TIMESTAMP;
         boolean oracleSource = source != null && DdlDialect.family(source) == DdlDialect.Family.ORACLE;
         if (oracleSource && PortableColumnType.base(raw).equals("FLOAT")) kind = PortableColumnType.Kind.DECIMAL;
         if (!oracleSource && PortableColumnType.base(raw).equals("LONG")) kind = PortableColumnType.Kind.BIGINT;
@@ -217,7 +221,9 @@ public class PortableDdlConverter {
     /** Keep origin semantics such as UUID and time zones until the user selects another type family. */
     public String originTypeForEditor(String selected, String origin, String sourceCode) {
         if (origin == null || origin.isBlank() || PortableColumnType.kind(origin) == PortableColumnType.Kind.UNKNOWN) return null;
-        if (optionalSourceType(sourceCode) == DatabaseType.MONGODB && "DATE".equals(PortableColumnType.base(origin))) return null;
+        DatabaseType source = optionalSourceType(sourceCode);
+        if ((source == DatabaseType.MONGODB || source == DatabaseType.ELASTICSEARCH)
+                && "DATE".equals(PortableColumnType.base(origin))) return null;
         return logicalType(origin,sourceCode).equalsIgnoreCase(selected) ? origin : null;
     }
 

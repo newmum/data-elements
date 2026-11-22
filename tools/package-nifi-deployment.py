@@ -23,7 +23,7 @@ SERVICES = {
 DEPLOYMENT = """# NiFi 2.9.0 / Linux x86_64 完整配套包
 
 本包包含Apache NiFi 2.9.0完整发行文件、9个自定义及父依赖NAR、JDK 21和JDBC驱动。
-自定义组件覆盖本地保存的公司节点清单中的全部组件类型，字段治理扩展使用1.1.29。
+自定义组件覆盖本地保存的公司节点清单中的全部组件类型，字段治理扩展使用1.1.30。
 组件名称、版本、父依赖及摘要见extensions.json，驱动版本和摘要见drivers/manifest.json。
 交付使用本机保存的厂商原件，公司10.231.176.56节点本次网页与SSH均连接超时。
 
@@ -59,7 +59,7 @@ GaussDB同时提供gaussdbjdbc.jar、opengaussjdbc.jar、openGauss独立驱动�
 
 extensions/中已放入以下9个NAR，NiFi启动时自动加载。
 
-- haitong-mapping-nar-1.1.29.nar
+- haitong-mapping-nar-1.1.30.nar
 - datadevs-database-nar-2.9.0.nar
 - datadevs-record-nar-2.9.0.nar
 - datadevs-record-service-api-nar-2.9.0.nar
@@ -127,7 +127,7 @@ def main():
     for path in custom:
         fields, types = inspect_nar(path)
         artifact, version = fields["Nar-Id"], fields["Nar-Version"]
-        if artifact not in REQUIRED or version != ("1.1.29" if artifact == "haitong-mapping-nar" else "2.9.0"):
+        if artifact not in REQUIRED or version != ("1.1.30" if artifact == "haitong-mapping-nar" else "2.9.0"):
             raise ValueError("Unexpected custom bundle: " + path.name)
         coordinates.add((fields["Nar-Group"], artifact, version))
         summaries.append({"file": path.name, "coordinate": {key: value for key, value in fields.items() if key.startswith("Nar-")},

@@ -17,13 +17,12 @@
                 <div class="network-header">
                   <div class="network-heading"><span class="network-symbol" :class="[`network-symbol--${network.tagType || 'info'}`, { 'network-symbol--uniform-blue': network.value === 'HLW' }] "><Icon :icon="network.icon || fallbackNetworkIcon(network.value)" :size="18" /></span><div class="network-title"><strong>{{ network.label }}</strong><el-tag size="small" effect="plain">{{ network.value }}</el-tag></div></div>
                   <div class="network-metrics"><span>节点 {{ network.nodes.length }} 个</span><span>启用 {{ network.enabledCount }} 个</span></div>
-                  <el-button link type="primary" @click.stop="openNetworkIconEditor(network)">{{ text.configureIcon }}</el-button>
-                  <el-button type="primary" link class="network-add-node-button" @click.stop="openCreate(kind, network.value)">＋{{ text.addNode }}</el-button>
+                  <div class="network-header-actions"><el-button link type="primary" @click.stop="openNetworkIconEditor(network)">{{ text.configureIcon }}</el-button><el-button type="primary" link class="network-add-node-button" @click.stop="openCreate(kind, network.value)">＋{{ text.addNode }}</el-button></div>
                 </div>
               </template>
               <div v-if="network.nodes.length" class="node-list">
                 <article v-for="node in network.nodes" :key="node.id" class="sync-node-row" :class="{ 'is-disabled': !node.enabled, 'is-default': node.isDefault }">
-                  <div class="node-row-main"><el-tooltip :content="healthDescription(node)" placement="top"><span class="node-icon" :class="`node-icon--${node.healthStatus || 'unknown'}`" tabindex="0" role="img" :aria-label="healthDescription(node)"><el-icon :size="18"><Connection /></el-icon></span></el-tooltip><div class="node-identity"><div class="node-identity-title"><strong>{{ node.name }}</strong><el-tag size="small" effect="plain">{{ node.code }}</el-tag></div><p class="node-inline-meta"><span :title="node.baseUrl">{{ node.baseUrl || '-' }}</span><i v-if="kind === 'sync'">·</i><span v-if="kind === 'sync'" :title="node.rootProcessGroupId">{{ node.rootProcessGroupId || '-' }}</span><i>·</i><span>{{ node.updatedTime || '-' }}</span><span v-if="kind === 'push' && node.lastSyncTime" :title="`最近一次同步：${node.lastSyncTime}`">{{ node.lastSyncStatus === 'SUCCESS' ? '最近同步成功' : '最近同步失败' }}</span></p></div></div>
+                  <div class="node-row-main"><el-tooltip :content="healthDescription(node)" placement="top"><span class="node-icon" :class="`node-icon--${node.healthStatus || 'unknown'}`" tabindex="0" role="img" :aria-label="healthDescription(node)"><el-icon :size="18"><Connection /></el-icon></span></el-tooltip><div class="node-identity"><div class="node-identity-title"><strong>{{ node.name }}</strong><el-tag size="small" effect="plain">{{ node.code }}</el-tag></div><p class="node-inline-meta"><span class="node-url" :title="node.baseUrl">{{ node.baseUrl || '-' }}</span><span v-if="kind === 'sync'" class="node-group" :title="`流程组：${node.rootProcessGroupId || '-'}`">流程组：{{ node.rootProcessGroupId || '-' }}</span><span class="node-updated">{{ node.updatedTime || '-' }}</span><span v-if="kind === 'push' && node.lastSyncTime" :title="`最近一次同步：${node.lastSyncTime}`">{{ node.lastSyncStatus === 'SUCCESS' ? '最近同步成功' : '最近同步失败' }}</span></p></div></div>
                   <div class="node-row-side"><div class="node-state"><el-tag v-if="node.isDefault" size="small" type="primary" effect="light">{{ text.default }}</el-tag><el-tag size="small" :type="node.enabled ? 'success' : 'info'" effect="light">{{ node.enabled ? text.enabled : text.disabled }}</el-tag><el-switch v-model="node.enabled" :disabled="saving" @change="saveStatus(node, kind)" /></div><div class="row-actions"><el-button v-if="kind === 'push'" link type="primary" :disabled="!node.enabled || Boolean(syncingNodeId)" :loading="syncingNodeId === node.id" @click="openPushSync(node)">同步配置</el-button><el-button link type="primary" :loading="testingId === node.id" @click="testNode(node, kind)">{{ text.test }}</el-button><el-dropdown trigger="click" @command="(action) => handleNodeCommand(action, node, kind)"><el-button link type="primary" class="more-action-button">{{ text.more }}<el-icon class="action-caret"><CaretBottom /></el-icon></el-button><template #dropdown><el-dropdown-menu><el-dropdown-item command="edit">{{ text.edit }}</el-dropdown-item><el-dropdown-item command="remove" divided>{{ text.remove }}</el-dropdown-item></el-dropdown-menu></template></el-dropdown></div></div>
                 </article>
               </div>
@@ -108,7 +107,7 @@
           <el-form-item :label="text.credentialRef"><el-input v-model.trim="form.credentialRef" :placeholder="text.credentialPlaceholder" maxlength="255" /></el-form-item>
         </template>
         <el-form-item :label="text.remark"><el-input v-model.trim="form.remark" type="textarea" :rows="3" maxlength="500" show-word-limit /></el-form-item>
-        <el-row :gutter="16">
+        <el-row :gutter="16" class="node-editor-options">
           <el-col :span="8"><el-form-item :label="text.enabled"><el-switch v-model="form.enabled" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item :label="text.setDefault"><el-switch v-model="form.isDefault" /></el-form-item></el-col>
           <el-col v-if="dialogMode === 'service'" :span="8"><el-form-item :label="text.localNode"><el-switch v-model="form.localNode" :disabled="editingLocalNode" /></el-form-item></el-col>
@@ -226,12 +225,15 @@ const inferNetworkCode = (item) => String(item.networkCode || item.network_code 
 const normalizeDriverDirectory = (value) => {
   const configured = String(value || '').trim();
   if (!configured || !configured.includes('=')) return configured;
-  const mapping = configured.split(/[\r\n;]/)[0] || '';
-  const location = mapping.slice(mapping.indexOf('=') + 1).trim();
+  const entries = configured.split(/[\r\n;]/);
+  const mapping = entries.find(entry => /^(DEFAULT|\*)=/i.test(entry.trim())) || entries[0] || '';
+  const location = mapping.slice(mapping.indexOf('=') + 1).split(',')[0].trim();
+  if (!/\.jar$/i.test(location)) return location;
   const separator = location.lastIndexOf('/');
   return separator > 0 ? location.slice(0, separator) : '';
 };
 const toNode = (item, mode) => ({
+  storedDriverLocations: item.jdbcDriverDirectory || item.jdbcDriverLocations || item.jdbc_driver_locations || '',
   id: item.tid || item.id, name: item.nodeName || item.name || '', code: item.nodeCode || item.code || '', baseUrl: item.baseUrl || '', rootProcessGroupId: item.rootProcessGroupId || '', authUsername: item.authUsername || item.auth_username || '', authPassword: '', hasAuthPassword: item.hasAuthPassword === true || Number(item.hasAuthPassword) === 1, insecureTls: item.insecureTls !== false && Number(item.insecureTls ?? item.insecure_tls ?? 1) !== 0, jdbcDriverDirectory: normalizeDriverDirectory(item.jdbcDriverDirectory || item.jdbcDriverLocations || item.jdbc_driver_locations || ''),
   networkCode: inferNetworkCode(item), networkName: item.networkName || item.network_name || findNetwork(inferNetworkCode(item))?.label || inferNetworkCode(item),
   businessDomain: item.businessDomain || '', serviceType: item.serviceType || '', managementUrl: item.managementUrl || '', credentialRef: item.credentialRef || '', remark: item.remark || '',
@@ -278,14 +280,37 @@ const loadActive = () => loadNodes(activeTab.value);
 const handleTabChange = (mode) => loadNodes(mode);
 const openNetworkIconEditor = (network) => { Object.assign(networkIconForm, { networkCode: network.value, networkName: network.label, icon: network.icon || fallbackNetworkIcon(network.value), tagType: network.tagType || 'primary' }); networkIconDialogVisible.value = true; };
 const saveNetworkIcon = async () => { savingNetworkIcon.value = true; try { await $common.post('/ods/node/options', { action: 'saveNetworkIcon', networkCode: networkIconForm.networkCode, icon: networkIconForm.icon }); networkIconDialogVisible.value = false; await loadNetworkOptions(); ElMessage.success(text.saved); } catch (error) { ElMessage.error(error?.message || text.saveFailed); } finally { savingNetworkIcon.value = false; } };
-const resetForm = () => { hasStoredAuthPassword.value = false; passwordVisible.value = false; Object.assign(form, { id: '', name: '', code: '', networkCode: networkOptions.value[0]?.value || '', networkName: networkOptions.value[0]?.label || '', baseUrl: '', rootProcessGroupId: '', authUsername: '', authPassword: '', insecureTls: true, jdbcDriverDirectory: '', businessDomain: '', serviceType: '', managementUrl: '', credentialRef: '', remark: '', enabled: true, isDefault: false, localNode: false }); };
+const resetForm = () => { form.storedDriverLocations = ''; passwordRequestVersion++; revealingPassword.value = false; hasStoredAuthPassword.value = false; passwordVisible.value = false; Object.assign(form, { id: '', name: '', code: '', networkCode: networkOptions.value[0]?.value || '', networkName: networkOptions.value[0]?.label || '', baseUrl: '', rootProcessGroupId: '', authUsername: '', authPassword: '', insecureTls: true, jdbcDriverDirectory: '', businessDomain: '', serviceType: '', managementUrl: '', credentialRef: '', remark: '', enabled: true, isDefault: false, localNode: false }); };
 const openCreate = async (mode, networkCode = '') => { dialogMode.value = mode; editingId.value = ''; editingLocalNode.value = false; resetForm(); if (mode !== 'service' && networkCode) form.networkCode = networkCode; if (mode !== 'service') form.isDefault = !(mode === 'push' ? pushNodes.value : syncNodes.value).some((node) => node.networkCode === form.networkCode && node.isDefault); dialogVisible.value = true; await nextTick(); formRef.value?.clearValidate?.(); };
-const openEdit = async (node, mode) => { dialogMode.value = mode; editingId.value = node.id; editingLocalNode.value = Boolean(node.localNode); hasStoredAuthPassword.value = Boolean(node.hasAuthPassword); passwordVisible.value = false; Object.assign(form, { ...node, authPassword: '' }); dialogVisible.value = true; await nextTick(); formRef.value?.clearValidate?.(); };
-const copyNode = async (node, mode) => { dialogMode.value = mode; editingId.value = ''; editingLocalNode.value = false; hasStoredAuthPassword.value = false; passwordVisible.value = false; Object.assign(form, { ...node, id: '', name: `${node.name}-${text.copy}`, code: '', authPassword: '', isDefault: false, localNode: false }); dialogVisible.value = true; await nextTick(); formRef.value?.clearValidate?.(); ElMessage.info(text.copied); };
-const toggleAuthPasswordVisibility = async () => { if (passwordVisible.value) { passwordVisible.value = false; return; } if (!form.authPassword && editingId.value && hasStoredAuthPassword.value) { revealingPassword.value = true; try { const response = await $common.post('/ods/node/page', { revealPasswordNodeId: editingId.value }); const payload = response?.data || response || {}; const rows = Array.isArray(payload) ? payload : payload.list || []; const revealed = rows.find((item) => String(item.tid || item.id) === String(editingId.value)); const password = String(revealed?.authPassword || revealed?.auth_password || ''); if (!password) throw new Error(text.passwordRevealFailed); form.authPassword = password; } catch (error) { ElMessage.error(error?.message || text.passwordRevealFailed); return; } finally { revealingPassword.value = false; } } passwordVisible.value = true; };
+const openEdit = async (node, mode) => { passwordRequestVersion++; revealingPassword.value = false; dialogMode.value = mode; editingId.value = node.id; editingLocalNode.value = Boolean(node.localNode); hasStoredAuthPassword.value = Boolean(node.hasAuthPassword); passwordVisible.value = false; Object.assign(form, { ...node, authPassword: '' }); dialogVisible.value = true; await nextTick(); formRef.value?.clearValidate?.(); };
+const copyNode = async (node, mode) => { passwordRequestVersion++; revealingPassword.value = false; dialogMode.value = mode; editingId.value = ''; editingLocalNode.value = false; hasStoredAuthPassword.value = false; passwordVisible.value = false; Object.assign(form, { ...node, id: '', name: `${node.name}-${text.copy}`, code: '', authPassword: '', isDefault: false, localNode: false }); dialogVisible.value = true; await nextTick(); formRef.value?.clearValidate?.(); ElMessage.info(text.copied); };
+let passwordRequestVersion = 0;
+const toggleAuthPasswordVisibility = async () => {
+  if (revealingPassword.value) return;
+  if (passwordVisible.value) { passwordVisible.value = false; return; }
+  if (!form.authPassword && editingId.value && hasStoredAuthPassword.value) {
+    const nodeId = String(editingId.value), version = ++passwordRequestVersion;
+    revealingPassword.value = true;
+    try {
+      const response = await $common.post('/ods/node/page', { action: 'password', nodeId });
+      const payload = response?.data || response || {};
+      if (version !== passwordRequestVersion || !dialogVisible.value || String(editingId.value) !== nodeId) return;
+      if (String(payload.nodeId) !== nodeId || typeof payload.authPassword !== 'string' || !payload.authPassword) throw new Error(text.passwordRevealFailed);
+      form.authPassword = payload.authPassword;
+    } catch (error) {
+      if (version === passwordRequestVersion && dialogVisible.value && String(editingId.value) === nodeId) ElMessage.error(error?.message || text.passwordRevealFailed);
+      return;
+    } finally {
+      if (version === passwordRequestVersion) revealingPassword.value = false;
+    }
+  }
+  passwordVisible.value = true;
+};
+// 仅修改凭据等字段时保留原有的逐数据库驱动映射。
+const driverLocationsForSave = value => value.storedDriverLocations && normalizeDriverDirectory(value.storedDriverLocations) === String(value.jdbcDriverDirectory || '').trim() ? value.storedDriverLocations : value.jdbcDriverDirectory || '';
 const requestSave = (value, mode) => $common.post(mode === 'service' ? '/ods/service/save' : '/ods/node/save', {
   nodeType: mode,
-  tid: value.id || '', nodeName: value.name, nodeCode: value.code, networkCode: value.networkCode || '', baseUrl: String(value.baseUrl || '').replace(/\/+$/, ''), rootProcessGroupId: value.rootProcessGroupId || '', authUsername: value.authUsername || '', authPassword: value.authPassword || '', insecureTls: value.insecureTls ? 1 : 0, jdbcDriverDirectory: value.jdbcDriverDirectory || '', businessDomain: value.businessDomain || '', serviceType: value.serviceType || '', managementUrl: String(value.managementUrl || '').replace(/\/+$/, ''), credentialRef: value.credentialRef || '', remark: value.remark || '', enabled: value.enabled ? 1 : 0, isDefault: value.isDefault ? 1 : 0, localNode: value.localNode ? 1 : 0
+  tid: value.id || '', nodeName: value.name, nodeCode: value.code, networkCode: value.networkCode || '', baseUrl: String(value.baseUrl || '').replace(/\/+$/, ''), rootProcessGroupId: value.rootProcessGroupId || '', authUsername: value.authUsername || '', authPassword: value.authPassword || '', insecureTls: value.insecureTls ? 1 : 0, jdbcDriverDirectory: driverLocationsForSave(value), businessDomain: value.businessDomain || '', serviceType: value.serviceType || '', managementUrl: String(value.managementUrl || '').replace(/\/+$/, ''), credentialRef: value.credentialRef || '', remark: value.remark || '', enabled: value.enabled ? 1 : 0, isDefault: value.isDefault ? 1 : 0, localNode: value.localNode ? 1 : 0
 });
 const saveNode = async () => {
   if (saving.value) return;
@@ -448,9 +473,66 @@ onMounted(async () => { await loadNetworkOptions(); await loadNodes('sync'); });
 .password-reveal-trigger:hover, .password-reveal-trigger:focus-visible { color: #1677ff; }
 .password-reveal-trigger :deep(.el-icon) { font-size: 17px; }
 .jdbc-driver-hint { margin-top: 6px; color: #7a8798; font-size: 12px; line-height: 18px; }
-@media (max-width: 1080px) { .network-metrics { gap: 10px; }.network-metrics span + span { padding-left: 10px; }.node-row-side { gap: 12px; }.node-inline-meta span:first-child { max-width: 220px; } }
-@media (max-width: 960px) { .node-config-page { padding-right: 14px; padding-left: 14px; }.toolbar-actions .node-query-input { width: 100%; flex: 1 1 100%; }.table-panel { min-height: 320px; }.network-header { flex-wrap: wrap; gap: 8px; }.network-metrics { flex-basis: calc(100% - 42px); margin-left: 48px; }.network-header > :deep(.el-button) { margin-left: auto; }.sync-node-row { align-items: flex-start; flex-direction: column; }.node-row-main, .node-row-side { width: 100%; }.node-row-side { justify-content: space-between; } }
-@media (max-width: 600px) { .network-collapse :deep(.el-collapse-item__header) { padding: 0 10px; }.network-collapse :deep(.el-collapse-item__content) { padding: 0 10px 10px; }.network-heading { min-width: 0; }.node-inline-meta { gap: 7px; }.node-inline-meta span:first-child { max-width: 130px; }.node-inline-meta span:nth-of-type(2) { max-width: 100px; }.node-row-side { align-items: flex-start; flex-direction: column; gap: 10px; }.row-actions { align-self: stretch; justify-content: space-between; }.row-actions :deep(.el-button) { margin: 0 !important; } }
+/* 按页面可用宽度适配，侧栏占用不会触发错误的整页断点。 */
+.node-config-page { container: nodeConfig / inline-size; min-height: 0; height: 100%; overflow: hidden; }
+.node-tabs { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.node-tabs :deep(.el-tabs__header) { flex: 0 0 auto; }
+.node-tabs :deep(.el-tabs__content) { flex: 1; min-height: 0; overflow: auto; scrollbar-gutter: stable; }
+.node-tabs :deep(.el-tabs__item) { padding: 0 16px; }
+.network-header { display: grid; grid-template-columns: minmax(120px,auto) minmax(110px,1fr) auto; gap: 12px; padding: 10px 0; }
+.network-heading { min-width: 0; }
+.network-title { min-width: 0; flex-wrap: wrap; }
+.network-symbol, .node-icon { flex-shrink: 0; }
+.network-metrics { flex-wrap: wrap; gap: 8px; font-size: 12px; }
+.network-metrics span + span { padding-left: 8px; }
+.network-header-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+.network-header-actions :deep(.el-button + .el-button) { margin-left: 0; }
+.node-identity { flex: 1; }
+.node-identity-title :deep(.el-tag) { max-width: 100%; min-width: 0; }
+.node-identity-title :deep(.el-tag__content) { overflow: hidden; text-overflow: ellipsis; }
+.node-inline-meta span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.node-inline-meta .node-url, .node-inline-meta .node-group { flex: 1 1 130px; max-width: none; }
+.node-inline-meta .node-updated { flex: 0 0 auto; }
+.node-editor-form { container: nodeEditor / inline-size; }
+.node-editor-form :deep(.el-row) { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); column-gap: 16px; margin-left: 0 !important; margin-right: 0 !important; }
+.node-editor-form :deep(.el-col) { width: auto; max-width: 100%; padding-left: 0 !important; padding-right: 0 !important; }
+.node-editor-form :deep(.node-editor-options) { grid-template-columns: repeat(3,minmax(0,1fr)); }
+:global(.node-editor-dialog) { max-height: calc(100dvh - 32px); margin: 16px auto !important; display: flex; flex-direction: column; }
+:global(.node-editor-dialog .el-dialog__body) { min-height: 0; overflow-y: auto; }
+:global(.node-editor-dialog .el-dialog__header), :global(.node-editor-dialog .el-dialog__footer) { flex-shrink: 0; }
+@container nodeConfig (max-width: 850px) {
+  .sync-node-row { flex-direction: column; align-items: stretch; gap: 9px; }
+  .node-row-main, .node-row-side { width: 100%; }
+  .node-row-side { justify-content: space-between; flex-wrap: wrap; gap: 8px; padding-left: 36px; box-sizing: border-box; }
+}
+@container nodeConfig (max-width: 650px) {
+  .toolbar-actions { display: grid; grid-template-columns: auto minmax(0,1fr); }
+  .toolbar-actions .node-query-input { width: 100%; min-width: 0; }
+  .network-header { grid-template-columns: minmax(0,1fr) auto; gap: 8px 12px; }
+  .network-metrics { justify-content: flex-end; }
+  .network-header-actions { grid-column: 1 / -1; }
+  .network-collapse :deep(.el-collapse-item__header) { padding: 0 10px; }
+  .network-collapse :deep(.el-collapse-item__content) { padding: 0 10px 10px; }
+  .network-collapse :deep(.el-collapse-item__arrow) { margin: 0 0 0 10px; }
+  .node-identity-title strong { width: 100%; }
+}
+@container nodeConfig (max-width: 480px) {
+  .toolbar-actions { grid-template-columns: minmax(0,1fr); }
+  .toolbar-actions .node-query-input { margin: 0; }
+  .node-inline-meta { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 4px 8px; }
+  .node-inline-meta .node-url { grid-column: 1 / -1; }
+  .node-inline-meta .node-group { max-width: none; }
+  .node-row-side { padding-left: 0; }
+  .network-header-actions { justify-content: flex-start; }
+}
+@container nodeEditor (max-width: 620px) {
+  :deep(.el-form-item) { flex-direction: column; }
+  :deep(.el-form-item__label) { width: 100% !important; height: auto; justify-content: flex-start; line-height: 24px; padding-bottom: 4px; }
+  :deep(.el-form-item__content) { width: 100%; margin-left: 0 !important; }
+}
+@container nodeEditor (max-width: 480px) {
+  .node-editor-form :deep(.el-row), .node-editor-form :deep(.el-row.node-editor-options) { grid-template-columns: minmax(0,1fr); }
+}
 
 .push-editor-note { margin: 4px 0 18px; }
 :global(.push-sync-dialog){max-height:92vh;display:flex;flex-direction:column;margin-bottom:4vh}:global(.push-sync-dialog .el-dialog__body){min-height:0;overflow-y:auto;flex:1}:global(.push-sync-dialog .el-dialog__header),:global(.push-sync-dialog .el-dialog__footer){flex-shrink:0}

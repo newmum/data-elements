@@ -10,6 +10,17 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class DslHasherDeploymentHashTest {
+    @Test void quotedOracleObjectFixInvalidatesOnlyTheAffectedDeploymentContract()throws Exception {
+        String revision=DslHasher.CURRENT_COMPILER_REVISION;
+        for(String type:List.of("ORACLE","OCEANBASE_ORACLE","DAMENG")) {
+            var quoted=singleSink("sink.jdbc",Map.of("dbType",type,"table","APP.\"car\""));
+            assertThat(DslHasher.deploymentHash(quoted,revision)).isEqualTo(previousDeploymentHash(quoted,revision+"|oracle-quoted-object-identity-v1"));
+            var ordinary=singleSink("sink.jdbc",Map.of("dbType",type,"table","APP.CAR"));
+            assertThat(DslHasher.deploymentHash(ordinary,revision)).isEqualTo(previousDeploymentHash(ordinary,revision));
+        }
+        var mysql=singleSink("sink.jdbc",Map.of("dbType","MYSQL","table","APP.\"car\""));
+        assertThat(DslHasher.deploymentHash(mysql,revision)).isEqualTo(previousDeploymentHash(mysql,revision));
+    }
     @Test
     void savedDesignRevisionIncludesConfigurationAndLayoutButNotMapOrNodeOrder() {
         var first = new Pipeline.Node("a", "sink.jdbc", "目标", "sink", 0, 0, Map.of("table", "events", "schema", "public"));

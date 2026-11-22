@@ -204,6 +204,24 @@ class DslCompilerSyncPolicyTest {
         verifyNoInteractions(nifi);
     }
 
+    @Test void quotedOracleSourceIdentityReachesFetchAndItsDirectSqlExecutionChainUnchanged() {
+        for(String table:List.of("TEST0809.\"car\"","\"owner.with.dot\".\"ca\"\"r.name\"")) {
+            processors.clear();clearInvocations(nifi);
+            Pipeline original=flow(Map.of("syncMode","FULL","table",table,"sid","test","sourceColumns",List.of(Map.of("columnName","id","primaryKey",true))),target());
+            var source=original.dsl().nodes().getFirst();
+            var pipeline=new Pipeline(original.id(),original.name(),null,null,null,
+                    new Pipeline.Dsl(1,List.of(new Pipeline.Node(source.id(),"source.oracle",source.label(),"source",0,0,source.config()),original.dsl().nodes().getLast()),original.dsl().edges()),
+                    null,null,null,null,null,null,null);
+            compiler.compile(pipeline);
+            var fetch=processor("来源/fetch");var execute=processor("来源/execute");
+            assertThat(fetch.type()).isEqualTo(DateTableFetchPolicy.NATIVE_TYPE);
+            assertThat(fetch.props()).containsEntry("Table Name",table).containsEntry("Database Type","Oracle");
+            assertThat(execute.type()).isEqualTo("org.apache.nifi.processors.standard.ExecuteSQLRecord");
+            verify(nifi).createConnection(fetch.group(),fetch.id(),"PROCESSOR",execute.id(),"PROCESSOR",List.of("success"));
+            assertThat(pipeline.dsl().nodes().getFirst().config()).containsEntry("table",table);
+        }
+    }
+
     @Test
     void fullWithoutTimestampUsesNativeFetchAndStablePagingOnlyWhenOrdered() {
         for (String mode : List.of("FULL", "PERIODIC_FULL")) {

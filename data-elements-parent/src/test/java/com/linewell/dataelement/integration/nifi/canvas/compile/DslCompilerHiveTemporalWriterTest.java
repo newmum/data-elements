@@ -31,6 +31,50 @@ class DslCompilerHiveTemporalWriterTest {
     private final NifiClient nifi = mock(NifiClient.class);
     private final DslCompiler compiler;
 
+    @ParameterizedTest
+    @org.junit.jupiter.params.provider.CsvSource({"LINEWELL_PUT_DATABASE_RECORD,INSERT,true",
+            "LINEWELL_PUT_DATABASE_RECORD,MERGE,false", "NIFI_PUT_DATABASE_RECORD,INSERT,false"})
+    void typedJdbcInputProjectsDuplicateInsertAuditColumnsOnlyForLinewellInsert(String writer,String statement,boolean projection) throws Exception {
+        var columns=new ArrayList<Map<String,Object>>();
+        for(String field:List.of("CREATETIME","KEYWORD","SEARCHNUM","UPDATETIME","ODS_UUID","ODS_RKSJ","ODS_GXSJ"))
+            columns.add(Map.of("columnName",field,"dataType",field.equals("CREATETIME")||field.startsWith("ODS_")&&!field.equals("ODS_UUID")?"TIMESTAMP":"VARCHAR2",
+                    "primaryKey",statement.equals("MERGE")&&field.equals("KEYWORD")));
+        var sink=new Pipeline.Node("jdbc","sink.jdbc","Oracle目标","sink",600,0,Map.of("dbType","Oracle",
+                "jdbcUrl","jdbc:oracle:thin:@//validation.invalid:1521/business","username","validation","password","validation-only",
+                "table","ODS_VALIDATION","writerType",writer,"statementType",statement,"targetColumns",columns));
+        var result=compiler.compile(hiveTargetFlow(List.of(source("source","mysql",Map.of()),mapping(),sink),
+                List.of(new Pipeline.Edge("sm","source","mapping","default"),new Pipeline.Edge("mj","mapping","jdbc","default"))));
+        var put=namedProcessor("Oracle目标/put");
+        if(!projection) {
+            assertThat(processors).noneMatch(p->p.name().equals("Oracle目标/normalize"));
+            return;
+        }
+        var normalize=namedProcessor("Oracle目标/normalize");
+        String query=normalize.properties().get("success");
+        assertThat(query).contains("\"CREATETIME\" AS \"CREATETIME\"","\"ODS_UUID\" AS \"ODS_UUID\"")
+                .doesNotContain("ODS_RKSJ","ODS_GXSJ","CAST(","TO_TIMESTAMP");
+        assertThat(put.properties()).containsEntry("__haitong.linewell.insert-values","ODS_RKSJ=SYSDATE,ODS_GXSJ=SYSDATE")
+                .containsEntry("put-db-record-statement-type","INSERT");
+        verify(nifi).createConnection("pg",normalize.id(),"PROCESSOR",put.id(),"PROCESSOR",List.of("success"));
+        verify(nifi).createConnection(eq("pg"),eq(normalize.id()),eq("PROCESSOR"),startsWith("funnel-"),eq("FUNNEL"),eq(List.of("failure")));
+        verify(nifi,never()).createConnection("pg",normalize.id(),"PROCESSOR",normalize.id(),"PROCESSOR",List.of("failure"));
+        assertThat(result.nodes().get("jdbc").inletProcessorId).isEqualTo(normalize.id());
+        // Execute the actual emitted projection, preserving every business value and row at 20/100 records.
+        for(int size:List.of(20,100))try(var db=java.sql.DriverManager.getConnection("jdbc:h2:mem:validation_audit_"+size)) {
+            db.createStatement().execute("CREATE TABLE FLOWFILE (CREATETIME VARCHAR(64), KEYWORD VARCHAR(100), SEARCHNUM INT, UPDATETIME VARCHAR(64), ODS_UUID VARCHAR(64), ODS_RKSJ VARCHAR(64), ODS_GXSJ VARCHAR(64))");
+            try(var add=db.prepareStatement("INSERT INTO FLOWFILE VALUES(?,?,?,?,?,?,?)")) {
+                for(int i=0;i<size;i++){add.setString(1,"2026-11-21T01:02:03.123");add.setString(2,"业务关键字"+i);add.setInt(3,i);
+                    add.setString(4,null);add.setString(5,"validation-"+i);add.setString(6,"incoming-created");add.setString(7,"incoming-updated");add.addBatch();}add.executeBatch();
+            }
+            try(var rows=db.createStatement().executeQuery(query+" ORDER BY SEARCHNUM")) {
+                assertThat(rows.getMetaData().getColumnCount()).isEqualTo(5);int read=0;
+                while(rows.next()){assertThat(rows.getString(1)).isEqualTo("2026-11-21T01:02:03.123");assertThat(rows.getString(2)).isEqualTo("业务关键字"+read);
+                    assertThat(rows.getInt(3)).isEqualTo(read);assertThat(rows.getString(4)).isNull();assertThat(rows.getString(5)).isEqualTo("validation-"+read);read++;}
+                assertThat(read).isEqualTo(size);
+            }
+        }
+    }
+
     DslCompilerHiveTemporalWriterTest() throws Exception {
         ManifestRegistry registry = mock(ManifestRegistry.class);
         ObjectMapper json = new ObjectMapper();

@@ -153,7 +153,7 @@ if (blank(datasourceId) || blank(physicalName)) { exit 400, "数据表缺少来�
 var datasource = loadDatasource(datasourceId, sourceRow)
 if (datasource == null) { exit 404, "数据源不存在或无访问权限" }
 var sourceType = textOf(firstValue(datasource, ["dbType", "db_type"])).toLowerCase()
-var structured = sourceType == "ftp" || sourceType == "sftp" || sourceType == "api" || sourceType == "kafka"
+var structured = sourceType == "ftp" || sourceType == "sftp" || sourceType == "api" || sourceType == "kafka" || sourceType == "minio"
 var managedHive = sourceType == "hive" && textOf(firstValue(datasource, ['hiveConnectionMode', 'hive_connection_mode'])).toLowerCase() != 'open-source' && (
     textOf(firstValue(datasource, ["metadataAccessMode", "metadata_access_mode"])) == "server-managed-mrs"
     || !blank(firstValue(datasource, ["hiveProfile", "hive_profile"]))
@@ -184,6 +184,13 @@ if (managedHive) {
     physicalColumns = metadataExplorerService.getColumns(dataSourceOf(datasource), physicalName + "")
 }
 if (physicalColumns == null || physicalColumns.isEmpty()) { exit 422, "来源表未返回字段，请检查表名和访问权限" }
+// 原始路径与安全字段名由已授权连接的同一份探查结果提供；不接受请求体中的字段快照。
+var sourceRecordShape = null
+if (registeredFile != null) {
+    sourceRecordShape = registeredFile.recordShape
+} else if (sourceType == 'kafka' || sourceType == 'minio') {
+    sourceRecordShape = structuredSourceProbeService.resolveRecordShape(datasource, physicalName + '')
+}
 var now = new Date()
 var rows = []
 var incomingNames = {}
@@ -258,10 +265,14 @@ for (previous in snapshot == null ? [] : snapshot) {
         .update({ is_del: 1, updated_time: now })
 }
 var tableUpdate = { field_count: rows.size(), updated_time: now }
+var governanceSnapshot = firstValue(tableAsset, ['fieldGovernanceConfig', 'field_governance_config'])
 if (registeredFile != null) {
     // 登记只保存无凭据的文件定位/解析描述；字段仍只有 db_table_column_t 一份。
-    tableUpdate.field_governance_config = jsons.toJSONStr(structuredSourceProbeService.withFtpFileSnapshot(
-        firstValue(tableAsset, ['fieldGovernanceConfig', 'field_governance_config']), registeredFile))
+    governanceSnapshot = structuredSourceProbeService.withFtpFileSnapshot(governanceSnapshot, registeredFile)
+}
+if (sourceRecordShape != null || registeredFile != null) {
+    tableUpdate.field_governance_config = jsons.toJSONStr(
+        structuredSourceProbeService.withRecordShapeSnapshot(governanceSnapshot, sourceRecordShape))
 }
 db.table("db_table_t").where().eq("tenant_id", currentTenantId).eq("tid", requestedTableId).eq("is_del", 0)
     .update(tableUpdate)

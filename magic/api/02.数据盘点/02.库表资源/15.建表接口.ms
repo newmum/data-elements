@@ -243,7 +243,7 @@ var dataSourceOf = (asset) => {
 var normalizedType = value => blank(value) ? '' : textOf(value).trim().toLowerCase().replaceAll('\\(.*', '').trim()
 var typeFamily = value => {
     var type = normalizedType(value)
-    if (['char','varchar','varchar2','nvarchar','nvarchar2','nchar','text','tinytext','mediumtext','longtext','clob','nclob','string','uuid','character varying','character'].contains(type)) { return 'string' }
+    if (['char','varchar','varchar2','nvarchar','nvarchar2','nchar','text','tinytext','mediumtext','longtext','clob','nclob','string','json','jsonb','uuid','character varying','character'].contains(type)) { return 'string' }
     if (['tinyint','smallint','mediumint','int','integer','bigint','int2','int4','int8','serial','bigserial','number','numeric','decimal','float','float4','float8','double','double precision','real','binary_float','binary_double','money'].contains(type)) { return 'number' }
     if (type == 'date') { return 'date' }
     if (type.startsWith('timestamp') || ['datetime','datetime2','smalldatetime','timestamptz'].contains(type)) { return 'datetime' }
@@ -251,7 +251,7 @@ var typeFamily = value => {
     if (['binary','varbinary','raw','long raw','blob','bytea','image','rowversion'].contains(type)) { return 'binary' }
     return type
 }
-var reusedTableItems = (requested, physical, config, tableName, warnings) => {
+var physicalTableItems = (requested, physical, config, tableName, warnings, checkCompatibility) => {
     if (!(requested instanceof List) || requested.size() == 0 || requested.size() > 2000) { exit 400, '复用已有表需要1至2000个目标字段' }
     if (physical == null || physical.size() == 0) { exit 409, '已有目标表“' + tableName + '”未返回字段，请检查表名、Schema和元数据权限' }
     var requestedByName = {}
@@ -284,7 +284,7 @@ var reusedTableItems = (requested, physical, config, tableName, warnings) => {
         var actualType = firstValue(column, ['dataType','data_type','columnType','column_type'])
         var actualFamily = typeFamily(actualType)
         if (config.getDatabaseType().getCode().toLowerCase() == 'sqlserver' && normalizedType(actualType) == 'timestamp') { actualFamily = 'binary' }
-        if (item != null) {
+        if (item != null && checkCompatibility) {
             var expectedFamily = typeFamily(firstValue(item, ['dataType','columnType']))
             var compatible = expectedFamily == actualFamily
                 || (expectedFamily == 'date' && actualFamily == 'datetime')
@@ -315,7 +315,7 @@ var reusedTableItems = (requested, physical, config, tableName, warnings) => {
             if (expectedFamily == 'number' && actualFamily == 'number' && actualScale != null && item.scale != null && item.scale::int > actualScale::int) {
                 errors.add(name + '（已有小数位数不足）')
             }
-        } else if (rowValue(column, ['nullable']) == false
+        } else if (item == null && checkCompatibility && rowValue(column, ['nullable']) == false
             && blank(rowValue(column, ['defaultValue','default_value']))
             && rowValue(column, ['autoIncrement','auto_increment']) != true) {
             errors.add(name + '（已有必填字段不在本次映射中）')
@@ -345,6 +345,8 @@ var reusedTableItems = (requested, physical, config, tableName, warnings) => {
     if (errors.size() > 0) { exit 409, '已有目标表“' + tableName + '”结构不兼容：' + errors.join('；') + '。请调整目标表结构或使用新表名' }
     return normalized
 }
+var reusedTableItems = (requested, physical, config, tableName, warnings) =>
+    physicalTableItems(requested, physical, config, tableName, warnings, true)
 var hiveValue = (row, aliases) => {
     // Hive JDBC版本可能返回带表前缀、不同大小写或空白的列标签。
     for (key in row.keySet()) {
@@ -644,7 +646,26 @@ if (body.canvas == true) {
         if (trustedBatch) { return {status:'failed', code:500, message:message} }
         exit 500, message
     }
-    return { status: 'created', created: true, tableName: createdTableName, partitionPlan:body?.partitionPlan, message: '物化建表成功' }
+    // DDL已由数据库执行。目标登记必须使用实际结构，不能继续把来源JSON等类型当作CLOB/STRING。
+    // 单次操作仅一张表；批量物化已限制为最多20个不同目标库，各库一次字段批量读取。
+    var createdItems = body.tableItems
+    var checkCreatedSchema = config.getDatabaseType() != DatabaseType.MONGODB
+        && body?.tableItems instanceof List && body.tableItems.size() > 0
+    if (checkCreatedSchema) {
+        try {
+            config.setSchema(parsed.schemaName)
+            var byTable = managedHive ? null : metadataExplorerService.getColumnsByTables(config, [createdTableName])
+            var actual = managedHive ? hiveColumns(config, createdTableName) : byTable[textOf(createdTableName).toLowerCase()]
+            if (actual == null || actual.size() == 0) { throw new IllegalStateException('目标数据库未返回新建表字段') }
+            createdItems = physicalTableItems(body.tableItems, actual, config, createdTableName, [], false)
+        } catch (e) {
+            var message = '目标物理表已创建，但读取真实字段结构失败，请确认复用后补齐登记：' + ErrorDetailSanitizer.errorText(e.getMessage())
+            if (trustedBatch) { return {status:'failed', code:500, physicalCreated:true, message:message} }
+            exit 500, message
+        }
+    }
+    return { status: 'created', created: true, tableName: createdTableName, tableItems:createdItems,
+        physicalSchemaChecked:checkCreatedSchema, partitionPlan:body?.partitionPlan, message: '物化建表成功' }
 }
 
 var dbAsset = loadAsset(dbId)

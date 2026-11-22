@@ -22,7 +22,8 @@ public class NifiNativeView {
     private final ObjectMapper mapper;
     private static final Set<String> METADATA = Set.of("/flow/about", "/flow/config", "/flow/current-user",
             "/flow/client-id", "/flow/processor-types", "/flow/controller-service-types", "/flow/cluster/summary",
-            "/authentication/configuration", "/access/status", "/controller/config", "/flow/reporting-task-types");
+            "/authentication/configuration", "/access/status", "/controller/config", "/flow/reporting-task-types",
+            "/flow/prioritizers", "/flow/flow-analysis-rule-types", "/flow/parameter-provider-types", "/flow/connector-types", "/flow/banners");
 
     private record View(String tenant, String token, Object login, String node, String group, Instant expires,
                         Set<String> objects, Set<String> groups) {}
@@ -66,6 +67,17 @@ public class NifiNativeView {
         if (request.getQueryString() != null && !request.getQueryString().isBlank()) path += "?" + request.getQueryString();
         try (var tenant = TenantContext.use(view.tenant());
              var runtime = view.node() == null || view.node().isBlank() ? nifi.bindRuntimeNode() : nifi.bindAssignedNode(view.node())) {
+            // The native header normally reads controller-wide counts and bulletins.
+            // Project only this authorized group; never relay another flow's state.
+            if (!ui && upstreamPath.equals("/nifi-api/flow/registries")) {
+                var empty = mapper.createObjectNode(); empty.putArray("registries");
+                return json(empty);
+            }
+            if (!ui && upstreamPath.equals("/nifi-api/flow/controller/bulletins")) {
+                var empty = mapper.createObjectNode();
+                for (String name : List.of("controllerBulletins", "controllerServiceBulletins", "reportingTaskBulletins")) empty.putArray(name);
+                return json(empty);
+            }
             HttpHeaders forwarded = new HttpHeaders();
             String accept = request.getHeader(HttpHeaders.ACCEPT);
             if (accept != null) forwarded.set(HttpHeaders.ACCEPT, accept);
@@ -79,6 +91,8 @@ public class NifiNativeView {
                     && headers.getContentType() != null && headers.getContentType().isCompatibleWith(MediaType.APPLICATION_JSON)) {
                 try {
                     JsonNode document = mapper.readTree(bytes);
+                    if (upstreamPath.equals("/nifi-api/flow/status")) document = flowStatus(document);
+                    scopeRoot(view, document);
                     collect(view, document.path("processGroupFlow").path("flow"));
                     if (document.path("controllerServices").isArray()) {
                         var selected = mapper.createArrayNode();
@@ -99,6 +113,14 @@ public class NifiNativeView {
         if (!fullPath.startsWith("/nifi-api/")) throw new ResponseStatusException(HttpStatus.FORBIDDEN);
         String path = fullPath.substring("/nifi-api".length());
         if (METADATA.contains(path)) return fullPath;
+        if (path.equals("/flow/status")) return "/nifi-api/flow/process-groups/" + view.group() + "/status";
+        if (path.equals("/flow/controller/bulletins")) return fullPath;
+        if (path.equals("/flow/registries")) return fullPath;
+        var analysis = java.util.regex.Pattern.compile("^/flow/flow-analysis/results/([A-Za-z0-9_-]+)$").matcher(path);
+        if (analysis.matches()) {
+            String id = analysis.group(1).equals("root") ? view.group() : analysis.group(1);
+            if (view.groups().contains(id)) return "/nifi-api/flow/flow-analysis/results/" + id;
+        }
         var group = java.util.regex.Pattern.compile("^/(flow/)?process-groups/([A-Za-z0-9_-]+)(/(?:status|processors|connections|controller-services))?$").matcher(path);
         if (group.matches()) {
             String id = group.group(2).equals("root") ? view.group() : group.group(2);
@@ -108,6 +130,52 @@ public class NifiNativeView {
         var object = java.util.regex.Pattern.compile("^/(?:processors|connections|controller-services|input-ports|output-ports|funnels|labels)/([A-Za-z0-9_-]+)(?:/(?:state|status))?$").matcher(path);
         if (object.matches() && view.objects().contains(object.group(1))) return fullPath;
         throw new ResponseStatusException(HttpStatus.FORBIDDEN, "原生详情仅可访问当前流程及其组件");
+    }
+
+    private ResponseEntity<byte[]> json(JsonNode value) {
+        try {
+            return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).cacheControl(CacheControl.noStore())
+                    .body(mapper.writeValueAsBytes(value));
+        } catch (java.io.IOException invalid) { throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "NiFi 原生响应格式无效"); }
+    }
+
+    private JsonNode flowStatus(JsonNode document) {
+        JsonNode snapshot = document.path("processGroupStatus").path("aggregateSnapshot");
+        var result = mapper.createObjectNode();
+        var status = result.putObject("controllerStatus");
+        for (String name : List.of("activeThreadCount", "terminatedThreadCount", "runningCount", "stoppedCount",
+                "invalidCount", "disabledCount", "activeRemotePortCount", "inactiveRemotePortCount",
+                "upToDateCount", "locallyModifiedCount", "staleCount", "locallyModifiedAndStaleCount", "syncFailureCount"))
+            status.put(name, snapshot.path(name).asLong(0));
+        status.put("queued", snapshot.path("queued").asText("0 (0 bytes)"));
+        status.put("hasPendingAccounts", false);
+        for (String wrapper : List.of("processorStatusSnapshot", "inputPortStatusSnapshot", "outputPortStatusSnapshot")) {
+            for (JsonNode component : snapshot.findValues(wrapper)) {
+                String counter = switch (component.path("runStatus").asText("").toUpperCase(Locale.ROOT)) {
+                    case "RUNNING", "STARTING" -> "runningCount";
+                    case "STOPPED" -> "stoppedCount";
+                    case "INVALID" -> "invalidCount";
+                    case "DISABLED" -> "disabledCount";
+                    default -> null;
+                };
+                if (counter != null && !snapshot.has(counter)) status.put(counter, status.path(counter).asLong() + 1);
+            }
+        }
+        return result;
+    }
+
+    private void scopeRoot(View view, JsonNode document) {
+        JsonNode flow = document.path("processGroupFlow");
+        if (flow.isObject() && view.group().equals(flow.path("id").asText())) {
+            var root = (com.fasterxml.jackson.databind.node.ObjectNode) flow;
+            root.remove("parentGroupId");
+            // NiFi embeds its full ancestor chain in breadcrumbs, including names.
+            if (root.path("breadcrumb").isObject())
+                ((com.fasterxml.jackson.databind.node.ObjectNode) root.path("breadcrumb")).remove("parentBreadcrumb");
+        }
+        JsonNode component = document.path("component");
+        if (component.isObject() && view.group().equals(component.path("id").asText()))
+            ((com.fasterxml.jackson.databind.node.ObjectNode) component).remove("parentGroupId");
     }
 
     private void collect(View view, JsonNode flow) {

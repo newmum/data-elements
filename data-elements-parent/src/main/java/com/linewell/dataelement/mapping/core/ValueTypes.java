@@ -122,7 +122,9 @@ public final class ValueTypes {
     }
     public static String field(String name) {
         String n = name == null ? "" : name.trim().replaceFirst("^/", "");
-        if (!n.matches("[\\p{L}_][\\p{L}\\p{N}_$#]{0,127}")) throw new MappingException("INVALID_FIELD", "字段引用必须是一级字段标识");
+        // Mongo/Elasticsearch commonly expose @timestamp as a literal top-level key.
+        // Keep nested paths, SQL fragments and control characters outside this contract.
+        if (!n.matches("[\\p{L}_@][\\p{L}\\p{N}_$#]{0,127}")) throw new MappingException("INVALID_FIELD", "字段引用必须是一级字段标识");
         return n;
     }
     public static long bytes(Object value, int depth) {

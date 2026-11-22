@@ -1370,7 +1370,7 @@ CREATE TABLE "public"."da_catalog_item_t" (
   "col_name" character varying(256 char),
   "col_en" character varying(256 char),
   "col_type" character varying(256 char),
-  "col_comment" character varying(128 char),
+  "col_comment" text,
   "col_length" bigint,
   "is_pk" character varying(4 char),
   "is_masking" integer,
@@ -7218,8 +7218,6 @@ COMMENT ON COLUMN "public"."nifi_access_template_t"."created_at" IS '创建时�
 
 COMMENT ON COLUMN "public"."nifi_access_template_t"."updated_at" IS '更新时间戳，Unix毫秒';
 
-CREATE INDEX idx_access_template_list ON public.nifi_access_template_t USING btree (tenant_id, status, updated_at, tid);
-
 CREATE TABLE "public"."nifi_node_t" (
   "tid" character varying(32 char) NOT NULL,
   "tenant_id" character varying(32 char) NOT NULL,
@@ -11034,6 +11032,8 @@ CREATE UNIQUE INDEX ix_f66d4832475160498655cf00 ON public.log_version_t USING bt
 CREATE INDEX ix_8b20ea7fda9bd86f98071926 ON public.metadata_table_collection_job_t USING btree (tenant_id, datasource_id, status, is_del);
 
 CREATE INDEX ix_ab2d849ce59ad797caedf950 ON public.metadata_table_collection_job_t USING btree (tenant_id, datasource_id, is_del, created_time);
+
+CREATE INDEX idx_access_template_list ON public.nifi_access_template_t USING btree (tenant_id, status, updated_at, tid);
 
 CREATE INDEX ix_1da9a76474e59617b01508d1 ON public.nifi_node_t USING btree (tenant_id, node_code, is_del);
 

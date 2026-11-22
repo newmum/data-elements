@@ -906,6 +906,8 @@ Cron 作用于来源触发器/文件清单处理器，下游转换、下载和�
 
 每个节点的状态树只解析一次，以租户、节点和流程组联合识别任务；逐行展示不访问数据库或NiFi。共享Magic函数一次读取当前租户全部启用节点（最多100个），默认节点只承担创建默认值及未绑定历史任务的兼容。画布现有的`node_mapping_json.runtimeNodeId`是运行节点绑定，返回行包含`nifiNodeId`、`nifiNodeName`、`nifiNetworkCode`，历史回退标记`runtimeLegacyNode`。节点和网络筛选只缩小授权范围；流程组参数每组最多500个，在数据库排序、分页及计数前应用。
 
+共享节点函数`@/common/nifiruntime`的位置参数依次为`nodeId, consume, allNodes`，新增可选参数放在末尾。节点管理的连通检测和系统诊断沿用前两个参数，Java采样使用具名参数。回归按资源元数据的真实参数顺序绑定调用，覆盖连通检测实际发出请求、诊断读取、跨租户拒绝与批量采样；不能只用具名测试替身绕过函数调用契约。若回调参数错位导致配置为空，尚未访问NiFi就会误报节点不存在，不能由此推断节点地址、账号或真实租户归属有误。该参数修复只调整1个共享函数和1个现有测试文件，生产Java文件、类、Controller及测试文件数量均无增减；HTTP请求、响应及权限契约保持原样，节点探活/诊断尚未纳入根Mock，以真实入口及隔离协议夹具验证。
+
 采集按节点有界并发，首次查询最多等候1.2秒，慢节点独立完成；同一实例中的多个页面共享采样。节点离线、停用、删除或认证失败时，其已部署任务保持待确认，其他节点继续显示。整页增加`runtimePartial`，前端提示“部分节点待确认”；登记汇总与操作按逐任务`runtimeFresh`判定。未找到已关联流程的任务不混入待启动统计。SSE只广播聚合版本、采样时间和健康信息，不下发全量树或其他角色的任务列表；续订重新读取节点配置。
 
 多节点改造修改3个现有生产Java技术文件，生产Java类和Controller数量净变化均为0；调整7个现有测试文件，没有新增或删除测试文件。节点查询、分页筛选和登记统计保留在现有Magic入口，未新增数据库结构。20/100行回归中接入筛选各11条业务SQL、分发任务链各12条、登记汇总各4条；节点配置另用1条批量查询，远程读取按节点共享，次数不随列表行数增加。
@@ -923,6 +925,8 @@ NiFi 状态读取连接/响应超时分别为 3/5 秒；失效认证最多重试
 ### 适用入口
 
 物化申请模板、来源 DDL 导入转换、单库或批量 DDL 预览、Java 元数据建表语句生成共用 `PortableColumnType` / `PortableStringCapacity` 规则。画布的建表校验和实际建表共用 `CanvasTableDdl`，保留生成的长度单位，不依赖连接会话的隐式默认值。
+
+生成 DDL 的字段引用由 `DdlDialect` 统一判断：Oracle、OceanBase Oracle、达梦的普通标识符须字母开头，MongoDB 的 `_id`、`@timestamp` 等特殊字段使用目标方言引用，并在列定义、主键及 COMMENT 中保持一致。普通 `application_id` 等仍保留未引用的大小写折叠语义；显式引用列保留真实拼写。新建后按真实物理字段登记，保留来源字段关联。原生和 Linewell JDBC Writer 对实际特殊列启用列引用，发现 `_id`／`ID` 等名称翻译碰撞时禁用字段翻译，避免绑定到同一列。不通过重命名来源集合字段解决兼容问题。
 
 登记模板保存来源数据库类型及可取得的原生类型、字符容量、字节容量、长度单位和字符集。Oracle / OceanBase Oracle 元数据在原有一次字段查询中同时读取 `DATA_LENGTH`、`CHAR_LENGTH`、`CHAR_USED`；字符容量与字节容量分开保存。编辑后的正数字段长度是本次目标定义的有效输入，不能被来源快照中的旧字节长度覆盖。
 
@@ -1019,7 +1023,20 @@ Hive 作为目标库时的原始写入发布规则见[详细设计第27章](data
 
 <a id="mapping-extension--当前版本1129"></a>
 
-### 当前版本（1.1.29）
+### 当前版本（1.1.32）
+
+结构化文件与Kafka在采集字段时，将原始JSON路径或平面表头保存在原登记表的`field_governance_config.sourceRecordShape`。JSON嵌套路径与安全字段名分别保存，不能把`agent_id`按下划线猜回`agent.id`；Excel/CSV的`2021年`等表头保留原名并映射到登记安全名。普通治理配置保存不能改写这份服务器采集快照。现有表须主动重新采集字段以补快照，部署不会暗中读取业务源或重置消费位置。
+
+编译时按当前租户和逐数据源权限一次批量解析已登记来源的快照，20/100项不逐节点查询。真实Kafka/MinIO/FTP来源缺失或过期的路径快照在创建NiFi组前拒绝发布。上传报表沿用原登记关系；MongoDB字面`_id`、`@timestamp`继续使用现有契约，不套用Kafka的安全名规则。执行图在来源出口、分支和过滤之前添加`HaitongNormalizeJsonRecords`，使用同版NAR并明确固定Bundle版本。规范化失败转独立保留队列，不能自动终止或自循环；晚窗口失败会撤回本输入全部候选输出。
+
+原始JSON对象、根数组、标量、标量数组、NULL及登记允许的纯文本统一转换为记录，避免JsonTreeReader对标量成功但输出0条。数组和嵌套对象转STRING时保存可还原JSON，普通字符串不重复编码，二进制继续Base64。NiFi嵌套Record先递归拆成实际字段值，不能写Java数组identity或序列化Record的Schema对象。记录8MiB、窗口8MiB及嵌套/字段数量上限继续生效。旧异常信封可在带单次门控的隔离恢复支路规范化，保留原记录索引和恢复票据，再进入更新后的治理节点；不重启来源或向已成功目标追加。
+
+同一路径在样本中同时出现空对象与非空对象时，已登记的父对象字段和子字段可以并存。执行时只对原路径明确允许`OBJECT`的父字段补充无损JSON文本，并保留孩子字段；仅允许标量的叶字段变为对象、路径冲突及种类漂移仍拒绝。父JSON与孩子共同计入同一记录和内存预算，超限保留完整原输入，不逐个父字段重复扫描整条记录。NiFi输入适配同时保留`Byte[]`二进制载体，与`byte[]`一致，普通数组仍按JSON语义处理。升级后端与NAR时保留旧版并存，不能覆盖原版本文件。
+
+本批是登记内部快照与NiFi执行契约修正，`/dst/db/collect`的字段列表、`/dst/db/policy`与既有前端请求契约不变，未新增Mock专用业务或复制组件；Mock不执行原生NiFi规范化。源码与隔离SDK回归通过不等于现场失败记录已恢复，现场Oracle/Hive对照由受控回放另行确认。
+
+
+一级字段契约支持 MongoDB／Elasticsearch 的 `@timestamp`，旧版与2.0规则、Schema、审计字段检查共用同一校验。保留128字符上限，继续拒绝嵌套路径、控制字符和SQL表达式；字典JDBC仍按方言引用标识符，不将字段名拼作表达式。真实NiFi2.9回归覆盖 JSON Reader→治理→JSON Writer→原生 JDBC 写入，验证 `_id`、`@timestamp` 与普通列的实际元数据拼写及20/100条记录绑定。该内核变化须同步更新后端和治理NAR；仅更新DDL生成器不能让旧NAR接受新字段。
 
 大文本直通与普通字段转换采用分开的预算。普通 STRING/ANY 来源直通、DIRECT 步骤及已经是字符串的恒等 CAST 保留原值，不根据 `base64`、`pic` 等字段名推断规则或探查图片内容。明确登记为二进制的字段采用下述无损载体规则。必填、类型、登记长度、Schema 及目标列容量继续校验。会改变内容的函数、表达式、拼接、字典等转换，其输入和步骤结果继续限制为256KiB；大文本应使用明确的来源字段直通。表达式引用与拼接在扩容前检查，不能借表达式绕过普通转换预算。
 
@@ -1043,7 +1060,7 @@ Hive 作为目标库时的原始写入发布规则见[详细设计第27章](data
 
 摘要自动计算，用于诊断，不作为队列重放门槛。升级或修正规则后，排队的原输入和有效错误信封按当前规则处理，保留原记录下标、类型、输入身份与时钟。实际计划格式、函数与字段规则、字典绑定权限仍校验；未支持的协议或无效输入不会被当成空规则执行。平台发布及启动继续校验当前租户、角色、流程归属与已发布引用。
 
-匹配 NiFi 2.9.0 的构建包位于 `logs/field-mapping-extension/nifi-2.9.0/haitong-mapping-nar/haitong-mapping-nar-1.1.29.nar`，生产各节点安装相同包。新后端与 NAR 同步更新；既有组件的 Bundle 使用 NiFi 原位切换或平台字段节点升级入口调整，并重新编译具有权威目标 Schema 的计划，保留队列、来源 ID 和增量水位。仅安装 NAR 不能从旧的无契约 BLOB 计划推断 JDBC 目标实际为 CLOB；禁止通过清队列或重建业务表规避该步骤。NiFi 自身及 GenerateDateTableFetch 继续使用2.9.0。多节点请求语义依据 [NiFi 2.9.0 FlowResource](https://github.com/apache/nifi/blob/rel/nifi-2.9.0/nifi-framework-bundle/nifi-framework/nifi-web/nifi-web-api/src/main/java/org/apache/nifi/web/api/FlowResource.java) 与 [DocumentedTypesMerger](https://github.com/apache/nifi/blob/rel/nifi-2.9.0/nifi-framework-bundle/nifi-framework-cluster/src/main/java/org/apache/nifi/cluster/manager/DocumentedTypesMerger.java)。生产尚未安装此包，不能把本地 SDK/隔离 JDBC 回归宣称为生产多节点或最终落库验收。
+匹配 NiFi 2.9.0 的构建包位于 `logs/field-mapping-extension/nifi-2.9.0/haitong-mapping-nar/haitong-mapping-nar-1.1.31.nar`，生产各节点安装相同包。新后端与 NAR 同步更新；既有组件的 Bundle 使用 NiFi 原位切换或平台字段节点升级入口调整，并重新编译具有权威目标 Schema 的计划，保留队列、来源 ID 和增量水位。仅安装 NAR 不能从旧的无契约 BLOB 计划推断 JDBC 目标实际为 CLOB；禁止通过清队列或重建业务表规避该步骤。NiFi 自身及 GenerateDateTableFetch 继续使用2.9.0。多节点请求语义依据 [NiFi 2.9.0 FlowResource](https://github.com/apache/nifi/blob/rel/nifi-2.9.0/nifi-framework-bundle/nifi-framework/nifi-web/nifi-web-api/src/main/java/org/apache/nifi/web/api/FlowResource.java) 与 [DocumentedTypesMerger](https://github.com/apache/nifi/blob/rel/nifi-2.9.0/nifi-framework-bundle/nifi-framework-cluster/src/main/java/org/apache/nifi/cluster/manager/DocumentedTypesMerger.java)。生产尚未安装此包，不能把本地 SDK/隔离 JDBC 回归宣称为生产多节点或最终落库验收。
 
 
 <a id="mapping-extension--上一版1125"></a>
@@ -1408,7 +1425,11 @@ ODS_UUID默认使用32位UUID，保留完整有效位并绑定流程、节点、
 
 Oracle/OceanBase Oracle的DATE保留时分秒，在读取投影中转换为TIMESTAMP并保留列名；其它库的仅日期DATE保持原意。SQL Server timestamp/rowversion按二进制原型保留，不能当作时间。带偏移文本直接按偏移生成Instant，不依赖NiFi JVM默认时区。TIME按时分秒处理，当前Time Format不保证小数精度。规则、物理Schema、读取、Writer和Reader须配套；旧来源已截断的数据不能靠仅替换字段节点恢复。
 
+Elasticsearch原生`date`可以承载日期时间文本或epoch毫秒，[官方类型说明](https://www.elastic.co/docs/reference/elasticsearch/mapping-reference/date)将其作为时间戳存储。物化申请模板将它默认归一为`datetime`，保留登记快照中的原生`date`及来源类型；目标Hive等生成TIMESTAMP。编辑器不再用隐藏的来源`date`覆盖已选日期时间，用户明确选择DATE或登记DATE标准时仍采用仅日期语义。SQL来源的纯DATE保持原意。旧Hive DATE目标及已截断文件需单独核对实际结构、登记Schema及原输入后受控升级和恢复，类型默认值修复不会自动改写既有目标或运行流程。
+
 新建Linewell写入流程，存在ODS_RKSJ/ODS_GXSJ时自动生成insert追加系统时间，update仅追加ODS_GXSJ；MERGE更新排除ODS_RKSJ及存在的ODS_UUID。Oracle/OB Oracle使用SYSDATE。通过创建响应的真实属性描述绑定API键，参数缺失则报错，不创建同名动态属性；NiFi原生PutDatabaseRecord不接收这些专属参数。
+
+Linewell显式INSERT的追加值会直接增加SQL列，不会像其MERGE适配器一样排除记录中的同名列。编译这类流程时，仅在输入可能含上述ODS时间字段时复用QueryRecord投影，保留业务字段及ODS_UUID、移除输入ODS_RKSJ/ODS_GXSJ，再由数据库时钟补入，避免重复列错误。类型化治理输出只投影字段，不重复转换业务时间；投影失败输入进入独立保留队列供受控恢复。MERGE及原生写入沿用既有路径，不增加该投影。无业务主键的新Oracle/OB Oracle任务明确持久化Linewell与INSERT选择，模板空组件选项或MERGE默认不得将追加任务改成需要主键的更新，不生成虚构主键；已有流程按显式保存和受控部署更新，不能自动改写带队列的运行图。
 
 针对截图中2.9.0组件，同时提供匹配NiFi 2.9.0的独立包。必须先确认实际运行版本，选择一个匹配包，不把两个同版本Bundle一起装入一个实例：
 
@@ -1536,11 +1557,17 @@ FTPS 密码保存在 NiFi 敏感动态属性中，脚本正文不含凭据。发
 | MinIO | 沿用对象目录、文件字段与对象接入 | Endpoint、授权、路径与文件格式 |
 | FTP／SFTP／FTPS | 沿用文件链路，补齐 FTPS TLS、敏感配置及持久化水位 | 协议、证书信任库与 NiFi Groovy／Commons Net 客户端 |
 
+MinIO登记后的单表接入以服务端探查到的物理对象键、Excel工作表名或JSON子数据集路径分别定位，不拆分仅用于展示的`对象#数据集`路径；对象键及工作表名中的`#`保留。任务补齐只在当前已授权来源范围内解析所选登记表，20/100个候选文件均只打开所选对象一次；同名文件无法唯一定位时拒绝。NiFi列举前缀后，先按完整对象键精确匹配再下载，JSON子数据集经EvaluateJsonPath提取，Excel Reader绑定明确工作表。模板占位不能覆盖这些运行定位字段；不删除或改写来源对象。
+
 新增产品的单元测试和模拟编译验证不能代替对应版本实库验收。首次接入应核对驱动、Schema、字段类型、分页、全量、增量边界和中断恢复；当前时间／水位抽取不等同于日志 CDC，不承诺自动捕获删除。
 
 <a id="nifi-deployment"></a>
 
 ## NiFi 配套交付
+
+节点配置组件按页面内容区域的容器宽度排列网络标题、数量、按钮和节点卡片，长地址及流程组使用省略提示；弹框在窄屏调整列数和标签位置，表单独立纵向滚动、页脚保留操作按钮。NiFi密码默认掩码，列表只返回`hasAuthPassword`；点击小眼睛才向`POST /ods/node/page`提交`action=password,nodeId`，沿用当前行业会话与节点编辑的租户边界，单次结构化查询只读取指定的有效节点，响应设置`Cache-Control: no-store`。关闭或切换编辑器后不接受旧请求的密码，关闭时清空；只修改凭据等字段时保留已有逐数据库JDBC映射，目录值与JAR路径分别识别。此批未新增生产Java、类或Controller，调整2个既有后端测试文件、增加1个前端行为测试文件；20/100节点列表各4条SQL，主动单节点密码读取为1条SQL，跨租户和已删除节点均拒绝。
+
+开发节点`10.231.176.56:8443`和`192.168.175.34:8443`的实际API版本均为2.9.0。56已核对公司自定义处理器及新增治理1.1.30注册，原1.1.29等旧版保留供已有组件引用；本次使用其已配置的`/home/linewell/application/nifi-2.9.0/extensions`自动加载目录，校验包后原子移入、未重启NiFi。现有受限SSH凭据认证失败，未宣称完成驱动磁盘清点。34沿用其现有NiFi容器，通过已配置的`nar_extensions`自动加载目录补齐9个受管NAR，核对20类自定义Processor及2类Controller Service；该节点既有治理验证仍为1.1.29，不将新构建版本当成它已升级。现有`/opt/nifi-canvas/jdbc-drivers`挂载中新增102个校验过的驱动/依赖文件，平台保存28项节点内路径映射，原有文件和凭据保留。安装前核算压缩文件、解包及余量，不清理FlowFile、内容或状态仓库；当前根分区空间偏低，应另行扩容。驱动类、构造与URL协议检查不代表全部数据库、MRS或Kerberos实库链路验收。本机`logs/nifi29-complete/fixture/nifi-2.9.0`为隔离验证实例，已按用户要求停止，其临时登记不作为常驻节点。
 
 NiFi发布使用调用范围内的HTTP客户端，避免逐组件重新创建TLS配置；扩展清单和客户端均绑定可信租户、实际节点，调用结束释放。控制器服务就绪检查对20/100项均使用一次批量快照/每轮，按不同所属流程组批量启用，校验每个请求ID仍在当前可见清单，已有ENABLED服务及公共编解码服务不重复启用。启动写请求返回5xx时只读回查全部后代处理器，不重放启动请求；部分成功不能宣称全部成功，也不把仍有关联的流程标为部署失败。
 
@@ -1548,7 +1575,7 @@ NiFi发布使用调用范围内的HTTP客户端，避免逐组件重新创建TLS
 
 根工具 `tools/package-nifi-deployment.py` 从已校验的 Apache NiFi 2.9.0 完整发行 ZIP、匹配的厂商 NAR、海通字段治理 NAR、Linux x86_64 JDK21和驱动清单生成独立完整包。参数通过工具 `--help` 查看，发行文件使用官方SHA-512校验，JDK和驱动使用已登记SHA-256校验，所有自定义NAR核对坐标、父依赖和完整性。输出包含逐文件二进制校验清单、`extensions.json`、驱动版本清单及现场绝对路径映射生成入口，厂商二进制与运行配置继续留在仓库外。
 
-当前匹配组合含9个NAR，包括`haitong-mapping-nar:1.1.29`，以及2.9.0的`datadevs-database`、`datadevs-record`、`datadevs-record-service-api`、`datadevs-record-redis-service`、`datadevs-avro`、`datadevs-encrypt`、`linewell-hadoop-libraries`和`linewell-hadoop`。同版本厂商原件已在临时NiFi 2.9.0 / JDK21实例核对20类自定义Processor和2类Controller Service注册，覆盖此前保存的公司节点全部自定义类型；原公司节点本次不可达，交付依据本地原件与历史清单，未宣称重新获取了服务器当前磁盘快照。注册验证不等同于现场数据库、Hadoop或Kerberos业务流验收。
+当前构建的匹配组合含9个NAR，包括`haitong-mapping-nar:1.1.30`，以及2.9.0的`datadevs-database`、`datadevs-record`、`datadevs-record-service-api`、`datadevs-record-redis-service`、`datadevs-avro`、`datadevs-encrypt`、`linewell-hadoop-libraries`和`linewell-hadoop`。同版本厂商原件在临时NiFi 2.9.0 / JDK21实例及上述34节点核对20类自定义Processor和2类Controller Service注册，覆盖此前保存的公司节点全部自定义类型；56当前已通过API复核注册，但SSH认证受阻，不能将历史磁盘清单当作当前文件证明。注册验证不等同于现场数据库、Hadoop或Kerberos业务流验收。
 
 启动入口为包根目录`bash nifi.sh start|stop|status`，启动时解开包内x86_64 JDK、校验发行二进制和扩展、生成驱动映射。配置目录可按现场修改，默认沿用官方HTTPS单用户模式与8443端口。MySQL、达梦、金仓、Oracle、OceanBase、PostgreSQL、SQL Server、Vertica等JDBC驱动及多种GaussDB原厂驱动随包提供；现场连接、证书、MRS站点与Kerberos凭据由部署环境配置。平台节点管理中的驱动路径指向NiFi实际执行服务器，包内模板中的路径在运行时生成。
 

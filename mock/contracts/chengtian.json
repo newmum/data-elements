@@ -412,7 +412,7 @@
         "kind": "magic",
         "id": "metadata_db_info_01",
         "file": "magic/api/02.数据盘点/02.库表资源/12.查询数据库元信息.ms",
-        "reviewedSha256": "b306ae939b467d90b5c4ca8b2b966965da076bff434cd9a81a6d1c3450dda9a1"
+        "reviewedSha256": "d2730272828677e2aa242a918fdb79ad146405d99af9e73b59df4fcde12ad3c1"
       },
       "request": {
         "type": "object"
@@ -420,7 +420,7 @@
       "response": {
         "type": "any"
       },
-      "review": "独立探查验证当前租户的有效来源及表关联，可读取同租户其他所有人的有效对象。Mock 以场景数据返回同形概览。 第 79 批调整目录，保留原地址和方法。 第 89 批切换到数据盘点短路径，参数、响应及数据范围沿用原契约。"
+      "review": "Oracle/OB Oracle单表概览保持原始引号，使用精确且有界的技术摘要查询，不再忽略大小写匹配；Mock继续读同一授权快照，响应字段未变。"
     },
     {
       "operation": "GET /dst/db/refresh",
@@ -444,7 +444,7 @@
         "kind": "magic",
         "id": "52e398a9f2fc429da79048b9ea719b37",
         "file": "magic/api/02.数据盘点/02.库表资源/11.获取表列表.ms",
-        "reviewedSha256": "8e0b1fe6082e7b1aa2ea4e74c7c54708dfe9e65af773a67f4acffd7029bcdcae"
+        "reviewedSha256": "bc1774964e6ec181607c8d30e77631c429f4b5fba2e14f0d409646823fadccab"
       },
       "request": {
         "type": "object"
@@ -452,7 +452,7 @@
       "response": {
         "type": "any"
       },
-      "review": "登记目录分页及历史 annotatedOnly 数组使用结构化数据库查询。现用澄天和风驰调用的默认数组及快照分页契约保持一致，模拟继续覆盖数据源闭环。真实目录关联、分类、两类计数及历史数组的排序、去重和租户隔离由真实接口与脚本回归覆盖。 第 79 批调整目录，保留原地址和方法。 第 89 批切换到数据盘点短路径，参数、响应及数据范围沿用原契约。"
+      "review": "Oracle快照分页和名称去重采用精确物理身份及平台方言字节键，其他来源原规则不变；Mock按现有表ID保留大小写不同对象。"
     },
     {
       "operation": "POST /dst/application/options",
@@ -762,7 +762,7 @@
         "kind": "magic",
         "id": "collect_start_v1",
         "file": "magic/api/02.数据盘点/09.表采集/08.启动数据源表采集.ms",
-        "reviewedSha256": "ee1041d8747ada14d09d52059d1ba308f33bd68b121d6cf37816a7008902955f"
+        "reviewedSha256": "82f66e035d9672a20f763565af6c8330a2e6d5fdb132cb421b28acb06405eda0"
       },
       "request": {
         "type": "object"
@@ -770,7 +770,7 @@
       "response": {
         "type": "any"
       },
-      "review": "第 135 批核对来源范围、预检、任务状态和旧方法。场景采集复用已有快照，真实并发、失败补偿和改名事务由后端回归覆盖。 第 185 批将对象请求体绑定写入资源声明，保留方法、脚本、权限及请求、响应和错误契约。"
+      "review": "Oracle采集按引号保留物理对象身份及既有登记ID；旧元数据原名仅依本次物理清单精确还原，歧义或已消失旧名保留缺失候选，不放宽物理查询语法。此补充只修正历史快照比较，受理、权限、状态和响应契约不变，Mock采集沿用当前授权来源快照、不模拟真实连接；20/100与历史名称事务回归由真实Magic执行器覆盖。"
     },
     {
       "operation": "POST /dst/collect/rename",
@@ -778,7 +778,7 @@
         "kind": "magic",
         "id": "collect_rename_v1",
         "file": "magic/api/02.数据盘点/09.表采集/09.关联缺失登记表新名称.ms",
-        "reviewedSha256": "de2342ba85c1cffa7cf11dfbf0045a435f05fd99265cf2282fae2537f58abed5"
+        "reviewedSha256": "3063211b157fadb67ab8406e821a0fe2d901b2d887d1a0a4219ea1f481c3c252"
       },
       "request": {
         "type": "object"
@@ -786,7 +786,7 @@
       "response": {
         "type": "any"
       },
-      "review": "第 135 批核对来源范围、预检、任务状态和旧方法。场景采集复用已有快照，真实并发、失败补偿和改名事务由后端回归覆盖。 第 185 批将对象请求体绑定写入资源声明，保留方法、脚本、权限及请求、响应和错误契约。"
+      "review": "Oracle改名匹配按精确身份和范围校验，不能用忽略大小写合并两个对象；Mock没有确认缺失项时继续拒绝改名，审查顺序同步精确去重。"
     },
     {
       "operation": "POST /dws/cart/page",

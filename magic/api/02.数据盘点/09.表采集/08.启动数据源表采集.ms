@@ -30,6 +30,9 @@ import cn.hutool.extra.spring.SpringUtil
 import com.fasterxml.jackson.databind.ObjectMapper
 import java.util.LinkedHashMap
 import java.util.Locale
+import java.util.HashSet
+import java.util.HexFormat
+import java.nio.charset.StandardCharsets
 import dataScope
 import metadataAsset
 import metadataScan
@@ -37,6 +40,7 @@ import request
 import tableRead
 import tableWrite
 import tenantRuntime
+import com.linewell.dataelement.metautil.ddl.DdlDialect
 
 // POST /dst/collect/start。先受理，提交后探查物理库。快照、登记摘要及任务完成状态同事务保存。
 return respond(() => {
@@ -93,14 +97,49 @@ return respond(() => {
                 return
             }
             var inventory = metadataScan.scan(sourceId)
+            var oracleObjects = inventory.databaseType() + '' == 'ORACLE' || inventory.databaseType() + '' == 'OCEANBASE_ORACLE'
+            var tableIdentity = value => oracleObjects ? DdlDialect.oracleObjectKey(text(value)) : normalize(value)
             var physical = new LinkedHashMap()
             for (table in inventory.tables()) {
                 if (table != null) {
-                    var name = normalize(table.getTableName())
+                    var name = tableIdentity(table.getTableName())
                     if (name != '') {
                         physical.putIfAbsent(name, table)
                     }
                 }
+            }
+            // 旧采集曾将元数据原名直接拼接保存，数字开头等合法引号对象因而缺少引号。
+            // 仅以本次权威物理清单建立精确别名，不能放宽 SQL 标识符解析或猜测大小写。
+            var legacyAliases = new LinkedHashMap()
+            var ambiguousAliases = new HashSet()
+            var addAlias = (alias, key) => {
+                var previous = legacyAliases.putIfAbsent(alias, key)
+                if (previous != null && previous != key) { ambiguousAliases.add(alias) }
+            }
+            if (oracleObjects) {
+                for (key in physical.keySet()) {
+                    var table = physical.get(key)
+                    var parts = DdlDialect.names(table.getTableName())
+                    var raw = ''
+                    for (part in parts) { raw = raw == '' ? part.value() : raw + '.' + part.value() }
+                    addAlias(raw, key)
+                    if (text(table.getSchemaName()) == text(inventory.legacyOwner())) {
+                        addAlias(parts.getLast().value(), key)
+                    }
+                }
+            }
+            var registeredIdentity = value => {
+                if (!oracleObjects) { return normalize(value) }
+                var raw = text(value)
+                if (raw == '') { return '' }
+                var canonical = null
+                try { canonical = DdlDialect.oracleObjectKey(raw) } catch (invalidLegacyName) { }
+                if (canonical != null && physical.containsKey(canonical)) { return canonical }
+                if (!ambiguousAliases.contains(raw) && legacyAliases.containsKey(raw)) { return legacyAliases.get(raw) }
+                if (canonical != null) { return canonical }
+                // 已消失或不能唯一还原的旧名称保留为缺失候选，绝不让一条历史脏名称中止整库。
+                // 此键只用于内存比较，不作为物理查询名称或 SQL 片段。
+                return 'legacy:' + HexFormat.of().formatHex(raw.getBytes(StandardCharsets.UTF_8))
             }
             var count = physical.size()
             if (updateJob(jobId, {phase: 'PERSISTING', scanned_count: count, total_count: count, updated_time: new Date()}) != 1) {
@@ -132,14 +171,14 @@ return respond(() => {
                 var updated = tableRead.column('t', 'updated_time', 'TIME')
                 current.forEachOrderedRow(savedFields, [savedFields.annotated, updated, savedFields.tid],
                     ['desc', 'desc', 'desc'], false, row => {
-                        var key = normalize(row.table_name)
+                        var key = registeredIdentity(row.table_name)
                         if (key != '') {
                             saved.putIfAbsent(key, row)
                         }
                     })
 
                 var timestamp = new Date()
-                var owner = normalize(inventory.legacyOwner())
+                var owner = oracleObjects ? text(inventory.legacyOwner()) : normalize(inventory.legacyOwner())
                 var updates = []
                 if (owner != '') {
                     // 旧版本以裸名保存当前所有者的表。仅迁移已匹配的代表行，保留其治理标注。
@@ -147,8 +186,10 @@ return respond(() => {
                         var physicalTable = physical.get(key)
                         var qualified = text(physicalTable.getTableName())
                         var separator = qualified.indexOf('.')
-                        if (normalize(physicalTable.getSchemaName()) == owner && separator > 0 && separator < qualified.length() - 1) {
-                            var priorName = normalize(qualified.substring(separator + 1))
+                        var ownerMatches = oracleObjects ? text(physicalTable.getSchemaName()) == owner : normalize(physicalTable.getSchemaName()) == owner
+                        if (ownerMatches && separator > 0 && separator < qualified.length() - 1) {
+                            var shortName = oracleObjects ? DdlDialect.oraclePhysicalName(DdlDialect.names(qualified).getLast().value()) : qualified.substring(separator + 1)
+                            var priorName = registeredIdentity(shortName)
                             var priorTable = saved.get(priorName)
                             if (priorTable != null && !saved.containsKey(key)) {
                                 updates.add({tid: priorTable.tid, table_name: qualified, table_name_en: qualified, updated_time: timestamp})
@@ -156,6 +197,17 @@ return respond(() => {
                                 priorTable.table_name = qualified
                                 saved.put(key, priorTable)
                             }
+                        }
+                    }
+                }
+                if (oracleObjects) {
+                    // 同一物理对象恢复为规范引号名称；原登记标识、字段及治理配置不变。
+                    for (key in physical.keySet()) {
+                        var previous = saved.get(key)
+                        var canonical = text(physical.get(key).getTableName())
+                        if (previous != null && text(previous.table_name) != canonical) {
+                            updates.add({tid: previous.tid, table_name: canonical, table_name_en: canonical, updated_time: timestamp})
+                            previous.table_name = canonical
                         }
                     }
                 }

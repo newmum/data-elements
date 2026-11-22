@@ -1626,6 +1626,7 @@ export default function ConfigDrawer() {
       if (!field.required) return;
       if (!scheduleFieldVisible(field.key, node.config)) return;
       // 跳过不可见字段。
+      if (!connectionFieldVisible(manifest.key, field.key, node.config)) return;
       if (!isVisible(field, node.config)) return;
       if (!isIncrementalVisible(field, node.config)) return;
       // 跳过只读字段。
