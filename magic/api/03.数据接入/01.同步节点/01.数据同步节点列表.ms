@@ -19,12 +19,11 @@ import tableSort
 import tableRead
 import tenantRuntime
 import '@/common/nifiruntime' as readConfiguration
+import '@/common/nodehealth' as nodeHealth
 import cn.hutool.http.HttpRequest
 import com.fasterxml.jackson.databind.ObjectMapper
 import java.util.Map
 import java.text.SimpleDateFormat
-import java.sql.Timestamp
-import com.linewell.dataelement.utils.LocalCache
 import com.linewell.dataelement.integration.nifi.canvas.config.NifiNodeRuntimeResolver as nodeResolver
 import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient as nifi
 import com.linewell.dataelement.model.common.CommonResponse
@@ -34,7 +33,6 @@ import org.springframework.http.ResponseEntity
 // health 和 diagnostics 只访问当前行业保存的节点，NiFi 客户端从该节点取得连接配置。
 
 var text = value => value == null ? '' : value + ''
-var nodeRevision = value => value instanceof Timestamp ? value.toLocalDateTime().toString() : text(value).trim().replace(' ', 'T')
 // 读取请求中的业务标识与筛选条件，供下面的校验和查询使用。
 var keyword = text(body?.keyword).trim()
 // 业务租户从当前会话读取，不采用请求体中的租户标识。
@@ -45,38 +43,29 @@ if (tenantId == '') {
 
 // Push nodes have separate storage; existing NiFi consumers keep the default contract.
 if (text(body?.nodeType) == 'push') {
-    // One in-process snapshot read for the whole tenant, never per-row probes.
-    // Results describe the last check in this backend process; URL edits and
-    // restarts naturally return nodes to the untested state.
-    var healthKey = 'push-node-health:' + tenantId
-    var healthJson = LocalCache.get(healthKey)
-    var health = healthJson == null ? {} : new ObjectMapper().readValue(healthJson,Map)
-    var remember = (nodeId,baseUrl,result) => {
-        result.healthTime = new SimpleDateFormat('yyyy-MM-dd HH:mm:ss').format(new Date())
-        health[nodeId] = {baseUrl:baseUrl,status:result.success?'reachable':'unreachable',message:result.message,time:result.healthTime,latencyMs:result.latencyMs}
-        LocalCache.put(healthKey,new ObjectMapper().writeValueAsString(health))
-        return result
-    }
     if (text(body?.action) == 'health') {
         var nodeId = text(body?.tid).trim()
         var node = db.table('push_node_t').where().eq('tenant_id', tenantId).eq('tid', nodeId).eq('is_del', 0).selectOne()
         if (node == null) { exit 404, '数据推送节点不存在或无权访问' }
         var url = text(node.baseUrl || node.base_url).replaceAll('/+$', '') + '/actuator/health'
-        var started = new Date().getTime()
+        var attempt = nodeHealth({action:'begin'})
+        var remember = result => nodeHealth({action:'store',kind:'push',node:node,attempt:attempt,result:result})
+        var started = attempt.started
         var response = null
         try {
             response = HttpRequest.get(url).timeout(5000).setFollowRedirects(false).execute()
             var status = response.getStatus()
             var payload = new ObjectMapper().readValue(response.body(), Map)
             var success = status == 200 && text(payload.status) == 'UP'
-            return remember(nodeId,text(node.baseUrl || node.base_url),{ success:success,status:status,latencyMs:new Date().getTime()-started,message:success?'数据推送服务运行正常':'推送服务健康检查未通过' })
+            return remember({ success:success,status:status,latencyMs:new Date().getTime()-started,message:success?'数据推送服务运行正常':'推送服务健康检查未通过' })
         } catch (e) {
-            return remember(nodeId,text(node.baseUrl || node.base_url),{ success:false,status:0,latencyMs:new Date().getTime()-started,message:'无法连接数据推送节点，请检查服务地址、网络连接及推送服务是否正常运行' })
+            return remember({ success:false,status:0,latencyMs:new Date().getTime()-started,message:'无法连接数据推送节点，请检查服务地址、网络连接及推送服务是否正常运行' })
         } finally { if (response != null) { response.close() } }
     }
     var page = db.table('push_node_t').where().eq('tenant_id',tenantId).eq('is_del',0)
         .orderBy('is_default','desc').orderBy('updated_time','desc').page(1001,0)
     if (page != null && page.total > 1000) { exit 422, '推送节点超过1000项，请缩小配置规模' }
+    var health = nodeHealth({action:'view',rows:page == null || page.list == null ? [] : page.list})
     var list = []
     for (row in (page == null || page.list == null ? [] : page.list)) {
         var name = text(row.nodeName || row.node_name)
@@ -84,8 +73,7 @@ if (text(body?.nodeType) == 'push') {
         var network = text(row.networkCode || row.network_code)
         if (keyword != '' && !name.contains(keyword) && !code.contains(keyword) && !network.contains(keyword)) { continue }
         var checked = health[text(row.tid)]
-        if (checked != null && checked.baseUrl != text(row.baseUrl || row.base_url)) { checked = null }
-        list.add({healthStatus:checked?.status || 'unknown',healthMessage:text(checked?.message).replace('haitong-data-pull 服务健康','数据推送服务运行正常').replace(' haitong-data-pull ','数据推送服务'),healthTime:checked?.time || '',healthLatencyMs:checked?.latencyMs,tid:row.tid,nodeName:name,nodeCode:code,networkCode:network,
+        list.add({healthStatus:checked?.healthStatus || 'unknown',healthMessage:text(checked?.healthMessage).replace('haitong-data-pull 服务健康','数据推送服务运行正常').replace(' haitong-data-pull ','数据推送服务'),healthTime:checked?.healthTime || '',healthLatencyMs:checked?.healthLatencyMs,healthStale:checked?.healthStale,healthConfigChanged:checked?.healthConfigChanged,tid:row.tid,nodeName:name,nodeCode:code,networkCode:network,
             baseUrl:row.baseUrl || row.base_url,enabled:row.enabled,isDefault:row.isDefault == null?row.is_default:row.isDefault,
             remark:row.remark,updatedTime:row.updatedTime || row.updated_time,
             lastSyncTime:row.lastSyncTime || row.last_sync_time,lastSyncStatus:row.lastSyncStatus || row.last_sync_status})
@@ -110,7 +98,9 @@ if (action == 'password') {
 }
 if (action == 'health' || action == 'diagnostics') {
     var nodeId = text(body?.nodeId).trim()
+    var attempt = action == 'health' ? nodeHealth({action:'begin'}) : null
     var started = new Date().getTime()
+    var owned = action == 'health' ? db.table('nifi_node_t').where().eq('tenant_id',tenantId).eq('tid',nodeId).eq('is_del',0).selectOne() : null
     var respond = data => ResponseEntity.ok(CommonResponse.success(data))
     var rootMessage = error => {
         var cause = error
@@ -122,8 +112,8 @@ if (action == 'health' || action == 'diagnostics') {
     if (action == 'diagnostics' && nodeId == '') {
         exit 400, '请选择需要查询的 NiFi 节点'
     }
-    var healthFailure = message => respond({success:false, status:0, latencyMs:new Date().getTime()-started,
-        message:message, url:''})
+    var finish = result => respond(owned == null?result:nodeHealth({action:'store',kind:'sync',node:owned,attempt:attempt,result:result}))
+    var healthFailure = message => finish({success:false,status:0,message:message,url:''})
     if (nodeId == '') { return healthFailure('请选择需要检测的数据同步节点') }
     var configuration = null
     var node = null
@@ -173,12 +163,7 @@ if (action == 'health' || action == 'diagnostics') {
         url:node.baseUrl() + '/nifi-api/flow/process-groups/root',
         healthTime:new SimpleDateFormat('yyyy-MM-dd HH:mm:ss').format(new Date())
     }
-    // 只回显此探活实际使用的配置版本。保存新配置后，旧结果自然失效。
-    var key = 'nifi-node-health:' + tenantId + ':' + node.id() + ':' + nodeRevision(configuration.updated_time)
-    LocalCache.put(key, new ObjectMapper().writeValueAsString({
-        success:result.success, message:result.message, healthTime:result.healthTime, latencyMs:result.latencyMs
-    }))
-    return respond(result)
+    return finish(result)
 }
 
 // 以下从 sym_dict_t 业务表读取或维护当前操作涉及的记录。
@@ -203,7 +188,7 @@ var nodePage = db.table('nifi_node_t').where().eq('tenant_id', tenantId).eq('is_
 if (nodePage != null && nodePage.total > 1000) { exit 422, '节点超过1000项，请使用节点分页查询' }
 var rows = nodePage == null || nodePage.list == null ? [] : nodePage.list
 var list = []
-var mapper = new ObjectMapper()
+var health = nodeHealth({action:'view',rows:rows})
 for (row in (rows == null ? [] : rows)) {
     var nodeName = row.nodeName == null ? row.node_name : row.nodeName
     var nodeCode = row.nodeCode == null ? row.node_code : row.nodeCode
@@ -219,11 +204,8 @@ for (row in (rows == null ? [] : rows)) {
     if (keyword != '' && text(nodeName).indexOf(keyword) < 0 && text(nodeCode).indexOf(keyword) < 0 && networkCode.indexOf(keyword) < 0 && networkName.indexOf(keyword) < 0) {
         continue
     }
-    // 仅为已通过租户筛选的节点读取内存结果，与检测时的配置版本一致才显示。
     var updatedTime = row.updatedTime == null ? row.updated_time : row.updatedTime
-    var revision = nodeRevision(updatedTime)
-    var healthJson = LocalCache.get('nifi-node-health:' + tenantId + ':' + text(row.tid) + ':' + revision)
-    var checked = healthJson == null ? null : mapper.readValue(healthJson, Map)
+    var checked = health[text(row.tid)]
     list.add({
         tid: row.tid,
         nodeName: nodeName,
@@ -241,10 +223,11 @@ for (row in (rows == null ? [] : rows)) {
         enabled: row.enabled == null ? 1 : row.enabled,
         isDefault: row.isDefault == null ? row.is_default : row.isDefault,
         updatedTime: updatedTime,
-        healthStatus: checked == null ? 'unknown' : (checked.success ? 'reachable' : 'unreachable'),
-        healthMessage: text(checked?.message),
+        healthStatus: checked?.healthStatus || 'unknown',
+        healthMessage: text(checked?.healthMessage),
         healthTime: text(checked?.healthTime),
-        healthLatencyMs: checked?.latencyMs
+        healthLatencyMs: checked?.healthLatencyMs,
+        healthStale: checked?.healthStale,healthConfigChanged: checked?.healthConfigChanged
     })
 }
 list=tableSort.rows(list,body,{name:'nodeName',nodeName:'nodeName',updatedTime:'updatedTime'},'updatedTime','tid')

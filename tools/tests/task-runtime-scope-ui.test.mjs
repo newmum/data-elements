@@ -1,0 +1,21 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import {createRequire} from 'node:module';
+const require=createRequire(new URL('../../data-elements-chengtian/package.json',import.meta.url));
+const {ref,computed}=require('vue');
+for (const file of ['2.3.1 数据汇聚(data-convergence).vue','2.3.2 接入监控(access-monitoring).vue']) test(`${file}: one stream per page node scope, none for drafts, cancel old scope`,()=>{
+ const source=fs.readFileSync(new URL(`../../lowcode/03.数据接入/${file}`,import.meta.url),'utf8');
+ const start=source.indexOf("const runtimeConnection = ref('connecting');");
+ const end=source.indexOf('const runtimeVisibility =',start);const lineEnd=source.indexOf('\n',end);
+ const script=source.slice(start,lineEnd);const calls=[];
+ const create=new Function('ref','computed','$request','document','tableRef','activeTab',`${script}\nreturn {applyRuntimeScope,startRuntimeStream,stopRuntimeStream,acceptRuntimeEvent,runtimeConnection};`);
+ const ui=create(ref,computed,{get:(url,config)=>{calls.push({url,config});return new Promise((resolve,reject)=>config.signal.addEventListener('abort',()=>reject(new Error('cancelled')),{once:true}));}},{hidden:false},ref({refresh(){}}),ref('all'));
+ ui.startRuntimeStream();assert.equal(calls.length,0);
+ ui.applyRuntimeScope(['own','own']);assert.equal(calls.length,1);assert.deepEqual(JSON.parse(calls[0].config.params.nodeIds),['own']);
+ ui.applyRuntimeScope(['own']);assert.equal(calls.length,1);
+ ui.applyRuntimeScope(['second']);assert.equal(calls.length,2);assert.equal(calls[0].config.signal.aborted,true);
+ ui.acceptRuntimeEvent({fresh:false,partial:false,revision:'second=unavailable'});assert.equal(ui.runtimeConnection.value,'connecting');
+ ui.applyRuntimeScope([]);assert.equal(calls[1].config.signal.aborted,true);assert.equal(calls.length,2);
+ ui.stopRuntimeStream();
+});

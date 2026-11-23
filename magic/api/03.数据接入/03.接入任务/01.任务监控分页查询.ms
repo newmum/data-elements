@@ -17,12 +17,13 @@
   "headers": [],
   "paths": [],
   "responseBody": "{\n  \"code\": 0,\n  \"msg\": \"success\",\n  \"success\": true,\n  \"data\": {\n    \"total\": 1,\n    \"list\": [\n      {\n        \"tid\": \"示例任务ID\",\n        \"taskName\": \"数据接入同步任务\",\n        \"taskStatus\": 1,\n        \"sourceDbName\": \"出入境人员动管系统数据库\",\n        \"sourceTableSummary\": \"3 张表\",\n        \"targetDbName\": \"目标库\",\n        \"targetTableSummary\": \"3 张表\",\n        \"syncTables\": [\n          {\n            \"sourceTableName\": \"police_person_info\",\n            \"targetTableName\": \"ods_police_person_info\",\n            \"syncStatus\": 1,\n            \"syncStatusText\": \"运行中\"\n          }\n        ]\n      }\n    ]\n  }\n}",
-  "description": "分页读取接入任务、表同步明细和 NiFi 运行状态快照。按当前登录租户及有效来源数据源的 ALL、ORG 或 OWNER 范围查询。支持 pageNum、pageSize、taskName、taskStatus、nifiNetworkCode、nifiNodeId、sortField 和 sortDir，返回分页数据和状态快照信息。仅当当前租户无有效业务任务时，ALL 范围可读取历史流水线。租户或数据范围无效时拒绝，不支持的任务状态返回 400。只读。",
+  "description": "分页读取接入任务、表同步明细和 NiFi 状态。任务监控传 flowScope=all、registered 或 native，按相同状态和节点筛选统一分页。有来源关联的原生流程按来源权限展示，无表关联的原生流程仅当前行业 ALL 可查看。未传 flowScope 时沿用登记任务查询及历史流水线回退规则。",
   "requestBodyDefinition": null,
   "responseBodyDefinition": null
 }
 ================================
 import dataScope
+import java.util.ArrayList
 import jsons
 import org.ssssssss.magicapi.modules.db.provider.CamelColumnMapperProvider
 import tableRead
@@ -85,10 +86,6 @@ if (blank(tenantId)) {
     exit 401, '当前登录租户无效，请重新登录后查看接入任务'
 }
 
-// 节点选项只缩小当前租户和角色可见的任务，默认节点仅用于历史未绑定任务。
-var selectedNetworkCode = text(body?.nifiNetworkCode)
-var selectedNodeId = text(body?.nifiNodeId)
-var live = taskRuntime.snapshot()
 var scope = dataScope.dataSource()
 var scopeMode = text(scope?.scope)
 var scopeUserId = text(scope?.userId)
@@ -100,10 +97,25 @@ if (status != '' && status != 'all' && !['0', '1', '2', '3'].contains(status)) {
     exit 400, '不支持的任务状态'
 }
 
+// 原生流程沿用登记关联的来源权限。无有效表关联的流程只对本行业 ALL 范围开放。
+var flowScope = text(body?.flowScope)
+if (flowScope != '' && !['all','registered','native'].contains(flowScope)) {
+    exit 400, '不支持的流程范围'
+}
+var includeNative = ['all','native'].contains(flowScope)
+var selectedNetworkCode = text(body?.nifiNetworkCode)
+var selectedNodeId = text(body?.nifiNodeId)
+var needsRuntimeSnapshot = includeNative || (status != '' && status != 'all') || selectedNodeId != '' || selectedNetworkCode != ''
+var live = needsRuntimeSnapshot ? taskRuntime.snapshot() : null
 var textColumn = (alias, name) => tableRead.column(alias, name, 'TEXT')
 var numberColumn = (alias, name) => tableRead.column(alias, name, 'NUMBER')
 var timeColumn = (alias, name) => tableRead.column(alias, name, 'TIME')
 var active = alias => tableRead.equal(numberColumn(alias, 'is_del'), 0)
+// 部分 Hive 登记只有连接配置中的数据库名，投影数据库标量，不读出连接配置或凭据。
+var databaseName = alias => tableRead.coalesce([
+    tableRead.blankAsNull(textColumn(alias,'db_name')),
+    tableRead.blankAsNull(tableRead.jsonText(tableRead.column(alias,'pool_cfg','LOB'),'database'))
+])
 
 var groupMatches = (processGroup, nodeExpression, groupStatus) => {
     var batches = []
@@ -111,19 +123,31 @@ var groupMatches = (processGroup, nodeExpression, groupStatus) => {
         for (batch in node.get('groups' + groupStatus) || []) {
             batches.add(tableRead.all([tableRead.equal(nodeExpression, node.nodeId), tableRead.in(processGroup, batch)]))
         }
+        for (batch in node.get('legacyGroups' + groupStatus) || []) {
+            batches.add(tableRead.all([tableRead.isNull(tableRead.blankAsNull(nodeExpression)),tableRead.in(processGroup,batch)]))
+        }
     }
     return tableRead.any(batches)
 }
 
 var statusFilter = (query, processGroup, lifecycle) => {
-    var nodeExpression = tableRead.coalesce([
-        tableRead.blankAsNull(tableRead.jsonText(tableRead.column('p', 'node_mapping_json', 'LOB'), 'runtimeNodeId')),
-        live.defaultNodeId])
+    if (!needsRuntimeSnapshot) { return }
+    var nodeExpression = tableRead.blankAsNull(tableRead.jsonText(tableRead.column('p', 'node_mapping_json', 'LOB'), 'runtimeNodeId'))
     if (selectedNodeId != '' || selectedNetworkCode != '') {
         var nodeIds = (live.nodes || []).filter(node =>
             (selectedNodeId == '' || node.nodeId == selectedNodeId)
             && (selectedNetworkCode == '' || node.networkCode == selectedNetworkCode)).map(node => node.nodeId)
-        query.where(tableRead.in(nodeExpression, nodeIds))
+        var nodeConditions = [tableRead.in(nodeExpression,nodeIds)]
+        for (node in live.nodes || []) {
+            if (!nodeIds.contains(node.nodeId)) { continue }
+            for (state in [0,1,2,3]) {
+                for (batch in node.get('legacyGroups'+state) || []) {
+                    nodeConditions.add(tableRead.all([tableRead.isNull(nodeExpression),tableRead.in(processGroup,batch)]))
+                }
+            }
+            if (node.nodeId==live.defaultNodeId) { nodeConditions.add(tableRead.all([tableRead.isNull(nodeExpression),tableRead.isNull(tableRead.blankAsNull(processGroup))])) }
+        }
+        query.where(tableRead.any(nodeConditions))
     }
     if (status == '' || status == 'all') {
         return
@@ -159,16 +183,34 @@ var pageResult = (query, readRows) => {
 }
 
 var response = (total, list) => {
+    var pageRuntime = taskRuntime.summary(list, live)
+    if (includeNative && scopeMode == 'ALL') {
+        // 即使原生流程位于后续页，监控也需要提示尚未确认的候选节点。
+        var candidates = (live.nodes || []).filter(node =>
+            ((live.watchNodeIds || []).contains(node.nodeId)
+                || (pageRuntime.nodeIds || []).contains(node.nodeId))
+            && (selectedNodeId == '' || selectedNodeId == node.nodeId)
+            && (selectedNetworkCode == '' || selectedNetworkCode == node.networkCode))
+        var pending = candidates.filter(node => node.fresh != true)
+        if (!pending.isEmpty()) {
+            pageRuntime.fresh = false
+            pageRuntime.partial = pending.size() < candidates.size()
+            pageRuntime.message = '状态待确认：' + pending.map(node => text(node.nodeName || node.nodeId)).join('、')
+        }
+    }
     return {
         pageNum: pageNum,
         pageSize: pageSize,
         total: total,
         list: list,
-        runtimeRevision: live.revision,
-        runtimeFresh: live.fresh,
-        runtimePartial: live.partial == true,
-        runtimeObservedAt: live.observedAt,
-        runtimeMessage: live.message
+        runtimeRevision: live.watchRevision || live.revision,
+        runtimeWatchNodeIds: live.watchNodeIds || [],
+        runtimeNodeIds: pageRuntime.nodeIds,
+        runtimeNodes: pageRuntime.nodes,
+        runtimeFresh: pageRuntime.fresh,
+        runtimePartial: pageRuntime.partial == true,
+        runtimeObservedAt: pageRuntime.observedAt,
+        runtimeMessage: pageRuntime.message
     }
 }
 
@@ -234,10 +276,16 @@ var statusTextOf = value => {
 var decorateTaskRow = row => {
     var sourceTable = tableRow(row.sourceTableId)
     var targetTable = tableRow(row.targetTableId)
-    row.sourceDbName = datasourceName(row.sourceDbId)
-    row.targetDbName = datasourceName(row.targetDbId)
+    if (flowScope == '') {
+        row.sourceDbName = datasourceName(row.sourceDbId)
+        row.targetDbName = datasourceName(row.targetDbId)
+    } else {
+        row.sourceDbName = datasourceName(sourceTable?.datasourceId)
+        row.targetDbName = datasourceName(targetTable?.datasourceId)
+    }
     row.sourceTableName = tableDisplayName(sourceTable)
     row.targetTableName = tableDisplayName(targetTable)
+    row.sourcePhysicalTableName = sourceTable == null ? null : sourceTable.tableName
     row.targetPhysicalTableName = targetTable == null ? null : targetTable.tableName
     row.sourceTableSummary = row.sourceTableName
     row.targetTableSummary = row.targetTableName
@@ -265,26 +313,112 @@ var decorateTaskRow = row => {
     return row
 }
 
-// 来源数据源关联参与 ORG、OWNER 权限过滤。ALL 仍可查看来源已失效的本租户任务。
-var tasks = tableRead.from('data_access_agg_task_t', 'a', tenantId)
-tasks.leftJoin('db_datasource_t', 'd', 'tid', 'source_db_id', [active('d')])
-tasks.leftJoin('nifi_pipeline_t', 'p', 'id', 'pipeline_id', [active('p')])
-tasks.where(active('a'))
-if (scopeMode == 'OWNER') {
-    tasks.where(tableRead.equal(textColumn('d', 'created_by'), scopeUserId))
-} else if (scopeMode == 'ORG') {
-    tasks.where(tableRead.in(textColumn('d', 'org_id'), scopeOrgIds))
-}
-var keywordPattern = '%' + keyword + '%'
-if (keyword != '') {
-    // 保留旧查询的 LIKE 通配符及数据库自身的任务名排序规则。
-    tasks.where(tableRead.like(textColumn('a', 'task_name'), keywordPattern))
-}
-
 // 流水线记录存在时使用它的运行组。流水线的空运行组表示尚未部署。
 var lifecycle = textColumn('p', 'status')
 var processGroup = tableRead.when(tableRead.isNull(textColumn('p', 'id')),
     textColumn('a', 'process_group_id'), textColumn('p', 'nifi_process_group_id'))
+var runtimeNode = tableRead.jsonText(tableRead.column('p', 'node_mapping_json', 'LOB'), 'runtimeNodeId')
+var taskQuery = () => {
+    var query = tableRead.from('data_access_agg_task_t', 'a', tenantId)
+    query.leftJoin('nifi_pipeline_t', 'p', 'id', 'pipeline_id', [active('p')])
+    query.where(active('a'))
+    return query
+}
+
+var nativeRows = []
+if (includeNative) {
+    var selectedNodes = (live.nodes || []).filter(node =>
+        (selectedNodeId == '' || selectedNodeId == text(node.nodeId))
+        && (selectedNetworkCode == '' || selectedNetworkCode == text(node.networkCode)))
+    var groups = taskRuntime.nativeGroups({nodes:selectedNodes})
+    if (!groups.isEmpty()) {
+        // 去重使用筛选前的关联，避免把当前关键词或状态未命中的登记任务当成原生流程。
+        // 只批量查询快照中可见流程组及其父组，流程组 ID 与运行节点共同标识流程。
+        var groupIds = {}
+        for (group in groups) {
+            groupIds[group.groupId] = true
+            for (ancestor in group.ancestors) { groupIds[ancestor] = true }
+        }
+        if (groupIds.size() > 20000) { exit 413, '流程组关联范围过大，请按节点筛选' }
+        var links = taskQuery()
+        links.where(tableRead.in(processGroup,new ArrayList(groupIds.keySet())))
+        var registered = {}
+        var managedLinks = links.rows({groupId:processGroup,nodeId:runtimeNode},
+            [textColumn('a','tid')],['asc'],10001,true)
+        if (managedLinks.size() > 10000) { exit 413, '任务关联超过10000项，请按节点筛选' }
+        for (link in managedLinks) {
+            var nodeId = taskRuntime.resolvedNode(live,text(link.nodeId),text(link.groupId))
+            if (nodeId != '') { registered[nodeId+':'+link.groupId] = true }
+        }
+        // 海通「原生流程关联」只登记来源表，不创建平台任务。按真实关联批量回填，不能从处理器属性猜测。
+        var association = tableRead.from('data_access_native_flow_t','l',tenantId)
+        association.leftJoin('db_table_t','t','tid','source_table_id',[active('t')])
+        association.leftJoin('db_datasource_t','d','tenant_id','tenant_id',[
+            active('d'),tableRead.equal(textColumn('d','tid'),textColumn('t','datasource_id'))])
+        var associationGroup = textColumn('l','process_group_id')
+        association.where(tableRead.in(associationGroup,new ArrayList(groupIds.keySet())))
+        association.where(tableRead.all([
+            tableRead.greaterThan(numberColumn('t','asset_status'),0),
+            tableRead.greaterThan(numberColumn('d','asset_status'),0),
+            tableRead.in(textColumn('t','business_type'),['业务表','日志表','字典表'])
+        ]))
+        if (scopeMode == 'OWNER') {
+            association.where(tableRead.equal(textColumn('d','created_by'),scopeUserId))
+        } else if (scopeMode == 'ORG') {
+            association.where(tableRead.in(textColumn('d','org_id'),scopeOrgIds))
+        }
+        var sourceByGroup = {}
+        var associationFields = {groupId:associationGroup,nodeId:textColumn('l','node_id'),
+            sourceDbName:databaseName('d'),sourcePhysicalTableName:textColumn('t','table_name'),
+            sourceTableName:textColumn('t','table_name_cn')}
+        var associations = association.rows(associationFields,[textColumn('l','tid')],['asc'],10001,true)
+        if (associations.size() > 10000) { exit 413, '原生流程关联超过10000项，请按节点筛选' }
+        for (link in associations) { sourceByGroup[link.nodeId+':'+link.groupId] = link }
+        for (group in groups) {
+            var prefix = text(group.nodeId)+':'
+            if (registered[prefix+group.groupId] == true
+                || group.ancestors.filter(id => registered[prefix+id] == true).size() > 0) { continue }
+            var source = sourceByGroup[prefix+group.groupId]
+            if (source == null && scopeMode != 'ALL') { continue }
+            if (status != '' && status != 'all' && status != text(group.taskStatus)) { continue }
+            if (keyword != '' && !text(group.name).toLowerCase().contains(keyword.toLowerCase())) { continue }
+            var nodeUrl = text(group.nodeUrl).replaceAll('/+$','')
+            var pg = text(group.groupId)
+            var nativeUrl = nodeUrl.matches('https?://[^\\s@?#]+') && pg.matches('[A-Za-z0-9_-]{1,64}')
+                ? nodeUrl+'/nifi/#/process-groups/'+pg : null
+            var row = {tid:prefix+pg,taskName:group.name,processGroupId:pg,runtimeProcessGroupId:pg,
+                runtimeNodeId:group.nodeId,nifiNodeId:group.nodeId,nifiNodeName:group.nodeName,nifiNetworkCode:group.networkCode,
+                taskStatus:group.taskStatus,runtimeState:group.state,running:group.running,runtimeFresh:true,
+                runtimeObservedAt:group.observedAt,recordSource:'native',readOnly:true,nativeUrl:nativeUrl,syncTables:[]}
+            if (source != null) {
+                row.sourceDbName = source.sourceDbName
+                row.sourceTableName = source.sourceTableName
+                row.sourcePhysicalTableName = source.sourcePhysicalTableName
+            }
+            nativeRows.add(row)
+        }
+        // 原生组没有平台运行/结束时间，采用名称与复合 ID 的稳定次序。
+        nativeRows = nativeRows.sort((a,b) => {
+            var byName = text(a.taskName).compareToIgnoreCase(text(b.taskName))
+            if (byName == 0) { return text(a.tid).compareTo(text(b.tid)) }
+            return sortField == 'taskName' && sortDirection == 'desc' ? -byName : byName
+        })
+    }
+}
+
+var keywordPattern = '%' + keyword + '%'
+var tasks = taskQuery()
+if (scopeMode != 'ALL') {
+    tasks.leftJoin('db_datasource_t', 'd', 'tid', 'source_db_id', [active('d')])
+    if (scopeMode == 'OWNER') {
+        tasks.where(tableRead.equal(textColumn('d', 'created_by'), scopeUserId))
+    } else {
+        tasks.where(tableRead.in(textColumn('d', 'org_id'), scopeOrgIds))
+    }
+}
+if (keyword != '') {
+    tasks.where(tableRead.like(textColumn('a', 'task_name'), keywordPattern))
+}
 statusFilter(tasks, processGroup, lifecycle)
 
 var taskSorts = {
@@ -300,10 +434,10 @@ var taskSorts = {
     bytesOut: numberColumn('a', 'bytes_out'),
     activeThreadCount: numberColumn('a', 'active_thread_count')
 }
-var taskPage = pageResult(tasks, number => tasks.pageRootRows({
+var taskPage = flowScope == 'native' ? {total:0L,rows:[]} : pageResult(tasks, number => tasks.pageRootRows({
     lifecycle_status: lifecycle,
     runtime_process_group_id: processGroup,
-    runtime_node_id: tableRead.jsonText(tableRead.column('p', 'node_mapping_json', 'LOB'), 'runtimeNodeId')
+    runtime_node_id: runtimeNode
 }, taskSorts[sortField], sortDirection, 'tid', number, pageSize))
 
 // 沿用 Magic API 的列名映射，保留不同部署中的全部任务列及其驼峰键名。
@@ -328,26 +462,44 @@ for (row in taskPage.rows) {
     collectIds(pageTableIds, [task.sourceTableId, task.targetTableId])
 }
 
-// 只对本页任务批量补齐来源和目标名称，查询数不随页内任务数量增长。
-if (pageDatasourceIds.size() > 0) {
-    var sources = db.table('db_datasource_t').columns('tid', 'db_name').where()
-        .eq('tenant_id', tenantId).eq('is_del', 0).in('tid', pageDatasourceIds).select()
-    for (source in sources) {
-        datasourceById[text(source.tid)] = source
-    }
-}
+// 从已登记的表回读所属库。历史任务的库 ID 可能为空，登记表归属仍可核验。
 if (pageTableIds.size() > 0) {
-    var tables = db.table('db_table_t').columns('tid', 'table_name', 'table_name_cn', 'record_count').where()
-        .eq('tenant_id', tenantId).eq('is_del', 0).in('tid', pageTableIds).select()
+    var tables = db.table('db_table_t').columns('tid','datasource_id','table_name','table_name_cn','record_count').where()
+        .eq('tenant_id',tenantId).eq('is_del',0).in('tid',pageTableIds).select()
     for (table in tables) {
         tableById[text(table.tid)] = table
+        if (flowScope != '') { collectIds(pageDatasourceIds,[table.datasourceId]) }
+    }
+}
+// 只对本页任务批量补齐来源和目标名称，查询数不随页内任务数量增长。
+if (pageDatasourceIds.size() > 0) {
+    var datasourceQuery = tableRead.from('db_datasource_t','d',tenantId)
+    var idColumn = textColumn('d','tid')
+    datasourceQuery.where(active('d'))
+    datasourceQuery.where(tableRead.in(idColumn,pageDatasourceIds))
+    var sources = datasourceQuery.rows({tid:idColumn,dbName:flowScope == '' ? textColumn('d','db_name') : databaseName('d')},
+        pageDatasourceIds.size())
+    for (source in sources) {
+        datasourceById[text(source.tid)] = source
     }
 }
 var decorated = []
 for (row in taskRows) {
     decorated.add(decorateTaskRow(row))
 }
+if (!needsRuntimeSnapshot) { live = taskRuntime.snapshotForRows(decorated) }
 taskRuntime.decorate(decorated, live)
+
+if (flowScope != '') {
+    if (!nativeRows.isEmpty() && decorated.size() < pageSize && pageNum <= 2147483647) {
+        var start = Math.max(0,(pageNum-1)*pageSize-taskPage.total)
+        if (start < nativeRows.size()) {
+            var end = Math.min(start+pageSize-decorated.size(),nativeRows.size())
+            decorated.addAll(nativeRows.subList(start::int,end::int))
+        }
+    }
+    return response(taskPage.total+nativeRows.size(), decorated)
+}
 
 // 有效任务存在时，即使请求页或筛选结果为空也不会回退到旧流水线。
 if (scopeMode != 'ALL' || taskPage.total > 0) {
@@ -497,5 +649,6 @@ for (pipeline in pipelinePage.rows) {
     filtered.add(item)
 }
 
+if (!needsRuntimeSnapshot) { live = taskRuntime.snapshotForRows(filtered) }
 taskRuntime.decorate(filtered, live)
 return response(pipelinePage.total, filtered)

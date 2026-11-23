@@ -17,7 +17,13 @@ public final class RuntimeStatusIndex {
     private RuntimeStatusIndex(Map<String, Group> groups) {
         this.groups = Collections.unmodifiableMap(groups);
         StringBuilder value = new StringBuilder();
-        new TreeMap<>(groups).forEach((id, group) -> value.append(id).append(':').append(group.state()).append(':').append(group.invalidCount()).append(';'));
+        new TreeMap<>(groups).forEach((id, group) -> {
+            value.append(id).append(':').append(group.state()).append(':').append(group.invalidCount())
+                    .append(':').append(group.snapshot().path("name").asText()).append(':');
+            group.snapshot().path("processGroupStatusSnapshots").forEach(child -> value.append(
+                    child.path("processGroupStatusSnapshot").path("id").asText()).append(','));
+            value.append(';');
+        });
         try { revision = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.toString().getBytes(StandardCharsets.UTF_8))); }
         catch (Exception e) { throw new IllegalStateException(e); }
     }

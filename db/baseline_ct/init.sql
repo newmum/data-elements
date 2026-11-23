@@ -7237,6 +7237,12 @@ CREATE TABLE "public"."nifi_node_t" (
   "created_time" timestamp(6) without time zone NOT NULL,
   "updated_time" timestamp(6) without time zone NOT NULL,
   "is_del" smallint DEFAULT 0 NOT NULL,
+  "last_health_status" character varying(16 char) DEFAULT 'unknown'::varchar NOT NULL,
+  "last_health_at" timestamp(6) without time zone,
+  "last_health_message" character varying(1000 char),
+  "last_health_latency_ms" bigint,
+  "last_health_revision" character varying(64 char),
+  "last_health_check_id" character varying(32 char),
   CONSTRAINT "nifi_node_t_pkey" PRIMARY KEY (tid)
 );
 
@@ -7277,6 +7283,18 @@ COMMENT ON COLUMN "public"."nifi_node_t"."created_time" IS '创建时间';
 COMMENT ON COLUMN "public"."nifi_node_t"."updated_time" IS '更新时间';
 
 COMMENT ON COLUMN "public"."nifi_node_t"."is_del" IS '删除标志：0正常，1删除';
+
+COMMENT ON COLUMN "public"."nifi_node_t"."last_health_status" IS '最近连通检测状态：unknown未检测、reachable可连通、unreachable不可连通';
+
+COMMENT ON COLUMN "public"."nifi_node_t"."last_health_at" IS '最近连通检测完成时间';
+
+COMMENT ON COLUMN "public"."nifi_node_t"."last_health_message" IS '最近连通检测结果说明，凭据已脱敏';
+
+COMMENT ON COLUMN "public"."nifi_node_t"."last_health_latency_ms" IS '最近连通检测耗时，单位毫秒';
+
+COMMENT ON COLUMN "public"."nifi_node_t"."last_health_revision" IS '检测对应的节点配置版本，修改配置后旧结果失效';
+
+COMMENT ON COLUMN "public"."nifi_node_t"."last_health_check_id" IS '检测发起序号，防止旧检测覆盖新结果';
 
 CREATE TABLE "public"."nifi_pipeline_external_ref_t" (
   "tid" character varying(32 char) NOT NULL,
@@ -7507,6 +7525,12 @@ CREATE TABLE "public"."push_node_t" (
   "created_time" timestamp(6) without time zone NOT NULL,
   "updated_time" timestamp(6) without time zone NOT NULL,
   "is_del" smallint DEFAULT 0 NOT NULL,
+  "last_health_status" character varying(16 char) DEFAULT 'unknown'::varchar NOT NULL,
+  "last_health_at" timestamp(6) without time zone,
+  "last_health_message" character varying(1000 char),
+  "last_health_latency_ms" bigint,
+  "last_health_revision" character varying(64 char),
+  "last_health_check_id" character varying(32 char),
   CONSTRAINT "push_node_t_pkey" PRIMARY KEY (tid)
 );
 
@@ -7541,6 +7565,18 @@ COMMENT ON COLUMN "public"."push_node_t"."created_time" IS '节点创建时间';
 COMMENT ON COLUMN "public"."push_node_t"."updated_time" IS '节点配置更新时间';
 
 COMMENT ON COLUMN "public"."push_node_t"."is_del" IS '逻辑删除标志：0正常、1已删除';
+
+COMMENT ON COLUMN "public"."push_node_t"."last_health_status" IS '最近连通检测状态：unknown未检测、reachable可连通、unreachable不可连通';
+
+COMMENT ON COLUMN "public"."push_node_t"."last_health_at" IS '最近连通检测完成时间';
+
+COMMENT ON COLUMN "public"."push_node_t"."last_health_message" IS '最近连通检测结果说明，凭据已脱敏';
+
+COMMENT ON COLUMN "public"."push_node_t"."last_health_latency_ms" IS '最近连通检测耗时，单位毫秒';
+
+COMMENT ON COLUMN "public"."push_node_t"."last_health_revision" IS '检测对应的节点配置版本，修改配置后旧结果失效';
+
+COMMENT ON COLUMN "public"."push_node_t"."last_health_check_id" IS '检测发起序号，防止旧检测覆盖新结果';
 
 CREATE TABLE "public"."res_catalog_publish_request" (
   "tid" character varying(32 char) NOT NULL,
@@ -9105,6 +9141,12 @@ CREATE TABLE "public"."service_node_t" (
   "created_time" timestamp(6) without time zone NOT NULL,
   "updated_time" timestamp(6) without time zone NOT NULL,
   "is_del" smallint DEFAULT 0 NOT NULL,
+  "last_health_status" character varying(16 char) DEFAULT 'unknown'::varchar NOT NULL,
+  "last_health_at" timestamp(6) without time zone,
+  "last_health_message" character varying(1000 char),
+  "last_health_latency_ms" bigint,
+  "last_health_revision" character varying(64 char),
+  "last_health_check_id" character varying(32 char),
   CONSTRAINT "service_node_t_pkey" PRIMARY KEY (tid)
 );
 
@@ -9141,6 +9183,18 @@ COMMENT ON COLUMN "public"."service_node_t"."created_time" IS '创建时间';
 COMMENT ON COLUMN "public"."service_node_t"."updated_time" IS '更新时间';
 
 COMMENT ON COLUMN "public"."service_node_t"."is_del" IS '删除标志：0正常，1删除';
+
+COMMENT ON COLUMN "public"."service_node_t"."last_health_status" IS '最近连通检测状态：unknown未检测、reachable可连通、unreachable不可连通';
+
+COMMENT ON COLUMN "public"."service_node_t"."last_health_at" IS '最近连通检测完成时间';
+
+COMMENT ON COLUMN "public"."service_node_t"."last_health_message" IS '最近连通检测结果说明，凭据已脱敏';
+
+COMMENT ON COLUMN "public"."service_node_t"."last_health_latency_ms" IS '最近连通检测耗时，单位毫秒';
+
+COMMENT ON COLUMN "public"."service_node_t"."last_health_revision" IS '检测对应的节点配置版本，修改配置后旧结果失效';
+
+COMMENT ON COLUMN "public"."service_node_t"."last_health_check_id" IS '检测发起序号，防止旧检测覆盖新结果';
 
 CREATE TABLE "public"."svc_feedback_t" (
   "tid" character varying(32 char) NOT NULL,

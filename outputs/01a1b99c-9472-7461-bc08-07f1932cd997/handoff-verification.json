@@ -1,0 +1,29 @@
+{
+  "oneWorksheet": true,
+  "rows": 111,
+  "normalRows": 60,
+  "grayRows": 51,
+  "firstGrayExcelRow": 68,
+  "excludedNoPing": 39,
+  "uniqueHosts": true,
+  "typedTimes": true,
+  "knownSecretMatches": 0,
+  "freezePanes": {
+    "xSplit": "2",
+    "ySplit": "7",
+    "topLeftCell": "C8",
+    "activePane": "bottomRight",
+    "state": "frozen"
+  },
+  "promptChars": 15055,
+  "files": [
+    {
+      "name": "继续任务提示词_数据源登记接入测试_2026-11-24.txt",
+      "bytes": 29043
+    },
+    {
+      "name": "服务器清单_数据源测试接管_2026-11-24.xlsx",
+      "bytes": 19696
+    }
+  ]
+}

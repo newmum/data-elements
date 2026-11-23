@@ -1,0 +1,4280 @@
+{
+  "checkedAt": "2026-11-24T00:01:28+08:00",
+  "inputCount": 150,
+  "records": [
+    {
+      "host": "10.231.176.10",
+      "checkedAt": "2026-11-24T00:00:23+08:00",
+      "ping": true,
+      "sshAuthenticated": false,
+      "sshErrors": [],
+      "serviceChecks": [],
+      "openPorts": [],
+      "usable": false
+    },
+    {
+      "host": "10.231.176.12",
+      "checkedAt": "2026-11-24T00:01:05+08:00",
+      "ping": false,
+      "sshAuthenticated": false,
+      "sshErrors": [],
+      "serviceChecks": []
+    },
+    {
+      "host": "10.231.176.13",
+      "checkedAt": "2026-11-24T00:01:05+08:00",
+      "ping": true,
+      "sshAuthenticated": true,
+      "sshErrors": [],
+      "serviceChecks": [],
+      "openPorts": [
+        22
+      ],
+      "loginUser": "root",
+      "loginPort": 22,
+      "credentialRef": "原表：176段(x86)!第3行",
+      "os": "Linux",
+      "currentInventory": {
+        "services": [
+          "MySQL"
+        ],
+        "resources": {
+          "memoryMB": 60786,
+          "diskFreeGB": 32.0,
+          "cpu": 16
+        },
+        "ports": [
+          22,
+          25,
+          2123,
+          9100,
+          13306,
+          33060
+        ],
+        "containers": []
+      },
+      "usable": true
+    },
+    {
+      "host": "10.231.176.14",
+      "checkedAt": "2026-11-24T00:01:05+08:00",
+      "ping": true,
+      "sshAuthenticated": true,
+      "sshErrors": [],
+      "serviceChecks": [],
+      "openPorts": [
+        22
+      ],
+      "loginUser": "root",
+      "loginPort": 22,
+      "credentialRef": "原表：176段(x86)!第4行",
+      "os": "Linux",
+      "inventoryError": "ValueError",
+      "usable": true
+    },
+    {
+      "host": "10.231.176.15",
+      "checkedAt": "2026-11-24T00:01:13+08:00",
+      "ping": true,
+      "sshAuthenticated": true,
+      "sshErrors": [],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        2181,
+        3306,
+        6379,
+        8000,
+        9000,
+        9092
+      ],
+      "loginUser": "root",
+      "loginPort": 22,
+      "credentialRef": "原表：176段(x86)!第22行",
+      "os": "Linux",
+      "currentInventory": {
+        "services": [
+          "Kafka",
+          "MySQL",
+          "Nacos",
+          "Redis"
+        ],
+        "resources": {
+          "memoryMB": 56161,
+          "diskFreeGB": 45.0,
+          "cpu": 8
+        },
+        "ports": [
+          22,
+          25,
+          2122,
+          2181,
+          3306,
+          6379,
+          8000,
+          9000,
+          9092,
+          33060,
+          36438,
+          38382
+        ],
+        "containers": [
+          "npc\tffdfgdfg/npc\t\tExited (255) 2 years ago"
+        ]
+      },
+      "usable": true
+    },
+    {
+      "host": "10.231.176.16",
+      "checkedAt": "2026-11-24T00:01:13+08:00",
+      "ping": true,
+      "sshAuthenticated": true,
+      "sshErrors": [],
+      "serviceChecks": [],
+      "openPorts": [
+        22
+      ],
+      "loginUser": "root",
+      "loginPort": 22,
+      "credentialRef": "原表：176段(x86)!第23行",
+      "os": "Linux",
+      "currentInventory": {
+        "services": [],
+        "resources": {
+          "memoryMB": 61009,
+          "diskFreeGB": 29.0,
+          "cpu": 16
+        },
+        "ports": [
+          22,
+          25,
+          2123,
+          2375
+        ],
+        "containers": [
+          "zealous_heyrovsky\tb3log/siyuan\t\tExited (0) 2 years ago",
+          "npc\tffdfgdfg/npc\t\tExited (0) 2 years ago",
+          "stackedit\tmafgwo/stackedit:latest\t\tExited (0) 2 years ago",
+          "reverent_johnson\tcodercom/code-server:latest\t\tExited (137) 2 years ago",
+          "superset\tapache/superset:3.1.0rc3\t\tExited (137) 2 years ago"
+        ]
+      },
+      "usable": true
+    },
+    {
+      "host": "10.231.176.17",
+      "checkedAt": "2026-11-24T00:01:14+08:00",
+      "ping": true,
+      "sshAuthenticated": true,
+      "sshErrors": [],
+      "serviceChecks": [],
+      "openPorts": [
+        22
+      ],
+      "loginUser": "root",
+      "loginPort": 22,
+      "credentialRef": "原表：176段(x86)!第24行",
+      "os": "Linux",
+      "currentInventory": {
+        "services": [],
+        "resources": {
+          "memoryMB": 58082,
+          "diskFreeGB": 36.0,
+          "cpu": 16
+        },
+        "ports": [
+          22,
+          25,
+          88,
+          464,
+          749,
+          2123
+        ],
+        "containers": []
+      },
+      "usable": true
+    },
+    {
+      "host": "10.231.176.18",
+      "checkedAt": "2026-11-24T00:01:14+08:00",
+      "ping": true,
+      "sshAuthenticated": false,
+      "sshErrors": [
+        "AuthenticationException"
+      ],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        1521,
+        3306
+      ],
+      "usable": false
+    },
+    {
+      "host": "10.231.176.19",
+      "checkedAt": "2026-11-24T00:01:14+08:00",
+      "ping": true,
+      "sshAuthenticated": false,
+      "sshErrors": [
+        "AuthenticationException"
+      ],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        1521,
+        5432
+      ],
+      "usable": false
+    },
+    {
+      "host": "10.231.176.20",
+      "checkedAt": "2026-11-24T00:01:15+08:00",
+      "ping": true,
+      "sshAuthenticated": false,
+      "sshErrors": [
+        "AuthenticationException"
+      ],
+      "serviceChecks": [],
+      "openPorts": [
+        22
+      ],
+      "usable": false
+    },
+    {
+      "host": "10.231.176.24",
+      "checkedAt": "2026-11-24T00:01:06+08:00",
+      "ping": true,
+      "sshAuthenticated": true,
+      "sshErrors": [],
+      "serviceChecks": [],
+      "openPorts": [
+        22
+      ],
+      "loginUser": "root",
+      "loginPort": 22,
+      "credentialRef": "原表：176段(x86)!第5行",
+      "os": "Linux",
+      "currentInventory": {
+        "services": [],
+        "resources": {
+          "memoryMB": 61644,
+          "diskFreeGB": 47.0,
+          "cpu": 16
+        },
+        "ports": [
+          22
+        ],
+        "containers": []
+      },
+      "usable": true
+    },
+    {
+      "host": "10.231.176.30",
+      "checkedAt": "2026-11-24T00:01:16+08:00",
+      "ping": true,
+      "sshAuthenticated": false,
+      "sshErrors": [
+        "AuthenticationException"
+      ],
+      "serviceChecks": [],
+      "openPorts": [
+        22
+      ],
+      "usable": false
+    },
+    {
+      "host": "10.231.176.31",
+      "checkedAt": "2026-11-24T00:01:16+08:00",
+      "ping": true,
+      "sshAuthenticated": false,
+      "sshErrors": [
+        "AuthenticationException"
+      ],
+      "serviceChecks": [],
+      "openPorts": [
+        22
+      ],
+      "usable": false
+    },
+    {
+      "host": "10.231.176.32",
+      "checkedAt": "2026-11-24T00:01:16+08:00",
+      "ping": true,
+      "sshAuthenticated": false,
+      "sshErrors": [
+        "AuthenticationException"
+      ],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        2181,
+        3306,
+        3307,
+        6379
+      ],
+      "usable": false
+    },
+    {
+      "host": "10.231.176.33",
+      "checkedAt": "2026-11-24T00:01:16+08:00",
+      "ping": false,
+      "sshAuthenticated": false,
+      "sshErrors": [],
+      "serviceChecks": []
+    },
+    {
+      "host": "10.231.176.34",
+      "checkedAt": "2026-11-24T00:01:16+08:00",
+      "ping": true,
+      "sshAuthenticated": false,
+      "sshErrors": [
+        "AuthenticationException"
+      ],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        54321
+      ],
+      "usable": false
+    },
+    {
+      "host": "10.231.176.35",
+      "checkedAt": "2026-11-24T00:01:21+08:00",
+      "ping": true,
+      "sshAuthenticated": false,
+      "sshErrors": [
+        "AuthenticationException"
+      ],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        3306,
+        6379,
+        8848,
+        9000,
+        10001
+      ],
+      "usable": false
+    },
+    {
+      "host": "10.231.176.36",
+      "checkedAt": "2026-11-24T00:01:22+08:00",
+      "ping": true,
+      "sshAuthenticated": false,
+      "sshErrors": [
+        "AuthenticationException"
+      ],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        3306,
+        6379,
+        9000
+      ],
+      "usable": false
+    },
+    {
+      "host": "10.231.176.37",
+      "checkedAt": "2026-11-24T00:01:16+08:00",
+      "ping": true,
+      "sshAuthenticated": false,
+      "sshErrors": [
+        "AuthenticationException"
+      ],
+      "serviceChecks": [],
+      "openPorts": [
+        22
+      ],
+      "usable": false
+    },
+    {
+      "host": "10.231.176.38",
+      "checkedAt": "2026-11-24T00:01:18+08:00",
+      "ping": true,
+      "sshAuthenticated": false,
+      "sshErrors": [
+        "AuthenticationException"
+      ],
+      "serviceChecks": [],
+      "openPorts": [
+        22
+      ],
+      "usable": false
+    },
+    {
+      "host": "10.231.176.39",
+      "checkedAt": "2026-11-24T00:01:20+08:00",
+      "ping": true,
+      "sshAuthenticated": false,
+      "sshErrors": [
+        "AuthenticationException"
+      ],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        2181,
+        3306,
+        6379
+      ],
+      "usable": false
+    },
+    {
+      "host": "10.231.176.40",
+      "checkedAt": "2026-11-24T00:01:20+08:00",
+      "ping": true,
+      "sshAuthenticated": false,
+      "sshErrors": [
+        "AuthenticationException"
+      ],
+      "serviceChecks": [],
+      "openPorts": [
+        22
+      ],
+      "usable": false
+    },
+    {
+      "host": "10.231.176.41",
+      "checkedAt": "2026-11-24T00:01:22+08:00",
+      "ping": true,
+      "sshAuthenticated": false,
+      "sshErrors": [
+        "AuthenticationException"
+      ],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        5236,
+        54321
+      ],
+      "usable": false
+    },
+    {
+      "host": "10.231.176.42",
+      "checkedAt": "2026-11-24T00:01:22+08:00",
+      "ping": true,
+      "sshAuthenticated": false,
+      "sshErrors": [
+        "AuthenticationException"
+      ],
+      "serviceChecks": [],
+      "openPorts": [
+        22
+      ],
+      "usable": false
+    },
+    {
+      "host": "10.231.176.50",
+      "checkedAt": "2026-11-24T00:01:08+08:00",
+      "ping": true,
+      "sshAuthenticated": true,
+      "sshErrors": [],
+      "serviceChecks": [],
+      "openPorts": [
+        21,
+        22,
+        5000
+      ],
+      "loginUser": "root",
+      "loginPort": 22,
+      "credentialRef": "原表：176段(x86)!第11行",
+      "os": "Linux",
+      "currentInventory": {
+        "services": [
+          "FTP",
+          "MySQL"
+        ],
+        "resources": {
+          "memoryMB": 27835,
+          "diskFreeGB": 20.0,
+          "cpu": 8
+        },
+        "ports": [
+          21,
+          22,
+          3301,
+          5000,
+          9090,
+          9100,
+          9104,
+          9108,
+          9121,
+          9141,
+          33060
+        ],
+        "containers": [
+          "test\tdata-monitor-ansible:v2\t\tExited (255) 18 months ago",
+          "data-monitor-ansible\tdata-monitor-ansible:v1\t0.0.0.0:1234->22/tcp\tExited (255) 11 months ago",
+          "kubeasz\teaszlab/kubeasz:3.6.5\t\tExited (255) 11 months ago",
+          "local_registry\tregistry:2\t\tUp 8 months",
+          "my_container\tghcr.io/jaegertracing/spark-dependencies/spark-dependencies\t\tExited (0) 2 years ago",
+          "bk-paas\tccr.ccs.tencentyun.com/bk.io/paas-standalone:latest\t\tExited (0) 2 years ago",
+          "busybox\tbusybox\t\tExited (255) 2 years ago",
+          "nginx-1\tnginx\t80/tcp\tExited (255) 2 years ago",
+          "nginx-test\tdata-monitor/nginx:1.18.0\t\tExited (0) 2 years ago"
+        ]
+      },
+      "usable": true
+    },
+    {
+      "host": "10.231.176.51",
+      "checkedAt": "2026-11-24T00:01:08+08:00",
+      "ping": false,
+      "sshAuthenticated": false,
+      "sshErrors": [],
+      "serviceChecks": []
+    },
+    {
+      "host": "10.231.176.52",
+      "checkedAt": "2026-11-24T00:01:13+08:00",
+      "ping": true,
+      "sshAuthenticated": true,
+      "sshErrors": [],
+      "serviceChecks": [
+        {
+          "kind": "elasticsearch",
+          "port": 9200,
+          "profileRef": "C:\\Users\\Administrator\\.codex\\private\\data-elements\\server-datasource-validation\\es-business-10.231.176.52-profile.private.json",
+          "verified": true
+        },
+        {
+          "kind": "mysql",
+          "port": 3306,
+          "profileRef": "C:\\Users\\Administrator\\.codex\\private\\data-elements\\server-datasource-validation\\existing-jdbc-2124240554170105856-profile.private.json",
+          "verified": true
+        }
+      ],
+      "openPorts": [
+        22,
+        3306,
+        5236,
+        5432,
+        6379,
+        9000,
+        9200
+      ],
+      "loginUser": "root",
+      "loginPort": 22,
+      "credentialRef": "原表：176段(x86)!第21行",
+      "os": "Linux",
+      "currentInventory": {
+        "services": [
+          "Dameng",
+          "Elasticsearch",
+          "MySQL",
+          "NiFi",
+          "PostgreSQL",
+          "Redis"
+        ],
+        "ports": [
+          22,
+          81,
+          3306,
+          5236,
+          5432,
+          6342,
+          6379,
+          7379,
+          7702,
+          7705,
+          7706,
+          7707,
+          7710,
+          7715,
+          7718,
+          7773,
+          7789,
+          7800,
+          8090,
+          9000,
+          9102,
+          9111,
+          9200,
+          9300,
+          9559,
+          9560,
+          9669,
+          9777,
+          9778,
+          9779,
+          9780,
+          12181,
+          19559,
+          19669,
+          19779,
+          33060,
+          52020
+        ],
+        "containers": [
+          "kingbase\tkingbase_v008r006c008b0014_single_x86:v1\t0.0.0.0:54321->54321/tcp, :::54321->54321/tcp\tExited (255) 8 months ago",
+          "middleware-nebula-studio-1\tvesoft/nebula-graph-studio:v3.3.0\t0.0.0.0:7001->7001/tcp, :::7001->7001/tcp, 0.0.0.0:9559->9559/tcp, :::9559->9559/tcp, 0.0.0.0:9669->9669/tcp, :::9669->9669/tcp, 0.0.0.0:9779->9779/tcp, :::9779->9779/tcp\tExited (255) 8 months ago",
+          "application2-data-assets-message-consumer-2-1\tapplication2-data-assets-message-consumer-2\t\tUp 8 months",
+          "application2-data-assets-map-2-1\tapplication2-data-assets-map-2\t\tUp 8 months",
+          "application2-data-assets-manage-2-1\tapplication2-data-assets-manage-2\t\tUp 8 months",
+          "application2_data-assets-manage-2_run_bf84b0eabd64\tapplication2-data-assets-manage-2\t\tExited (255) 8 months ago",
+          "middleware-redis-1\tredis:6.0.6\t0.0.0.0:6379->6379/tcp, :::6379->6379/tcp\tExited (255) 8 months ago",
+          "application2-data-assets-register-2-1\tapplication2-data-assets-register-2\t\tUp 8 months",
+          "dm8\tdm8_single:dm8_20230808_rev197096_x86_rh6_64\t0.0.0.0:5236->5236/tcp, :::5236->5236/tcp\tUp 3 months",
+          "application2-data-assets-apicenter-2-1\tapplication2-data-assets-apicenter-2\t\tUp 8 months",
+          "application2-data-assets-job-executor7706-2-1\tapplication2-data-assets-job-executor7706-2\t\tUp 8 months",
+          "application2-data-assets-flowcenter-2-1\tapplication2-data-assets-flowcenter-2\t\tUp 8 months",
+          "application2-data-assets-front-2-1\tapplication2-data-assets-front-2\t\tUp 8 months",
+          "application2-data-assets-job-center-2-1\tapplication2-data-assets-job-center-2\t\tUp 8 months",
+          "application2-data-assets-opendoor-2-1\tapplication2-data-assets-opendoor-2\t0.0.0.0:7789->7789/tcp, :::7789->7789/tcp\tUp 8 months",
+          "application2-data-assets-user-center-2-1\tapplication2-data-assets-user-center-2\t\tUp 8 months",
+          "middleware-elasticsearch-1\telasticsearch:7.16.2\t9200/tcp, 0.0.0.0:19200->19200/tcp, :::19200->19200/tcp, 9300/tcp, 0.0.0.0:19300->19300/tcp, :::19300->19300/tcp\tExited (255) 8 months ago",
+          "middleware_2-minio-1\tminio/minio:RELEASE.2022-09-22T18-57-27Z\t0.0.0.0:19001->19001/tcp, :::19001->19001/tcp, 0.0.0.0:19000->9000/tcp, :::19000->9000/tcp\tExited (255) 8 months ago",
+          "middleware-kafka-1\twurstmeister/kafka\t0.0.0.0:9092->9092/tcp, :::9092->9092/tcp\tExited (255) 8 months ago",
+          "middleware-zookeeper-1\tzookeeper:3.6.1\t2888/tcp, 3888/tcp, 0.0.0.0:2181->2181/tcp, :::2181->2181/tcp, 8080/tcp\tExited (255) 8 months ago"
+        ],
+        "resources": {
+          "memoryMB": 28518,
+          "cpu": 8,
+          "diskFreeGB": 33.3
+        }
+      },
+      "usable": true
+    },
+    {
+      "host": "10.231.176.53",
+      "checkedAt": "2026-11-24T00:01:07+08:00",
+      "ping": true,
+      "sshAuthenticated": false,
+      "sshErrors": [
+        "AuthenticationException"
+      ],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        1433,
+        3306,
+        5236,
+        9092
+      ],
+      "usable": false
+    },
+    {
+      "host": "10.231.176.54",
+      "checkedAt": "2026-11-24T00:01:07+08:00",
+      "ping": true,
+      "sshAuthenticated": false,
+      "sshErrors": [
+        "AuthenticationException"
+      ],
+      "serviceChecks": [],
+      "openPorts": [
+        22
+      ],
+      "usable": false
+    },
+    {
+      "host": "10.231.176.55",
+      "checkedAt": "2026-11-24T00:01:07+08:00",
+      "ping": true,
+      "sshAuthenticated": false,
+      "sshErrors": [
+        "AuthenticationException"
+      ],
+      "serviceChecks": [],
+      "openPorts": [
+        22
+      ],
+      "usable": false
+    },
+    {
+      "host": "10.231.176.56",
+      "checkedAt": "2026-11-24T00:01:08+08:00",
+      "ping": true,
+      "sshAuthenticated": false,
+      "sshErrors": [
+        "AuthenticationException"
+      ],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        2181
+      ],
+      "usable": false
+    },
+    {
+      "host": "10.231.176.57",
+      "checkedAt": "2026-11-24T00:01:08+08:00",
+      "ping": true,
+      "sshAuthenticated": false,
+      "sshErrors": [
+        "AuthenticationException"
+      ],
+      "serviceChecks": [
+        {
+          "kind": "elasticsearch",
+          "port": 9200,
+          "profileRef": "C:\\Users\\Administrator\\.codex\\private\\data-elements\\server-datasource-validation\\es-business-10.231.176.57-profile.private.json",
+          "verified": true
+        }
+      ],
+      "openPorts": [
+        22,
+        2181,
+        3306,
+        6379,
+        9092,
+        9200
+      ],
+      "usable": true
+    },
+    {
+      "host": "10.231.176.58",
+      "checkedAt": "2026-11-24T00:01:22+08:00",
+      "ping": true,
+      "sshAuthenticated": false,
+      "sshErrors": [],
+      "serviceChecks": [],
+      "openPorts": [
+        22
+      ],
+      "usable": false
+    },
+    {
+      "host": "10.231.176.71",
+      "checkedAt": "2026-11-24T00:01:08+08:00",
+      "ping": true,
+      "sshAuthenticated": true,
+      "sshErrors": [],
+      "serviceChecks": [],
+      "openPorts": [
+        22
+      ],
+      "loginUser": "root",
+      "loginPort": 22,
+      "credentialRef": "原表：176段(x86)!第13行",
+      "os": "Linux",
+      "currentInventory": {
+        "services": [],
+        "resources": {
+          "memoryMB": 58301,
+          "diskFreeGB": 46.0,
+          "cpu": 16
+        },
+        "ports": [
+          22,
+          25,
+          9090,
+          9091,
+          9100,
+          9141
+        ],
+        "containers": [
+          "redis\tswr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/redis:latest\t0.0.0.0:6379->6379/tcp\tExited (255) 11 months ago",
+          "dameng\txuxuclassmate/dameng:v8.1\t0.0.0.0:5236->5236/tcp\tExited (255) 11 months ago"
+        ]
+      },
+      "usable": true
+    },
+    {
+      "host": "10.231.176.72",
+      "checkedAt": "2026-11-24T00:01:08+08:00",
+      "ping": false,
+      "sshAuthenticated": false,
+      "sshErrors": [],
+      "serviceChecks": []
+    },
+    {
+      "host": "10.231.176.73",
+      "checkedAt": "2026-11-24T00:01:09+08:00",
+      "ping": true,
+      "sshAuthenticated": true,
+      "sshErrors": [],
+      "serviceChecks": [],
+      "openPorts": [
+        22
+      ],
+      "loginUser": "root",
+      "loginPort": 22,
+      "credentialRef": "原表：176段(x86)!第15行",
+      "os": "Linux",
+      "currentInventory": {
+        "services": [],
+        "resources": {
+          "memoryMB": 59116,
+          "diskFreeGB": 48.0,
+          "cpu": 16
+        },
+        "ports": [
+          22,
+          25,
+          9100,
+          9141
+        ],
+        "containers": []
+      },
+      "usable": true
+    },
+    {
+      "host": "10.231.176.74",
+      "checkedAt": "2026-11-24T00:01:11+08:00",
+      "ping": false,
+      "sshAuthenticated": false,
+      "sshErrors": [],
+      "serviceChecks": []
+    },
+    {
+      "host": "10.231.176.75",
+      "checkedAt": "2026-11-24T00:01:11+08:00",
+      "ping": true,
+      "sshAuthenticated": true,
+      "sshErrors": [],
+      "serviceChecks": [],
+      "openPorts": [
+        22
+      ],
+      "loginUser": "root",
+      "loginPort": 22,
+      "credentialRef": "原表：176段(x86)!第17行",
+      "os": "Linux",
+      "currentInventory": {
+        "services": [],
+        "resources": {
+          "memoryMB": 35695,
+          "diskFreeGB": 47.0,
+          "cpu": 16
+        },
+        "ports": [
+          22,
+          25,
+          9100,
+          9108,
+          9196,
+          9216
+        ],
+        "containers": []
+      },
+      "usable": true
+    },
+    {
+      "host": "10.231.176.181",
+      "checkedAt": "2026-11-24T00:01:14+08:00",
+      "ping": true,
+      "sshAuthenticated": false,
+      "sshErrors": [
+        "AuthenticationException"
+      ],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        5432
+      ],
+      "usable": false
+    },
+    {
+      "host": "10.231.176.182",
+      "checkedAt": "2026-11-24T00:01:23+08:00",
+      "ping": true,
+      "sshAuthenticated": true,
+      "sshErrors": [],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        3306,
+        6379,
+        8000,
+        8848,
+        9092,
+        9093,
+        9200
+      ],
+      "loginUser": "root",
+      "loginPort": 22,
+      "credentialRef": "原表：176段(x86)!第43行",
+      "os": "Linux",
+      "currentInventory": {
+        "services": [
+          "Elasticsearch",
+          "Kafka",
+          "MySQL",
+          "Redis"
+        ],
+        "resources": {
+          "memoryMB": 32606,
+          "diskFreeGB": 47.0,
+          "cpu": 64
+        },
+        "ports": [
+          22,
+          25,
+          443,
+          2375,
+          3306,
+          6379,
+          6400,
+          6500,
+          7700,
+          7848,
+          8000,
+          8200,
+          8300,
+          8848,
+          9092,
+          9093,
+          9200,
+          9300,
+          9848,
+          9849,
+          10010,
+          10086,
+          33060,
+          33379
+        ],
+        "containers": [
+          "firmament-service-dgp\t10.231.176.181/firmament/firmament-dgp-microservice:6.0.0-GA\t\tUp 8 months (unhealthy)",
+          "firmament-service-layout\t10.231.176.181/firmament/linewell-framework-layout-microservice:6.0.0-GA\t\tUp 8 months (unhealthy)",
+          "firmament-service-datacenter\t10.231.176.181/firmament/firmament-datacenter-microservice:6.0.0-GA\t\tUp 8 months (healthy)",
+          "firmament-service-survey\t10.231.176.181/firmament/firmament-survey-microservice:6.0.0-GA\t\tUp 8 months (unhealthy)",
+          "firmament-service-datamodel\t10.231.176.181/firmament/firmament-datamodel-microservice:6.0.0-GA\t\tUp 8 months (unhealthy)",
+          "firmament-service-basic\t10.231.176.181/firmament/firmament-basic-microservice:6.0.0-GA\t\tUp 8 months (unhealthy)",
+          "firmament-service-standard\t10.231.176.181/firmament/firmament-standard-microservice:6.0.0-GA\t\tUp 8 months (healthy)",
+          "firmament-service-sys\t10.231.176.181/firmament/linewell-framework-sys-microservice:6.0.0-GA\t\tUp 8 months (unhealthy)",
+          "firmament-service-cockpit\t10.231.176.181/firmament/firmament-cockpit-microservice:6.0.0-GA\t\tUp 8 months (unhealthy)",
+          "firmament-service-wxdg\t10.231.176.181/firmament/firmament-wxdg-microservice:6.0.0-GA\t\tUp 8 months (unhealthy)",
+          "firmament-service-daq\t10.231.176.181/firmament/firmament-daq-microservice:6.0.0-GA\t\tUp 8 months (unhealthy)",
+          "firmament-service-authserver\t10.231.176.181/firmament/linewell-framework-microservice-authserver:6.0.0-GA\t\tUp 8 months (healthy)",
+          "firmament-service-gateway\t10.231.176.181/firmament/linewell-framework-microservice-gateway:6.0.0-GA\t\tUp 8 months (healthy)",
+          "firmament-kit-nginx\t10.231.176.181/firmament/nginx:1.25.4\t\tUp 8 months (healthy)",
+          "firmament-service-powerjob\t10.231.176.181/firmament/linewell-framework-kit-powerjob:6.0.0-GA\t\tUp 8 months (healthy)",
+          "firmament-service-nacos\t10.231.176.181/firmament/linewell-framework-kit-nacos:6.0.0-GA\t\tUp 8 months (healthy)",
+          "firmament-kit-kafka\t10.231.176.181/firmament/kafka:3.2.3\t\tUp 8 months (healthy)",
+          "firmament-kit-mysql\t10.231.176.181/firmament/mysql:8.0.35\t\tUp 8 months (healthy)",
+          "firmament-kit-redis\t10.231.176.181/firmament/redis:5.0.14\t\tUp 8 months (healthy)",
+          "firmament-kit-elasticsearch\t10.231.176.181/firmament/elasticsearch:7.17.6\t\tUp 8 months (healthy)"
+        ]
+      },
+      "usable": true
+    },
+    {
+      "host": "10.231.176.183",
+      "checkedAt": "2026-11-24T00:01:23+08:00",
+      "ping": true,
+      "sshAuthenticated": true,
+      "sshErrors": [],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        3306
+      ],
+      "loginUser": "root",
+      "loginPort": 22,
+      "credentialRef": "原表：176段(x86)!第44行",
+      "os": "Linux",
+      "currentInventory": {
+        "services": [
+          "MySQL"
+        ],
+        "resources": {
+          "memoryMB": 61371,
+          "diskFreeGB": 46.0,
+          "cpu": 16
+        },
+        "ports": [
+          22,
+          3306,
+          33060
+        ],
+        "containers": []
+      },
+      "usable": true
+    },
+    {
+      "host": "10.231.176.184",
+      "checkedAt": "2026-11-24T00:01:24+08:00",
+      "ping": true,
+      "sshAuthenticated": true,
+      "sshErrors": [],
+      "serviceChecks": [],
+      "openPorts": [
+        22
+      ],
+      "loginUser": "root",
+      "loginPort": 22,
+      "credentialRef": "原表：176段(x86)!第45行",
+      "os": "Linux",
+      "currentInventory": {
+        "services": [],
+        "resources": {
+          "memoryMB": 62962,
+          "diskFreeGB": 46.0,
+          "cpu": 16
+        },
+        "ports": [
+          22,
+          25
+        ],
+        "containers": []
+      },
+      "usable": true
+    },
+    {
+      "host": "10.231.176.190",
+      "checkedAt": "2026-11-24T00:01:12+08:00",
+      "ping": false,
+      "sshAuthenticated": false,
+      "sshErrors": [],
+      "serviceChecks": []
+    },
+    {
+      "host": "10.231.176.191",
+      "checkedAt": "2026-11-24T00:01:12+08:00",
+      "ping": false,
+      "sshAuthenticated": false,
+      "sshErrors": [],
+      "serviceChecks": []
+    },
+    {
+      "host": "10.231.176.192",
+      "checkedAt": "2026-11-24T00:01:12+08:00",
+      "ping": false,
+      "sshAuthenticated": false,
+      "sshErrors": [],
+      "serviceChecks": []
+    },
+    {
+      "host": "14.103.233.56",
+      "checkedAt": "2026-11-24T00:01:24+08:00",
+      "ping": true,
+      "sshAuthenticated": false,
+      "sshErrors": [],
+      "serviceChecks": [],
+      "openPorts": [
+        22
+      ],
+      "usable": false
+    },
+    {
+      "host": "192.168.71.101",
+      "checkedAt": "2026-11-24T00:00:23+08:00",
+      "ping": false,
+      "sshAuthenticated": false,
+      "sshErrors": [],
+      "serviceChecks": []
+    },
+    {
+      "host": "192.168.71.102",
+      "checkedAt": "2026-11-24T00:00:23+08:00",
+      "ping": false,
+      "sshAuthenticated": false,
+      "sshErrors": [],
+      "serviceChecks": []
+    },
+    {
+      "host": "192.168.71.121",
+      "checkedAt": "2026-11-24T00:00:23+08:00",
+      "ping": false,
+      "sshAuthenticated": false,
+      "sshErrors": [],
+      "serviceChecks": []
+    },
+    {
+      "host": "192.168.71.122",
+      "checkedAt": "2026-11-24T00:00:23+08:00",
+      "ping": false,
+      "sshAuthenticated": false,
+      "sshErrors": [],
+      "serviceChecks": []
+    },
+    {
+      "host": "192.168.71.123",
+      "checkedAt": "2026-11-24T00:00:23+08:00",
+      "ping": false,
+      "sshAuthenticated": false,
+      "sshErrors": [],
+      "serviceChecks": []
+    },
+    {
+      "host": "192.168.71.124",
+      "checkedAt": "2026-11-24T00:00:25+08:00",
+      "ping": false,
+      "sshAuthenticated": false,
+      "sshErrors": [],
+      "serviceChecks": []
+    },
+    {
+      "host": "192.168.71.125",
+      "checkedAt": "2026-11-24T00:00:25+08:00",
+      "ping": false,
+      "sshAuthenticated": false,
+      "sshErrors": [],
+      "serviceChecks": []
+    },
+    {
+      "host": "192.168.71.126",
+      "checkedAt": "2026-11-24T00:00:25+08:00",
+      "ping": false,
+      "sshAuthenticated": false,
+      "sshErrors": [],
+      "serviceChecks": []
+    },
+    {
+      "host": "192.168.71.127",
+      "checkedAt": "2026-11-24T00:00:25+08:00",
+      "ping": false,
+      "sshAuthenticated": false,
+      "sshErrors": [],
+      "serviceChecks": []
+    },
+    {
+      "host": "192.168.71.128",
+      "checkedAt": "2026-11-24T00:00:27+08:00",
+      "ping": false,
+      "sshAuthenticated": false,
+      "sshErrors": [],
+      "serviceChecks": []
+    },
+    {
+      "host": "192.168.71.130",
+      "checkedAt": "2026-11-24T00:00:31+08:00",
+      "ping": false,
+      "sshAuthenticated": false,
+      "sshErrors": [],
+      "serviceChecks": []
+    },
+    {
+      "host": "192.168.71.133",
+      "checkedAt": "2026-11-24T00:00:27+08:00",
+      "ping": false,
+      "sshAuthenticated": false,
+      "sshErrors": [],
+      "serviceChecks": []
+    },
+    {
+      "host": "192.168.71.134",
+      "checkedAt": "2026-11-24T00:00:27+08:00",
+      "ping": false,
+      "sshAuthenticated": false,
+      "sshErrors": [],
+      "serviceChecks": []
+    },
+    {
+      "host": "192.168.71.142",
+      "checkedAt": "2026-11-24T00:00:27+08:00",
+      "ping": false,
+      "sshAuthenticated": false,
+      "sshErrors": [],
+      "serviceChecks": []
+    },
+    {
+      "host": "192.168.71.145",
+      "checkedAt": "2026-11-24T00:00:29+08:00",
+      "ping": false,
+      "sshAuthenticated": false,
+      "sshErrors": [],
+      "serviceChecks": []
+    },
+    {
+      "host": "192.168.71.150",
+      "checkedAt": "2026-11-24T00:00:27+08:00",
+      "ping": false,
+      "sshAuthenticated": false,
+      "sshErrors": [],
+      "serviceChecks": []
+    },
+    {
+      "host": "192.168.71.172",
+      "checkedAt": "2026-11-24T00:00:27+08:00",
+      "ping": false,
+      "sshAuthenticated": false,
+      "sshErrors": [],
+      "serviceChecks": []
+    },
+    {
+      "host": "192.168.71.174",
+      "checkedAt": "2026-11-24T00:00:31+08:00",
+      "ping": false,
+      "sshAuthenticated": false,
+      "sshErrors": [],
+      "serviceChecks": []
+    },
+    {
+      "host": "192.168.71.175",
+      "checkedAt": "2026-11-24T00:00:29+08:00",
+      "ping": false,
+      "sshAuthenticated": false,
+      "sshErrors": [],
+      "serviceChecks": []
+    },
+    {
+      "host": "192.168.71.176",
+      "checkedAt": "2026-11-24T00:00:29+08:00",
+      "ping": true,
+      "sshAuthenticated": false,
+      "sshErrors": [
+        "AuthenticationException"
+      ],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        3306,
+        5432,
+        6379
+      ],
+      "usable": false
+    },
+    {
+      "host": "192.168.71.177",
+      "checkedAt": "2026-11-24T00:00:29+08:00",
+      "ping": true,
+      "sshAuthenticated": false,
+      "sshErrors": [],
+      "serviceChecks": [],
+      "openPorts": [
+        3389
+      ],
+      "usable": false
+    },
+    {
+      "host": "192.168.71.185",
+      "checkedAt": "2026-11-24T00:00:31+08:00",
+      "ping": false,
+      "sshAuthenticated": false,
+      "sshErrors": [],
+      "serviceChecks": []
+    },
+    {
+      "host": "192.168.71.186",
+      "checkedAt": "2026-11-24T00:00:31+08:00",
+      "ping": false,
+      "sshAuthenticated": false,
+      "sshErrors": [],
+      "serviceChecks": []
+    },
+    {
+      "host": "192.168.71.187",
+      "checkedAt": "2026-11-24T00:00:31+08:00",
+      "ping": false,
+      "sshAuthenticated": false,
+      "sshErrors": [],
+      "serviceChecks": []
+    },
+    {
+      "host": "192.168.71.188",
+      "checkedAt": "2026-11-24T00:00:33+08:00",
+      "ping": false,
+      "sshAuthenticated": false,
+      "sshErrors": [],
+      "serviceChecks": []
+    },
+    {
+      "host": "192.168.71.189",
+      "checkedAt": "2026-11-24T00:00:31+08:00",
+      "ping": false,
+      "sshAuthenticated": false,
+      "sshErrors": [],
+      "serviceChecks": []
+    },
+    {
+      "host": "192.168.71.190",
+      "checkedAt": "2026-11-24T00:00:31+08:00",
+      "ping": false,
+      "sshAuthenticated": false,
+      "sshErrors": [],
+      "serviceChecks": []
+    },
+    {
+      "host": "192.168.173.18",
+      "checkedAt": "2026-11-24T00:00:23+08:00",
+      "ping": true,
+      "sshAuthenticated": false,
+      "sshErrors": [],
+      "serviceChecks": [],
+      "openPorts": [
+        22
+      ],
+      "usable": false
+    },
+    {
+      "host": "192.168.173.19",
+      "checkedAt": "2026-11-24T00:00:23+08:00",
+      "ping": false,
+      "sshAuthenticated": false,
+      "sshErrors": [],
+      "serviceChecks": []
+    },
+    {
+      "host": "192.168.173.31",
+      "checkedAt": "2026-11-24T00:00:33+08:00",
+      "ping": true,
+      "sshAuthenticated": true,
+      "sshErrors": [],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        3307
+      ],
+      "loginUser": "root",
+      "loginPort": 22,
+      "credentialRef": "原表：173段(arm)!第2行",
+      "os": "Linux",
+      "currentInventory": {
+        "services": [
+          "MongoDB",
+          "MySQL"
+        ],
+        "resources": {
+          "memoryMB": 16530,
+          "diskFreeGB": 26.0,
+          "cpu": 16
+        },
+        "ports": [
+          22,
+          25,
+          111,
+          892,
+          2049,
+          2185,
+          2186,
+          3307,
+          5001,
+          7102,
+          7103,
+          10161,
+          27017,
+          32803,
+          59767
+        ],
+        "containers": [
+          "zookeeper-mobileplatform\t218.104.238.200:28080/arm64/zookeeper:3.5.6\t2888/tcp, 3888/tcp, 0.0.0.0:2186->2181/tcp\tUp 2 years",
+          "mobileplatform-business\tmb-mobileplatform-business:latest\t\tRestarting (1) 44 seconds ago",
+          "mobileplatform-apiservice\tmb-mobileplatform-apiservice:latest\t\tUp 2 years",
+          "mobileplatform-provider\tmb-mobileplatform-provider:latest\t\tRestarting (1) 55 seconds ago",
+          "mobileoa-provider\tmb-mobileoa-provider:latest\t\tRestarting (1) 25 seconds ago",
+          "mobileoa-apiservice\tmb-mobileoa-apiservice:latest\t\tUp 2 years",
+          "zookeeper-mobileoa\t218.104.238.200:28080/arm64/zookeeper:3.5.6\t2888/tcp, 3888/tcp, 0.0.0.0:2185->2181/tcp\tUp 2 years",
+          "mobileoa-business\tmb-mobileoa-business:latest\t\tRestarting (1) 11 seconds ago",
+          "mbbase-apiservice\tmbbase-apiservice:2.1\t0.0.0.0:5001->5000/tcp\tUp 2 years"
+        ]
+      },
+      "usable": true
+    },
+    {
+      "host": "192.168.173.32",
+      "checkedAt": "2026-11-24T00:00:35+08:00",
+      "ping": true,
+      "sshAuthenticated": false,
+      "sshErrors": [
+        "AuthenticationException"
+      ],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        3307,
+        6379,
+        8848,
+        9000,
+        9092
+      ],
+      "usable": false
+    },
+    {
+      "host": "192.168.173.33",
+      "checkedAt": "2026-11-24T00:00:41+08:00",
+      "ping": true,
+      "sshAuthenticated": true,
+      "sshErrors": [],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        3306,
+        3307,
+        6379,
+        9092
+      ],
+      "loginUser": "root",
+      "loginPort": 22,
+      "credentialRef": "原表：173段(arm)!第19行",
+      "os": "Linux",
+      "currentInventory": {
+        "services": [
+          "MySQL",
+          "Redis"
+        ],
+        "resources": {
+          "memoryMB": 11895,
+          "diskFreeGB": 43.0,
+          "cpu": 16
+        },
+        "ports": [
+          22,
+          81,
+          111,
+          892,
+          2049,
+          2185,
+          2186,
+          2189,
+          3306,
+          3307,
+          6379,
+          7102,
+          7103,
+          8501,
+          8888,
+          9091,
+          9092,
+          9093,
+          9094,
+          13561,
+          15717,
+          20881,
+          20882,
+          20883,
+          20884,
+          27002,
+          27003,
+          32803,
+          55667
+        ],
+        "containers": [
+          "nginx\tlianchuang/arm64/nginx:1.21.3\t0.0.0.0:81->80/tcp\tUp 2 years",
+          "mysql5.7\t218.104.238.200:28080/arm64/mysql:5.7\t0.0.0.0:3306->3306/tcp, 33060/tcp\tUp 2 years",
+          "mobileplatform-business\tmb-mobileplatform-business:latest\t\tRestarting (1) 37 seconds ago",
+          "mobileplatform-apiservice\tmb-mobileplatform-apiservice:latest\t\tUp 2 years",
+          "mobileplatform-provider\tmb-mobileplatform-provider:latest\t\tUp 2 years",
+          "zookeeper-mobileplatform\t218.104.238.200:28080/arm64/zookeeper:3.5.6\t2888/tcp, 3888/tcp, 0.0.0.0:2186->2181/tcp\tUp 2 years",
+          "mobileoa-apiservice\tmb-mobileoa-apiservice:latest\t\tUp 2 years",
+          "mobileoa-provider\tmb-mobileoa-provider:latest\t\tUp 2 years",
+          "mobileoa-business\tmb-mobileoa-business:latest\t\tRestarting (1) 58 seconds ago",
+          "zookeeper-mobileoa\t218.104.238.200:28080/arm64/zookeeper:3.5.6\t2888/tcp, 3888/tcp, 0.0.0.0:2185->2181/tcp\tUp 2 years"
+        ]
+      },
+      "usable": true
+    },
+    {
+      "host": "192.168.173.34",
+      "checkedAt": "2026-11-24T00:00:41+08:00",
+      "ping": true,
+      "sshAuthenticated": true,
+      "sshErrors": [],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        3306
+      ],
+      "loginUser": "root",
+      "loginPort": 22,
+      "credentialRef": "原表：173段(arm)!第20行",
+      "os": "Linux",
+      "currentInventory": {
+        "services": [
+          "MySQL",
+          "Redis"
+        ],
+        "resources": {
+          "memoryMB": 18596,
+          "diskFreeGB": 33.0,
+          "cpu": 8
+        },
+        "ports": [
+          22,
+          25,
+          81,
+          111,
+          2049,
+          2185,
+          2186,
+          2376,
+          3306,
+          5001,
+          6380,
+          7002,
+          7003,
+          7102,
+          7103,
+          20048,
+          27003,
+          34935,
+          46673,
+          51299,
+          51961
+        ],
+        "containers": [
+          "jenkins-blueocean\tjenkins-blueocean:2.443\t0.0.0.0:8081->8080/tcp, :::8081->8080/tcp, 0.0.0.0:50001->50000/tcp, :::50001->50000/tcp\tExited (128) 2 years ago",
+          "jenkins-docker\tdocker:dind\t2375/tcp, 0.0.0.0:2376->2376/tcp, :::2376->2376/tcp\tUp 2 years",
+          "mysql5.7\t218.104.238.200:28080/arm64/mysql:5.7\t0.0.0.0:3306->3306/tcp, :::3306->3306/tcp, 33060/tcp\tUp 2 years",
+          "redis_slave\tredis:6.2.3-alpine3.13\t\tExited (0) 4 years ago",
+          "redis-sentinel\tikaruswill/redis-sentinel:latest\t\tExited (0) 4 years ago",
+          "redis_master\tredis:6.2.3-alpine3.13\t\tExited (0) 4 years ago",
+          "mobileoa-business\tmb-mobileoa-business:latest\t\tUp 2 years",
+          "nginx\tlianchuang/arm64/nginx:1.21.3\t0.0.0.0:81->80/tcp, :::81->80/tcp\tUp 2 years",
+          "zookeeper-mobileplatform\t218.104.238.200:28080/arm64/zookeeper:3.5.6\t2888/tcp, 3888/tcp, 0.0.0.0:2186->2181/tcp, :::2186->2181/tcp\tUp 2 years",
+          "zookeeper-mobileoa\t218.104.238.200:28080/arm64/zookeeper:3.5.6\t2888/tcp, 3888/tcp, 0.0.0.0:2185->2181/tcp, :::2185->2181/tcp\tUp 2 years",
+          "mobileplatform-provider\tmb-mobileplatform-provider:latest\t\tUp 2 years",
+          "mobileplatform-business\tmb-mobileplatform-business:latest\t\tUp 2 years",
+          "mobileplatform-apiservice\tmb-mobileplatform-apiservice:latest\t\tUp 2 years",
+          "mobileoa-provider\tmb-mobileoa-provider:latest\t\tExited (128) 2 years ago",
+          "mobileoa-apiservice\tmb-mobileoa-apiservice:latest\t\tUp 2 years",
+          "mbbase-apiservice\tmbbase-apiservice:2.1\t0.0.0.0:5001->5000/tcp, :::5001->5000/tcp\tUp 2 years",
+          "redis-6.2.3-alpine3.13\tredis:6.2.3-alpine3.13\t0.0.0.0:6380->6379/tcp, :::6380->6379/tcp\tUp 2 years",
+          "zookeeper\t218.104.238.200:28080/arm64/zookeeper:3.5.6\t\tExited (137) 5 years ago",
+          "redis\t218.104.238.200:28080/arm64/redis:4.0.14-alpine3.11\t\tExited (0) 4 years ago"
+        ]
+      },
+      "usable": true
+    },
+    {
+      "host": "192.168.173.35",
+      "checkedAt": "2026-11-24T00:00:42+08:00",
+      "ping": true,
+      "sshAuthenticated": false,
+      "sshErrors": [
+        "AuthenticationException"
+      ],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        2181,
+        3306,
+        6379,
+        8848
+      ],
+      "usable": false
+    },
+    {
+      "host": "192.168.173.36",
+      "checkedAt": "2026-11-24T00:00:42+08:00",
+      "ping": true,
+      "sshAuthenticated": true,
+      "sshErrors": [],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        3306,
+        6379,
+        8000
+      ],
+      "loginUser": "root",
+      "loginPort": 22,
+      "credentialRef": "原表：173段(arm)!第22行",
+      "os": "Linux",
+      "inventoryError": "ValueError",
+      "usable": true
+    },
+    {
+      "host": "192.168.173.37",
+      "checkedAt": "2026-11-24T00:00:43+08:00",
+      "ping": true,
+      "sshAuthenticated": true,
+      "sshErrors": [],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        3306,
+        6379
+      ],
+      "loginUser": "root",
+      "loginPort": 22,
+      "credentialRef": "原表：173段(arm)!第23行",
+      "os": "Linux",
+      "currentInventory": {
+        "services": [
+          "MongoDB",
+          "MySQL",
+          "Nacos",
+          "Redis"
+        ],
+        "ports": [
+          22,
+          2182,
+          3306,
+          6379,
+          8089,
+          20880,
+          21810,
+          27017,
+          44733,
+          53007,
+          54001,
+          54002,
+          54003,
+          54009,
+          54011,
+          54012
+        ],
+        "containers": [
+          "festive_kilby\tea17ec341c42\t\tExited (100) 4 months ago",
+          "xenodochial_herschel\tf4849cfc95b0\t\tExited (100) 4 months ago",
+          "jolly_dubinsky\tea17ec341c42\t\tExited (100) 4 months ago",
+          "distracted_dhawan\t7eeb94c13aca\t\tExited (100) 4 months ago",
+          "friendly_burnell\t921d16509c20\t\tExited (100) 4 months ago",
+          "hopeful_heisenberg\t921d16509c20\t\tExited (100) 4 months ago",
+          "infallible_murdock\t921d16509c20\t\tExited (100) 4 months ago",
+          "gracious_proskuriakova\tdde9a2e8728e\t\tExited (100) 4 months ago",
+          "lucid_yalow\tdde9a2e8728e\t\tExited (100) 4 months ago",
+          "clever_allen\t2961f464e7c7\t\tExited (100) 4 months ago",
+          "infallible_lederberg\td5ea0faec585\t\tExited (100) 4 months ago",
+          "reverent_leavitt\tb3624fae4124\t\tExited (100) 4 months ago",
+          "wonderful_mclean\t252e7e45ba12\t\tCreated",
+          "xenodochial_haibt\t252e7e45ba12\t\tCreated",
+          "fervent_haibt\te03571422420\t\tExited (100) 5 months ago",
+          "friendly_roentgen\te03571422420\t\tExited (100) 5 months ago"
+        ],
+        "resources": {
+          "memoryMB": 14331,
+          "cpu": 8,
+          "diskFreeGB": 18.6
+        }
+      },
+      "usable": true
+    },
+    {
+      "host": "192.168.173.38",
+      "checkedAt": "2026-11-24T00:00:43+08:00",
+      "ping": true,
+      "sshAuthenticated": false,
+      "sshErrors": [
+        "AuthenticationException"
+      ],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        6379
+      ],
+      "usable": false
+    },
+    {
+      "host": "192.168.173.39",
+      "checkedAt": "2026-11-24T00:00:45+08:00",
+      "ping": true,
+      "sshAuthenticated": true,
+      "sshErrors": [],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        3306
+      ],
+      "loginUser": "root",
+      "loginPort": 22,
+      "credentialRef": "原表：173段(arm)!第28行",
+      "os": "Linux",
+      "currentInventory": {
+        "services": [
+          "MySQL"
+        ],
+        "resources": {
+          "memoryMB": 27529,
+          "diskFreeGB": 29.0,
+          "cpu": 8
+        },
+        "ports": [
+          22,
+          111,
+          2049,
+          3306,
+          7799,
+          8001,
+          20048,
+          39979,
+          41731,
+          42343,
+          43529
+        ],
+        "containers": [
+          "nginx_D7JDHnOY\tlinewell/nginx:1.21.0\t\tUp 8 months",
+          "nginx_dVP1gK6q\tlinewell/nginx:1.21.0\t\tUp 8 months",
+          "nginx_gnfdDFAT\tlinewell/nginx:1.21.0\t\tExited (0) 8 months ago",
+          "hbase-master_gWJ1VUFW\thbase-master:1.1.2\t\tExited (1) 3 years ago",
+          "hbase-regionserver_jQNXDHDq\thbase-regionserver:1.1.2\t\tExited (1) 3 years ago",
+          "nginx_oCDxYbg2\t17f81ca67d18\t\tExited (0) 8 months ago",
+          "es\tdata-rover/wos-elasticsearch-nomal:7.8.1\t\tExited (137) 4 years ago"
+        ]
+      },
+      "usable": true
+    },
+    {
+      "host": "192.168.173.40",
+      "checkedAt": "2026-11-24T00:00:47+08:00",
+      "ping": true,
+      "sshAuthenticated": false,
+      "sshErrors": [
+        "AuthenticationException"
+      ],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        3306,
+        5432,
+        54321
+      ],
+      "usable": false
+    },
+    {
+      "host": "192.168.173.41",
+      "checkedAt": "2026-11-24T00:00:47+08:00",
+      "ping": true,
+      "sshAuthenticated": true,
+      "sshErrors": [],
+      "serviceChecks": [],
+      "openPorts": [
+        22
+      ],
+      "loginUser": "root",
+      "loginPort": 22,
+      "credentialRef": "原表：173段(arm)!第30行",
+      "os": "Linux",
+      "currentInventory": {
+        "services": [
+          "NiFi"
+        ],
+        "ports": [
+          22,
+          111,
+          6334,
+          7777,
+          8443,
+          8886,
+          8887,
+          8899,
+          8992,
+          9102,
+          9111,
+          10002,
+          18080,
+          18966,
+          34117,
+          46195
+        ],
+        "containers": [],
+        "resources": {
+          "memoryMB": 4891,
+          "cpu": 8,
+          "diskFreeGB": 21.0
+        }
+      },
+      "usable": true
+    },
+    {
+      "host": "192.168.173.42",
+      "checkedAt": "2026-11-24T00:00:48+08:00",
+      "ping": true,
+      "sshAuthenticated": true,
+      "sshErrors": [],
+      "serviceChecks": [
+        {
+          "kind": "mysql",
+          "port": 3306,
+          "profileRef": "C:\\Users\\Administrator\\.codex\\private\\data-elements\\server-datasource-validation\\existing-jdbc-2124240577754677248-profile.private.json",
+          "verified": true
+        }
+      ],
+      "openPorts": [
+        22,
+        2181,
+        3306,
+        9092,
+        9200
+      ],
+      "loginUser": "root",
+      "loginPort": 22,
+      "credentialRef": "原表：173段(arm)!第34行",
+      "os": "Linux",
+      "currentInventory": {
+        "services": [
+          "Elasticsearch",
+          "Hadoop",
+          "Kafka",
+          "MySQL"
+        ],
+        "ports": [
+          22,
+          2181,
+          3306,
+          3888,
+          5555,
+          8019,
+          8020,
+          8030,
+          8031,
+          8032,
+          8033,
+          8040,
+          8042,
+          8080,
+          8088,
+          8091,
+          8480,
+          8485,
+          8999,
+          9091,
+          9092,
+          9100,
+          9200,
+          9300,
+          9864,
+          9866,
+          9867,
+          9870,
+          13562,
+          32001,
+          32002,
+          32003,
+          32004,
+          32006,
+          32007,
+          34345,
+          40319,
+          42627,
+          45454
+        ],
+        "containers": [],
+        "resources": {
+          "memoryMB": 26304,
+          "cpu": 12,
+          "diskFreeGB": 42.0
+        }
+      },
+      "usable": true
+    },
+    {
+      "host": "192.168.173.43",
+      "checkedAt": "2026-11-24T00:00:48+08:00",
+      "ping": true,
+      "sshAuthenticated": true,
+      "sshErrors": [],
+      "serviceChecks": [],
+      "openPorts": [
+        22
+      ],
+      "loginUser": "root",
+      "loginPort": 22,
+      "credentialRef": "原表：173段(arm)!第35行",
+      "os": "Linux",
+      "currentInventory": {
+        "services": [
+          "Hive"
+        ],
+        "resources": {
+          "memoryMB": 49234,
+          "diskFreeGB": 45.0,
+          "cpu": 12
+        },
+        "ports": [
+          22,
+          9083,
+          9100,
+          9141,
+          9802
+        ],
+        "containers": []
+      },
+      "usable": true
+    },
+    {
+      "host": "192.168.173.44",
+      "checkedAt": "2026-11-24T00:00:48+08:00",
+      "ping": true,
+      "sshAuthenticated": true,
+      "sshErrors": [],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        2181,
+        9092,
+        10000
+      ],
+      "loginUser": "root",
+      "loginPort": 22,
+      "credentialRef": "原表：173段(arm)!第36行",
+      "os": "Linux",
+      "currentInventory": {
+        "services": [
+          "Hadoop",
+          "Hive",
+          "Kafka"
+        ],
+        "ports": [
+          22,
+          25,
+          2181,
+          2888,
+          3888,
+          8019,
+          8033,
+          8040,
+          8042,
+          8080,
+          8088,
+          8480,
+          8485,
+          9092,
+          9100,
+          9141,
+          9308,
+          9803,
+          9864,
+          9866,
+          9867,
+          10000,
+          10002,
+          10020,
+          10033,
+          13562,
+          19888,
+          32002,
+          32003,
+          32004,
+          32005,
+          32006,
+          32007,
+          35401,
+          35467,
+          39545,
+          40927,
+          41811,
+          45454
+        ],
+        "containers": [],
+        "resources": {
+          "memoryMB": 25927,
+          "cpu": 12,
+          "diskFreeGB": 33.9
+        }
+      },
+      "usable": true
+    },
+    {
+      "host": "192.168.173.45",
+      "checkedAt": "2026-11-24T00:00:35+08:00",
+      "ping": true,
+      "sshAuthenticated": false,
+      "sshErrors": [],
+      "serviceChecks": [],
+      "openPorts": [],
+      "usable": false
+    },
+    {
+      "host": "192.168.173.46",
+      "checkedAt": "2026-11-24T00:00:35+08:00",
+      "ping": true,
+      "sshAuthenticated": false,
+      "sshErrors": [
+        "AuthenticationException"
+      ],
+      "serviceChecks": [
+        {
+          "kind": "elasticsearch",
+          "port": 9200,
+          "profileRef": "C:\\Users\\Administrator\\.codex\\private\\data-elements\\server-datasource-validation\\es-business-192.168.173.46-profile.private.json",
+          "verified": true
+        }
+      ],
+      "openPorts": [
+        22,
+        2181,
+        5000,
+        9092,
+        9200
+      ],
+      "usable": true
+    },
+    {
+      "host": "192.168.173.47",
+      "checkedAt": "2026-11-24T00:00:35+08:00",
+      "ping": true,
+      "sshAuthenticated": false,
+      "sshErrors": [
+        "AuthenticationException"
+      ],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        2181,
+        5000,
+        9092,
+        9200,
+        10000
+      ],
+      "usable": false
+    },
+    {
+      "host": "192.168.173.48",
+      "checkedAt": "2026-11-24T00:00:35+08:00",
+      "ping": true,
+      "sshAuthenticated": false,
+      "sshErrors": [
+        "AuthenticationException"
+      ],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        2181,
+        5000,
+        6379,
+        9092,
+        9200,
+        10000
+      ],
+      "usable": false
+    },
+    {
+      "host": "192.168.173.49",
+      "checkedAt": "2026-11-24T00:00:35+08:00",
+      "ping": true,
+      "sshAuthenticated": true,
+      "sshErrors": [],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        8000,
+        8848
+      ],
+      "loginUser": "root",
+      "loginPort": 22,
+      "credentialRef": "原表：173段(arm)!第8行",
+      "os": "Linux",
+      "inventoryError": "ValueError",
+      "usable": true
+    },
+    {
+      "host": "192.168.173.53",
+      "checkedAt": "2026-11-24T00:00:50+08:00",
+      "ping": true,
+      "sshAuthenticated": false,
+      "sshErrors": [
+        "AuthenticationException"
+      ],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        2181,
+        3306,
+        6379,
+        8848,
+        9000,
+        9200
+      ],
+      "usable": false
+    },
+    {
+      "host": "192.168.173.55",
+      "checkedAt": "2026-11-24T00:00:51+08:00",
+      "ping": true,
+      "sshAuthenticated": true,
+      "sshErrors": [],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        2881,
+        3306,
+        3307,
+        6379,
+        8848
+      ],
+      "loginUser": "root",
+      "loginPort": 22,
+      "credentialRef": "原表：173段(arm)!第41行",
+      "os": "Linux",
+      "currentInventory": {
+        "services": [
+          "Hadoop",
+          "MySQL",
+          "Nacos",
+          "OceanBase",
+          "Redis"
+        ],
+        "ports": [
+          22,
+          80,
+          111,
+          2881,
+          3306,
+          3307,
+          4040,
+          5678,
+          6379,
+          7778,
+          7848,
+          8085,
+          8777,
+          8778,
+          8848,
+          9100,
+          9501,
+          9600,
+          9602,
+          9702,
+          9848,
+          9849,
+          9911,
+          9912,
+          9914,
+          9915,
+          12345,
+          15011,
+          19998,
+          21553,
+          25333,
+          27771,
+          29339,
+          50052
+        ],
+        "containers": [
+          "oceanbase-ce\tquay.io/oceanbase/oceanbase-ce\t0.0.0.0:2881->2881/tcp\tUp 18 months",
+          "nginx\tnginx\t0.0.0.0:80->80/tcp, 0.0.0.0:9911-9912->9911-9912/tcp, 0.0.0.0:9914-9915->9914-9915/tcp\tUp 21 months",
+          "redis\thub.atomgit.com/arm64v8/redis:6.0\t0.0.0.0:6379->6379/tcp\tUp 22 months",
+          "mysql8test\tmysql:8\t\tExited (1) 22 months ago",
+          "dolphinscheduler-standalone-server\tapache/dolphinscheduler-standalone-server:3.2.1\t\tExited (137) 2 years ago",
+          "minio\tminio/minio\t0.0.0.0:9000-9001->9000-9001/tcp\tExited (255) 2 years ago",
+          "clickhouse-server3\tclickhouse/clickhouse-server:23.3\t\tExited (0) 2 years ago",
+          "mysqlnew\tmysql:8\t33060/tcp, 0.0.0.0:3307->3306/tcp\tUp 22 months",
+          "mysql8\tmysql:8\t0.0.0.0:3306->3306/tcp, 33060/tcp\tUp 22 months"
+        ],
+        "resources": {
+          "memoryMB": 2683,
+          "cpu": 10,
+          "diskFreeGB": 27.9
+        }
+      },
+      "usable": true
+    },
+    {
+      "host": "192.168.173.56",
+      "checkedAt": "2026-11-24T00:00:47+08:00",
+      "ping": true,
+      "sshAuthenticated": false,
+      "sshErrors": [
+        "AuthenticationException"
+      ],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        2181,
+        3306,
+        6379,
+        9092,
+        9200
+      ],
+      "usable": false
+    },
+    {
+      "host": "192.168.173.57",
+      "checkedAt": "2026-11-24T00:00:35+08:00",
+      "ping": true,
+      "sshAuthenticated": false,
+      "sshErrors": [
+        "AuthenticationException"
+      ],
+      "serviceChecks": [],
+      "openPorts": [
+        22
+      ],
+      "usable": false
+    },
+    {
+      "host": "192.168.173.59",
+      "checkedAt": "2026-11-24T00:00:51+08:00",
+      "ping": true,
+      "sshAuthenticated": true,
+      "sshErrors": [],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        8000,
+        8848
+      ],
+      "loginUser": "root",
+      "loginPort": 22,
+      "credentialRef": "原表：173段(arm)!第40行",
+      "os": "Linux",
+      "currentInventory": {
+        "services": [],
+        "ports": [
+          22,
+          25,
+          2122,
+          2123,
+          2377,
+          5006,
+          5011,
+          6100,
+          6200,
+          6300,
+          6400,
+          6500,
+          6600,
+          6700,
+          6800,
+          7000,
+          7100,
+          7700,
+          7848,
+          7946,
+          8000,
+          8200,
+          8300,
+          8800,
+          8848,
+          8990,
+          9600,
+          9848,
+          9849,
+          10010,
+          10086,
+          26700,
+          26800,
+          26900,
+          27000,
+          27100
+        ],
+        "containers": [
+          "jpom-server\tjpomdocker/jpom\t0.0.0.0:2122->2122/tcp, :::2122->2122/tcp\tExited (255) 4 years ago"
+        ],
+        "resources": {
+          "memoryMB": 51081,
+          "cpu": 16,
+          "diskFreeGB": 13.4
+        }
+      },
+      "usable": true
+    },
+    {
+      "host": "192.168.173.60",
+      "checkedAt": "2026-11-24T00:00:49+08:00",
+      "ping": true,
+      "sshAuthenticated": false,
+      "sshErrors": [
+        "AuthenticationException"
+      ],
+      "serviceChecks": [],
+      "openPorts": [
+        21,
+        22,
+        3306,
+        6379,
+        8848,
+        9200
+      ],
+      "usable": false
+    },
+    {
+      "host": "192.168.173.61",
+      "checkedAt": "2026-11-24T00:00:52+08:00",
+      "ping": false,
+      "sshAuthenticated": false,
+      "sshErrors": [],
+      "serviceChecks": []
+    },
+    {
+      "host": "192.168.173.62",
+      "checkedAt": "2026-11-24T00:00:52+08:00",
+      "ping": true,
+      "sshAuthenticated": true,
+      "sshErrors": [],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        2181,
+        6379,
+        9092,
+        10000
+      ],
+      "loginUser": "root",
+      "loginPort": 22,
+      "credentialRef": "原表：173段(arm)!第43行",
+      "os": "Linux",
+      "currentInventory": {
+        "services": [
+          "Hadoop",
+          "Hive",
+          "Kafka",
+          "NiFi",
+          "Redis"
+        ],
+        "resources": {
+          "memoryMB": 19831,
+          "diskFreeGB": 48.0,
+          "cpu": 16
+        },
+        "ports": [
+          22,
+          25,
+          80,
+          2181,
+          3888,
+          6334,
+          6379,
+          7777,
+          8033,
+          8080,
+          8088,
+          8480,
+          8485,
+          8888,
+          8992,
+          9092,
+          9100,
+          9102,
+          9111,
+          9121,
+          9803,
+          9864,
+          9866,
+          9867,
+          10000,
+          10002,
+          18966,
+          32002,
+          32003,
+          32007,
+          32987,
+          34287,
+          35585,
+          39785,
+          46369
+        ],
+        "containers": []
+      },
+      "usable": true
+    },
+    {
+      "host": "192.168.173.63",
+      "checkedAt": "2026-11-24T00:00:53+08:00",
+      "ping": true,
+      "sshAuthenticated": true,
+      "sshErrors": [],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        2181,
+        3306,
+        8848,
+        9092,
+        19200
+      ],
+      "loginUser": "root",
+      "loginPort": 22,
+      "credentialRef": "原表：173段(arm)!第44行",
+      "os": "Linux",
+      "currentInventory": {
+        "services": [
+          "Elasticsearch",
+          "Hadoop",
+          "Hive",
+          "Kafka",
+          "MySQL",
+          "Nacos"
+        ],
+        "resources": {
+          "memoryMB": 14705,
+          "diskFreeGB": 39.0,
+          "cpu": 16
+        },
+        "ports": [
+          22,
+          81,
+          2181,
+          2888,
+          3306,
+          3888,
+          7705,
+          7706,
+          7707,
+          7715,
+          7718,
+          7730,
+          7734,
+          7778,
+          7848,
+          8020,
+          8033,
+          8080,
+          8085,
+          8088,
+          8480,
+          8485,
+          8777,
+          8778,
+          8848,
+          8888,
+          9083,
+          9092,
+          9100,
+          9104,
+          9501,
+          9600,
+          9802,
+          9848,
+          9849,
+          9864,
+          9866,
+          9867,
+          9870,
+          10091,
+          17702,
+          17703,
+          17710,
+          19200,
+          19300,
+          32001,
+          32002,
+          32003,
+          32007,
+          33060,
+          34257,
+          35067,
+          36509,
+          44449
+        ],
+        "containers": [
+          "application-data-assets-manage-1\tapplication-data-assets-manage\t\tUp 7 months",
+          "application-data-assets-front-1\tapplication-data-assets-front\t\tUp 7 months",
+          "application-data-assets-job-executor7706-1\tapplication-data-assets-job-executor7706\t\tUp 7 months",
+          "application-data-assets-apicenter-1\tapplication-data-assets-apicenter\t\tUp 7 months",
+          "application-data-assets-map-1\tapplication-data-assets-map\t\tUp 7 months",
+          "application-data-assets-flowcenter-1\tapplication-data-assets-flowcenter\t\tUp 7 months",
+          "application-data-assets-dataopen-1\tapplication-data-assets-dataopen\t\tUp 7 months",
+          "application-data-assets-message-consumer-1\tapplication-data-assets-message-consumer\t\tUp 7 months",
+          "application-data-survey-1\tapplication-data-survey\t\tUp 7 months",
+          "application-data-assets-user-center-1\tapplication-data-assets-user-center\t\tUp 7 months",
+          "application-data-assets-job-center-1\tapplication-data-assets-job-center\t\tUp 7 months",
+          "application-data-assets-baseline-1\tapplication-data-assets-baseline\t\tUp 7 months",
+          "wonderful_almeida\t86ccb90b34d4\t\tExited (1) 2 years ago",
+          "application_report-data-assets-front-1\tapplication_report-data-assets-front\t\tExited (255) 2 years ago",
+          "application_report-data-assets-data-report-1\tapplication_report-data-assets-data-report\t\tExited (255) 2 years ago",
+          "middleware-elasticsearch-1\telasticsearch:7.16.2\t0.0.0.0:19200->9200/tcp, :::19200->9200/tcp, 0.0.0.0:19300->9300/tcp, :::19300->9300/tcp\tUp 2 years"
+        ]
+      },
+      "usable": true
+    },
+    {
+      "host": "192.168.173.64",
+      "checkedAt": "2026-11-24T00:00:53+08:00",
+      "ping": true,
+      "sshAuthenticated": true,
+      "sshErrors": [],
+      "serviceChecks": [],
+      "openPorts": [
+        22
+      ],
+      "loginUser": "linewell",
+      "loginPort": 22,
+      "credentialRef": "原表：173段(arm)!第45行",
+      "os": "Linux",
+      "inventoryError": "ValueError",
+      "usable": true
+    },
+    {
+      "host": "192.168.173.65",
+      "checkedAt": "2026-11-24T00:00:53+08:00",
+      "ping": false,
+      "sshAuthenticated": false,
+      "sshErrors": [],
+      "serviceChecks": []
+    },
+    {
+      "host": "192.168.173.67",
+      "checkedAt": "2026-11-24T00:00:55+08:00",
+      "ping": true,
+      "sshAuthenticated": true,
+      "sshErrors": [],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        3306,
+        6379,
+        8848,
+        9000
+      ],
+      "loginUser": "root",
+      "loginPort": 22,
+      "credentialRef": "原表：173段(arm)!第50行",
+      "os": "Linux",
+      "currentInventory": {
+        "services": [
+          "MinIO",
+          "MySQL",
+          "Nacos",
+          "Redis"
+        ],
+        "resources": {
+          "memoryMB": 13641,
+          "diskFreeGB": 34.0,
+          "cpu": 8
+        },
+        "ports": [
+          22,
+          3306,
+          6379,
+          6443,
+          6444,
+          8080,
+          8089,
+          8719,
+          8848,
+          9000,
+          9001,
+          10010,
+          10248,
+          10249,
+          10250,
+          10256,
+          10257,
+          10258,
+          10259,
+          13000,
+          20020,
+          20060,
+          20061,
+          20062,
+          21050
+        ],
+        "containers": [
+          "data-elements-front\tharbor.linewell.cn:10090/sjzx/data-elements-front:v20260527\t80/tcp, 0.0.0.0:8080->8080/tcp, :::8080->8080/tcp\tUp 6 months",
+          "data-element-backend\tharbor.linewell.cn:10090/sjzx/data-element-backend:v20260527\t8088/tcp, 0.0.0.0:8089->8089/tcp, :::8089->8089/tcp\tUp 6 months",
+          "minikube\tkicbase/stable:v0.0.50\t\tExited (2) 6 months ago",
+          "mysql-server-new\tmysql:8.4.3\t0.0.0.0:3306->3306/tcp, :::3306->3306/tcp, 33060/tcp\tUp 6 months",
+          "minio-server-new\tcrpi-fouys6pw17iv3jmz.cn-hangzhou.personal.cr.aliyuncs.com/docker-666-myself/linux_arm64_minio:latest\t0.0.0.0:9000-9001->9000-9001/tcp, :::9000-9001->9000-9001/tcp\tUp 6 months",
+          "nacos-server-new\tnacos/nacos-server:v2.4.3\t0.0.0.0:8848->8848/tcp, :::8848->8848/tcp\tUp 6 months",
+          "cloud-page-nginx-server-new\tnginx:1.27.3\t\tExited (128) 22 months ago",
+          "redis-server-new\tcrpi-fouys6pw17iv3jmz.cn-hangzhou.personal.cr.aliyuncs.com/docker-666-myself/linux_arm64_redis:7.4.1\t0.0.0.0:6379->6379/tcp, :::6379->6379/tcp\tUp 6 months",
+          "musing_ptolemy\te35859c321b6\t\tExited (127) 2 years ago",
+          "charming_kalam\te35859c321b6\t\tExited (127) 2 years ago",
+          "festive_tu\te35859c321b6\t\tExited (127) 2 years ago",
+          "cloud-page-nginx-server\tnginx:stable-alpine\t\tRestarting (1) 30 seconds ago",
+          "cloud-page-server\tarm64v8/cloudpage:jdk8\t0.0.0.0:20060-20062->20060-20062/tcp, :::20060-20062->20060-20062/tcp, 0.0.0.0:21050->21050/tcp, :::21050->21050/tcp, 30060-30063/tcp\tUp 6 months",
+          "data-center-server\topenjdk:8u131-jdk-alpine\t0.0.0.0:20020->20020/tcp, :::20020->20020/tcp\tUp 6 months",
+          "pub-server\topenjdk:8u131-jdk-alpine\t\tUp 6 months",
+          "gitlab-runner\tgitlab/gitlab-runner:latest\t\tUp 6 months",
+          "brain-stage\tarm64v8/centos:7\t0.0.0.0:13000->10001/tcp, :::13000->10001/tcp\tUp 6 months"
+        ]
+      },
+      "usable": true
+    },
+    {
+      "host": "192.168.173.68",
+      "checkedAt": "2026-11-24T00:00:55+08:00",
+      "ping": true,
+      "sshAuthenticated": true,
+      "sshErrors": [],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        3306,
+        6379,
+        8848,
+        9000
+      ],
+      "loginUser": "root",
+      "loginPort": 22,
+      "credentialRef": "原表：173段(arm)!第51行",
+      "os": "Linux",
+      "currentInventory": {
+        "services": [
+          "MinIO",
+          "MySQL",
+          "Nacos",
+          "Redis"
+        ],
+        "resources": {
+          "memoryMB": 2890,
+          "diskFreeGB": 20.0,
+          "cpu": 8
+        },
+        "ports": [
+          22,
+          80,
+          3306,
+          4431,
+          6200,
+          6300,
+          6379,
+          6380,
+          7003,
+          7004,
+          7005,
+          7008,
+          7009,
+          8086,
+          8719,
+          8720,
+          8721,
+          8722,
+          8723,
+          8724,
+          8725,
+          8848,
+          9000,
+          9002,
+          9003,
+          9998,
+          10002,
+          17001,
+          20003,
+          20030,
+          20050,
+          20060,
+          20061,
+          20062,
+          26379,
+          33060
+        ],
+        "containers": []
+      },
+      "usable": true
+    },
+    {
+      "host": "192.168.173.69",
+      "checkedAt": "2026-11-24T00:00:55+08:00",
+      "ping": true,
+      "sshAuthenticated": true,
+      "sshErrors": [],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        3306,
+        5000,
+        9000,
+        9200
+      ],
+      "loginUser": "root",
+      "loginPort": 22,
+      "credentialRef": "原表：173段(arm)!第52行",
+      "os": "Linux",
+      "currentInventory": {
+        "services": [
+          "Elasticsearch",
+          "MySQL"
+        ],
+        "ports": [
+          22,
+          25,
+          3306,
+          4369,
+          4999,
+          5000,
+          5044,
+          5601,
+          5671,
+          5672,
+          7000,
+          7001,
+          7002,
+          7003,
+          7004,
+          7005,
+          7006,
+          7007,
+          7008,
+          7009,
+          7010,
+          7011,
+          7012,
+          7013,
+          7014,
+          7015,
+          7016,
+          7017,
+          7018,
+          7019,
+          7020,
+          7021,
+          7022,
+          7023,
+          7024,
+          7025,
+          7026,
+          7027,
+          7028,
+          7029,
+          7030,
+          7031,
+          7032,
+          7033,
+          7034,
+          7035,
+          7036,
+          7037,
+          7038,
+          7039,
+          7040,
+          7041,
+          7042,
+          7043,
+          7044,
+          7045,
+          7046,
+          7047,
+          7048,
+          7049,
+          7050,
+          7051,
+          7052,
+          7053,
+          7054,
+          7055,
+          7056,
+          7057,
+          7058,
+          7059,
+          7060,
+          7061,
+          7062,
+          7063,
+          7064,
+          7065,
+          7066,
+          7067,
+          7068,
+          7069,
+          7070,
+          7071,
+          7072,
+          7073,
+          7074,
+          7075,
+          7076,
+          7077,
+          7078,
+          7079,
+          7080,
+          7081,
+          7082,
+          7083,
+          7084,
+          7085,
+          7086,
+          7087,
+          7088,
+          7089,
+          7090,
+          7091,
+          7092,
+          7093,
+          7094,
+          7095,
+          7096,
+          7097,
+          7098,
+          7099,
+          7100,
+          8081,
+          9000,
+          9200,
+          9300,
+          15671,
+          15672,
+          25672,
+          34249
+        ],
+        "containers": [
+          "rainbond-allinone\tregistry.cn-hangzhou.aliyuncs.com/goodrain/rainbond:v5.14.2-arm64-dind-allinone\t\tCreated",
+          "es-head2\te2a76963bc18\t\tExited (1) 3 years ago",
+          "elastic-head\te2a76963bc18\t\tExited (1) 3 years ago",
+          "elasticsearch-head\t6a62e22de3d1\t\tExited (1) 3 years ago",
+          "es-head\tb19a5c98e43b\t\tExited (1) 3 years ago",
+          "warn-server\topenjdk:8u131-jdk-alpine\t\tExited (137) 4 years ago",
+          "cloud-page-linewell\tarm64v8/cloudpage:jdk8\t\tExited (137) 4 years ago",
+          "cloud-page-alpine\topenjdk:8u131-jdk-alpine\t\tExited (137) 4 years ago",
+          "cloud-page\tarm64v8/openjdk:8u131-jdk\t\tExited (0) 4 years ago",
+          "data-server\topenjdk:8u131-jdk-alpine\t\tExited (137) 4 years ago",
+          "user-server\topenjdk:8u131-jdk-alpine\t\tExited (137) 4 years ago",
+          "redis-test\tredis\t\tExited (0) 4 years ago",
+          "logstash\tdocker.elastic.co/logstash/logstash:8.3.1-arm64\t0.0.0.0:4999-5000->4999-5000/tcp, :::4999-5000->4999-5000/tcp, 0.0.0.0:5044->5044/tcp, :::5044->5044/tcp, 9600/tcp\tUp 6 months",
+          "kibana_8\tarm64v8/kibana:8.2.3\t0.0.0.0:5601->5601/tcp, :::5601->5601/tcp\tUp 6 months",
+          "nginx-server\tnginx\t80/tcp, 0.0.0.0:7000-7100->7000-7100/tcp, :::7000-7100->7000-7100/tcp\tUp 6 months",
+          "elasticsearch-server\tarm64v8/elasticsearch:8.2.2\t0.0.0.0:9200->9200/tcp, :::9200->9200/tcp, 0.0.0.0:9300->9300/tcp, :::9300->9300/tcp\tUp 6 months",
+          "portainer\tportainer/portainer:linux-arm64\t0.0.0.0:9000->9000/tcp, :::9000->9000/tcp\tUp 6 months",
+          "nexus3\tklo2k/nexus3\t0.0.0.0:8081->8081/tcp, :::8081->8081/tcp\tUp 6 months",
+          "rabbitmq\trabbitmq:management\t0.0.0.0:4369->4369/tcp, :::4369->4369/tcp, 0.0.0.0:5671-5672->5671-5672/tcp, :::5671-5672->5671-5672/tcp, 0.0.0.0:15671-15672->15671-15672/tcp, :::15671-15672->15671-15672/tcp, 0.0.0.0:25672->25672/tcp, :::25672->25672/tcp, 15691-15692/tcp\tUp 6 months",
+          "redis-server\tredis\t0.0.0.0:6379->6379/tcp, :::6379->6379/tcp\tExited (255) 3 years ago",
+          "strange_chatelet\t2d25c92337fc\t\tExited (0) 4 years ago",
+          "zookeeper\twurstmeister/zookeeper\t\tExited (1) 4 years ago",
+          "reverent_engelbart\t2d25c92337fc\t\tExited (0) 4 years ago",
+          "tender_dijkstra\t2d25c92337fc\t\tExited (0) 4 years ago",
+          "vigilant_joliot\t2d25c92337fc\t\tExited (127) 4 years ago",
+          "elegant_solomon\t04b2cca940b8\t\tExited (0) 4 years ago",
+          "goofy_feynman\t04b2cca940b8\t\tExited (128) 4 years ago",
+          "charming_dirac\t04b2cca940b8\t\tExited (0) 4 years ago",
+          "fervent_jones\t04b2cca940b8\t\tExited (1) 4 years ago",
+          "gifted_mclean\t04b2cca940b8\t\tExited (1) 4 years ago",
+          "vibrant_perlman\t04b2cca940b8\t\tExited (1) 4 years ago",
+          "great_wiles\t04b2cca940b8\t\tExited (0) 4 years ago",
+          "mysql-server\t04b2cca940b8\t0.0.0.0:3306->3306/tcp, :::3306->3306/tcp, 33060-33061/tcp\tUp 6 months (healthy)",
+          "mysql_centos7\tcentos:centos7\t\tExited (137) 4 years ago"
+        ],
+        "resources": {
+          "memoryMB": 18765,
+          "cpu": 8,
+          "diskFreeGB": 11.1
+        }
+      },
+      "usable": true
+    },
+    {
+      "host": "192.168.173.70",
+      "checkedAt": "2026-11-24T00:00:44+08:00",
+      "ping": true,
+      "sshAuthenticated": true,
+      "sshErrors": [],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        2181,
+        6379,
+        9092,
+        9093
+      ],
+      "loginUser": "root",
+      "loginPort": 22,
+      "credentialRef": "原表：173段(arm)!第25行",
+      "os": "Linux",
+      "currentInventory": {
+        "services": [
+          "Redis"
+        ],
+        "resources": {
+          "memoryMB": 12907,
+          "diskFreeGB": 30.0,
+          "cpu": 8
+        },
+        "ports": [
+          22,
+          25,
+          80,
+          2181,
+          6379,
+          8080,
+          8501,
+          8505,
+          9091,
+          9092,
+          9093,
+          9094,
+          20881,
+          20882,
+          20883,
+          20884,
+          41119
+        ],
+        "containers": []
+      },
+      "usable": true
+    },
+    {
+      "host": "192.168.173.71",
+      "checkedAt": "2026-11-24T00:00:44+08:00",
+      "ping": true,
+      "sshAuthenticated": true,
+      "sshErrors": [],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        2181,
+        3306,
+        6379,
+        9092
+      ],
+      "loginUser": "root",
+      "loginPort": 22,
+      "credentialRef": "原表：173段(arm)!第26行",
+      "os": "Linux",
+      "currentInventory": {
+        "services": [
+          "Kafka",
+          "MySQL",
+          "Redis"
+        ],
+        "resources": {
+          "memoryMB": 15912,
+          "diskFreeGB": 37.0,
+          "cpu": 8
+        },
+        "ports": [
+          22,
+          25,
+          80,
+          2181,
+          3306,
+          4243,
+          6379,
+          8080,
+          8081,
+          8082,
+          8083,
+          9092,
+          20881,
+          20882,
+          20883,
+          36749,
+          43157
+        ],
+        "containers": [
+          "elasticsearch-7.8.1\telasticsearch:7.8.1\t\tExited (143) 3 years ago",
+          "elasticsearch-6.8.13\tamd64/elasticsearch:6.8.13\t\tExited (126) 3 years ago"
+        ]
+      },
+      "usable": true
+    },
+    {
+      "host": "192.168.173.73",
+      "checkedAt": "2026-11-24T00:00:35+08:00",
+      "ping": true,
+      "sshAuthenticated": false,
+      "sshErrors": [
+        "AuthenticationException"
+      ],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        3306
+      ],
+      "usable": false
+    },
+    {
+      "host": "192.168.173.74",
+      "checkedAt": "2026-11-24T00:00:45+08:00",
+      "ping": true,
+      "sshAuthenticated": true,
+      "sshErrors": [],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        5000
+      ],
+      "loginUser": "root",
+      "loginPort": 22,
+      "credentialRef": "原表：173段(arm)!第27行",
+      "os": "Linux",
+      "currentInventory": {
+        "services": [],
+        "ports": [
+          22,
+          25,
+          80,
+          5000,
+          8005,
+          8080,
+          13597
+        ],
+        "containers": [
+          "private-docker-registry\tregistry\t0.0.0.0:5000->5000/tcp, :::5000->5000/tcp\tUp 2 years"
+        ],
+        "resources": {
+          "memoryMB": 50349,
+          "cpu": 16,
+          "diskFreeGB": 35.8
+        }
+      },
+      "usable": true
+    },
+    {
+      "host": "192.168.173.75",
+      "checkedAt": "2026-11-24T00:00:36+08:00",
+      "ping": true,
+      "sshAuthenticated": false,
+      "sshErrors": [
+        "AuthenticationException"
+      ],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        2181,
+        3306,
+        6379,
+        8123,
+        9000,
+        9092
+      ],
+      "usable": false
+    },
+    {
+      "host": "192.168.173.78",
+      "checkedAt": "2026-11-24T00:00:37+08:00",
+      "ping": true,
+      "sshAuthenticated": false,
+      "sshErrors": [
+        "AuthenticationException"
+      ],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        3306,
+        3307,
+        6379,
+        8848,
+        9000,
+        10001
+      ],
+      "usable": false
+    },
+    {
+      "host": "192.168.173.81",
+      "checkedAt": "2026-11-24T00:00:38+08:00",
+      "ping": true,
+      "sshAuthenticated": true,
+      "sshErrors": [],
+      "serviceChecks": [],
+      "openPorts": [
+        21,
+        22,
+        3306,
+        5000
+      ],
+      "loginUser": "root",
+      "loginPort": 22,
+      "credentialRef": "原表：173段(arm)!第14行",
+      "os": "Linux",
+      "currentInventory": {
+        "services": [
+          "FTP",
+          "MySQL"
+        ],
+        "ports": [
+          21,
+          22,
+          3306,
+          5000,
+          9100,
+          9121,
+          33060
+        ],
+        "containers": [
+          "data-monitor-ansible\tdata-monitor-ansible:v1\t0.0.0.0:1234->22/tcp, [::]:1234->22/tcp\tExited (255) 8 months ago",
+          "local_registry\tregistry:2\t\tUp 8 months"
+        ],
+        "resources": {
+          "memoryMB": 24135,
+          "cpu": 4,
+          "diskFreeGB": 11.7
+        }
+      },
+      "usable": true
+    },
+    {
+      "host": "192.168.173.82",
+      "checkedAt": "2026-11-24T00:00:40+08:00",
+      "ping": true,
+      "sshAuthenticated": true,
+      "sshErrors": [],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        6379
+      ],
+      "loginUser": "root",
+      "loginPort": 22,
+      "credentialRef": "原表：173段(arm)!第15行",
+      "os": "Linux",
+      "currentInventory": {
+        "services": [
+          "MySQL",
+          "Redis"
+        ],
+        "resources": {
+          "memoryMB": 10789,
+          "diskFreeGB": 22.0,
+          "cpu": 8
+        },
+        "ports": [
+          22,
+          3301,
+          6379,
+          9090,
+          9091,
+          9100,
+          9104,
+          9121,
+          33060
+        ],
+        "containers": [
+          "clickhouse-server\tlinewell/clickhouse:22.3.6.5\t\tExited (137) 3 years ago"
+        ]
+      },
+      "usable": true
+    },
+    {
+      "host": "192.168.173.83",
+      "checkedAt": "2026-11-24T00:00:53+08:00",
+      "ping": false,
+      "sshAuthenticated": false,
+      "sshErrors": [],
+      "serviceChecks": []
+    },
+    {
+      "host": "192.168.173.85",
+      "checkedAt": "2026-11-24T00:00:41+08:00",
+      "ping": true,
+      "sshAuthenticated": false,
+      "sshErrors": [
+        "AuthenticationException"
+      ],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        3306,
+        6379,
+        8848
+      ],
+      "usable": false
+    },
+    {
+      "host": "192.168.173.86",
+      "checkedAt": "2026-11-24T00:00:41+08:00",
+      "ping": true,
+      "sshAuthenticated": false,
+      "sshErrors": [
+        "AuthenticationException"
+      ],
+      "serviceChecks": [],
+      "openPorts": [
+        22
+      ],
+      "usable": false
+    },
+    {
+      "host": "192.168.173.87",
+      "checkedAt": "2026-11-24T00:00:41+08:00",
+      "ping": true,
+      "sshAuthenticated": false,
+      "sshErrors": [
+        "AuthenticationException"
+      ],
+      "serviceChecks": [],
+      "openPorts": [
+        22
+      ],
+      "usable": false
+    },
+    {
+      "host": "192.168.173.88",
+      "checkedAt": "2026-11-24T00:00:54+08:00",
+      "ping": true,
+      "sshAuthenticated": false,
+      "sshErrors": [
+        "AuthenticationException"
+      ],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        3306,
+        6379,
+        8848,
+        9000,
+        10001,
+        54321
+      ],
+      "usable": false
+    },
+    {
+      "host": "192.168.173.89",
+      "checkedAt": "2026-11-24T00:00:37+08:00",
+      "ping": true,
+      "sshAuthenticated": false,
+      "sshErrors": [
+        "AuthenticationException"
+      ],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        3306,
+        8848
+      ],
+      "usable": false
+    },
+    {
+      "host": "192.168.173.93",
+      "checkedAt": "2026-11-24T00:00:55+08:00",
+      "ping": true,
+      "sshAuthenticated": false,
+      "sshErrors": [
+        "AuthenticationException"
+      ],
+      "serviceChecks": [],
+      "openPorts": [
+        21,
+        22,
+        2181,
+        9092,
+        9200
+      ],
+      "usable": false
+    },
+    {
+      "host": "192.168.173.96",
+      "checkedAt": "2026-11-24T00:00:55+08:00",
+      "ping": false,
+      "sshAuthenticated": false,
+      "sshErrors": [],
+      "serviceChecks": []
+    },
+    {
+      "host": "192.168.173.125",
+      "checkedAt": "2026-11-24T00:00:54+08:00",
+      "ping": true,
+      "sshAuthenticated": false,
+      "sshErrors": [
+        "AuthenticationException"
+      ],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        3306,
+        6379
+      ],
+      "usable": false
+    },
+    {
+      "host": "192.168.173.140",
+      "checkedAt": "2026-11-24T00:00:48+08:00",
+      "ping": true,
+      "sshAuthenticated": true,
+      "sshErrors": [],
+      "serviceChecks": [],
+      "openPorts": [
+        22
+      ],
+      "loginUser": "root",
+      "loginPort": 22,
+      "credentialRef": "原表：173段(arm)!第32行",
+      "os": "Linux",
+      "currentInventory": {
+        "services": [],
+        "ports": [
+          22,
+          81,
+          111,
+          8180,
+          9090
+        ],
+        "containers": [],
+        "resources": {
+          "memoryMB": 25265,
+          "cpu": 16,
+          "diskFreeGB": 310.3
+        }
+      },
+      "usable": true
+    },
+    {
+      "host": "192.168.173.141",
+      "checkedAt": "2026-11-24T00:00:48+08:00",
+      "ping": true,
+      "sshAuthenticated": true,
+      "sshErrors": [],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        6379,
+        8000,
+        8848
+      ],
+      "loginUser": "root",
+      "loginPort": 22,
+      "credentialRef": "原表：173段(arm)!第33行",
+      "os": "Linux",
+      "currentInventory": {
+        "services": [],
+        "ports": [
+          22,
+          111,
+          6200,
+          6300,
+          6379,
+          7848,
+          8000,
+          8083,
+          8086,
+          8808,
+          8848,
+          9090,
+          9848,
+          9849,
+          49150
+        ],
+        "containers": [],
+        "resources": {
+          "memoryMB": 19833,
+          "cpu": 16,
+          "diskFreeGB": 411.3
+        }
+      },
+      "usable": true
+    },
+    {
+      "host": "192.168.173.142",
+      "checkedAt": "2026-11-24T00:00:50+08:00",
+      "ping": false,
+      "sshAuthenticated": false,
+      "sshErrors": [],
+      "serviceChecks": []
+    },
+    {
+      "host": "192.168.175.18",
+      "checkedAt": "2026-11-24T00:00:23+08:00",
+      "ping": true,
+      "sshAuthenticated": false,
+      "sshErrors": [],
+      "serviceChecks": [],
+      "openPorts": [
+        22
+      ],
+      "usable": false
+    },
+    {
+      "host": "192.168.175.20",
+      "checkedAt": "2026-11-24T00:00:23+08:00",
+      "ping": true,
+      "sshAuthenticated": false,
+      "sshErrors": [],
+      "serviceChecks": [],
+      "openPorts": [
+        22
+      ],
+      "usable": false
+    },
+    {
+      "host": "192.168.175.26",
+      "checkedAt": "2026-11-24T00:00:56+08:00",
+      "ping": true,
+      "sshAuthenticated": true,
+      "sshErrors": [],
+      "serviceChecks": [
+        {
+          "kind": "elasticsearch",
+          "port": 9200,
+          "profileRef": "C:\\Users\\Administrator\\.codex\\private\\data-elements\\server-datasource-validation\\es-business-192.168.175.26-profile.private.json",
+          "verified": true
+        }
+      ],
+      "openPorts": [
+        22,
+        2181,
+        5432,
+        9092,
+        9200
+      ],
+      "loginUser": "root",
+      "loginPort": 22,
+      "credentialRef": "原表：175段(x86)!第2行",
+      "os": "Linux",
+      "currentInventory": {
+        "services": [
+          "Elasticsearch",
+          "Kafka",
+          "PostgreSQL"
+        ],
+        "resources": {
+          "memoryMB": 21873,
+          "diskFreeGB": 29.0,
+          "cpu": 16
+        },
+        "ports": [
+          22,
+          111,
+          2181,
+          5432,
+          8081,
+          9010,
+          9092,
+          9100,
+          9103,
+          9200,
+          9300,
+          11800,
+          12800
+        ],
+        "containers": [
+          "redis_slave\tredis:latest\t\tExited (0) 4 years ago",
+          "redis-sentinel\tikaruswill/redis-sentinel:latest\t\tExited (0) 4 years ago",
+          "redis_master\tredis:latest\t\tExited (0) 4 years ago",
+          "sonar\tsonarqube:8.9.3-community\t0.0.0.0:9010->9000/tcp\tUp 2 years",
+          "postgres\tpostgres:12.3\t0.0.0.0:5432->5432/tcp\tUp 2 years",
+          "ui\t218.104.238.200:28080/sw-ui:v8.1.1\t0.0.0.0:8081->8080/tcp\tUp 2 years",
+          "oap\t218.104.238.200:28080/sw-oap-es7:v8.1.1\t0.0.0.0:11800->11800/tcp, 0.0.0.0:12800->12800/tcp\tUp 2 years",
+          "kafka\t218.104.238.200:28080/kafka:2.11-1.0.1\t0.0.0.0:9092->9092/tcp\tUp 2 years",
+          "sw-zookeeper\t218.104.238.200:28080/zookeeper\t2888/tcp, 0.0.0.0:2181->2181/tcp, 3888/tcp\tUp 2 years",
+          "sw-es\t218.104.238.200:28080/elasticsearch:7.9.3\t0.0.0.0:9200->9200/tcp, 0.0.0.0:9300->9300/tcp\tUp 2 years",
+          "sw-agent\t218.104.238.200:28080/sw-agent:v8.1.1\t\tExited (0) 5 years ago"
+        ]
+      },
+      "usable": true
+    },
+    {
+      "host": "192.168.175.27",
+      "checkedAt": "2026-11-24T00:00:57+08:00",
+      "ping": true,
+      "sshAuthenticated": true,
+      "sshErrors": [],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        5000
+      ],
+      "loginUser": "root",
+      "loginPort": 22,
+      "credentialRef": "原表：175段(x86)!第3行",
+      "os": "Linux",
+      "currentInventory": {
+        "services": [
+          "NiFi"
+        ],
+        "resources": {
+          "memoryMB": 24821,
+          "diskFreeGB": 47.0,
+          "cpu": 16
+        },
+        "ports": [
+          22,
+          80,
+          111,
+          3999,
+          5000,
+          8089,
+          8337,
+          23006,
+          39998
+        ],
+        "containers": [
+          "sleepy_hoover\tkeking/kkfileview:v4.0.0\t0.0.0.0:8012->8012/tcp\tExited (255) 3 years ago",
+          "silly_yonath\t218.104.238.200:28080/jdk:1.8\t\tExited (137) 5 years ago",
+          "mobileoa-provider\tmb-mobileoa-provider:latest\t\tExited (137) 5 years ago",
+          "mobileoa-apiservice\tmb-mobileoa-apiservice:latest\t\tExited (137) 5 years ago",
+          "mobileoa-business\tmb-mobileoa-business:latest\t\tExited (137) 5 years ago",
+          "mbbase-apiservice\tmbbase-apiservice:2.1\t\tUp 2 years",
+          "mysql5.7\tmysql:5.7\t\tExited (0) 5 years ago",
+          "redis\t218.104.238.200:28080/redis\t\tExited (0) 5 years ago",
+          "zookeeper\t218.104.238.200:28080/zookeeper\t\tExited (143) 5 years ago",
+          "nginx\t218.104.238.200:28080/nginx\t\tExited (1) 5 years ago"
+        ]
+      },
+      "usable": true
+    },
+    {
+      "host": "192.168.175.28",
+      "checkedAt": "2026-11-24T00:00:57+08:00",
+      "ping": true,
+      "sshAuthenticated": false,
+      "sshErrors": [
+        "AuthenticationException",
+        "AuthenticationException"
+      ],
+      "serviceChecks": [
+        {
+          "kind": "clickhouse",
+          "port": 8123,
+          "profileRef": "C:\\Users\\Administrator\\.codex\\private\\data-elements\\server-datasource-validation\\existing-clickhouse17528-profile.private.json",
+          "verified": true
+        },
+        {
+          "kind": "mysql",
+          "port": 3301,
+          "profileRef": "C:\\Users\\Administrator\\.codex\\private\\data-elements\\server-datasource-validation\\existing-jdbc-2124456928855322624-profile.private.json",
+          "verified": true
+        }
+      ],
+      "openPorts": [
+        22,
+        3301,
+        6379,
+        8123,
+        8848,
+        9000,
+        9200,
+        10000,
+        18848
+      ],
+      "usable": true
+    },
+    {
+      "host": "192.168.175.29",
+      "checkedAt": "2026-11-24T00:00:58+08:00",
+      "ping": true,
+      "sshAuthenticated": false,
+      "sshErrors": [
+        "AuthenticationException"
+      ],
+      "serviceChecks": [],
+      "openPorts": [
+        22
+      ],
+      "usable": false
+    },
+    {
+      "host": "192.168.175.30",
+      "checkedAt": "2026-11-24T00:00:58+08:00",
+      "ping": true,
+      "sshAuthenticated": true,
+      "sshErrors": [],
+      "serviceChecks": [],
+      "openPorts": [
+        21,
+        22,
+        5236,
+        6379,
+        8848,
+        9000,
+        9093
+      ],
+      "loginUser": "root",
+      "loginPort": 22,
+      "credentialRef": "原表：175段(x86)!第6行",
+      "os": "Linux",
+      "inventoryError": "ValueError",
+      "usable": true
+    },
+    {
+      "host": "192.168.175.31",
+      "checkedAt": "2026-11-24T00:00:59+08:00",
+      "ping": true,
+      "sshAuthenticated": true,
+      "sshErrors": [],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        2181,
+        5258,
+        6379,
+        27017
+      ],
+      "loginUser": "root",
+      "loginPort": 22,
+      "credentialRef": "原表：175段(x86)!第7行",
+      "os": "Linux",
+      "currentInventory": {
+        "services": [
+          "GBase",
+          "MongoDB",
+          "Redis"
+        ],
+        "resources": {
+          "memoryMB": 13557,
+          "diskFreeGB": 539.0,
+          "cpu": 4
+        },
+        "ports": [
+          22,
+          25,
+          80,
+          2181,
+          2375,
+          4236,
+          5258,
+          6379,
+          8001,
+          8080,
+          9600,
+          20880,
+          20881,
+          20882,
+          24880,
+          24881,
+          24882,
+          27017,
+          30000,
+          30100,
+          30200,
+          30300,
+          30400,
+          30600,
+          30800,
+          33160,
+          50000,
+          53002,
+          53003,
+          53007
+        ],
+        "containers": [
+          "priceless_tesla\td70298061cb1\t\tExited (1) 2 years ago",
+          "upbeat_bhabha\t0a8b5cc7ee71\t\tExited (1) 2 years ago",
+          "dm8_4t9HyvM9\tlinewell/dm8:v1.0\t\tUp 2 years",
+          "gbase_aX6ftJQm\tlinewell/gbase:8a\t\tUp 2 years"
+        ]
+      },
+      "usable": true
+    },
+    {
+      "host": "192.168.175.32",
+      "checkedAt": "2026-11-24T00:00:59+08:00",
+      "ping": true,
+      "sshAuthenticated": true,
+      "sshErrors": [],
+      "serviceChecks": [],
+      "openPorts": [
+        21,
+        22,
+        1521,
+        5432,
+        54321,
+        54322
+      ],
+      "loginUser": "root",
+      "loginPort": 22,
+      "credentialRef": "原表：175段(x86)!第8行",
+      "os": "Linux",
+      "currentInventory": {
+        "services": [
+          "Dameng",
+          "FTP",
+          "Kingbase",
+          "Oracle",
+          "PostgreSQL"
+        ],
+        "ports": [
+          21,
+          22,
+          25,
+          111,
+          1521,
+          2049,
+          2375,
+          5432,
+          5444,
+          8866,
+          9507,
+          11598,
+          20048,
+          30236,
+          36036,
+          41521,
+          43011,
+          54321,
+          54322
+        ],
+        "containers": [
+          "kingbaseV8R6C9B14\tkingbase_v008r006c009b0014_single_x86:v1\t0.0.0.0:54322->54321/tcp\tUp 13 months",
+          "kingbase\tkingbase_v008r006c008b0014_single_x86:v1\t0.0.0.0:54321->54321/tcp\tUp 8 months",
+          "dm8_test\tdm8:dm8_20240613_rev229704_x86_rh6_64\t0.0.0.0:30236->5236/tcp\tUp 8 months",
+          "linewell-framework-boot\td598fcdef056\t\tExited (143) 23 months ago",
+          "clickhouse\tclickhouse/clickhouse-server:22.8.20.11\t0.0.0.0:8123->8123/tcp, 0.0.0.0:9000->9000/tcp, 0.0.0.0:9009->9009/tcp\tExited (255) 2 years ago",
+          "oceanbase\tobpilot/oceanbase-ce:latest\t0.0.0.0:2881->2881/tcp, 0.0.0.0:2883->2883/tcp\tExited (255) 2 years ago",
+          "greenplum\tprojectairws/greenplum\t22/tcp, 0.0.0.0:5432->5432/tcp\tExited (255) 2 years ago",
+          "gbase8a\tshihd/gbase8a:1.0\t0.0.0.0:5258->5258/tcp\tExited (255) 19 months ago",
+          "oracle11g\tregistry.cn-hangzhou.aliyuncs.com/helowin/oracle_11g\t0.0.0.0:1521->1521/tcp\tUp 8 months",
+          "serene_payne\t21ce40d2cc21\t\tExited (137) 3 years ago",
+          "epic_northcutt\t0557689e22a9\t0.0.0.0:8866->8866/tcp\tUp 12 months",
+          "doris\tapache/incubator-doris:build-env-for-0.15.0\t\tUp 8 months",
+          "nebula-metad_VNADVtPR\tvesoft/nebula-metad:v3.0.0\t\tExited (0) 19 months ago",
+          "nebula-storaged_Z17UQH0d\tvesoft/nebula-storaged:v3.0.0\t\tExited (0) 19 months ago",
+          "nebula-graphd_cM9TjDzN\tvesoft/nebula-graphd:v3.0.0\t\tExited (0) 19 months ago",
+          "oracle_joVtsj3K\tlinewell/oracle:11g\t8080/tcp, 0.0.0.0:41521->1521/tcp\tUp 8 months",
+          "vsftpd_SvFV9kjY\tlinewell/vsftpd:1.0\t\tUp 8 months",
+          "mysql\tmysql/mysql-server:5.7.30\t\tExited (0) 4 years ago",
+          "mysql-1_inrDBGJM\tmysql/mysql-server:5.7.30\t\tExited (1) 4 years ago"
+        ],
+        "resources": {
+          "memoryMB": 25727,
+          "cpu": 4,
+          "diskFreeGB": 45.4
+        }
+      },
+      "usable": true
+    },
+    {
+      "host": "192.168.175.33",
+      "checkedAt": "2026-11-24T00:00:59+08:00",
+      "ping": true,
+      "sshAuthenticated": true,
+      "sshErrors": [],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        5000,
+        6379
+      ],
+      "loginUser": "linewell",
+      "loginPort": 22,
+      "credentialRef": "原表：175段(x86)!第9行",
+      "os": "Linux",
+      "inventoryError": "ValueError",
+      "usable": true
+    },
+    {
+      "host": "192.168.175.34",
+      "checkedAt": "2026-11-24T00:01:00+08:00",
+      "ping": true,
+      "sshAuthenticated": true,
+      "sshErrors": [],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        3307,
+        9000
+      ],
+      "loginUser": "root",
+      "loginPort": 22,
+      "credentialRef": "原表：175段(x86)!第11行",
+      "os": "Linux",
+      "currentInventory": {
+        "services": [
+          "Dameng",
+          "MinIO",
+          "MySQL",
+          "NiFi"
+        ],
+        "resources": {
+          "memoryMB": 21737,
+          "diskFreeGB": 0.0,
+          "cpu": 4
+        },
+        "ports": [
+          22,
+          1080,
+          2375,
+          3307,
+          3690,
+          8088,
+          8443,
+          9000,
+          9001,
+          9100,
+          9104,
+          9108,
+          9121,
+          9870,
+          9872,
+          9873,
+          15236,
+          16443,
+          21060,
+          21061,
+          21062,
+          33060
+        ],
+        "containers": [
+          "nifi\tdocker.m.daocloud.io/apache/nifi:2.9.0\t8000/tcp, 10000/tcp, 0.0.0.0:8443->8443/tcp, :::8443->8443/tcp\tUp 6 months",
+          "dm8\tdm8_single:dm8_20240715_rev232765_x86_rh6_64\t0.0.0.0:15236->5236/tcp, :::15236->5236/tcp\tUp 16 months",
+          "hdp-01\tamd64/openjdk:8u171-jdk\t0.0.0.0:8088->8088/tcp, :::8088->8088/tcp, 0.0.0.0:9870->9870/tcp, :::9870->9870/tcp\tUp 2 years",
+          "hdp-03\tamd64/openjdk:8u171-jdk\t0.0.0.0:9873->9870/tcp, :::9873->9870/tcp\tUp 2 years",
+          "hdp-02\tamd64/openjdk:8u171-jdk\t0.0.0.0:9872->9870/tcp, :::9872->9870/tcp\tUp 2 years",
+          "k8s_kube-apiserver_kube-apiserver-k8s-master01_kube-system_40f134920803691edeb30282698028dd_30973\t771ffcf9ca63\t\tExited (1) 4 years ago",
+          "k8s_calico-kube-controllers_calico-kube-controllers-78d6f96c7b-xrqtt_kube-system_4c98af67-7fc3-49f9-bad1-b7a57e04fc20_31486\t5d3d5ddc8605\t\tExited (1) 4 years ago",
+          "k8s_etcd_etcd-k8s-master01_kube-system_707b8e1f626552a90b6d5bec5bd4a537_24697\t0369cf4303ff\t\tExited (255) 4 years ago",
+          "k8s_etcd_etcd-k8s-master01_kube-system_707b8e1f626552a90b6d5bec5bd4a537_24696\t0369cf4303ff\t\tExited (2) 4 years ago",
+          "k8s_kube-controller-manager_kube-controller-manager-k8s-master01_kube-system_2a26f0d8f91e40658330f2837aff433d_144\te16544fd47b0\t\tExited (255) 4 years ago",
+          "k8s_kube-scheduler_kube-scheduler-k8s-master01_kube-system_91dd7d0e998e077380cf15dc6eb51060_140\ta4183b88f6e6\t\tExited (255) 4 years ago",
+          "k8s_kube-controller-manager_kube-controller-manager-k8s-master01_kube-system_2a26f0d8f91e40658330f2837aff433d_143\te16544fd47b0\t\tExited (255) 4 years ago",
+          "k8s_kube-scheduler_kube-scheduler-k8s-master01_kube-system_91dd7d0e998e077380cf15dc6eb51060_139\ta4183b88f6e6\t\tExited (255) 4 years ago",
+          "k8s_POD_nginx3-5465449d99-g47xf_default_06cc93e1-cfec-45ed-b49f-2dbae5014889_0\tregistry.aliyuncs.com/google_containers/pause:3.4.1\t\tExited (0) 4 years ago",
+          "k8s_calico-node_calico-node-297w2_kube-system_a68a3765-0c82-4728-9092-50edbf8c6c5d_1\tc4d75af7e098\t\tExited (255) 4 years ago",
+          "friendly_ritchie\tubuntu:15.10\t\tExited (0) 5 years ago",
+          "k8s_kube-flannel_kube-flannel-ds-cxcbq_kube-system_44588dab-ecb7-4d1f-92c8-ef8557b52d52_0\t8522d622299c\t\tExited (255) 4 years ago",
+          "k8s_install-cni_kube-flannel-ds-cxcbq_kube-system_44588dab-ecb7-4d1f-92c8-ef8557b52d52_0\t8522d622299c\t\tExited (0) 5 years ago",
+          "k8s_POD_kube-flannel-ds-cxcbq_kube-system_44588dab-ecb7-4d1f-92c8-ef8557b52d52_0\tregistry.aliyuncs.com/google_containers/pause:3.4.1\t\tExited (255) 4 years ago",
+          "k8s_coredns_coredns-545d6fc579-xlbm5_kube-system_7ad0c817-0a2d-4d45-814e-f4f3c3ff202c_0\t296a6d5035e2\t\tExited (255) 4 years ago",
+          "k8s_POD_coredns-545d6fc579-xlbm5_kube-system_7ad0c817-0a2d-4d45-814e-f4f3c3ff202c_1\tregistry.aliyuncs.com/google_containers/pause:3.4.1\t\tExited (255) 4 years ago",
+          "k8s_POD_calico-kube-controllers-78d6f96c7b-xrqtt_kube-system_4c98af67-7fc3-49f9-bad1-b7a57e04fc20_1\tregistry.aliyuncs.com/google_containers/pause:3.4.1\t\tExited (255) 4 years ago",
+          "k8s_coredns_coredns-545d6fc579-db49r_kube-system_678793f5-7080-4723-b10c-784c46583f2a_0\t296a6d5035e2\t\tExited (255) 4 years ago",
+          "k8s_POD_coredns-545d6fc579-db49r_kube-system_678793f5-7080-4723-b10c-784c46583f2a_1\tregistry.aliyuncs.com/google_containers/pause:3.4.1\t\tExited (255) 4 years ago",
+          "k8s_calico-node_calico-node-297w2_kube-system_a68a3765-0c82-4728-9092-50edbf8c6c5d_0\tc4d75af7e098\t\tExited (0) 4 years ago",
+          "k8s_flexvol-driver_calico-node-297w2_kube-system_a68a3765-0c82-4728-9092-50edbf8c6c5d_0\t5660150975fb\t\tExited (0) 5 years ago",
+          "k8s_install-cni_calico-node-297w2_kube-system_a68a3765-0c82-4728-9092-50edbf8c6c5d_0\t5749e8b276f9\t\tExited (0) 5 years ago",
+          "k8s_upgrade-ipam_calico-node-297w2_kube-system_a68a3765-0c82-4728-9092-50edbf8c6c5d_0\t5749e8b276f9\t\tExited (0) 5 years ago",
+          "k8s_POD_calico-node-297w2_kube-system_a68a3765-0c82-4728-9092-50edbf8c6c5d_0\tregistry.aliyuncs.com/google_containers/pause:3.4.1\t\tExited (255) 4 years ago",
+          "k8s_kube-proxy_kube-proxy-stzmp_kube-system_2414d8cb-cda0-4b65-89eb-950244458708_0\t4359e752b596\t\tExited (255) 4 years ago",
+          "k8s_POD_kube-proxy-stzmp_kube-system_2414d8cb-cda0-4b65-89eb-950244458708_0\tregistry.aliyuncs.com/google_containers/pause:3.4.1\t\tExited (255) 4 years ago",
+          "k8s_POD_kube-controller-manager-k8s-master01_kube-system_2a26f0d8f91e40658330f2837aff433d_0\tregistry.aliyuncs.com/google_containers/pause:3.4.1\t\tExited (255) 4 years ago",
+          "k8s_POD_kube-apiserver-k8s-master01_kube-system_40f134920803691edeb30282698028dd_0\tregistry.aliyuncs.com/google_containers/pause:3.4.1\t\tExited (255) 4 years ago",
+          "k8s_POD_etcd-k8s-master01_kube-system_707b8e1f626552a90b6d5bec5bd4a537_0\tregistry.aliyuncs.com/google_containers/pause:3.4.1\t\tExited (255) 4 years ago",
+          "k8s_POD_kube-scheduler-k8s-master01_kube-system_91dd7d0e998e077380cf15dc6eb51060_0\tregistry.aliyuncs.com/google_containers/pause:3.4.1\t\tExited (255) 4 years ago",
+          "priceless_snyder\tproviderdocker\t\tExited (143) 5 years ago",
+          "naughty_leavitt\tproviderdocker\t\tCreated",
+          "objective_banach\tconsumerdocker\t\tExited (143) 5 years ago"
+        ]
+      },
+      "usable": true
+    },
+    {
+      "host": "192.168.175.38",
+      "checkedAt": "2026-11-24T00:00:59+08:00",
+      "ping": true,
+      "sshAuthenticated": true,
+      "sshErrors": [],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        3306,
+        3307,
+        9007,
+        10001,
+        19000
+      ],
+      "loginUser": "root",
+      "loginPort": 22,
+      "credentialRef": "原表：175段(x86)!第10行",
+      "os": "Linux",
+      "currentInventory": {
+        "services": [
+          "MinIO",
+          "MySQL",
+          "Nacos",
+          "Redis"
+        ],
+        "resources": {
+          "memoryMB": 17416,
+          "diskFreeGB": 25.0,
+          "cpu": 4
+        },
+        "ports": [
+          22,
+          25,
+          2377,
+          3306,
+          3307,
+          5236,
+          6380,
+          7946,
+          8847,
+          9007,
+          9008,
+          10001,
+          10002,
+          10004,
+          19000,
+          20003,
+          20020,
+          20060,
+          20061,
+          20062,
+          21050,
+          21060,
+          21061,
+          21062
+        ],
+        "containers": [
+          "cloud-page-nginx-server\tnginx:1.23-alpine\t80/tcp, 0.0.0.0:21060-21062->21060-21062/tcp, :::21060-21062->21060-21062/tcp\tUp 22 months",
+          "cloud-page-server\tamd64/cloudpage:jdk8\t0.0.0.0:20060-20062->20060-20062/tcp, :::20060-20062->20060-20062/tcp, 0.0.0.0:21050->21050/tcp, :::21050->21050/tcp\tUp 21 months",
+          "data-center-server\topenjdk:8u131-jdk-alpine\t0.0.0.0:20020->20020/tcp, :::20020->20020/tcp\tUp 21 months",
+          "pub-server\topenjdk:8u131-jdk-alpine\t0.0.0.0:10001-10002->10001-10002/tcp, :::10001-10002->10001-10002/tcp, 0.0.0.0:10004->10004/tcp, :::10004->10004/tcp, 0.0.0.0:20003->20003/tcp, :::20003->20003/tcp\tUp 20 months",
+          "nacos-server\tnacos/nacos-server:v1.4.3\t0.0.0.0:8847->8848/tcp, :::8847->8848/tcp\tUp 2 years",
+          "redis-server\tredis:6.2.7-alpine3.16\t0.0.0.0:6380->6379/tcp, :::6380->6379/tcp\tUp 2 years",
+          "minio-stack-createbuckets-1\tminio/mc\t\tExited (0) 3 years ago",
+          "minio-server\tbitnami/minio:2022.10.8\t0.0.0.0:9007->9000/tcp, :::9007->9000/tcp, 0.0.0.0:9008->9001/tcp, :::9008->9001/tcp\tUp 2 years",
+          "mysql-server\tamd64/mysql:8.0.30\t3306/tcp, 33060/tcp, 0.0.0.0:3307->3307/tcp, :::3307->3307/tcp\tUp 2 years",
+          "kingbase\tkingbase:v8r3\t\tExited (1) 3 years ago",
+          "dm8_01\tdm8_single:v8.1.2.128_ent_x86_64_ctm_pack4\t0.0.0.0:5236->5236/tcp, :::5236->5236/tcp\tUp 2 years",
+          "nginx-manager-app-1\tjc21/nginx-proxy-manager:latest\t\tExited (0) 3 years ago",
+          "sonarqube\tsonarqube:lts-community\t\tExited (130) 3 years ago",
+          "rocketmqBroker\trocketmqinc/rocketmq\t0.0.0.0:10909->10909/tcp, :::10909->10909/tcp, 9876/tcp, 0.0.0.0:10911->10911/tcp, :::10911->10911/tcp\tExited (255) 3 years ago",
+          "rocketmqConsole\tpangliang/rocketmq-console-ng\t0.0.0.0:18181->8080/tcp, :::18181->8080/tcp\tExited (255) 3 years ago",
+          "rocketmqNameServer\trocketmqinc/rocketmq\t10909/tcp, 0.0.0.0:9876->9876/tcp, :::9876->9876/tcp, 10911/tcp\tExited (255) 3 years ago",
+          "dockerfile_brain-admin\t6bad6189c2e4\t\tExited (1) 3 years ago",
+          "seata-server\tseataio/seata-server:1.3.0\t\tExited (1) 3 years ago",
+          "portainer1\t6053537/portainer-ce\t8000/tcp, 9443/tcp, 0.0.0.0:19000->9000/tcp, :::19000->9000/tcp\tUp 2 years",
+          "portainer\t6053537/portainer-ce\t\tCreated"
+        ]
+      },
+      "usable": true
+    },
+    {
+      "host": "192.168.175.54",
+      "checkedAt": "2026-11-24T00:01:01+08:00",
+      "ping": true,
+      "sshAuthenticated": false,
+      "sshErrors": [
+        "AuthenticationException"
+      ],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        3306,
+        9000,
+        10000
+      ],
+      "usable": false
+    },
+    {
+      "host": "192.168.175.78",
+      "checkedAt": "2026-11-24T00:01:02+08:00",
+      "ping": true,
+      "sshAuthenticated": false,
+      "sshErrors": [
+        "AuthenticationException"
+      ],
+      "serviceChecks": [],
+      "openPorts": [
+        22
+      ],
+      "usable": false
+    },
+    {
+      "host": "192.168.175.80",
+      "checkedAt": "2026-11-24T00:01:01+08:00",
+      "ping": true,
+      "sshAuthenticated": false,
+      "sshErrors": [
+        "AuthenticationException"
+      ],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        2181,
+        3306,
+        6379,
+        9092
+      ],
+      "usable": false
+    },
+    {
+      "host": "192.168.175.81",
+      "checkedAt": "2026-11-24T00:01:02+08:00",
+      "ping": true,
+      "sshAuthenticated": false,
+      "sshErrors": [
+        "AuthenticationException"
+      ],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        2181,
+        3306,
+        6379,
+        8848,
+        9000,
+        9092,
+        19200
+      ],
+      "usable": false
+    },
+    {
+      "host": "192.168.175.86",
+      "checkedAt": "2026-11-24T00:01:02+08:00",
+      "ping": true,
+      "sshAuthenticated": false,
+      "sshErrors": [
+        "AuthenticationException"
+      ],
+      "serviceChecks": [
+        {
+          "kind": "elasticsearch",
+          "port": 19200,
+          "profileRef": "C:\\Users\\Administrator\\.codex\\private\\data-elements\\server-datasource-validation\\es-business-192.168.175.86-profile.private.json",
+          "verified": true
+        }
+      ],
+      "openPorts": [
+        22,
+        2181,
+        3306,
+        6379,
+        8848,
+        9000,
+        9092,
+        9200,
+        19200
+      ],
+      "usable": true
+    },
+    {
+      "host": "192.168.175.122",
+      "checkedAt": "2026-11-24T00:01:03+08:00",
+      "ping": true,
+      "sshAuthenticated": true,
+      "sshErrors": [],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        3306,
+        6379,
+        8848,
+        9000,
+        10001
+      ],
+      "loginUser": "root",
+      "loginPort": 22,
+      "credentialRef": "原表：175段(x86)!第19行",
+      "os": "Linux",
+      "currentInventory": {
+        "services": [
+          "MinIO",
+          "MySQL",
+          "Nacos",
+          "Redis"
+        ],
+        "ports": [
+          22,
+          111,
+          3306,
+          6379,
+          8719,
+          8720,
+          8848,
+          9000,
+          9001,
+          9090,
+          10001,
+          10004,
+          20001,
+          20003,
+          20020,
+          20060,
+          20061,
+          20062,
+          21050,
+          21060,
+          21061,
+          21062
+        ],
+        "containers": [
+          "cloud-page-nginx-server\tnginx:1.23-alpine\t80/tcp, 0.0.0.0:21060-21062->21060-21062/tcp, :::21060-21062->21060-21062/tcp\tUp 8 months",
+          "cloud-page-server\tamd64/cloudpage:jdk8\t0.0.0.0:20001->20001/tcp, :::20001->20001/tcp, 0.0.0.0:20060-20062->20060-20062/tcp, :::20060-20062->20060-20062/tcp, 0.0.0.0:21050->21050/tcp, :::21050->21050/tcp\tUp 8 months",
+          "data-center-server\topenjdk:8u131-jdk-alpine\t0.0.0.0:20020->20020/tcp, :::20020->20020/tcp\tUp 8 months",
+          "pub-server\topenjdk:8u131-jdk-alpine\t\tUp 8 months",
+          "nacos-server\tnacos/nacos-server:v1.4.3\t0.0.0.0:8848->8848/tcp, :::8848->8848/tcp\tUp 8 months",
+          "redis-server\tredis:6.2.7-alpine3.16\t0.0.0.0:6379->6379/tcp, :::6379->6379/tcp\tUp 8 months",
+          "minio-server\tbitnami/minio:2022.10.8\t0.0.0.0:9000-9001->9000-9001/tcp, :::9000-9001->9000-9001/tcp\tUp 8 months",
+          "mysql-server\tamd64/mysql:8.0.30\t0.0.0.0:3306->3306/tcp, :::3306->3306/tcp, 33060/tcp\tUp 8 months"
+        ],
+        "resources": {
+          "memoryMB": 20294,
+          "cpu": 4,
+          "diskFreeGB": 179.8
+        }
+      },
+      "usable": true
+    },
+    {
+      "host": "192.168.175.176",
+      "checkedAt": "2026-11-24T00:01:02+08:00",
+      "ping": true,
+      "sshAuthenticated": true,
+      "sshErrors": [],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        2881,
+        2883,
+        3306,
+        6379,
+        9000,
+        9200
+      ],
+      "loginUser": "root",
+      "loginPort": 22,
+      "credentialRef": "原表：175段(x86)!第17行",
+      "os": "Linux",
+      "currentInventory": {
+        "services": [
+          "Elasticsearch",
+          "MinIO",
+          "MySQL",
+          "OceanBase",
+          "Redis"
+        ],
+        "resources": {
+          "memoryMB": 12931,
+          "diskFreeGB": 7.0,
+          "cpu": 8
+        },
+        "ports": [
+          22,
+          25,
+          2881,
+          2882,
+          2883,
+          2884,
+          2885,
+          2886,
+          3000,
+          3306,
+          5244,
+          6379,
+          8088,
+          8089,
+          9000,
+          9090,
+          9200,
+          9300,
+          33060,
+          42770
+        ],
+        "containers": []
+      },
+      "usable": true
+    },
+    {
+      "host": "192.168.175.177",
+      "checkedAt": "2026-11-24T00:01:02+08:00",
+      "ping": true,
+      "sshAuthenticated": true,
+      "sshErrors": [],
+      "serviceChecks": [],
+      "openPorts": [
+        22
+      ],
+      "loginUser": "root",
+      "loginPort": 22,
+      "credentialRef": "原表：175段(x86)!第18行",
+      "os": "Linux",
+      "currentInventory": {
+        "services": [],
+        "resources": {
+          "memoryMB": 28548,
+          "diskFreeGB": 47.0,
+          "cpu": 32
+        },
+        "ports": [
+          22,
+          25,
+          8080
+        ],
+        "containers": []
+      },
+      "usable": true
+    },
+    {
+      "host": "192.168.175.239",
+      "checkedAt": "2026-11-24T00:01:03+08:00",
+      "ping": true,
+      "sshAuthenticated": true,
+      "sshErrors": [],
+      "serviceChecks": [],
+      "openPorts": [
+        22,
+        2181,
+        6379,
+        8848,
+        9092,
+        9200
+      ],
+      "loginUser": "root",
+      "loginPort": 22,
+      "credentialRef": "原表：175段(x86)!第20行",
+      "os": "Linux",
+      "currentInventory": {
+        "services": [
+          "Elasticsearch",
+          "Kafka",
+          "Nacos",
+          "Redis"
+        ],
+        "ports": [
+          22,
+          80,
+          2181,
+          6379,
+          7474,
+          7848,
+          8080,
+          8719,
+          8720,
+          8721,
+          8722,
+          8723,
+          8724,
+          8848,
+          9090,
+          9091,
+          9092,
+          9100,
+          9103,
+          9104,
+          9108,
+          9111,
+          9121,
+          9200,
+          9300,
+          9308,
+          9848,
+          9849,
+          9999,
+          34609,
+          35215,
+          45387,
+          46719,
+          53001,
+          53011,
+          53021,
+          53031,
+          53041,
+          53061,
+          53091,
+          57687
+        ],
+        "containers": [],
+        "resources": {
+          "memoryMB": 42008,
+          "cpu": 16,
+          "diskFreeGB": 85.2
+        }
+      },
+      "usable": true
+    },
+    {
+      "host": "192.168.175.251",
+      "checkedAt": "2026-11-24T00:01:05+08:00",
+      "ping": true,
+      "sshAuthenticated": true,
+      "sshErrors": [],
+      "serviceChecks": [],
+      "openPorts": [
+        21,
+        22,
+        6379,
+        8848,
+        15432,
+        18848
+      ],
+      "loginUser": "root",
+      "loginPort": 22,
+      "credentialRef": "原表：175段(x86)!第21行",
+      "os": "Linux",
+      "currentInventory": {
+        "services": [
+          "FTP",
+          "Nacos",
+          "Redis"
+        ],
+        "ports": [
+          21,
+          22,
+          111,
+          6379,
+          7848,
+          8123,
+          8719,
+          8720,
+          8721,
+          8722,
+          8723,
+          8724,
+          8777,
+          8778,
+          8848,
+          8878,
+          9000,
+          9090,
+          9100,
+          9108,
+          9848,
+          9849,
+          10004,
+          13307,
+          15432,
+          16379,
+          16380,
+          17848,
+          18089,
+          18848,
+          19090,
+          19848,
+          19849,
+          20880,
+          20881,
+          38080,
+          52001,
+          52011,
+          52021,
+          52031,
+          52041,
+          52051,
+          53003,
+          53007
+        ],
+        "containers": [
+          "validation-opengauss-20261121\topengauss:7.0.0-RC3\t0.0.0.0:15432->5432/tcp, :::15432->5432/tcp\tUp 2 days",
+          "validation-opengauss-20261121-attempt1\topengauss:7.0.0-RC3\t\tExited (1) 2 days ago"
+        ],
+        "resources": {
+          "memoryMB": 96521,
+          "cpu": 32,
+          "diskFreeGB": 824.3
+        }
+      },
+      "usable": true
+    }
+  ]
+}

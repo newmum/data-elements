@@ -46,7 +46,7 @@
           <el-table class="node-data-table" v-loading="serviceLoading" :data="serviceNodes" @sort-change="sort => sortNodes('service',sort)" row-key="id" stripe>
             <el-table-column type="index" :label="text.serialNo" width="68" align="center" />
             <el-table-column prop="name" sortable="custom" :label="text.nodeName" min-width="170">
-              <template #default="{ row }"><div class="node-name"><Icon icon="carbon:api" /><span>{{ row.name }}</span></div></template>
+              <template #default="{ row }"><div class="node-name"><el-tooltip :content="healthDescription(row)" placement="top"><span class="node-icon" :class="`node-icon--${row.healthStatus || 'unknown'}`" role="img" :aria-label="healthDescription(row)"><el-icon :size="18"><Connection /></el-icon></span></el-tooltip><span>{{ row.name }}</span></div></template>
             </el-table-column>
             <el-table-column prop="code" :label="text.nodeCode" width="140" show-overflow-tooltip />
             <el-table-column prop="businessDomain" :label="text.businessDomain" width="130" show-overflow-tooltip />
@@ -237,7 +237,7 @@ const toNode = (item, mode) => ({
   id: item.tid || item.id, name: item.nodeName || item.name || '', code: item.nodeCode || item.code || '', baseUrl: item.baseUrl || '', rootProcessGroupId: item.rootProcessGroupId || '', authUsername: item.authUsername || item.auth_username || '', authPassword: '', hasAuthPassword: item.hasAuthPassword === true || Number(item.hasAuthPassword) === 1, insecureTls: item.insecureTls !== false && Number(item.insecureTls ?? item.insecure_tls ?? 1) !== 0, jdbcDriverDirectory: normalizeDriverDirectory(item.jdbcDriverDirectory || item.jdbcDriverLocations || item.jdbc_driver_locations || ''),
   networkCode: inferNetworkCode(item), networkName: item.networkName || item.network_name || findNetwork(inferNetworkCode(item))?.label || inferNetworkCode(item),
   businessDomain: item.businessDomain || '', serviceType: item.serviceType || '', managementUrl: item.managementUrl || '', credentialRef: item.credentialRef || '', remark: item.remark || '',
-  enabled: item.enabled !== false && Number(item.enabled ?? 1) !== 0, isDefault: item.isDefault === true || Number(item.isDefault) === 1, localNode: mode === 'service' && (item.localNode === true || Number(item.localNode) === 1), healthStatus: item.healthStatus || 'unknown', healthMessage: item.healthMessage || '', healthTime: item.healthTime || '', healthLatencyMs: item.healthLatencyMs, lastSyncTime: item.lastSyncTime || '', lastSyncStatus: item.lastSyncStatus || '', updatedTime: item.updatedTime || ''
+  enabled: item.enabled !== false && Number(item.enabled ?? 1) !== 0, isDefault: item.isDefault === true || Number(item.isDefault) === 1, localNode: mode === 'service' && (item.localNode === true || Number(item.localNode) === 1), healthConfigChanged: item.healthConfigChanged === true, healthStale: item.healthStale === true, healthStatus: item.healthStatus || 'unknown', healthMessage: item.healthMessage || '', healthTime: item.healthTime || '', healthLatencyMs: item.healthLatencyMs, lastSyncTime: item.lastSyncTime || '', lastSyncStatus: item.lastSyncStatus || '', updatedTime: item.updatedTime || ''
 });
 const networkGroups = computed(() => Object.fromEntries(['sync', 'push'].map(mode => [mode, networkOptions.value.map((network, index) => {
   const nodes = (mode === 'push' ? pushNodes.value : syncNodes.value).filter((node) => node.networkCode === network.value);
@@ -326,13 +326,23 @@ const saveNode = async () => {
   finally { saving.value = false; }
 };
 const saveStatus = async (node, mode) => { try { await requestSave(node, mode); ElMessage.success(text.statusUpdated); } catch (error) { node.enabled = !node.enabled; ElMessage.error(error?.message || text.statusFailed); } };
-const healthDescription = node => node.healthStatus === 'unknown' || !node.healthStatus ? '尚未检测，请点击“连通检测”' : `${node.healthStatus === 'reachable' ? '可连通' : '不可连通'}：${node.healthMessage || '检测已完成'}${node.healthTime ? `；检测时间：${node.healthTime}` : ''}${node.healthLatencyMs != null ? `；耗时：${node.healthLatencyMs}ms` : ''}`;
+const healthDescription = node => {
+  const suffix = `${node.healthTime ? `；最近检测时间：${node.healthTime}` : ''}${node.healthLatencyMs != null ? `；耗时：${node.healthLatencyMs}ms` : ''}`;
+  if (node.healthConfigChanged) return `配置已修改，请重新检测${suffix}`;
+  if (node.healthStatus === 'unknown' || !node.healthStatus) return node.healthMessage || '尚未检测，请点击“连通检测”';
+  return `最近检测${node.healthStatus === 'reachable' ? '可连通' : '不可连通'}：${node.healthMessage || '检测已完成'}${suffix}${node.healthStale ? '；结果超过15分钟，建议重新检测' : ''}`;
+};
 const testNode = async (node, nodeType) => {
   testingId.value = node.id;
   try {
     const response = await $common.post(nodeType === 'service' ? '/ods/service/page' : '/ods/node/page', { action: 'health', tid: node.id, nodeId: node.id, nodeType });
     const payload = response?.data || response || {};
-    Object.assign(node, { healthStatus: payload.success ? 'reachable' : 'unreachable', healthMessage: payload.message || (payload.success ? text.healthOk : text.healthFailed), healthTime: payload.healthTime || new Date().toLocaleString(), healthLatencyMs: payload.latencyMs });
+    if (payload.persisted === false) {
+      await loadNodes(nodeType);
+      ElMessage.warning('节点配置或检测结果已更新，已重新读取最新状态');
+      return;
+    }
+    Object.assign(node, { healthConfigChanged: false, healthStale: false, healthStatus: payload.success ? 'reachable' : 'unreachable', healthMessage: payload.message || (payload.success ? text.healthOk : text.healthFailed), healthTime: payload.healthTime || new Date().toLocaleString(), healthLatencyMs: payload.latencyMs });
     if (payload.success) ElMessage.success(`${text.healthOk} (${payload.latencyMs ?? 0}ms)`);
     else ElMessage.error(`${text.healthFailed}: ${payload.message || ''}`);
   } catch (error) {

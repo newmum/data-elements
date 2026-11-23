@@ -48,7 +48,7 @@ final class TaskRuntimeMagicFixture implements AutoCloseable {
 
     TaskRuntimeMagicFixture(String tenantId, JsonNode response) {
         String id = "tenant-a".equals(tenantId) ? "node-default" : "test-node";
-        node = new RuntimeNode(tenantId, id, "test-node", "https://test.invalid", "", "", false, "root");
+        node = new RuntimeNode(tenantId, id, "test-node", "http://test.invalid", "", "", false, "root");
         when(resolver.resolve()).thenReturn(node);
         configurations.add(Map.of("tid", id, "network_code", "network-a", "node_name", "默认节点"));
         nodes.put(id,node);
@@ -61,7 +61,7 @@ final class TaskRuntimeMagicFixture implements AutoCloseable {
     }
 
     void addNode(String id, JsonNode response) {
-        var added = new RuntimeNode(node.tenantId(),id,id,"https://"+id+".invalid","","",false,"root");
+        var added = new RuntimeNode(node.tenantId(),id,id,"http://"+id+".invalid","","",false,"root");
         nodes.put(id,added);
         configurations.add(Map.of("tid",id,"network_code","network-b","node_name",id));
         if (response == null) when(nifi.getRuntimeRootStatus(added)).thenThrow(new IllegalStateException("offline"));
@@ -118,6 +118,14 @@ final class TaskRuntimeMagicFixture implements AutoCloseable {
             return method.invoke(target, arguments);
         } catch (InvocationTargetException failure) {
             throw failure.getCause();
+        }
+    }
+
+    void verifyPageRootReads(java.util.List<?> ids) {
+        if (ids == null) { verifySingleRootRead(); return; }
+        for (var entry : nodes.entrySet()) {
+            if (ids.contains(entry.getKey())) verify(nifi, times(1)).getRuntimeRootStatus(entry.getValue());
+            else verify(nifi, atMost(1)).getRuntimeRootStatus(entry.getValue());
         }
     }
 

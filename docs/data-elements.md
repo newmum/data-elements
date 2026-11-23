@@ -258,6 +258,9 @@ mysql --host=127.0.0.1 --port=3306 --user=DBA_USER --password --default-characte
 
 当前86完整结构导出与比较以本节表格为准。公安、海渔、广电各212表，表列、主键、索引及外键比较零差异；澄天165表仍有62项既有差异（缺47表、13列、2项索引语义），不是四行业已同构。目录字段`da_catalog_item_t.col_comment`从128字符扩为与来源注释相应的长文本：MySQL LONGTEXT、金仓TEXT、达梦CLOB，保留全文、NULL及中文注释。四库原值逐项核对一致，达梦依赖视图重新绑定；五库结构重新导出后，相对变更前实库只改变该列，既有澄天差异清单未增加。已有库分别使用[MySQL增量](../db/increments/000013_catalog_column_comment.mysql.sql)、[金仓增量](../db/increments/000013_catalog_column_comment.kingbase.sql)、[达梦增量](../db/increments/000013_catalog_column_comment.dameng.sql)，先按脚本核对绑定、备份和停写，不能直接执行完整初始化文件。达梦禁止VARCHAR直接改CLOB，须复制核对、换列、恢复视图后再清理原列；已有长值时不能缩回128或截断。14演示库未随本批升级。
 
+节点连通检测快照保存在实际行业库 `nifi_node_t`、`push_node_t`、`service_node_t` 的六个 `last_health_*` 列中：最近状态、检测时间、脱敏原因、毫秒耗时、配置修订值和检测序号。成功、协议失败及配置校验失败都落库；首次升级不将未检测节点回填为成功。刷新页面或重启后端回显最近结果，超过15分钟提示重新检测；配置修改后历史结果保留供说明，图标变为待重新检测。按当前租户、有效节点、`updated_time` 和单调检测序号执行原子更新，旧请求不能覆盖新配置或较新的检测。列表使用同批读取列，无逐行探测或补查；检测只由用户单项操作触发。已有库按实际方言使用 [MySQL增量000014](../db/increments/000014_node_health_snapshot.mysql.sql)、[金仓增量000014](../db/increments/000014_node_health_snapshot.kingbase.sql)、[达梦增量000014](../db/increments/000014_node_health_snapshot.dameng.sql)，先备份并执行结构增量，再发布快照函数和调用方；不能执行完整初始化文件覆盖已有库。本次四行业应用后重新导出五库，公安、海渔、广电零差异，澄天既有62项差异不增加。
+
+
 `haitong-data-pull` 对应的独立库完整结构为 [haitong/init.sql](../db/haitong/init.sql)，已通过真实 MySQL 的 `SHOW CREATE` 导出：15 张表、51 个索引（含主键及唯一索引）、5 个外键，没有视图、触发器、例程或事件。它不属于四行业同构基线。历史工程内 `sql/` 已整合移除，后续只在本目录更新完整定义；对账查询归入[海通推送服务文档](haitong-data-pull.md#reconciliation-queries)。
 
 原有达梦适配定义保存在 [haitong/compatibility/dameng.sql](../db/haitong/compatibility/dameng.sql)，明确标记为未连接实库核验的 9 表模板，缺少 MySQL 中的推送凭据和 Magic 资源表；不能作为当前 15 表结构、完整兼容承诺或已有库升级脚本。应用打包使用的 H2 本地初始化资源继续保留在应用 `src/main/resources/db/h2.sql`，不作为生产 MySQL 基线。

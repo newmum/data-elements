@@ -59,11 +59,16 @@
       <el-tooltip :content="runtimeHint" placement="bottom"><el-tag class="runtime-channel" :type="runtimeConnection === 'live' ? 'success' : runtimeConnection === 'connecting' ? 'info' : 'warning'" size="small" effect="plain">{{ runtimeConnection === 'live' ? '实时状态' : runtimeConnection === 'connecting' ? '连接中' : runtimeConnection === 'partial' ? '部分节点待确认' : '状态待确认' }}</el-tag></el-tooltip>
 
       <div class="toolbar-actions">
+        <el-select v-model="flowScope" class="flow-scope-select" aria-label="流程范围" @change="refreshTable">
+          <el-option label="全部流程" value="all" />
+          <el-option label="平台登记任务" value="registered" />
+          <el-option label="NiFi 原生流程" value="native" />
+        </el-select>
         <el-input
           v-model="searchVal"
           clearable
           class="task-search"
-          placeholder="请输入任务名称、来源表或目标表"
+          placeholder="请输入任务或流程名称"
           @clear="refreshTable"
           @keyup.enter="refreshTable"
         >
@@ -81,17 +86,18 @@
       :columns="[]"
       :data="fetchTasks"
       row-key="tid"
+      :row-class-name="({ row }) => row.syncTables?.length ? '' : 'monitor-no-details'"
       height="100%"
       flex-type="flex-[1_1_200px]"
       :show-search="false"
       :show-reset="false"
       :page-sizes="[10, 20, 50, 100]"
       class="task-table"
-      empty-text="暂无接入任务"
+      empty-text="暂无匹配流程"
     >
-      <el-table-column type="expand" width="44">
+      <el-table-column type="expand" width="36">
         <template #default="{ row }">
-          <div class="sync-detail-panel">
+          <div v-if="row.syncTables?.length" class="sync-detail-panel">
             <div class="sync-detail-card">
               <div class="sync-detail-title">
                 <div>
@@ -160,20 +166,28 @@
                   </div>
                 </article>
               </div>
-              <el-empty v-else description="该任务暂无表同步明细" :image-size="82" />
             </div>
           </div>
         </template>
       </el-table-column>
 
-      <el-table-column label="序号" type="index" width="70" align="center" />
-      <el-table-column sortable="custom" prop="taskName" label="任务名称" min-width="180" show-overflow-tooltip />
-      <el-table-column prop="taskStatus" label="当前状态" width="120" align="center">
+      <el-table-column label="序号" type="index" width="54" align="center" />
+      <el-table-column sortable="custom" prop="taskName" label="任务名称" min-width="175" show-overflow-tooltip />
+      <el-table-column prop="taskStatus" label="当前状态" width="100" align="center">
         <template #default="{ row }">
-          <el-tag :type="runtimeConnection === 'unavailable' && row.runtimeFresh != null ? 'warning' : statusTagType(row.taskStatus)" effect="light">
-            {{ runtimeConnection === 'unavailable' && row.runtimeFresh != null ? '状态待确认' : row.runtimeLabel || statusText(row.taskStatus) }}
+          <el-tag :type="runtimeConnection === 'unavailable' && row.runtimeFresh === false ? 'warning' : statusTagType(row.taskStatus)" effect="light">
+            {{ runtimeConnection === 'unavailable' && row.runtimeFresh === false ? '状态待确认' : row.runtimeLabel || statusText(row.taskStatus) }}
           </el-tag>
         </template>
+      </el-table-column>
+      <el-table-column prop="nifiNodeName" label="所属 NiFi 节点" min-width="145" show-overflow-tooltip />
+      <el-table-column prop="sourceDbName" label="来源数据库" min-width="150" show-overflow-tooltip />
+      <el-table-column label="来源数据表" min-width="150" show-overflow-tooltip>
+        <template #default="{ row }">{{ row.sourcePhysicalTableName || row.sourceTableSummary || row.sourceTableName }}</template>
+      </el-table-column>
+      <el-table-column prop="targetDbName" label="目标数据库" min-width="150" show-overflow-tooltip />
+      <el-table-column label="目标数据表" min-width="150" show-overflow-tooltip>
+        <template #default="{ row }">{{ row.targetPhysicalTableName || row.targetTableSummary || row.targetTableName }}</template>
       </el-table-column>
       <el-table-column sortable="custom" prop="lastRunning" label="最新运行时间" width="175">
         <template #default="{ row }">{{ formatDateTime(row.lastRunning || row.latestRunTime) }}</template>
@@ -187,29 +201,20 @@
       <el-table-column prop="scheduleFrequency" label="调度频率" width="140" show-overflow-tooltip>
         <template #default="{ row }">{{ row.scheduleFrequency || "-" }}</template>
       </el-table-column>
-      <el-table-column prop="sourceDbName" label="来源数据库" min-width="150" show-overflow-tooltip />
-      <el-table-column prop="sourceTableSummary" label="来源数据表" min-width="150" show-overflow-tooltip>
-        <template #default="{ row }">
-          <span>{{ row.sourceTableSummary || row.sourceTableName || "-" }}</span>
-        </template>
-      </el-table-column>
-      <el-table-column prop="targetDbName" label="目标数据库" min-width="150" show-overflow-tooltip />
-      <el-table-column prop="targetTableSummary" label="目标数据表" min-width="150" show-overflow-tooltip>
-        <template #default="{ row }">
-          <span>{{ row.targetTableSummary || row.targetTableName || "-" }}</span>
-        </template>
-      </el-table-column>
       <el-table-column
         prop="operation"
         label="操作"
-        width="190"
+        width="170"
         fixed="right"
         align="center"
         class-name="operation-column"
         :show-overflow-tooltip="false"
       >
         <template #default="{ row }">
-          <div class="operation-buttons task-actions">
+          <template v-if="row.readOnly">
+            <el-link v-if="row.nativeUrl" :href="row.nativeUrl" target="_blank" rel="noopener noreferrer" type="primary">查看原生流程</el-link>
+          </template>
+          <div v-else class="operation-buttons task-actions">
             <el-button
               v-if="row.running || [1].includes(Number(row.taskStatus))"
               type="primary"
@@ -355,6 +360,7 @@ const taskName = ref("");
 const errorLogVisible = ref(false);
 const pipelineId = ref("");
 const activeTab = ref("all");
+const flowScope = ref("all");
 const searchVal = ref("");
 const tableRef = ref();
 const operationState = ref({});
@@ -366,21 +372,25 @@ const runtimeConnection = ref('connecting');
 const runtimeReadAt = ref(0);
 const runtimeWarning = ref('');
 const runtimeHint = computed(() => runtimeWarning.value || (runtimeReadAt.value ? `NiFi 最近确认：${new Date(runtimeReadAt.value).toLocaleTimeString()}` : '正在读取 NiFi 当前运行状态'));
-let runtimeRevision = '', taskFetchSequence = 0;
+let runtimeRevision = '', runtimeEventRevision = '', taskFetchSequence = 0, runtimeNodeIds = [];
+const applyRuntimeScope = (ids) => {
+  const next = [...new Set((ids || []).filter(id => /^[A-Za-z0-9_-]{1,64}$/.test(id)))].sort();
+  if (JSON.stringify(next) === JSON.stringify(runtimeNodeIds)) return;
+  stopRuntimeStream(); runtimeNodeIds = next; runtimeEventRevision = '';
+  if (next.length) startRuntimeStream();
+};
 let runtimeActive = true, runtimeAbort = null, reconnectTimer = null, statusRefreshTimer = null, reconnectDelay = 1000;
 const refreshRuntimePage = () => {
   if (statusRefreshTimer) return;
   statusRefreshTimer = setTimeout(() => { statusRefreshTimer = null; if (runtimeActive && !document.hidden) tableRef.value?.refresh?.(activeTab.value !== 'all'); }, 150);
 };
+// 跨节点采样完成会改变列表成员，事件只触发授权分页重读，不能用全节点健康覆盖本页状态。
 const acceptRuntimeEvent = (payload) => {
-  runtimeConnection.value = payload.fresh ? 'live' : payload.partial ? 'partial' : 'unavailable';
-  runtimeWarning.value = payload.message || '';
-  runtimeReadAt.value = Number(payload.observedAt || 0);
-  if (runtimeRevision && runtimeRevision !== payload.revision) refreshRuntimePage();
-  runtimeRevision = payload.revision;
+  if (runtimeEventRevision !== payload.revision) refreshRuntimePage();
+  runtimeEventRevision = payload.revision;
 };
 const startRuntimeStream = async () => {
-  if (!runtimeActive || document.hidden || runtimeAbort) return;
+  if (!runtimeActive || document.hidden || runtimeAbort || !runtimeNodeIds.length) return;
   const controller = new AbortController(); runtimeAbort = controller;
   let stalled = false, watchdog;
   const armWatchdog = () => { clearTimeout(watchdog); watchdog = setTimeout(() => { stalled = true; controller.abort(); }, 20000); };
@@ -389,6 +399,7 @@ const startRuntimeStream = async () => {
     // The existing Axios interceptor supplies the current token to this adapter.
     // Fetch keeps the stream open without putting credentials in the URL.
     await $request.get('/nifi/run/events', {
+      params: { nodeIds: JSON.stringify(runtimeNodeIds) },
       signal: controller.signal, timeout: 0, responsePolicy: 'raw', errorPolicy: 'silent',
       headers: { Accept: 'text/event-stream' },
       adapter: async (config) => {
@@ -491,6 +502,7 @@ const normalizeListData = (response) => {
 const fetchTasks = async ({ pageNo = 1, pageSize = 20, sortField, sortDir } = {}) => {
   const sequence = ++taskFetchSequence;
   const response = await $common.post("/ods/job/page", {
+    flowScope: flowScope.value,
     taskStatus: activeTab.value === "all" ? "all" : activeTab.value,
     taskName: searchVal.value,
     nifiNetworkCode: selectedNetworkCode.value,
@@ -501,6 +513,7 @@ const fetchTasks = async ({ pageNo = 1, pageSize = 20, sortField, sortDir } = {}
   const data = normalizeListData(response);
   const payload = response?.data || response || {};
   if (sequence === taskFetchSequence && payload.runtimeRevision) {
+    applyRuntimeScope(payload.runtimeWatchNodeIds || payload.runtimeNodeIds);
     runtimeRevision = payload.runtimeRevision; runtimeReadAt.value = Number(payload.runtimeObservedAt || 0);
     runtimeConnection.value = payload.runtimeFresh ? 'live' : payload.runtimePartial ? 'partial' : 'unavailable'; runtimeWarning.value = payload.runtimeMessage || '';
   }
@@ -709,7 +722,7 @@ const operationErrorMessage = (error, fallback) => {
 };
 
 const handleOperation = async (type, row) => {
-  if (isRowOperating(row)) return;
+  if (row.readOnly || isRowOperating(row)) return;
   try {
     switch (type) {
       case "stop": {
@@ -969,6 +982,8 @@ onDeactivated(() => { runtimeActive = false; stopRuntimeStream(); });
 
 <style scoped>
 .runtime-channel { flex-shrink: 0; }
+.flow-scope-select { width: 140px; }
+.task-table :deep(.monitor-no-details .el-table__expand-icon) { visibility: hidden; }
 .task-target-drawer-footer {
   display: flex;
   justify-content: flex-end;
@@ -1277,6 +1292,8 @@ onDeactivated(() => { runtimeActive = false; stopRuntimeStream(); });
   .access-toolbar { gap: 10px; }
   .toolbar-actions { gap: 8px; }
   .task-search { width: clamp(132px, 18vw, 220px); }
+  .task-table :deep(.operation-column.el-table-fixed-column--right) { position: static !important; }
+  .task-table :deep(.el-table-fixed-column--right::before) { display: none; }
 }
 
 .sync-detail-panel {

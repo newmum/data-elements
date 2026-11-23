@@ -27,6 +27,30 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 class TaskRuntimeStatusTest {
+    @Test void slowNonDefaultNodeRemainsInSubscriptionAndCompletionRevealsLegacyTask() throws Exception {
+        var resolver=mock(NifiNodeRuntimeResolver.class);var nifi=mock(NifiClient.class);
+        var first=new RuntimeNode("tenant-a","first","first","http://first.invalid","","",false,"root");
+        var slow=new RuntimeNode("tenant-a","slow","slow","http://slow.invalid","","",false,"root");
+        when(resolver.samplingConfigurations()).thenReturn(List.of(Map.of("tid","first"),Map.of("tid","slow")));
+        when(resolver.runtimeNode(anyMap())).thenAnswer(call->"first".equals(((Map<?,?>)call.getArgument(0)).get("tid"))?first:slow);
+        when(nifi.getRuntimeRootStatus(first)).thenReturn(MAPPER.readTree(response("Stopped").replace("child","default-child")));
+        when(nifi.getRuntimeRootStatus(slow)).thenAnswer(call->{Thread.sleep(1800);return MAPPER.readTree(response("Running").replace("child","slow-child"));});
+        var service=new TaskRuntimeStatusService(resolver,nifi);
+        try(var tenant=TenantContext.use("tenant-a")) {
+            var module=new TaskRuntimeMagicModule(service);var initial=module.snapshot();
+            assertThat(initial.get("watchNodeIds")).isEqualTo(List.of("first","slow"));
+            var mvc=MockMvcBuilders.standaloneSetup(new ScriptHandler(module)).build();
+            var events=mvc.perform(get("/nifi/run/events").param("nodeIds","[\"first\",\"slow\"]").accept("text/event-stream"))
+                .andExpect(status().isOk()).andExpect(request().asyncStarted()).andReturn();
+            for(int retry=0;retry<100 && !events.getResponse().getContentAsString().contains("\"fresh\":true");retry++)Thread.sleep(20);
+            assertThat(events.getResponse().getContentAsString()).contains("\"fresh\":true");
+            var finalSnapshot=module.snapshot();
+            assertThat(module.resolvedNode(finalSnapshot,"","slow-child")).isEqualTo("slow");
+            var legacy=new HashMap<String,Object>(Map.of("runtimeProcessGroupId","slow-child"));
+            module.decorate(List.of(legacy),finalSnapshot);assertThat(legacy).containsEntry("nifiNodeId","slow").containsEntry("taskStatus",1);
+            verify(nifi,times(1)).getRuntimeRootStatus(slow);
+        } finally {service.close();}
+    }
     @Test void multipleNodesUseIndependentKeysAndOfflineNodesDoNotHideHealthyTasks() throws Exception {
         var resolver = mock(NifiNodeRuntimeResolver.class);
         var nifi = mock(NifiClient.class);
@@ -63,11 +87,52 @@ class TaskRuntimeStatusTest {
             assertThat(healthy).containsEntry("runtimeState", "RUNNING");
             assertThat(offline).containsEntry("runtimeState", "UNKNOWN").containsEntry("running", false);
             assertThat(deleted).containsEntry("runtimeState", "UNKNOWN");
-            assertThat(legacy).containsEntry("nifiNodeId", "a").containsEntry("runtimeLegacyNode", true);
+            assertThat(legacy).containsEntry("nifiNodeId", "b").containsEntry("runtimeLegacyNode", true);
+            assertThat(module.summary(List.of(healthy), partial)).containsEntry("fresh", true).containsEntry("partial", false);
+            assertThat(module.summary(List.of(healthy, offline), partial)).containsEntry("fresh", false).containsEntry("partial", true);
+            assertThat(module.summary(List.of(deleted), partial)).containsEntry("fresh", false);
+            var draft = new HashMap<String, Object>(Map.of("runtimeNodeId", "a", "lifecycleStatus", "DRAFT"));
+            module.decorate(List.of(draft), partial);
+            assertThat(draft).containsEntry("runtimeFresh", true).containsEntry("runtimeState", "UNDEPLOYED");
+            assertThat(module.summary(List.of(draft), partial)).containsEntry("fresh", true).containsEntry("nodeIds", List.of());
         } finally { service.close(); }
         assertThatThrownBy(service::snapshotAll).isInstanceOf(com.linewell.dataelement.platform.tenant.domain.TenantAccessException.class);
     }
     private static final ObjectMapper MAPPER = new ObjectMapper();
+    @Test void pageSamplingIgnoresUnrelatedOfflineNodeAndStillDetectsItsOwnLaterFailure() throws Exception {
+        var resolver = mock(NifiNodeRuntimeResolver.class);
+        var nifi = mock(NifiClient.class);
+        var own = new RuntimeNode("tenant-a", "own", "own", "http://own.invalid", "", "", false, "root");
+        var sample = new RuntimeNode("tenant-a", "sample", "sample", "http://sample.invalid", "", "", false, "root");
+        when(resolver.samplingConfigurations()).thenReturn(List.of(Map.of("tid", "own"), Map.of("tid", "sample")));
+        when(resolver.runtimeNode(anyMap())).thenAnswer(call -> "own".equals(((Map<?, ?>)call.getArgument(0)).get("tid")) ? own : sample);
+        when(nifi.getRuntimeRootStatus(own)).thenReturn(MAPPER.readTree(response("Running")));
+        var service = new TaskRuntimeStatusService(resolver, nifi);
+        try (var tenant = TenantContext.use("tenant-a")) {
+            var module = new TaskRuntimeMagicModule(service);
+            for (int count : List.of(20, 100)) {
+                List<Map<String,Object>> rows = new ArrayList<>();
+                for (int i=0;i<count;i++) rows.add(new HashMap<>(Map.of("runtimeNodeId", "own", "runtimeProcessGroupId", "child")));
+                var snapshot = module.snapshotForRows(rows);
+                assertThat(module.summary(rows, snapshot)).containsEntry("fresh", true).containsEntry("nodeIds", List.of("own"));
+            }
+            verify(nifi, times(1)).getRuntimeRootStatus(own);
+            verify(nifi, never()).getRuntimeRootStatus(sample);
+            var mvc = MockMvcBuilders.standaloneSetup(new ScriptHandler(module)).build();
+            var eventResult = mvc.perform(get("/nifi/run/events").param("nodeIds", "[\"own\"]").accept("text/event-stream"))
+                    .andExpect(status().isOk()).andExpect(request().asyncStarted()).andReturn();
+            for (int retry=0;retry<100 && !eventResult.getResponse().getContentAsString().contains("own=");retry++) Thread.sleep(10);
+            assertThat(eventResult.getResponse().getContentAsString()).contains("own=", "\"fresh\":true").doesNotContain("sample=");
+
+            service.invalidateTenant();
+            when(nifi.getRuntimeRootStatus(own)).thenThrow(new IllegalStateException("later disconnected"));
+            var rows = List.<Map<String,Object>>of(new HashMap<>(Map.of("runtimeNodeId", "own", "runtimeProcessGroupId", "child")));
+            var snapshot = module.snapshotForRows(rows);
+            assertThat(module.summary(rows, snapshot)).containsEntry("fresh", false).containsEntry("partial", false);
+            module.decorate(rows, snapshot);
+            assertThat(rows.getFirst()).containsEntry("runtimeState", "UNKNOWN");
+        } finally { service.close(); }
+    }
     private static String response(String state) { return """
         {"processGroupStatus":{"aggregateSnapshot":{"id":"root","processGroupStatusSnapshots":[
         {"processGroupStatusSnapshot":{"id":"child","activeThreadCount":0,"processorStatusSnapshots":[
@@ -121,7 +186,7 @@ class TaskRuntimeStatusTest {
         @RequestMapping(value = "/nifi/run/events", method = {RequestMethod.GET, RequestMethod.HEAD})
         public Object invoke(HttpServletRequest request, HttpServletResponse response) {
             Object result = script.execute(new MagicScriptContext(Map.of("request", new ScriptRequest(request),
-                    "response", response, "taskRuntime", module)));
+                    "response", response, "taskRuntime", module,"param",request.getParameter("nodeIds") == null ? Map.of() : Map.of("nodeIds",request.getParameter("nodeIds")))));
             return result instanceof org.springframework.http.ResponseEntity<?> ? result
                     : new MagicApiResultProvider().buildResult(null, 0, "success", result);
         }
@@ -129,6 +194,7 @@ class TaskRuntimeStatusTest {
 
     public record ScriptRequest(HttpServletRequest servlet) {
         public HttpServletRequest get() { return servlet; }
+        public java.util.List<String> getValues(String key) { var values=servlet.getParameterValues(key); return values == null ? null : Arrays.asList(values); }
     }
     @Test void idleScheduledProcessorIsRunningAndNestedStateIsIncluded() throws Exception {
         var index = RuntimeStatusIndex.parse(MAPPER.readTree(response("Running")));

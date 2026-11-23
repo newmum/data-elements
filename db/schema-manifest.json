@@ -64,7 +64,7 @@
         "functions": 0,
         "sequences": 0
       },
-      "sha256": "e73217b56eff818cce100e5d62c9ed34fba5ff0a04d25a11f89810382e811a48",
+      "sha256": "26c4c4d78656817b479fd2708df6201ecd4dcaf8159659e01bf29921014471c6",
       "exportNotes": {
         "definitions": "DBMS_METADATA.GET_DDL",
         "comments": "DBA_TAB_COMMENTS/DBA_COL_COMMENTS",
@@ -86,7 +86,7 @@
         "procedures": 0,
         "events": 0
       },
-      "sha256": "fd93ff707f40a3c3bc72b9875eb2b681ce45c45269ca5a151dbc24ba98e4fb70",
+      "sha256": "b940806f910e0283a4e7abdc1b072120f6ae653a78d8725fb6ad408988e9fda8",
       "exportNotes": {
         "definitions": "Kingbase native catalogs and pg_get_*def",
         "sqlSchema": "public",
@@ -108,7 +108,7 @@
         "functions": 0,
         "events": 0
       },
-      "sha256": "0178ba36e7d56ff2c36d9d786ebcbbad0c0081c3dbb94f5b9178cd5a608bff95",
+      "sha256": "7f1be775da8f98e3b0902879c5485399cb949b9275d8fa7f6d8733f8c8ada2c7",
       "exportNotes": {
         "definitions": "SHOW CREATE",
         "routineDefiners": "omitted",
@@ -130,7 +130,7 @@
         "functions": 0,
         "events": 0
       },
-      "sha256": "94632edca4e45ccb86167403c5374e2549b88ca9a627c388f462d95d856f55a4",
+      "sha256": "cc40bbdcb1f34df10b3588aa61add89db5c588932d072d9c13f22cf13729ade8",
       "exportNotes": {
         "definitions": "SHOW CREATE",
         "routineDefiners": "omitted",

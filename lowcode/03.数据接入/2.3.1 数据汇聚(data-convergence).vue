@@ -399,21 +399,25 @@ const runtimeConnection = ref('connecting');
 const runtimeReadAt = ref(0);
 const runtimeWarning = ref('');
 const runtimeHint = computed(() => runtimeWarning.value || (runtimeReadAt.value ? `NiFi 最近确认：${new Date(runtimeReadAt.value).toLocaleTimeString()}` : '正在读取 NiFi 当前运行状态'));
-let runtimeRevision = '', taskFetchSequence = 0;
+let runtimeRevision = '', runtimeEventRevision = '', taskFetchSequence = 0, runtimeNodeIds = [];
+const applyRuntimeScope = (ids) => {
+  const next = [...new Set((ids || []).filter(id => /^[A-Za-z0-9_-]{1,64}$/.test(id)))].sort();
+  if (JSON.stringify(next) === JSON.stringify(runtimeNodeIds)) return;
+  stopRuntimeStream(); runtimeNodeIds = next; runtimeEventRevision = '';
+  if (next.length) startRuntimeStream();
+};
 let runtimeActive = true, runtimeAbort = null, reconnectTimer = null, statusRefreshTimer = null, reconnectDelay = 1000;
 const refreshRuntimePage = () => {
   if (statusRefreshTimer) return;
   statusRefreshTimer = setTimeout(() => { statusRefreshTimer = null; if (runtimeActive && !document.hidden) tableRef.value?.refresh?.(false); }, 150);
 };
+// 跨节点采样完成会改变列表成员，事件只触发授权分页重读，不能用全节点健康覆盖本页状态。
 const acceptRuntimeEvent = (payload) => {
-  runtimeConnection.value = payload.fresh ? 'live' : payload.partial ? 'partial' : 'unavailable';
-  runtimeWarning.value = payload.message || '';
-  runtimeReadAt.value = Number(payload.observedAt || 0);
-  if (runtimeRevision && runtimeRevision !== payload.revision) refreshRuntimePage();
-  runtimeRevision = payload.revision;
+  if (runtimeEventRevision !== payload.revision) refreshRuntimePage();
+  runtimeEventRevision = payload.revision;
 };
 const startRuntimeStream = async () => {
-  if (!runtimeActive || document.hidden || runtimeAbort) return;
+  if (!runtimeActive || document.hidden || runtimeAbort || !runtimeNodeIds.length) return;
   const controller = new AbortController(); runtimeAbort = controller;
   let stalled = false, watchdog;
   const armWatchdog = () => { clearTimeout(watchdog); watchdog = setTimeout(() => { stalled = true; controller.abort(); }, 20000); };
@@ -422,6 +426,7 @@ const startRuntimeStream = async () => {
     // The existing Axios interceptor supplies the current token to this adapter.
     // Fetch keeps the stream open without putting credentials in the URL.
     await $request.get('/nifi/run/events', {
+      params: { nodeIds: JSON.stringify(runtimeNodeIds) },
       signal: controller.signal, timeout: 0, responsePolicy: 'raw', errorPolicy: 'silent',
       headers: { Accept: 'text/event-stream' },
       adapter: async (config) => {
@@ -921,6 +926,7 @@ const fetchSources = async ({ pageNo = 1, pageSize = 20 } = {}) => {
       state.datasourceTypeError = state.datasourceTypeStatistics ? "" : "类型统计暂不可用";
     }
     if (sequence === taskFetchSequence && page.runtimeRevision) {
+      applyRuntimeScope(page.runtimeWatchNodeIds || page.runtimeNodeIds);
       if (runtimeReadAt.value > Number(page.runtimeObservedAt || 0) && runtimeRevision !== page.runtimeRevision) {
         refreshRuntimePage();
       } else {

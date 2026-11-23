@@ -168,7 +168,8 @@ class NifiNodeListMagicTest {
     @Test
     void serviceHealthUsesOnlyTheSavedCurrentTenantTarget() throws Exception {
         var fixture = new Fixture(0);
-        fixture.jdbc.execute("create table service_node_t(tid varchar(64),tenant_id varchar(64),is_del int,local_node int,base_url varchar(255),management_url varchar(255))");
+        fixture.jdbc.execute("create table service_node_t(tid varchar(64),tenant_id varchar(64),is_del int,local_node int,base_url varchar(255),management_url varchar(255), updated_time timestamp default current_timestamp)");
+        NodeHealthSnapshotMagicTest.columns(fixture.jdbc,"service_node_t");
         var paths = new ArrayList<String>();
         var upstream = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         try {
@@ -181,7 +182,7 @@ class NifiNodeListMagicTest {
             });
             upstream.start();
             String base = "http://127.0.0.1:" + upstream.getAddress().getPort();
-            fixture.jdbc.update("insert into service_node_t values('own','police',0,0,?,null),('foreign','other',0,0,?,null)", base, base);
+            fixture.jdbc.update("insert into service_node_t(tid,tenant_id,is_del,local_node,base_url,management_url) values('own','police',0,0,?,null),('foreign','other',0,0,?,null)", base, base);
             var unauthorized = fixture.serviceHealth(Map.of("action", "health", "nodeId", "foreign",
                     "tenantId", "other", "localNode", true));
             assertEquals(404, assertInstanceOf(ExitValue.class, unauthorized).getValues()[0]);
@@ -387,6 +388,7 @@ class NifiNodeListMagicTest {
             for (int i = 0; i < size; i++) jdbc.update("insert into nifi_node_t values(?,'police',0,?,?,'公安网',null,0,current_timestamp,'must-not-return')", "own-"+i, "节点"+String.format("%03d",i), "code-"+i);
             jdbc.update("insert into nifi_node_t values('foreign','foreign',0,'foreign','foreign','公安网',null,0,current_timestamp,'secret'),('deleted','police',1,'deleted','deleted','公安网',null,0,current_timestamp,'secret')");
             jdbc.execute("alter table nifi_node_t add (base_url varchar(255), root_process_group_id varchar(128), auth_username varchar(64), insecure_tls int, jdbc_driver_locations varchar(4096), remark varchar(500), enabled int, created_time timestamp)");
+            NodeHealthSnapshotMagicTest.columns(jdbc,"nifi_node_t");
             var sources = new MagicDynamicDataSource(); sources.setDefault(source);
             db = new SQLModule(sources); db.setDataSourceNode(sources.getDataSource());
             var dialects = new DialectAdapter();
@@ -424,6 +426,7 @@ class NifiNodeListMagicTest {
                 catch (Exception failure) { throw new IllegalStateException(failure); }
             });
             bindings.put("nifi", client);
+            bindings.put("nodeHealth", (MagicScriptLambdaFunction)(ctx,args)->NodeHealthSnapshotMagicTest.execute(db,jdbc,scope,args[0]));
             var script = CanonicalMagicSources.byId("ods_nifi_node_page_01").replaceAll("(?m)^import [^\\r\\n]*\\r?\\n", "");
             return MagicScript.create(script,null).execute(new MagicScriptContext(bindings));
         }
@@ -437,7 +440,7 @@ class NifiNodeListMagicTest {
             return MagicScript.create(script, null).execute(new MagicScriptContext(Map.of(
                     "db", db, "tenantRuntime", scope, "httpx", new FlowHttpModule(null, new ObjectMapper()), "body", body,
                     "URI", URI.class, "CommonResponse", CommonResponse.class, "ResponseEntity", ResponseEntity.class,
-                    "flowRuntime", new FlowRuntimePaths())));
+                    "flowRuntime", new FlowRuntimePaths(), "nodeHealth", (MagicScriptLambdaFunction)(ctx,args)->NodeHealthSnapshotMagicTest.execute(db,jdbc,scope,args[0]))));
         }
     }
     public static class Scope { String tenant = "police"; public String id() { return tenant; } }

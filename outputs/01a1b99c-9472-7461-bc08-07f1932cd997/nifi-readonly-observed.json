@@ -1,0 +1,149 @@
+{
+  "about": {
+    "title": "NiFi",
+    "version": "2.9.0",
+    "uri": "https://10.231.176.56:8443/nifi-api/",
+    "contentViewerUrl": "https://10.231.176.56:8443/nifi/#/content-viewer",
+    "timezone": "CST",
+    "buildTag": "HEAD"
+  },
+  "mappingTypes": [
+    {
+      "type": "HaitongTransformRecord",
+      "version": "1.1.30"
+    },
+    {
+      "type": "HaitongTransformRecord",
+      "version": "1.1.32"
+    },
+    {
+      "type": "HaitongTransformRecord",
+      "version": "1.1.31"
+    },
+    {
+      "type": "HaitongTransformRecord",
+      "version": "1.1.38"
+    },
+    {
+      "type": "HaitongTransformRecord",
+      "version": "1.1.37"
+    },
+    {
+      "type": "HaitongTransformRecord",
+      "version": "1.1.39"
+    },
+    {
+      "type": "HaitongTransformRecord",
+      "version": "1.1.34"
+    },
+    {
+      "type": "HaitongTransformRecord",
+      "version": "1.1.33"
+    },
+    {
+      "type": "HaitongTransformRecord",
+      "version": "1.1.36"
+    },
+    {
+      "type": "HaitongTransformRecord",
+      "version": "1.1.35"
+    },
+    {
+      "type": "HaitongTransformRecord",
+      "version": "1.1.21"
+    },
+    {
+      "type": "HaitongTransformRecord",
+      "version": "1.1.20"
+    },
+    {
+      "type": "HaitongTransformRecord",
+      "version": "1.1.26"
+    },
+    {
+      "type": "HaitongTransformRecord",
+      "version": "1.1.29"
+    },
+    {
+      "type": "HaitongTransformRecord",
+      "version": "1.1.23"
+    },
+    {
+      "type": "HaitongTransformRecord",
+      "version": "1.1.22"
+    },
+    {
+      "type": "HaitongTransformRecord",
+      "version": "1.1.25"
+    },
+    {
+      "type": "HaitongTransformRecord",
+      "version": "1.1.24"
+    },
+    {
+      "type": "HaitongTransformRecord",
+      "version": "1.1.16"
+    },
+    {
+      "type": "HaitongTransformRecord",
+      "version": "1.1.15"
+    },
+    {
+      "type": "HaitongTransformRecord",
+      "version": "1.1.18"
+    },
+    {
+      "type": "HaitongTransformRecord",
+      "version": "1.1.17"
+    },
+    {
+      "type": "HaitongTransformRecord",
+      "version": "1.1.14"
+    },
+    {
+      "type": "HaitongTransformRecord",
+      "version": "1.1.13"
+    },
+    {
+      "type": "HaitongTransformRecord",
+      "version": "1.1.19"
+    },
+    {
+      "type": "HaitongNormalizeJsonRecords",
+      "version": "1.1.34"
+    },
+    {
+      "type": "HaitongNormalizeJsonRecords",
+      "version": "1.1.33"
+    },
+    {
+      "type": "HaitongNormalizeJsonRecords",
+      "version": "1.1.32"
+    },
+    {
+      "type": "HaitongNormalizeJsonRecords",
+      "version": "1.1.31"
+    },
+    {
+      "type": "HaitongNormalizeJsonRecords",
+      "version": "1.1.38"
+    },
+    {
+      "type": "HaitongNormalizeJsonRecords",
+      "version": "1.1.37"
+    },
+    {
+      "type": "HaitongNormalizeJsonRecords",
+      "version": "1.1.36"
+    },
+    {
+      "type": "HaitongNormalizeJsonRecords",
+      "version": "1.1.35"
+    },
+    {
+      "type": "HaitongNormalizeJsonRecords",
+      "version": "1.1.39"
+    }
+  ],
+  "authenticated": true
+}

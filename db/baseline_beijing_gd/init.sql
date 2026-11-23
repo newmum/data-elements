@@ -3172,6 +3172,12 @@ CREATE TABLE "baseline_beijing_gd"."nifi_node_t"
 "network_type" VARCHAR(32),
 "network_code" VARCHAR(64),
 "jdbc_driver_locations" CLOB,
+"last_health_status" VARCHAR(16) DEFAULT 'unknown' NOT NULL,
+"last_health_at" TIMESTAMP(6),
+"last_health_message" VARCHAR(1000),
+"last_health_latency_ms" BIGINT,
+"last_health_revision" VARCHAR(64),
+"last_health_check_id" VARCHAR(32),
 NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 -- TABLE nifi_pipeline_external_ref_t
@@ -3553,6 +3559,12 @@ CREATE TABLE "baseline_beijing_gd"."push_node_t"
 "created_time" TIMESTAMP(6) NOT NULL,
 "updated_time" TIMESTAMP(6) NOT NULL,
 "is_del" SMALLINT DEFAULT 0 NOT NULL,
+"last_health_status" VARCHAR(16) DEFAULT 'unknown' NOT NULL,
+"last_health_at" TIMESTAMP(6),
+"last_health_message" VARCHAR(1000),
+"last_health_latency_ms" BIGINT,
+"last_health_revision" VARCHAR(64),
+"last_health_check_id" VARCHAR(32),
 NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 -- TABLE res_catalog_publish_request
@@ -4176,6 +4188,12 @@ CREATE TABLE "baseline_beijing_gd"."service_node_t"
 "created_time" TIMESTAMP(6) NOT NULL,
 "updated_time" TIMESTAMP(6) NOT NULL,
 "is_del" SMALLINT DEFAULT 0 NOT NULL,
+"last_health_status" VARCHAR(16) DEFAULT 'unknown' NOT NULL,
+"last_health_at" TIMESTAMP(6),
+"last_health_message" VARCHAR(1000),
+"last_health_latency_ms" BIGINT,
+"last_health_revision" VARCHAR(64),
+"last_health_check_id" VARCHAR(32),
 NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 -- TABLE srch_analyzer_t
@@ -8660,6 +8678,12 @@ COMMENT ON COLUMN "baseline_beijing_gd"."nifi_node_t"."insecure_tls" IS '允许�
 COMMENT ON COLUMN "baseline_beijing_gd"."nifi_node_t"."is_default" IS '默认节点：1默认，0否';
 COMMENT ON COLUMN "baseline_beijing_gd"."nifi_node_t"."is_del" IS '删除标志：0正常，1删除';
 COMMENT ON COLUMN "baseline_beijing_gd"."nifi_node_t"."jdbc_driver_locations" IS 'NiFi节点JDBC驱动映射：DB_TYPE=/absolute/path，每行一条';
+COMMENT ON COLUMN "baseline_beijing_gd"."nifi_node_t"."last_health_at" IS '最近连通检测完成时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."nifi_node_t"."last_health_check_id" IS '检测发起序号，防止旧检测覆盖新结果';
+COMMENT ON COLUMN "baseline_beijing_gd"."nifi_node_t"."last_health_latency_ms" IS '最近连通检测耗时，单位毫秒';
+COMMENT ON COLUMN "baseline_beijing_gd"."nifi_node_t"."last_health_message" IS '最近连通检测结果说明，凭据已脱敏';
+COMMENT ON COLUMN "baseline_beijing_gd"."nifi_node_t"."last_health_revision" IS '检测对应的节点配置版本，修改配置后旧结果失效';
+COMMENT ON COLUMN "baseline_beijing_gd"."nifi_node_t"."last_health_status" IS '最近连通检测状态：unknown未检测、reachable可连通、unreachable不可连通';
 COMMENT ON COLUMN "baseline_beijing_gd"."nifi_node_t"."network_code" IS '所属网络字典编码（SSWL）';
 COMMENT ON COLUMN "baseline_beijing_gd"."nifi_node_t"."network_type" IS '所属网络：公安网、互联网、专网';
 COMMENT ON COLUMN "baseline_beijing_gd"."nifi_node_t"."node_code" IS '节点编码';
@@ -8953,6 +8977,12 @@ COMMENT ON COLUMN "baseline_beijing_gd"."push_node_t"."created_time" IS '节点�
 COMMENT ON COLUMN "baseline_beijing_gd"."push_node_t"."enabled" IS '是否启用：0停用、1启用';
 COMMENT ON COLUMN "baseline_beijing_gd"."push_node_t"."is_default" IS '是否为所属网络默认节点：0否、1是';
 COMMENT ON COLUMN "baseline_beijing_gd"."push_node_t"."is_del" IS '逻辑删除标志：0正常、1已删除';
+COMMENT ON COLUMN "baseline_beijing_gd"."push_node_t"."last_health_at" IS '最近连通检测完成时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."push_node_t"."last_health_check_id" IS '检测发起序号，防止旧检测覆盖新结果';
+COMMENT ON COLUMN "baseline_beijing_gd"."push_node_t"."last_health_latency_ms" IS '最近连通检测耗时，单位毫秒';
+COMMENT ON COLUMN "baseline_beijing_gd"."push_node_t"."last_health_message" IS '最近连通检测结果说明，凭据已脱敏';
+COMMENT ON COLUMN "baseline_beijing_gd"."push_node_t"."last_health_revision" IS '检测对应的节点配置版本，修改配置后旧结果失效';
+COMMENT ON COLUMN "baseline_beijing_gd"."push_node_t"."last_health_status" IS '最近连通检测状态：unknown未检测、reachable可连通、unreachable不可连通';
 COMMENT ON COLUMN "baseline_beijing_gd"."push_node_t"."last_sync_source_id" IS '最近同步的数据源标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."push_node_t"."last_sync_status" IS '最近配置同步结果：SUCCESS成功、FAILED失败';
 COMMENT ON COLUMN "baseline_beijing_gd"."push_node_t"."last_sync_time" IS '最近一次配置同步尝试时间';
@@ -9426,6 +9456,12 @@ COMMENT ON COLUMN "baseline_beijing_gd"."service_node_t"."credential_ref" IS '�
 COMMENT ON COLUMN "baseline_beijing_gd"."service_node_t"."enabled" IS '启用状态：1启用，0停用';
 COMMENT ON COLUMN "baseline_beijing_gd"."service_node_t"."is_default" IS '默认节点标志：1默认，0非默认';
 COMMENT ON COLUMN "baseline_beijing_gd"."service_node_t"."is_del" IS '删除标志：0正常，1删除';
+COMMENT ON COLUMN "baseline_beijing_gd"."service_node_t"."last_health_at" IS '最近连通检测完成时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."service_node_t"."last_health_check_id" IS '检测发起序号，防止旧检测覆盖新结果';
+COMMENT ON COLUMN "baseline_beijing_gd"."service_node_t"."last_health_latency_ms" IS '最近连通检测耗时，单位毫秒';
+COMMENT ON COLUMN "baseline_beijing_gd"."service_node_t"."last_health_message" IS '最近连通检测结果说明，凭据已脱敏';
+COMMENT ON COLUMN "baseline_beijing_gd"."service_node_t"."last_health_revision" IS '检测对应的节点配置版本，修改配置后旧结果失效';
+COMMENT ON COLUMN "baseline_beijing_gd"."service_node_t"."last_health_status" IS '最近连通检测状态：unknown未检测、reachable可连通、unreachable不可连通';
 COMMENT ON COLUMN "baseline_beijing_gd"."service_node_t"."local_node" IS '本机节点标志：1本机，0远程';
 COMMENT ON COLUMN "baseline_beijing_gd"."service_node_t"."management_url" IS '管理部署地址';
 COMMENT ON COLUMN "baseline_beijing_gd"."service_node_t"."node_code" IS '数据服务节点编码';

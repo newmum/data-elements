@@ -34,6 +34,95 @@ import org.ssssssss.script.MagicScriptContext;
 import org.ssssssss.script.runtime.ExitValue;
 
 class AccessTaskPageMagicTest {
+    @ParameterizedTest
+    @ValueSource(ints = {20, 100})
+    void monitorsRegisteredAndNativeInOnePageWithTenantAndRoleScope(int size) throws Exception {
+        var fixture = new Fixture();
+        fixture.pipeline("registered", TENANT, 0, "registered-task", "DEPLOYED", "shared-group", DSL);
+        fixture.jdbc.update("update nifi_pipeline_t set node_mapping_json=? where id='registered'",
+                "{\"runtimeNodeId\":\"node-default\"}");
+        fixture.task("registered", TENANT, 0, "registered-task", "source-a", "registered", "shared-group", 0);
+        fixture.jdbc.update("update data_access_agg_task_t set source_table_id='source-table',target_table_id='target-table' where tid='registered'");
+        fixture.task("outside-owner", TENANT, 0, "outside-owner", "source-other", null, "task-only", 0);
+        fixture.task("foreign", "tenant-b", 0, "foreign", "source-a", null, "native-001", 0);
+        fixture.jdbc.execute("""
+                alter table db_datasource_t add asset_status int default 1;
+                alter table db_datasource_t add pool_cfg clob;
+                update db_datasource_t set db_name=null,pool_cfg='{"database":"validation_hive"}' where tid='target-a';
+                alter table db_table_t add asset_status int default 1;
+                alter table db_table_t add business_type varchar default '业务表';
+                create table data_access_native_flow_t(tid varchar,tenant_id varchar,node_id varchar,
+                    process_group_id varchar,source_table_id varchar);
+                insert into db_table_t(tid,tenant_id,is_del,datasource_id,table_name,table_name_cn)
+                    values ('other-table','tenant-a',0,'source-other','other_table','其他表');
+                insert into data_access_native_flow_t values
+                    ('own','tenant-a','second','native-001','source-table'),
+                    ('other','tenant-a','second','native-002','other-table'),
+                    ('foreign','tenant-b','second','native-003','foreign-table');
+                """);
+        fixture.addGroup("shared-group", "Running", true);
+        fixture.addGroup("task-only", "Stopped", true);
+        var root = (ObjectNode) TaskRuntimeMagicFixture.emptyRootStatus();
+        var groups = root.withObject("/processGroupStatus/aggregateSnapshot").putArray("processGroupStatusSnapshots");
+        for (int index = 0; index < 102; index++) {
+            var id = index == 0 ? "shared-group" : "native-%03d".formatted(index);
+            groups.addObject().putObject("processGroupStatusSnapshot").put("id", id).put("name", id)
+                    .putArray("processorStatusSnapshots").addObject().putObject("processorStatusSnapshot")
+                    .put("runStatus", index == 0 ? "Running" : "Stopped");
+        }
+        try (var runtime = new TaskRuntimeMagicFixture(TENANT, fixture.runtimeResponse)) {
+            runtime.addNode("second", root);
+            var page = fixture.pageWithRuntime(ALL, Map.of("flowScope", "all", "pageSize", size), runtime);
+            assertThat(page.get("total")).isEqualTo(104L);
+            assertThat(rows(page)).hasSize(size);
+            assertThat(fixture.counter.reads).isEqualTo(6);
+            assertThat(rows(page).stream().filter(row -> row.get("tid").equals("registered")).findFirst().orElseThrow())
+                    .containsEntry("sourcePhysicalTableName", "physical_source")
+                    .containsEntry("sourceDbName", "来源库").containsEntry("targetDbName", "validation_hive");
+            assertThat(rows(page).subList(2, size)).allSatisfy(row -> assertThat(row)
+                    .containsEntry("readOnly", true).containsEntry("recordSource", "native")
+                    .doesNotContainKeys("targetDbName", "targetTableName"));
+            assertThat(rows(page)).filteredOn(row -> row.get("tid").equals("second:native-003"))
+                    .singleElement().satisfies(row -> assertThat(row).doesNotContainKeys("sourceDbName", "sourceTableName"));
+            var next = fixture.pageWithRuntime(ALL, Map.of("flowScope", "all", "pageSize", size, "pageNum", 2), runtime);
+            assertThat(ids(page)).doesNotContainAnyElementsOf(ids(next));
+            assertThat(rows(next)).hasSize(Math.min(size, 104 - size));
+            var running = fixture.pageWithRuntime(ALL, Map.of("flowScope", "all", "taskStatus", 1), runtime);
+            assertThat(ids(running)).containsExactly("registered", "second:shared-group");
+            assertThat(fixture.pageWithRuntime(ALL, Map.of("flowScope", "native", "nifiNodeId", "second"), runtime).get("total"))
+                    .isEqualTo(102L);
+            for (var scope : List.of(ORG, OWNER)) {
+                assertThat(ids(fixture.pageWithRuntime(scope, Map.of("flowScope", "all", "tenantId", "tenant-b"), runtime)))
+                        .containsExactly("registered", "second:native-001");
+                assertThat(rows(fixture.pageWithRuntime(scope, Map.of("flowScope", "native"), runtime)))
+                        .singleElement().satisfies(row -> assertThat(row).containsEntry("tid", "second:native-001")
+                                .containsEntry("sourceDbName", "来源库").containsEntry("sourcePhysicalTableName", "physical_source"));
+                assertThat(fixture.counter.reads).isEqualTo(2);
+            }
+            runtime.verifyPageRootReads(List.of("node-default", "second"));
+            System.out.printf("Unified monitor page=%d: 6 SQL mixed, 2 SQL native-only, one root read per node%n", size);
+        }
+    }
+    @Test void unboundHistoricalTaskIsFoundOnTheOtherNodeBeforeStatusAndNodePaging() throws Exception {
+        var f=new Fixture();
+        f.pipeline("legacy-other",TENANT,0,"历史非默认节点任务","DEPLOYED","only-second",DSL);
+        f.task("legacy-task",TENANT,0,"历史非默认节点任务","source-a","legacy-other","only-second",0);
+        var second=(ObjectNode)TaskRuntimeMagicFixture.emptyRootStatus();
+        second.withObject("/processGroupStatus/aggregateSnapshot").putArray("processGroupStatusSnapshots")
+            .addObject().putObject("processGroupStatusSnapshot").put("id","only-second")
+            .putArray("processorStatusSnapshots").addObject().putObject("processorStatusSnapshot").put("runStatus","Running");
+        try(var runtime=new TaskRuntimeMagicFixture(TENANT,TaskRuntimeMagicFixture.emptyRootStatus())) {
+            runtime.addNode("second",second);
+            for(int size:List.of(20,100)) {
+                var page=f.pageWithRuntime(ALL,Map.of("pageSize",size,"taskStatus",1),runtime);
+                assertThat(page.get("total")).isEqualTo(1L);
+                assertThat(rows(page).getFirst()).containsEntry("nifiNodeId","second").containsEntry("runtimeLegacyNode",true).containsEntry("taskStatus",1);
+                assertThat(f.pageWithRuntime(ALL,Map.of("pageSize",size,"nifiNodeId","second","taskStatus",1),runtime).get("total")).isEqualTo(1L);
+                assertThat(f.pageWithRuntime(ALL,Map.of("pageSize",size,"nifiNodeId","node-default","taskStatus",1),runtime).get("total")).isEqualTo(0L);
+            }
+            runtime.verifyPageRootReads(List.of("node-default","second"));
+        }
+    }
     @Test void nodeBindingFiltersBeforePagingAndKeepsTenantAndOwnerScope() throws Exception {
         var f = new Fixture();
         f.pipeline("p-default",TENANT,0,"默认节点任务","DEPLOYED","same-pg",DSL);
@@ -303,7 +392,7 @@ class AccessTaskPageMagicTest {
 
     private static void assertEnvelope(Map<String, Object> page, int pageNumber, int size, long total) {
         assertThat(page).containsOnlyKeys("pageNum", "pageSize", "total", "list", "runtimeRevision", "runtimeFresh",
-                "runtimeObservedAt", "runtimeMessage", "runtimePartial").containsEntry("runtimeFresh", true);
+                "runtimeObservedAt", "runtimeMessage", "runtimePartial", "runtimeNodeIds", "runtimeNodes", "runtimeWatchNodeIds").containsEntry("runtimeFresh", true);
         assertThat(((Number) page.get("pageNum")).intValue()).isEqualTo(pageNumber);
         assertThat(((Number) page.get("pageSize")).intValue()).isEqualTo(size);
         assertThat(((Number) page.get("total")).longValue()).isEqualTo(total);
@@ -414,7 +503,7 @@ class AccessTaskPageMagicTest {
                         "tableSort", new TableSortMagicModule(), "taskRuntime", runtime.module, "jsons", new JsonModule(),
                         "tenantRuntime", new Session(TENANT), "dataScope", scope));
                 var result = script.execute(context);
-                if (result instanceof Map<?, ?> page && page.containsKey("runtimeRevision")) runtime.verifySingleRootRead();
+                if (result instanceof Map<?, ?> page && page.containsKey("runtimeRevision")) runtime.verifyPageRootReads((java.util.List<?>)page.get("runtimeNodeIds"));
                 return result;
             }
         }

@@ -381,15 +381,18 @@ if (viewLevel == 'table') {
                 textColumn('status_pipeline', 'nifi_process_group_id'), textColumn('task', 'process_group_id'))
             // 节点与流程组联合匹配。离线节点保留待确认，不能混用其他节点的同名组。
             var boundNode = tableRead.jsonText(tableRead.column('status_pipeline', 'node_mapping_json', 'LOB'), 'runtimeNodeId')
-            var effectiveNode = tableRead.coalesce([tableRead.blankAsNull(boundNode), tableRuntimeSnapshot.defaultNodeId])
+            var legacyNode = tableRead.isNull(tableRead.blankAsNull(boundNode))
             var runningConditions = []
             var knownConditions = []
             for (node in tableRuntimeSnapshot.nodes || []) {
-                var matchesNode = tableRead.equal(effectiveNode, node.nodeId)
+                var matchesNode = tableRead.equal(boundNode, node.nodeId)
                 if (node.fresh == true) {
                     for (state in [0,1,2,3]) {
                         for (knownBatch in node.get('groups' + state) || []) {
                             knownConditions.add(tableRead.all([matchesNode,tableRead.in(effectiveGroup,knownBatch)]))
+                        }
+                        for (legacyBatch in node.get('legacyGroups' + state) || []) {
+                            knownConditions.add(tableRead.all([legacyNode,tableRead.in(effectiveGroup,legacyBatch)]))
                         }
                     }
                     var batch = []
@@ -401,6 +404,16 @@ if (viewLevel == 'table') {
                         }
                     }
                     if (batch.size() > 0) { runningConditions.add(tableRead.all([matchesNode, tableRead.in(effectiveGroup, batch)])) }
+                    var legacyRunning = node.legacyRunningGroups || []
+                    var legacyBatch = []
+                    for (legacyId in legacyRunning) {
+                        legacyBatch.add(legacyId)
+                        if (legacyBatch.size()==500) {
+                            runningConditions.add(tableRead.all([legacyNode,tableRead.in(effectiveGroup,legacyBatch)]))
+                            legacyBatch=[]
+                        }
+                    }
+                    if (!legacyBatch.isEmpty()) { runningConditions.add(tableRead.all([legacyNode,tableRead.in(effectiveGroup,legacyBatch)])) }
                 }
             }
             var hasGroup = present(tableRead.blankAsNull(tableRead.trim(effectiveGroup)))
@@ -778,10 +791,11 @@ if (viewLevel == 'table') {
         pageTable.orgName = pageOrgNameMap[text(pageTable.orgId)] || ''
     }
     // 只装饰当前已授权、可达任务；一次节点快照供全部链路复用，不逐任务查 NiFi。
-    var live = tableRuntimeSnapshot == null ? taskRuntime.snapshot() : tableRuntimeSnapshot
     var runtimeRows = []
     for (pageTable in tablePage) { for (task in pageTable.tasks) { runtimeRows.add(task) } }
+    var live = tableRuntimeSnapshot == null ? taskRuntime.snapshotForRows(runtimeRows) : tableRuntimeSnapshot
     taskRuntime.decorate(runtimeRows, live)
+    var pageRuntime = taskRuntime.summary(runtimeRows, live)
     for (task in runtimeRows) { task.currentStatus = task.runtimeState; task.taskStatusText = task.runtimeLabel }
     for (pageTable in tablePage) {
         var ownTasks = pageTable.tasks.filter(task => text(task.sourceTableId) == text(pageTable.tid))
@@ -793,11 +807,14 @@ if (viewLevel == 'table') {
     }
     return {
         datasourceTypeStatistics: datasourceTypeStatistics,
-        runtimeRevision: live.revision,
-        runtimeFresh: live.fresh,
-        runtimePartial: live.partial == true,
-        runtimeObservedAt: live.observedAt,
-        runtimeMessage: live.message,
+        runtimeRevision: live.watchRevision || live.revision,
+        runtimeWatchNodeIds: live.watchNodeIds || [],
+        runtimeNodeIds: pageRuntime.nodeIds,
+        runtimeNodes: pageRuntime.nodes,
+        runtimeFresh: pageRuntime.fresh,
+        runtimePartial: pageRuntime.partial == true,
+        runtimeObservedAt: pageRuntime.observedAt,
+        runtimeMessage: pageRuntime.message,
         viewLevel: 'table',
         scopeType: text(body?.scopeType),
         scopeId: text(body?.scopeId),

@@ -75,7 +75,7 @@ class PushNodeMagicTest {
             assertEquals("reachable", currentNode(fixture).get("healthStatus"));
             assertEquals(2, fixture.reads.get());
 
-            fixture.jdbc.update("UPDATE push_node_t SET base_url=? WHERE tid='node'", upstream.url() + "/missing");
+            fixture.jdbc.update("UPDATE push_node_t SET base_url=?,updated_time=TIMESTAMP '2030-01-01 00:00:00' WHERE tid='node'", upstream.url() + "/missing");
             assertEquals("unknown", currentNode(fixture).get("healthStatus"));
             assertEquals(false, StructuredValues.objectMap(call(fixture, PAGE, check)).get("success"));
             assertEquals("unreachable", currentNode(fixture).get("healthStatus"));
@@ -119,6 +119,7 @@ class PushNodeMagicTest {
 
     private static PushRegistrySyncMagicTest.Fixture fixture(int count, String url) throws Exception {
         var fixture = new PushRegistrySyncMagicTest.Fixture(count);
+        NodeHealthSnapshotMagicTest.columns(fixture.jdbc,"push_node_t");
         for (String id : List.of("node", "foreign-node", "disabled-node")) {
             fixture.jdbc.update("INSERT INTO push_node_t(tid,tenant_id,network_code,node_name,node_code,base_url,enabled,is_default,is_del) "
                             + "VALUES(?,?,'GAW',?,?,?, ?,0,0)",
@@ -126,14 +127,15 @@ class PushNodeMagicTest {
         }
         fixture.jdbc.execute("CREATE TABLE sym_dict_t(tid VARCHAR,tenant_id VARCHAR,dict_code VARCHAR,parent_id VARCHAR,is_del INT)");
         fixture.jdbc.update("INSERT INTO sym_dict_t VALUES('network','ga','SSWL','0',0),('gaw','ga','GAW','network',0),('hlw','ga','HLW','network',0)");
+        fixture.jdbc.update("update push_node_t set updated_time=current_timestamp");
         return fixture;
     }
 
     private static Object call(PushRegistrySyncMagicTest.Fixture fixture, String metadataId, Map<String, Object> body) throws Exception {
         String script = CanonicalMagicSources.byId(metadataId)
-                .replaceAll("(?m)^import (?:tenantRuntime|tableSort|tableRead|'@/common/nifiruntime' as readConfiguration)\\R", "");
+                .replaceAll("(?m)^import (?:tenantRuntime|tableSort|tableRead|'@/common/nifiruntime' as readConfiguration|'@/common/nodehealth' as nodeHealth)\\R", "");
         fixture.reads.set(0);
-        var context = Map.of("body", body, "db", fixture.db, "tenantRuntime", fixture.scope, "tableSort", new TableSortMagicModule(),
+        var context = Map.of("nodeHealth", (org.ssssssss.script.runtime.function.MagicScriptLambdaFunction)(ctx,args) -> NodeHealthSnapshotMagicTest.execute(fixture.db,fixture.jdbc,fixture.scope,args[0]),"body", body, "db", fixture.db, "tenantRuntime", fixture.scope, "tableSort", new TableSortMagicModule(),
                 "readConfiguration", (org.ssssssss.script.runtime.function.MagicScriptLambdaFunction) (ctx, args) -> {
                     throw new AssertionError("Push nodes must not read NiFi connection settings");
                 });

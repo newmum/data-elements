@@ -1183,7 +1183,7 @@
         "ods_nifi_node_page_01"
       ],
       "kind": "api",
-      "baseSha256": "9b75190c7e96ebf8f397a24eb5f069dfd189b75cab32501aa95577a7cb339c23",
+      "baseSha256": "6e70eb941e337e49233113a5368ee6f366765fa0639721320194e09e95e27400",
       "metadataId": "ods_nifi_node_page_01"
     },
     {
@@ -1242,7 +1242,7 @@
         "ods_service_node_page_01"
       ],
       "kind": "api",
-      "baseSha256": "63af1c1c80530446628447d98434f662c9f3931f858587feb5fed9101c78f967",
+      "baseSha256": "67ffe6f524e19efb99d2306b4065bf7ac52a127e49ff52186971f77c91b86858",
       "metadataId": "ods_service_node_page_01"
     },
     {
@@ -1291,7 +1291,7 @@
         "1155bcd0ccad47b49a6c4a94251cf52c"
       ],
       "kind": null,
-      "baseSha256": "876d8f56adc6d5cb1e6812517e509f97eae5ddb5811054f698aef199ddf22233",
+      "baseSha256": "d3cf567d0dfa3d59dec30402736e2e1212a8a10174a51e6c4591ebb3a2e878ed",
       "metadataId": "1155bcd0ccad47b49a6c4a94251cf52c"
     },
     {
@@ -1873,7 +1873,7 @@
         "76fd211790f54164947f276824d19c1d"
       ],
       "kind": null,
-      "baseSha256": "5b0e85ad412251e3f96d1c4fc013090794164282b4b7f450a3a9cfab69a4eee9",
+      "baseSha256": "58db3696064c4815f837797ae677d216ed5e69541ba44696701147f7b75754d9",
       "metadataId": "76fd211790f54164947f276824d19c1d"
     },
     {
@@ -7738,7 +7738,7 @@
       ],
       "kind": "api",
       "metadataId": "nifi_runtime_events_v1",
-      "baseSha256": "dbd52316f02dc0356f5489559a9b8ec2b5114c704985c031874336cb90d1dc9a"
+      "baseSha256": "e310589615bf5797a781714bab00369374695efe87e42f935f785151a54f57e2"
     },
     {
       "path": "api/09.海通流程接口/05.运行状态/group.json",
@@ -9171,6 +9171,16 @@
       "kind": "function",
       "metadataId": "nifi_node_configuration_v1",
       "baseSha256": "478619ac181511a71e71837dd7841ae19c9515ee56a1f0de703a68f3c6ca10af"
+    },
+    {
+      "path": "function/01.通用函数/81.节点连通检测快照.ms",
+      "databasePath": "/magic-api/function/01.通用函数/81.节点连通检测快照.ms",
+      "rowIds": [
+        "2f4d7555e54a4e7ab2f5e1a9e948cc51"
+      ],
+      "kind": "function",
+      "metadataId": "node_health_snapshot_v1",
+      "baseSha256": "b11ba081c9163a9415bdec3022d9744a07fdadf760172be6e99a97b21d60325f"
     },
     {
       "path": "function/01.通用函数/group.json",

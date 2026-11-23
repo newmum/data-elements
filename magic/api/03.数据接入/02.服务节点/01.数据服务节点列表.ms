@@ -15,6 +15,7 @@
   "script": null
 }
 ================================
+import '@/common/nodehealth' as nodeHealth
 import tableSort
 import tenantRuntime
 import httpx
@@ -38,14 +39,16 @@ if (tenantId == '') {
 }
 if (body?.action == 'health') {
     var nodeId = text(body?.nodeId).trim()
-    var node = db.table('service_node_t').columns('local_node', 'base_url', 'management_url')
+    var node = db.table('service_node_t')
         .where().eq('tenant_id', tenantId).eq('tid', nodeId).eq('is_del', 0).selectOne()
     if (node == null) {
         exit 404, '数据服务节点不存在或无权访问'
     }
-    var respond = (success,status,latency,message,url) => ResponseEntity.ok(CommonResponse.success({
-        success:success, status:status, latencyMs:latency, message:message, url:url
-    }))
+    var attempt = nodeHealth({action:'begin'})
+    var respond = (success,status,latency,message,url) => ResponseEntity.ok(CommonResponse.success(nodeHealth({
+        action:'store',kind:'service',node:node,attempt:attempt,
+        result:{success:success,status:status,latencyMs:latency,message:message,url:url}
+    })))
     var local = text(node.localNode == null ? node.local_node : node.localNode).toLowerCase()
     if (local == '1' || local == 'true') {
         return respond(true, 200, 0, '本机 data-elements 数据服务节点可用', 'local')
@@ -90,7 +93,9 @@ if (body?.action == 'health') {
 }
 // 以下从 service_node_t 业务表读取或维护当前操作涉及的记录。
 var rows = db.table('service_node_t').where().eq('tenant_id', tenantId).eq('is_del', 0)
-    .orderBy('is_default', 'desc').orderBy('updated_time', 'desc').select()
+    .orderBy('is_default', 'desc').orderBy('updated_time', 'desc').page(1,1001).list
+if (rows.size()>1000) { exit 413, '服务节点超过1000个，请先缩小配置规模' }
+var health = nodeHealth({action:'view',rows:rows})
 var list = []
 for (row in (rows == null ? [] : rows)) {
     var name = row.nodeName == null ? row.node_name : row.nodeName
@@ -100,7 +105,10 @@ for (row in (rows == null ? [] : rows)) {
     if (keyword != '' && text(name).indexOf(keyword) < 0 && text(code).indexOf(keyword) < 0 && text(domain).indexOf(keyword) < 0 && text(serviceType).indexOf(keyword) < 0) {
         continue
     }
+    var checked = health[text(row.tid)]
     list.add({
+        healthStatus:checked.healthStatus,healthMessage:checked.healthMessage,healthTime:checked.healthTime,
+        healthLatencyMs:checked.healthLatencyMs,healthStale:checked.healthStale,healthConfigChanged:checked.healthConfigChanged,
         tid: row.tid, nodeName: name, nodeCode: code, businessDomain: domain, serviceType: serviceType,
         baseUrl: row.baseUrl == null ? row.base_url : row.baseUrl,
         managementUrl: row.managementUrl == null ? row.management_url : row.managementUrl,

@@ -1,0 +1,206 @@
+请接管并继续完成 D:\Sourcecode\data-elements 的“元数据管理平台 / 数据源管理：真实数据源登记、元数据登记、数据接入及字段治理兼容性测试”目标。
+
+我现在改为只用你这一个新窗口：你同时负责测试、定位问题、开发修复、构建发布和真实数据复测。原先测试窗口（陈宇卓）与开发窗口（程应斌，口述时也叫陈应斌）的分工取消。不要再给原窗口派发工作，也不要向唐迎新/唐迎鑫、肖烨辉或其他窗口发送消息、包、日志或会话。不要为这项任务再新建聊天。
+
+我把这份提示词发给新窗口，就是要求新窗口从已有检查点继续该目标。旧两个窗口仍保持暂停。旧记录里的 paused 是上次停工状态，不表示我要求新窗口永远等待；但也不能一接管就启动全部来源、重放成功数据或覆盖当前服务。先只读接管，明确本任务资源、现役版本及恢复边界，再逐项继续。实际目标尚未全部完成，不要只汇报“已经登记/修复”就结束。
+
+一、最终需要完成什么
+
+1. 基于已掌握的服务器和新附的单工作表服务器清单，寻找实际可以使用的数据库及中间件，核对真实类型、版本、认证方式、端口、库/Schema、已有表或索引/Topic/文件等资源。可以在已授权服务器及 Nacos 中找配置和现有凭据，不要在还没查配置时直接认定“没有对应库”。Nacos 的既有常见账号是 nacos/nacos，只用于已经确认的入口，不做密码穷举。
+2. 在当前公安租户内，按原先已建立的“总队—应用系统—数据源”分类继续登记。应用/源名称要能识别服务器 IP 和数据库类型。每个数据源优先登记约 20 个现有业务对象，允许按实际资源选 10～30 个；不足时登记实际可用对象并说明数量。关系库是表，ES 是索引，Kafka 是 Topic，文件源是实际文件/目录等，不强行假扮成关系表。
+3. 不只测试连通。正式走通：数据源登记/连接验证 → 元数据采集 → 库表及字段登记/注释/分类 → Schema、预览、准确计数 → 接入任务及映射/治理 → 目标模板与 DDL → 部署/执行 → Oracle 与 Hive 两端独立物理验收 → 停止、状态和失败恢复检查。此前已选登记的范围仍要继续完成，不能只挑几个已成功案例重复演示。
+4. 重点覆盖 ES、Kafka、MinIO、FTP/SFTP、MongoDB，并继续 MySQL、Oracle、达梦、金仓、PostgreSQL、ClickHouse、SQL Server、开源 Hive、Huawei Hive/MRS、GaussDB/openGauss、OceanBase 等实际能找到的类型。以系统现有支持类型和盘点证据建立覆盖矩阵。Nacos/Redis 可能只是依赖，不能将一个配置中心或缓存“登记为支持来源”冒充业务接入通过。
+5. MongoDB 还必须覆盖两个方向：作为来源接入其他数据库；作为目标接收其他数据库的真实数据。已有 Mongo→Oracle/Hive 成功，不等于“其他库→Mongo”完成。源/目标登记、集合/字段类型、嵌套值、NULL、写入方式及物理结果都要核验。
+6. 全部优先使用服务器现有业务数据，不要自己建验证表替代实际业务表。确实遍查服务器/已有配置后仍没有某一类型或业务数据时，才使用明确标为“能力验证/缺类型回退”的隔离实例和数据；不得将它计入真实业务验收。原目标允许补齐缺少的中间件，但应先确认现有实例，隔离端口/目录，不能重建或覆盖既有库。
+7. 大表使用真实主键范围或可信采样条件限定实际抽取总量。fetch-size、partition-size 不是总行数上限。先确认总量、计划和队列再启动，避免无界拉取和双写重复。小表可以读完整原表；大表要保存本次真实主键范围及对照证据。
+8. 遇到不兼容，你在这个窗口完成产品修复和回归，再复测原来失败的真实记录。不能只改一个验收脚本、给单张表打补丁、放宽断言、改目标物理类型或手工改原生图，便声称全局能力完成。
+
+二、工程、环境与先读文件
+
+工程：D:\Sourcecode\data-elements。不要被其他窗口的皓月工程工作目录带偏。
+先读适用的 AGENTS.md、docs/data-elements.md，以及：
+C:\Users\Administrator\.codex\skills\data-elements-lowcode\SKILL.md
+Magic 唯一可维护源在 magic\，共享低代码 Vue 在 lowcode\。Java 负责共用技术能力；不要为每个数据源再造业务 Controller 或绕过既有登记/接入流程。先改本地版本源，按范围测试，再发布选定资源并刷新/回读。
+
+以下目录简称：
+R = D:\Sourcecode\data-elements
+V = R\logs\server-datasource-validation
+P = C:\Users\Administrator\.codex\private\data-elements\server-datasource-validation
+PRIVATE = C:\Users\Administrator\.codex\private\data-elements
+
+必须先读的接管材料：
+- V\progress-checkpoint.json：本任务主检查点，passed、partialPasses、unstartedReviewCases、legacyInPlaceUpgradeCases 为关键入口。
+- V\latest-validation-status.json 及 .md：本任务最后的统计和 106 个验收流程。
+- V\stop-after-025-batch-confirmation.json：上次暂停范围。
+- V\defect-025-scoped-root-independent-verification.json 和 defect-025-scoped-fix.md：025 最后完成证据。
+- V\defect-041-host-fix.md、defect-040-fix.md、defect-020-fix.md：已部署但尚有数据验收待续的修复。
+- V\shared-8088-current-window.json：旧协调记录，仅作历史和成员范围参考，不能直接当作新的发布许可。
+- R\logs\all-node-task-coverage\shared-8088-publication.json：旧目标暂停后共享后端发生的后续发布。
+- 随本提示词提供的“服务器清单_数据源测试接管_2026-11-24.xlsx”。同目录 inventory-data.json、server-probe-results-final.json、observed-8088-runtime.json 是本次只读整理的可复核数据，不是新的业务验收。
+
+私有配置和原数据备份在 P / PRIVATE。不要把密码、token、私钥、完整业务行、恢复输入写进 Git、公开日志或交付包。清单只给凭据索引，不含明文密码。原始服务器表仍在：
+D:\svn\08_实施部署\系统部署环境\G区服务器管理2025(新).xlsx
+
+实际绑定：公安 tenantId = 2084109831682699264。控制库 baseline 和公安业务库 baseline_ga 在 192.168.175.86，不能因默认开发配置指向 14 环境就误切环境。
+- 公安库取 P\binding.private.json 的 config。
+- 控制库资源配置参见 PRIVATE\resources-materialization-86.private.json。
+- 会话 P\session.private.json；使用前 GET /portal/sso/session 核实身份和公安租户。失效时走现有正常登录，勿新建超级用户/重置密码来绕过。
+- V\runtime.py / nifi_runtime.py 有本任务既有请求及连接辅助函数。调用前读实现，避免导入带执行副作用的一次性历史脚本。
+
+三、接管时要区分“任务最后验收基线”和“当前正在运行版本”
+
+本任务上次最后完成的 025 批次：8088 PID 22808，R\.runtime\data-element-runtime.jar 的 SHA256：
+c9e4aacb96e2fe0d9849499b08e930598483eec5a7aed1ee1b314adf8f33a729
+025 已完成，不要再把它列为待发布。
+
+2026-11-24 00:02（北京时间）本次只读实查：8088 实际监听 PID 30276，进程 -jar 路径仍为 R\.runtime\data-element-runtime.jar，但 SHA256 已变为：
+022e36945d7bbfd5cfd76ed38f86c745d46892c5b27bb2298c606d17fd46b101
+该包与 R\logs\all-node-task-coverage\shared-8088-publication.json 相符，记录为后续“跨节点流程归属/原生流程展示”发布、窗口已释放。程应斌旧窗口也已收到这个回执并继续暂停。
+因此 c9 只是本任务历史基线，不能用旧 checkpoint 覆盖当前 022e 包。接管时重新核实监听进程、-jar 路径、摘要、有效配置、健康及真实会话；理解后续已合入内容，保留它们。不要把历史 PID 写死到停机命令。不要只按日志里的 PID 判断现役。
+
+共享 NiFi：2.9.0，https://10.231.176.56:8443/nifi-api；本次只读认证和 /flow/about 已成功。
+本任务默认节点 ID 2099412688441966592，原根组 8e5abedd-01a0-1000-dfcf-8985616db6b1。
+本任务最新字段治理内核/函数/NAR 为 1.1.39，本次仍确认 1.1.39 原生注册存在，旧版本保留并存。
+NAR 8627998 字节，SHA256：
+c7479c55990e5dea71acdeddb76ec9b6b0cb042516662527bd94424cad371b6a
+可交付包：V\delivery\haitong-mapping-1.1.39.zip
+独立 NAR：V\delivery\haitong-mapping-1.1.39\haitong-mapping-nar-1.1.39.nar
+主要类型包括 HaitongTransformRecord、HaitongNormalizeJsonRecords、JdbcHaitongDictionaryService、HaitongBinaryRecordReader、HaitongJdbcRecordReader。
+旧版本及引用它们的已成功图都不得删除。新包安装按既有自动装载方式核验，不默认重启 NiFi。
+
+四、双目标和模板，不能改错
+
+原“OB Oracle 与 Huawei Hive 并行接入”模板 ID 2124047023082172416，rev2，保留定义。它后来在其他既有操作中由 PUBLISHED 变为 RETIRED，观察到的时间为 2026-11-23 14:09:31.339+08。这不是 025 引入的变动，不要恢复它、删除它或用旧全行守卫覆盖现状。保护本次接管的 current-before 全行，同时保护历史定义/版本/默认标记；审计状态与时间变化要明示。
+
+本任务使用的独立“Oracle + 开源 Hive”新模板：2124157397211049984，rev2，非默认。原 OB/Huawei 模板不动。
+Oracle 目标 DS 2124144842941931520：192.168.175.32:1521/helowin，Schema VALIDATION_20261121，Oracle11g。
+Hive 目标 DS 2124144855147356160：192.168.173.44:10000，库 validation_parallel_20261121，开源 Hive3.1.2。
+Oracle 原有登记目标表守卫 ID 2124146601575849984 保留。
+Oracle/Hive 凭据分别见 P\oracle-target-profile.private.json、hive-target-profile.private.json；不用重新建账号、重建库或执行全量初始化。
+Huawei Hive 和开源 Hive 不能仅凭兼容 Hive SQL 就视为所有认证/驱动/传输模式一致，MRS 的 Kerberos、HTTP/二进制、ZooKeeper、SSL 配置按实际版本分别核验。
+
+五、已完成的业务验收与资源范围
+
+最后完整关闭的本任务检查点：
+- 已选登记原有对象 517 项，不等于接入全部通过。
+- 两端完整验收通过 102 个现有业务对象，Oracle 与 Hive 各 5184 行。
+- 通过对象分布：MySQL35、金仓31、Oracle16、PostgreSQL10、MinIO3；MongoDB、Elasticsearch、FTP/SFTP、Kafka、ClickHouse、达梦、开源Hive各1。
+- 另有 4 个部分通过案例，以及 020/038/041 等未启动的独立复测案例，详见下文。
+- 106 个本任务验收 PG，212 个完整 local/cluster 持久状态组件，74 个既有引用 Controller Services。最后冻结均无活动线程/活跃采集；保留原 STOPPED / DISABLED 状态。
+- 本次清单整理只读看到公安租户共 56 张数据源卡，可能含后续其他场景；不要据这个总数假定所有卡、草稿及 PG 都属于本任务。
+
+passed 中每项有 pipeline / sourceTableId / proof。先据它们去重，不重跑已成功来源，不让同一批数据追加两次。数据通过与“正式旧图已升级可重新运行”是两个不同结论，021 未完成的图要继续标记不可直接重启。
+
+原有历史目标曾要求“全部删除重登”，那是最初一次性清理阶段的授权，已经执行过。现在是续接；禁止再次清空现有登记、目录、任务或成功目标。只补剩余范围与缺类型。
+
+六、必须继续完成的开发和复测清单
+
+A. 020：产品模板容量建议已发布，另一个原有 MinIO 工作表 12 行仍未验收。
+源表 ID 2124191622555512834，4 个业务字段。原采样“月份”长度2，实际12行中长度到3；没有创建任务或目标、没有启动来源。
+最新模板已将非 SQL/文件类、无显式长度声明的文本采样宽度建议为至少255字符；采样最大值不是已证明上限。关系库真实 VARCHAR(n)、明确长度约束不擅改。
+继续时重新走当前正式模板/计划/DDL，不能复用旧 width2 请求，再受控接入原12行并验收两端所有字段及 ODS。此前另外已成功的 MinIO12行不要重读。
+证据：V\defect-020-additional-minio12-prestart-evidence.json、defect-020-fix.md。
+唯一模板 Magic ID f93a8e653ac6413e89660f5d77d45769，本任务最后运行脚本摘要 ce9d8be897c21a75b13fdf9173b712abed3145503424090da935cd46938ad399（包含后续041归一修复）。新窗口仍应回读现用版本，不以旧摘要强行覆盖其他后续改动。
+
+B. 021：保留来源 ID 和完整水位的“正式原位升级”产品能力尚未完成，不能用临时恢复冒充完成。
+现有 maprun/upgrade 只升级治理节点，不会为旧图补齐新 Normalizer、读取投影、精确/二进制 Reader、新驱动池或 MySQL 读取选项。
+至少覆盖：
+- 原 MinIO ListS3 已成功12行的旧图，保留 ListS3 ID 及全部 state；从现有报告/主检查点定位，不能仅按表名猜。
+- Oracle 文件 BLOB 原2行：pipeline 2124553877633720321，sourceTableId 2124260441789669410；真实数据已通过，正式旧图仍需 Reader / Oracle1.0.4 池能力。
+- PostgreSQL project_branches BINARY 原16行：pipeline 2124561321457967105，sourceTableId 2124204628173750293；数据已通过，正式旧图待升级。
+- MySQL tinyint 原20行：pipeline 2124557937657077761，sourceTableId 2124161097589596192；治理显式 INT 规则已发布，来源旧共享池仍需按任务引用切到 tinyInt1isBit=false 的新正确池。不能直接改共享池影响其他任务。
+做成受控正式产品路径，升级前后保护来源 processor ID、完整 local/cluster state 键值、所有已有队列数和字节、原连线/引用及已通过分支。仅修改需要升级的技术组件；新建适当作用域的正确池并迁移本任务引用，不能清水位或整图重建。
+forceRebuild 只适用于已证明 STOPPED、queue0、全部 source state0 的从未运行场景，不能拿它替代有成功历史的原位升级。
+
+C. 034：Oracle 历史时间在 Hive 中偏移 -343 秒，仍需开发与原3行恢复。
+Oracle来源 PEOPLEINFOR023，sourceTableId 2124228042372530184，pipeline 2124521306136883201。
+3行、6业务列；Oracle3行全字段/ODS正确，Hive3行 birthday 为-343s，流程停止/队列空。
+原 FETCH 私有备份和真实 NiFi2.9 SDK 已可重复证明问题；NiFi Timestamp.toLocalDateTime / java.time 格式化与历史时区/旧日历 carrier 语义不同。
+重要：只改输出 Timestamp carrier 的原型已被否决。infer Reader 的原3行从-343修到0，但显式 Timestamp Format=.SSS 的原本0偏差路径会变成+343。因此不能把 prototype 当 ready；不能统一加343秒、全局改时区或将所有 Timestamp 机械改成 valueOf。
+需要明确 JSON 文本 reader 的 legacy carrier 与 JDBC/Avro 的 absolute instant 合同，保持 instant/nanos/数值载体；补跨 JVM 时区、历史日期边界、现代日期、NULL、纳秒、Reader/Writer矩阵。
+证据：defect-034-native-sdk-original-reproduction.json、defect-034-actual-jdk-carrier-diagnostic.json、defect-034-sdk-typed-original.json、defect-034-sdk-typed-isolated.json。
+修好后只恢复原 Hive3行。先隔离原错误文件并保存内容证据，不重新查询/启动原来源，不重跑已经正确的 Oracle3行。
+
+D. 038：Oracle11g标识符30字节限制，尚未开发/接入。
+金仓 data_center_resource_catalog_info，sourceTableId 2124204581646336015；原14行、37业务列，其中4个原列名33～36字节。
+从未启动来源，无 PG；Oracle目标 ODS_BA33F32FFBDBE 物理不存在，Hive当时跳过；故障 ORA-00972。
+需要服务端派生稳定、无碰撞的目标物理短名，并保持逻辑原字段名/字段ID/血缘不变。DDL、COMMENT、登记、映射、Reader、JDBC/CSV Writer、预览与引用链须一致。不能直接改来源列、截名造成碰撞、丢列/主键、改成文本或只手工改DDL。
+先从该 casePrefix business-existing-jdbc-2124204581646336015 的现有报告读取准确列信息，再修复、回归并进行原14行双目标验收。
+
+E. 039/040：治理入口和下游精确数值 Reader 已发布，但原三表共15行真实恢复尚未做，不能标端到端完成。
+Oracle来源均为 192.168.175.32 / helowin / TEST0809：
+WX_USER：sourceTableId 2124228042498359312，pipeline 2124608465770455041。
+WX_USER2：sourceTableId 2124228042498359313，pipeline 2124609047373619201。
+WX_USER6：sourceTableId 2124228042498359316，pipeline 2124610163435970561。
+每表5行、6业务列及3个ODS；两端现有5行都不是验收通过，HEIGH/heigh 原各2/5存在精度偏差。原 FETCH 仍精确。
+039修 Gov 在普通 JsonTreeReader 把数值 token 先转 Double 之前保留原精度；040修 QueryRecord投影以及最终 Writer 再次 infer 丢精度。HaitongJdbcRecordReader39 只按可信物理 NUMBER/DECIMAL/NUMERIC 字段产生精确 BigDecimal，可同时处理真实 BLOB bytes。独立SDK、实际厂商参数转换/绑定均已验证，但真实目标尚待恢复。
+恢复时，QueryRecord 的 Reader 与最终 Writer 的 Reader 都必须使用正确独立 Reader。number-fields 为一级原字段名 JSON 数组，不带“/”；存在BLOB才配 binary-fields；不设置 delegate-reader，按原非空时间/字符串上限等属性保留语义。
+原输入已取证：P 下各 business-existing-oracle-<sourceTableId>-040-original-recovery-inputs.private.json；公开 witness 同前缀在 V。
+V\capture_original_number_recovery_040.py 已完成三份捕获，不要重新运行它或再查询来源。保留原 UUID/ticket/index/clock/node identity/ODS，用已有原输入做唯一门控恢复。
+Oracle Writer 的常规 MERGE/SYSDATE 可能改 ODS 时间，必须保持原 ODS 并有主键/旧值保护；先备份原目标5行的正确与错误全字段证据。Hive先隔离原精确错误文件，再仅替换这5行，不追加。已正确记录和成功分支不重复跑。
+目前还没有这些案例的 *-040-precision-recovery-state.json 成功闭环。只有物理两端全值精确、ODS保持且正式旧图按021处理后，才能更新完成状态。
+
+F. 041：SQL Server INT IDENTITY + host模式连接装配已修并发布，原2行“能力测试”尚未正式接入。
+来源 10.231.176.53:1433 / test_cbh / dbo.table_cbh_01；DS 2124646965471440896，sourceTableId 2124647027379367937。
+4字段、2行，是服务器原有测试表，明确标 capability，不计入真实业务102对象的新增数量。
+SQL Server15.0.4335.1；已有只读 validation_data_reader，可 SELECT / VIEW DEFINITION。本次整理仍用现有账号固定 SELECT1 成功。凭据 P\sqlserver-53-validation-reader.private.json；正式连接 profile 在 existing-jdbc-2124646965471440896-profile.private.json。
+之前用户授权的账号恢复已经完成，有冷备目录 /root/sqlserver-validation-account-recovery-20261123T071947；不要再次重置SA或重建系统库。
+041HOST已解决：int identity拆基础INT、来源自增血缘保留，目标autoIncrement=0、主键/非空/原字段ID保持；没有jdbc_url的合法host配置通过 DataSourceConfig 临时装配URL，保留TLS选项，不回写原源配置。
+正式 registered/physical Schema均INT，Oracle NUMBER(10,0)+PK且无IDENTITY、Hive INTEGER 的只读DDL预览已通过。旧失败计划曾产生 CLOB主键 ORA-02329，未创建成功物理Oracle目标、未建PG、Hive跳过。
+请用当前正式模板重建正确计划/物化请求，受控读原2行并双目标全字段/ODS验证，不沿用旧CLOB请求，不仅凭Schema INT就算接入通过。
+证据：defect-041-host-runtime-verification.json、defect-041-host-fix.md 及 capability-existing-sqlserver-2124647027379367937-*。
+
+G. 其他覆盖缺口必须继续查，不当作已通过：
+- 192.168.173.31:27017 MongoDB 现有数据库有效凭据未找到；该服务器SSH成功不等于Mongo认证成功。继续查已授权部署配置/Nacos，不盲目重置数据库。
+- GBase 现有账号认证失败；定位版本、服务和配置后复测。
+- OceanBase 192.168.173.55 原连接2013握手问题，host/tunnel/container客户端等旧探查尚未形成成功证据。该机普通MySQL能连不等于OB兼容通过。
+- 517个既选对象中其余未验收的、各源应选10～30个而不足覆盖的、Mongo目标方向、可找到但尚未登记的类型，均建立清晰待办并完成。不能把旧 next 文本中已完成的025/041代码部分重复列为“尚未开发”；以逐项证据区分代码完成、数据恢复待做、环境阻断。
+
+七、近期已修能力及保留要求
+
+025 已完成：ClickHouse默认受管目录必须展开同版主jar + all.jar；显式节点/任务路径保持优先。默认双路径三步原生DBCP验证成功，节点现行NiFi受管jdbc目录（从已保存节点配置读取）只补缺失主jar，原31个JAR摘要保持。
+驱动交付：V\clickhouse-jdbc-0.6.5-nifi.zip，SHA256 f377a86a39a4a7ee50d484781af411fb34e494f4d7dd93b0410b9710e9cdf89d。
+旧候选48c2c1fb夹带其他同期Hive方法，已拒绝从未发布；不要恢复它。真正025只覆盖一个方法 resolveNodeJdbcDriverLocation(String,String) + 一个来源manifest，c9包仅2条目，方法/字段集合和9个内部类保持父包。回归实际候选358项、隔离完整3750项通过；不能将当前整个工作区测试/编译输出直接当作这个包的范围。
+
+Oracle Typed driver 已到1.0.4，SHA ac7da15246257c4b34aaf763d935af1e505085de3a2015e22e9dc3b1b7021c1c，与原 ojdbc8-12.2.0.1 配套，节点 ORACLE_TYPED 映射保留。不要把 NCLOB/BINARY_DOUBLE/BLOB 改普通文本规避绑定；空BLOB与NULL需区分。
+开源 Hive 使用原 standalone + 既有 JDBC 兼容桥接，处理 NiFi2.9 调用 Hive3.1.2 不支持的 metadata 方法；按原 HIVE_OPEN_SOURCE 映射保留。
+018布尔到DECIMAL(1,0)1/0；035数字开头/特殊字段的传输别名及UI校验；036BLOB字节Reader/Hive Base64；037MySQL tinyint(1)读取和可信INT转换等均已有成功数据。不要为修新问题放宽一般类型契约或破坏它们。
+
+八、共享资源与发布纪律，单窗口也要保护别人的独立实例
+
+本任务原8个SAVED、无PG草稿如下，逐列保护：
+2108767080626761728；2109440381984399360；2109441575419113472；2109441711289397248；2118230787094073344；2118230789224779776；2118290963570552832；a310c5fc-4768-47cd-8099-ccca25afdb53。
+4个节点完整字段保护；来源state必须比较完整local/cluster键值，不能只比较条数。Controller Services比较原配置与引用；队列比较数量和字节。
+
+独立技术场景 pipeline 2124747459938230273、task 2124747459938230272、PG 07437dca-01a2-1000-ffff-ffffae1e3b9f 不属于本任务。它位于 R\logs\parallel-shared-mapping，gateway指向18088，其私有JAR在该目录、版本/PID可正常变更。不要查询/冻结/修改其整个派生资源，也不要因为它更新自己的DSL/状态/审计时间而无限阻塞本任务。
+本任务成员应从 master.passed[].pipeline 和 partialPasses[].pipelineId 等既有记录精确取集，不能用“同租户所有SAVED”或“NiFi根目录所有PG”当作自己独占资源。接管后新增本任务资源要同步维护成员清单。
+8088 与18088文件/进程隔离要实查；不能 Stop-Process 所有Java，也不能按旧PID杀其他实例。只在明确范围内用现行启动入口处理8088及其实际JAR。
+
+后续每批修改先备份现役包/所选资源，给准确候选摘要和范围；在本窗口自己的在途写请求/采集/执行到安全边界后，捕获本批新基线，切换后只verify，不覆盖capture前快照。不要复用旧READY/旧快照。若发现非本方改动，先只读辨明资源归属和变动字段，不静默放宽、回写旧时间或还原别人的资源。
+只发布所选Magic/低代码；Java覆盖包须从实际现役父包构建/比对。当前工作区含其他未发布编辑，不能全量mvn打包后直接覆盖运行。比较选定类的方法/字段与依赖，不能只凭“条目数量少”判定范围正确。新功能需要源码可维护、针对性/完整相关回归和真实版本运行检查。
+本任务最后仍有映射运行启动MS、department-datasource、base-detail等既有本地/远端差异，接管先核对，不能全量同步覆盖。后续共享服务发布记录可能更新这些事实，应以实际只读状态与授权范围合并判断。
+结构变更遵循AGENTS：同步各实际方言完整DDL及递增增量，运行检查/导出，禁止已有库执行全量初始化。没有结构变更不制造空增量。
+
+九、什么才算通过
+
+每个案例分别记录：源认证/登记/采集/表字段登记是否通过；接入任务是否能创建/编译/部署；实际读了多少原记录；两端独立真实行数；所有业务字段与3个ODS字段逐值对照；失败队列/原输入是否保全；正式图是否具备后续可用能力。
+不能把以下情况当完成：端口开；预览只看前10行；HTTP200但包装code500/422；Gov成功但Writer失败；目标行数一致但数值/日期/LOB丢失；临时支路成功但正式旧图仍不可升级；仅SDK/单元测试通过。
+Hive准确计数要防陈旧统计/结果缓存，只在当前JDBC会话内关闭相应优化并恢复，不能改全局Hive或重启集群。LOB读完整内容；二进制验证字节长度/SHA及空值/NULL；精确数值不得先Double再补BigDecimal；历史时区、纳秒、大小写引号、数字/中文/@字段名、主键/自增血缘均保持。
+我已明确接受：Oracle可空文本字段空字符串与NULL按Oracle语义等价验收；不要把该约定扩大到数值、非空列、BLOB、其他丢值。
+权限要验真实公安会话及ALL/ORG/OWNER、外租户拒绝。元数据20/100项批量场景检查SQL/原生探查次数，不引入每字段一次查询的N+1。
+
+十、新窗口的执行顺序和交付
+
+1. 先读上述检查点和代码规则；只读复核当前8088/NiFi/租户绑定、资源成员、原失败输入/目标文件和新的服务器清单，给我一份简明“接管成功/已完成/待修/待恢复/环境阻断”状态。发现当前版本和历史不同先保留后续发布，不回滚。
+2. 建立按服务器、类型、DS、已选对象和接入案例的覆盖矩阵；把102个已通过精确去重，保留5184行历史基线，继续其他已选真实对象。未通或缺凭据的先查已有配置、Nacos和正确库，不无限重复错误密码。
+3. 对已部署修复优先闭环原记录：039/040三表、020新增MinIO12行、041原2行能力测试。严格按原输入/预启动状态分开恢复，成功来源不重读。
+4. 并在本窗口补齐021、034、038等实际未完成产品能力，逐批回归/部署/原数据复测。可按依赖调整顺序，但不得漏项或把环境阻断写成通过。
+5. 继续剩余类型和对象的登记/接入，完成Mongo目标方向；每个有限案例结束回到STOPPED、排空或清晰保留失败现场，更新检查点。不要自动把旧102个成功流程批量重跑。
+6. 持续更新 V\progress-checkpoint.json 及可读的最新状态，记录新增真实对象数/每端原始行数、完成的缺陷/仍欠项、正式图能力和物理验收证据。新任务若建立持续goal，其目标就是本提示词的完整登记与接入闭环，旧窗口goal不需要被唤醒。
+7. 最终给我按服务器/数据源类型的完成清单、登记和双写真实结果、Mongo双向结果、修复及回归证据、最新字段治理组件与兼容后端/驱动说明，以及确实无法解决的外部条件。不要因为工作量大就停在计划或几张演示表，也不要把“修复待复测”写成全部完成。
+
+附：这次服务器表的范围与用法
+
+这次仅对既有清单/已掌握连接中的150个明确地址做只读复核，未扫网段。111台有ICMP应答，其中60台验证到SSH/SFTP、数据库或NiFi可用入口，正常白色；51台ping通但没有验证到可用登录，整行灰色列在最下面。39个无ping应答的地址按我要求从新Excel中排除。
+白色不等于该服务器每一种数据库的账号都可用，须看“本次连接结果”；灰色也不等于机器报废，只表示现有入口/凭据没有验证成功。候选端口只是开放端口，不代表已确认服务版本。禁ping或临时网络故障也会被过滤，因此不能据此删除平台已有来源或丢弃本任务待办。
+本次复核时间跨2026-11-23深夜到2026-11-24零时，逐行给出北京时间；当前状态后续可能变化，实际连接前再核验。旧业务目标和原窗口没有因为制作这两份接管文件而恢复运行。

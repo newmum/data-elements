@@ -22,6 +22,27 @@ import org.ssssssss.script.runtime.ExitValue;
 /** Executes the editable resources against real SQL, including mixed tenant IDs and legacy menu scope. */
 class TaskCategoryWarehouseScopeMagicTest {
     @ParameterizedTest @ValueSource(ints={20,100})
+    void ingestionFindsLegacyUnboundTasksOnNonDefaultNodeForAllAndRunningTabs(int count) throws Exception {
+        var f=fixture(count);
+        var second=(com.fasterxml.jackson.databind.node.ObjectNode)TaskRuntimeMagicFixture.emptyRootStatus();
+        second.withObject("/processGroupStatus/aggregateSnapshot").putArray("processGroupStatusSnapshots")
+            .addObject().putObject("processGroupStatusSnapshot").put("id","only-second")
+            .putArray("processorStatusSnapshots").addObject().putObject("processorStatusSnapshot").put("runStatus","Running");
+        for(int i=0;i<count;i++) {
+            insertTask(f,"legacy-other-"+i,"table-"+i,"warehouse-"+i,List.of("warehouse-"+i));
+            f.jdbc.update("update nifi_pipeline_t set nifi_process_group_id='only-second',node_mapping_json=null where id=?","pipe-legacy-other-"+i);
+        }
+        var counter=f.countQueries();
+        for(String state:List.of("all","1","3")) {
+            counter.reads=0;
+            var page=(Map<?,?>)runValue(f,INGEST_PAGE,Map.of("viewLevel","table","pageSize",count,"datasourceIds",List.of("db"),"accessStatus",state),
+                TaskRuntimeMagicFixture.emptyRootStatus(),runtime->runtime.addNode("second",second));
+            assertThat(((Number)page.get("total")).intValue()).isEqualTo(state.equals("3")?0:count);
+            if(!state.equals("3")) assertThat(page.get("runtimeNodeIds")).isEqualTo(List.of("second"));
+            assertThat(counter.reads).isLessThanOrEqualTo(11);
+        }
+    }
+    @ParameterizedTest @ValueSource(ints={20,100})
     void ingestionCombinesNodeAndGroupBeforeCountingAndPaging(int count) throws Exception {
         var f=fixture(count);
         var response=(com.fasterxml.jackson.databind.node.ObjectNode)TaskRuntimeMagicFixture.emptyRootStatus();
@@ -42,7 +63,7 @@ class TaskCategoryWarehouseScopeMagicTest {
             var result=(Map<?,?>)runValue(f,INGEST_PAGE,Map.of("viewLevel","table","pageSize",count,"datasourceIds",List.of("db"),"accessStatus",state),response,
                 runtime->{runtime.addNode("second",running);runtime.addNode("offline",null);});
             assertThat(((Number)result.get("total")).intValue()).isEqualTo(state.equals("all")?count:count/4);
-            assertThat(result.get("runtimePartial")).isEqualTo(true);
+            assertThat(result.get("runtimePartial")).isEqualTo(state.equals("all"));
             if(!state.equals("all")) assertThat((List<?>)result.get("list")).allSatisfy(row->assertThat(((Map<?,?>)row).get("accessStatus")).isEqualTo(state));
             assertThat(counter.reads).isEqualTo(11);
         }
@@ -752,7 +773,7 @@ class TaskCategoryWarehouseScopeMagicTest {
             configure.accept(runtime);
             inputs.put("taskRuntime", runtime.module);
             Object result = MagicScript.create(script, null).execute(new MagicScriptContext(inputs));
-            if (result instanceof Map<?, ?> page && page.containsKey("runtimeRevision")) runtime.verifySingleRootRead();
+            if (result instanceof Map<?, ?> page && page.containsKey("runtimeRevision")) runtime.verifyPageRootReads((java.util.List<?>)page.get("runtimeNodeIds"));
             return result;
         }
     }

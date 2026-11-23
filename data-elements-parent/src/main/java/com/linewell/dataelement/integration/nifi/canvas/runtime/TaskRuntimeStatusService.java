@@ -49,6 +49,7 @@ public class TaskRuntimeStatusService {
         volatile boolean disconnected;
         List<Entry> sources;
         String defaultNodeId;
+        Set<String> requestedIds;
         Subscriber(Entry entry) {
             this(List.of(entry), null);
         }
@@ -56,10 +57,9 @@ public class TaskRuntimeStatusService {
             this.sources = sources;
             this.defaultNodeId = defaultNodeId;
             Runnable remove = () -> {
-                boolean removed = false;
+                boolean removed = unconfigured.remove(this);
                 for (Entry entry : sources) removed |= entry.subscribers.remove(this);
                 if (removed) connections.release();
-                unconfigured.remove(this);
                 if (renewal != null) renewal.cancel(false);
                 if (heartbeat != null) heartbeat.cancel(false);
             };
@@ -131,8 +131,8 @@ public class TaskRuntimeStatusService {
         } catch (Exception ignored) { /* One disconnected viewer must not terminate shared sampling. */ }
     }
     private void broadcast(Entry entry) {
-        entry.subscribers.forEach(s -> s.offer(s.defaultNodeId == null ? event(entry)
-                : aggregateEvent(s.sources)));
+        entry.subscribers.forEach(s -> s.offer(s.requestedIds != null ? aggregateEvent(s.sources, s.requestedIds)
+                : s.defaultNodeId == null ? event(entry) : aggregateEvent(s.sources)));
     }
     private Map<String, Object> event(Entry entry) {
         // Invalidation metadata only: never send the root tree or another role's task IDs.
@@ -164,9 +164,17 @@ public class TaskRuntimeStatusService {
     }
 
     private List<Entry> samplingEntries() {
+        return samplingEntries(null);
+    }
+    private List<Entry> samplingEntries(Set<String> nodeIds) {
+        return samplingEntries(nodeIds, false);
+    }
+    private List<Entry> samplingEntries(Set<String> nodeIds, boolean includeDefault) {
         var configurations = resolver.samplingConfigurations();
         var result = new ArrayList<Entry>();
         for (var row : configurations) {
+            if (nodeIds != null && !nodeIds.contains(Objects.toString(row.get("tid"), ""))
+                    && !(includeDefault && row == configurations.getFirst())) continue;
             RuntimeNode node = resolver.runtimeNode(row);
             Entry entry = currentNode(node);
             entry.name = Objects.toString(row.get("node_name"), node.code());
@@ -192,33 +200,46 @@ public class TaskRuntimeStatusService {
     }
 
     private Map<String, Object> aggregateEvent(List<Entry> sources) {
+        return aggregateEvent(sources, null);
+    }
+    private Map<String, Object> aggregateEvent(List<Entry> sources, Set<String> requestedIds) {
         int available = (int) sources.stream().filter(this::fresh).count();
+        int total = requestedIds == null ? sources.size() : requestedIds.size();
         String revision = sources.stream().map(e -> e.node.id() + "=" + revision(e)).sorted()
                 .collect(java.util.stream.Collectors.joining("|"));
         long observed = sources.stream().mapToLong(e -> e.observedAt).filter(t -> t > 0).min().orElse(0);
         return Map.of("revision", revision.isEmpty() ? "unavailable" : revision,
-                "fresh", !sources.isEmpty() && available == sources.size(),
-                "partial", available > 0 && available < sources.size(),
+                "fresh", requestedIds != null ? available == total : total > 0 && available == total,
+                "partial", available > 0 && available < total,
                 "observedAt", observed, "checkedAt", sources.stream().mapToLong(e -> e.attemptedAt).max().orElse(0),
-                "message", sources.isEmpty() ? "当前租户尚未配置 NiFi 节点，请在节点管理中配置并启用后查看实时状态"
+                "message", requestedIds != null ? total == 0 ? "本页暂无已部署任务节点"
+                        : available == total ? "" : "本页任务关联 " + total + " 个节点，" + available + " 个已确认，" + (total - available) + " 个待确认"
+                        : sources.isEmpty() ? "当前租户尚未配置 NiFi 节点，请在节点管理中配置并启用后查看实时状态"
                         : available == sources.size() ? "" : "部分节点状态待确认，已连通节点的任务继续显示");
     }
 
     /** Read each configured node once, with a bounded first-response wait and shared backoff. */
     public Map<String, Object> snapshotAll() {
+        return snapshotForNodes(null);
+    }
+    public Map<String, Object> snapshotForNodes(Set<String> nodeIds) {
+        return snapshotForNodes(nodeIds, false);
+    }
+    public Map<String, Object> snapshotForNodes(Set<String> nodeIds, boolean includeDefault) {
         TenantContext.requireTenantId();
-        List<Entry> sources = samplingEntries();
+        List<Entry> sources = samplingEntries(nodeIds, includeDefault);
         CompletableFuture<?>[] pending = sources.stream().map(this::scheduleRead).toArray(CompletableFuture[]::new);
         try { CompletableFuture.allOf(pending).get(1200, TimeUnit.MILLISECONDS); }
         catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); }
         catch (ExecutionException | TimeoutException ignored) { /* Slow nodes complete independently. */ }
-        var result = new HashMap<String, Object>(aggregateEvent(sources));
+        var result = new HashMap<String, Object>(aggregateEvent(sources, nodeIds));
         var nodes = new ArrayList<Map<String, Object>>();
         var configurations = new LinkedHashMap<String, Object>();
         for (Entry entry : sources) {
             var node = snapshot(entry);
             node.put("nodeName", entry.name);
             node.put("networkCode", entry.networkCode);
+            node.put("nodeUrl", entry.node.baseUrl());
             node.put("runningGroups", fresh(entry) ? entry.index.groups().entrySet().stream()
                     .filter(e -> e.getValue().running()).map(Map.Entry::getKey).toList() : List.of());
             nodes.add(node);
@@ -227,7 +248,53 @@ public class TaskRuntimeStatusService {
         result.put("nodes", nodes);
         result.put("byNode", configurations);
         result.put("defaultNodeId", sources.isEmpty() ? "" : sources.getFirst().node.id());
+        // Historical flows did not persist a node ID. Resolve their actual PG across
+        // reachable nodes; duplicated PGs are ambiguous and must never use the default.
+        var owners = new HashMap<String, String>();
+        var ambiguous = new HashSet<String>();
+        for (Entry entry : sources) if (fresh(entry)) for (String group : entry.index.groups().keySet()) {
+            if (owners.putIfAbsent(group, entry.node.id()) != null) ambiguous.add(group);
+        }
+        ambiguous.forEach(owners::remove);
+        result.put("legacyOwners", owners);
+        result.put("ambiguousGroups", ambiguous);
+        for (var node : nodes) {
+            Entry entry = sources.stream().filter(e -> e.node.id().equals(node.get("nodeId"))).findFirst().orElseThrow();
+            for (int status = 0; status <= 3; status++) {
+                final int wanted = status;
+                var ids = fresh(entry) ? entry.index.groups().entrySet().stream()
+                        .filter(e -> entry.node.id().equals(owners.get(e.getKey())) && e.getValue().taskStatus() == wanted)
+                        .map(Map.Entry::getKey).toList() : List.<String>of();
+                var chunks = new ArrayList<List<String>>();
+                for (int offset = 0; offset < ids.size(); offset += 500) chunks.add(ids.subList(offset, Math.min(offset + 500, ids.size())));
+                node.put("legacyGroups" + status, chunks);
+            }
+            node.put("legacyRunningGroups", fresh(entry) ? entry.index.groups().entrySet().stream()
+                    .filter(e -> entry.node.id().equals(owners.get(e.getKey())) && e.getValue().running())
+                    .map(Map.Entry::getKey).toList() : List.of());
+        }
+        var watchSources = sources.stream().filter(e -> {
+            try { e.node.requireValidConnection(); return true; } catch (RuntimeException invalid) { return false; }
+        }).toList();
+        result.put("watchNodeIds", watchSources.stream().map(e -> e.node.id()).toList());
+        result.put("watchRevision", aggregateEvent(watchSources).get("revision"));
         return result;
+    }
+
+    /** Only sample the current tenant's explicitly selected nodes. Missing bindings stay unavailable. */
+    public SseEmitter subscribeForNodes(Set<String> nodeIds) {
+        TenantContext.requireTenantId();
+        var sources = samplingEntries(nodeIds);
+        if (!connections.tryAcquire()) throw new org.springframework.web.server.ResponseStatusException(
+                org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE, "实时状态连接繁忙，请稍后重试");
+        var subscriber = new Subscriber(sources, "scoped");
+        subscriber.requestedIds = Set.copyOf(nodeIds);
+        sources.forEach(e -> e.subscribers.add(subscriber));
+        if (sources.isEmpty()) unconfigured.add(subscriber);
+        subscriber.heartbeat = clock.scheduleAtFixedRate(() -> subscriber.offer(aggregateEvent(sources, nodeIds)), 15, 15, TimeUnit.SECONDS);
+        subscriber.offer(aggregateEvent(sources, nodeIds));
+        subscriber.renewal = clock.schedule(subscriber.emitter::complete, 55, TimeUnit.SECONDS);
+        return subscriber.emitter;
     }
 
     public SseEmitter subscribeAll() {
@@ -289,7 +356,8 @@ public class TaskRuntimeStatusService {
         Map<String, Object> value = new HashMap<>();
         value.put("taskStatus", taskStatus); value.put("runtimeState", state); value.put("runtimeLabel", label);
         value.put("running", group != null && group.running() && Boolean.TRUE.equals(snapshot.get("fresh")));
-        value.put("runtimeFresh", Boolean.TRUE.equals(snapshot.get("fresh")) && (!deployed || group != null));
+        value.put("runtimeFresh", !deployed && !"RUNNING".equals(lifecycle)
+                || Boolean.TRUE.equals(snapshot.get("fresh")) && (!deployed || group != null));
         value.put("runtimeObservedAt", snapshot.get("observedAt")); value.put("runtimeMessage", snapshot.get("message"));
         value.put("invalidProcessorCount", group == null ? 0 : group.invalidCount());
         return value;

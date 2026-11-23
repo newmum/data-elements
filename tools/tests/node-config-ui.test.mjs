@@ -8,8 +8,8 @@ const source = fs.readFileSync(new URL('../../lowcode/09.系统管理/02.用户�
 const script = source.match(/<script setup>([\s\S]*?)<\/script>/)[1].replace(/^import .*;\r?\n/gm, '');
 function fixture(post) {
   const successes = [];
-  const create = new Function('ref', 'reactive', 'computed', 'nextTick', 'onMounted', 'resolveComponent', '$common', 'ElMessage', 'ElMessageBox', `${script}\nreturn {loadNodes,syncNodes,pushNodes,networkOptions,openPushSync,closePushSync,previewPushSync,commitPushSync,pushSyncNode,pushSyncPage,pushSyncRows,pushSyncPageRows,pushCanSync,pushSyncStage,pushSyncPreview,pushSyncError,pushPreviewLoading,pushSyncVisible,saveNode,formRef,dialogMode};`);
-  const ui = create(ref, reactive, computed, nextTick, () => {}, name => name, {post}, {success: value => successes.push(value),error:()=>{}}, {});
+  const create = new Function('ref', 'reactive', 'computed', 'nextTick', 'onMounted', 'resolveComponent', '$common', 'ElMessage', 'ElMessageBox', `${script}\nreturn {testNode,healthDescription,serviceNodes,loadNodes,syncNodes,pushNodes,networkOptions,openPushSync,closePushSync,previewPushSync,commitPushSync,pushSyncNode,pushSyncPage,pushSyncRows,pushSyncPageRows,pushCanSync,pushSyncStage,pushSyncPreview,pushSyncError,pushPreviewLoading,pushSyncVisible,saveNode,formRef,dialogMode};`);
+  const ui = create(ref, reactive, computed, nextTick, () => {}, name => name, {post}, {success: value => successes.push(value),error:()=>{},warning:()=>{}}, {});
   ui.networkOptions.value = [{value:'GAW',label:'公安网'}];
   return {ui,successes};
 }
@@ -43,4 +43,18 @@ test('disabled node cannot start preview',async()=>{
 test('double click during asynchronous form validation submits only once',async()=>{
   const calls=[];let resolveValidation;const {ui}=fixture(async(url,body)=>{calls.push({url,body});return {list:[]};});ui.dialogMode.value='push';ui.formRef.value={validate:()=>new Promise(resolve=>{resolveValidation=resolve;})};
   const first=ui.saveNode();const second=ui.saveNode();resolveValidation(true);await Promise.all([first,second]);assert.equal(calls.filter(call=>call.url === '/ods/node/save').length,1);
+});
+
+test('persisted health is restored for extraction, push and service with revision and age hints',async()=>{
+ const {ui}=fixture(async()=>({list:[{tid:'validation',healthStatus:'reachable',healthTime:'2026-11-23 22:30:00',healthStale:true}]}));
+ for(const mode of ['sync','push','service']){
+  await ui.loadNodes(mode);const node=ui[mode==='sync'?'syncNodes':mode==='push'?'pushNodes':'serviceNodes'].value[0];
+  assert.equal(node.healthStatus,'reachable');assert.match(ui.healthDescription(node),/最近检测可连通/);assert.match(ui.healthDescription(node),/15分钟/);
+ }
+ assert.match(ui.healthDescription({healthStatus:'unknown',healthConfigChanged:true,healthTime:'previous'}),/配置已修改/);
+});
+test('superseded probe reads current snapshot and never paints obsolete success',async()=>{
+ const calls=[];const {ui}=fixture(async(url,body)=>{calls.push(body);return body.action==='health'?{success:true,persisted:false}:{list:[{tid:'validation',healthStatus:'unreachable'}]};});
+ const node={id:'validation',healthStatus:'unknown'};await ui.testNode(node,'sync');
+ assert.equal(calls.length,2);assert.equal(node.healthStatus,'unknown');assert.equal(ui.syncNodes.value[0].healthStatus,'unreachable');
 });

@@ -602,7 +602,7 @@
       "type": "1",
       "sortOrder": 3,
       "path": "03.数据接入/2.3.1 数据汇聚(data-convergence).vue",
-      "baseSha256": "46e23b595c153ae2a91dd3d0af5317fa14360970860d517a8a068fce3c2b3f4c"
+      "baseSha256": "60a6859ebaeac6e5e3e54f6a8b800512addb950248f56bc6478535eabe89407f"
     },
     {
       "id": "2066782132212649984",
@@ -702,7 +702,7 @@
       "type": "1",
       "sortOrder": 4,
       "path": "03.数据接入/2.3.2 接入监控(access-monitoring).vue",
-      "baseSha256": "1d061059c15cc2407c23e9e217fd50360d917cf3d7e4a7eac44b56fe527580ab"
+      "baseSha256": "cdb52ca6b09c9640440eb3a6697e83bbc58ee23c424798ee14b3a67195e18b64"
     },
     {
       "id": "2059545106555981824",
@@ -1332,7 +1332,7 @@
       "type": "1",
       "sortOrder": 1,
       "path": "09.系统管理/02.用户与权限/NiFi 节点配置(nifi-node-config).vue",
-      "baseSha256": "2bcf28747cf293d4350ec118d22152343a985dfa01df521fa12b696a1eeb3bf4"
+      "baseSha256": "a825619e68c2834c9f498445ec1a3f3c58ae095b911f78d20d608c8634a07df6"
     },
     {
       "id": "178716197774800001",
