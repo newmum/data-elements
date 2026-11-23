@@ -160,3 +160,40 @@
 .modeling-properties .execution-actions>span{flex-basis:100%}
 .modeling-properties .execution-actions>.model-ant-btn{flex:1;padding-inline:8px}
 .modeling-properties .execution-status{line-height:1.7}
+
+/* Full viewport configuration uses Ant Design's body portal, independent of canvas geometry. */
+.modeling-config-drawer{--model-bg:#fff;--model-stage:#f6f8fc;--model-text:#303746;--model-muted:#707a8b;--model-line:#e2e7f0;color:var(--model-text)}
+[data-theme=dark] .modeling-config-drawer{--model-bg:#242932;--model-stage:#1e232b;--model-text:#dfe5ee;--model-muted:#a4aebd;--model-line:#39404c}
+.modeling-config-drawer .model-ant-drawer-content{background:var(--model-bg);height:100%;color:var(--model-text)}
+.modeling-config-drawer .model-ant-drawer-header,.modeling-config-drawer .model-ant-drawer-footer{border-color:var(--model-line)}
+.modeling-drawer-heading{display:grid;gap:5px;min-width:0}.modeling-drawer-heading>small{font-size:12px;font-weight:400;color:var(--model-muted)}
+.modeling-drawer-heading .modeling-node-heading>strong{font-size:18px;line-height:27px}.modeling-drawer-heading .modeling-node-heading>.model-ant-input{font-size:16px}
+.modeling-drawer-content{min-height:0;overflow:auto;flex:1;overscroll-behavior:contain}.modeling-drawer-start{min-height:0;flex:1;display:flex;flex-direction:column}
+.modeling-drawer-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.modeling-drawer-actions>span{flex:1;font-size:12px;color:var(--model-muted)}
+.modeling-selection-summary{padding:18px 14px;display:grid;gap:12px;line-height:1.7}.modeling-selection-summary p{margin:0;overflow-wrap:anywhere}.modeling-selection-summary small{font-size:12px;color:var(--model-muted)}
+.modeling-configure{position:absolute;right:7px;top:7px;width:25px;height:25px;display:grid;place-items:center;border:1px solid var(--model-line);border-radius:5px;background:var(--model-stage);color:var(--model-muted);cursor:pointer}
+.modeling-configure:hover,.modeling-configure:focus-visible{color:var(--node-color);border-color:var(--node-color)}.modeling-card{padding-right:36px}
+.modeling-start-label{cursor:inherit}.modeling-start-label strong,.modeling-start-label small{pointer-events:none}
+.execution-start-editor{display:flex;flex-direction:column;flex:1;min-height:0;font-size:14px;color:var(--model-text)}
+.execution-content{flex:1;min-height:0;overflow:auto;padding:24px;overscroll-behavior:contain}.execution-content>.model-ant-alert,.execution-content>.execution-status{margin-top:18px}
+.execution-introduction{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:24px}.execution-introduction h3{font-size:20px;line-height:1.5;margin:0 0 6px}.execution-introduction p{line-height:1.7;margin:0;color:var(--model-muted);font-size:13px}
+.execution-start-editor .execution-section{border:1px solid var(--model-line);border-radius:8px;padding:20px;min-width:0}.execution-section h4{font-size:15px;line-height:1.5;margin:0 0 16px;font-weight:600}
+.execution-trigger-options{display:grid;gap:12px;width:100%}.execution-trigger-options>.model-ant-radio-wrapper{align-items:flex-start;padding:12px;margin:0;border:1px solid var(--model-line);border-radius:6px;background:var(--model-bg)}
+.execution-trigger-options>.model-ant-radio-wrapper-checked{border-color:#4b8fc2;background:color-mix(in srgb,#4b8fc2 5%,var(--model-bg))}.execution-trigger-options strong{display:block;font-size:14px;font-weight:500;margin-bottom:4px}.execution-trigger-options .execution-trigger-description{display:block;font-size:13px;line-height:1.7;color:var(--model-muted)}
+.execution-start-grid{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(240px,1fr);gap:20px;margin-top:20px;align-items:start}
+.execution-start-editor .execution-field-pair{gap:14px;margin-bottom:16px}.execution-start-editor .execution-field-pair label{font-size:14px;color:var(--model-text);min-width:0;line-height:1.6}.execution-start-editor label>small,.execution-field-help{font-size:12px;color:var(--model-muted);line-height:1.7}
+.execution-start-editor .execution-engine{grid-template-columns:minmax(160px,1fr) 1.7fr;margin:20px 0 0;align-items:center}.execution-first-run{display:grid;gap:7px}.execution-first-run>small{font-size:12px;color:var(--model-muted);line-height:1.7}
+.execution-example{padding:12px;border-radius:6px;background:var(--model-stage);color:var(--model-muted);font-size:12px;line-height:1.8;margin:18px 0 0}
+.execution-mode-note{font-size:14px;line-height:1.9}.execution-mode-note p{margin:0 0 12px}.execution-mode-note p:last-child{font-size:13px;color:var(--model-muted)}
+.execution-start-editor .execution-summary{background:var(--model-stage);border-color:var(--model-line);padding:20px}.execution-start-editor .execution-summary dl>div{font-size:13px;gap:12px;line-height:1.8}.execution-start-editor .execution-summary dt{color:var(--model-muted)}.execution-start-editor .execution-summary dd{text-align:right}.execution-start-editor .execution-summary h5{border-color:var(--model-line);font-size:13px}.execution-start-editor .execution-summary ol{line-height:1.9;font-size:13px}.execution-start-editor .execution-summary small,.execution-start-editor .execution-summary p{font-size:12px;line-height:1.8;color:var(--model-muted)}
+.execution-start-editor .execution-actions{flex-shrink:0;margin:0;padding:16px 24px;border-top:1px solid var(--model-line);background:var(--model-bg);flex-wrap:wrap;gap:10px}.execution-start-editor .execution-actions>span{flex:1;font-size:12px;line-height:1.6;color:var(--model-muted)}
+.execution-start-editor .execution-status{font-size:13px;line-height:1.8}
+@media(max-width:700px){.execution-start-grid{grid-template-columns:minmax(0,1fr)}.execution-content{padding:18px}.execution-start-editor .execution-section{padding:16px}.execution-start-editor .execution-engine{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:600px){.modeling-config-drawer .model-ant-drawer-content-wrapper{width:100%!important}.execution-start-editor .execution-actions>span,.modeling-drawer-actions>span{flex-basis:100%}.execution-start-editor .execution-actions>.model-ant-btn{flex:1}.modeling-config-drawer .model-ant-drawer-header{padding-inline:18px!important}}
+@media(prefers-reduced-motion:reduce){.modeling-config-drawer .model-ant-drawer-content-wrapper{transition:none!important}}
+
+/* Script controls reserve the editor for code; diagnostics appear only on demand. */
+.modeling-script-status{justify-content:space-between;gap:8px;padding-bottom:10px;min-width:0}.modeling-script-context,.modeling-script-actions{display:flex;align-items:center;gap:8px;min-width:0;flex-wrap:wrap}.modeling-script-actions{margin-left:auto;justify-content:flex-end}.modeling-script-status button{margin-left:0}.modeling-script-context>.model-ant-select{width:124px;flex-shrink:0}.modeling-script-context>span{font-size:12px;white-space:nowrap}
+.modeling-sql-diagnostics-button[data-severity=error],.modeling-sql-diagnostics-button[data-severity=error]:hover{color:#c4423a}.modeling-sql-diagnostics-button[data-severity=warning],.modeling-sql-diagnostics-button[data-severity=warning]:hover{color:#b47a11}
+.modeling-sql-diagnostic-list{max-width:min(460px,calc(100vw - 64px));max-height:min(480px,60vh);overflow:auto;overscroll-behavior:contain;font-size:13px;line-height:1.8}.modeling-sql-diagnostic-list ul{padding-left:18px;margin:0}.modeling-sql-diagnostic-list li+li{margin-top:12px}.modeling-sql-diagnostic-list strong{font-weight:600}.modeling-sql-diagnostic-list p{margin:3px 0 0;overflow-wrap:anywhere}.modeling-sql-diagnostic-list li[data-severity=error]>strong{color:#c4423a}.modeling-script-menu-item{display:grid;gap:4px}.modeling-script-menu-item>strong{font-size:13px;font-weight:500}.modeling-script-menu-item>small{font-size:12px;color:var(--model-muted,#7b8493)}
+@media(max-width:600px){.modeling-script{padding:12px}.modeling-script-context{width:100%}.modeling-script-actions{width:100%;justify-content:flex-end}.modeling-script-status{gap:8px}}

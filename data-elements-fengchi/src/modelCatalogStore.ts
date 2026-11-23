@@ -6,15 +6,15 @@ import type {TableDef} from './data';
 export const MODEL_CATALOG_SCHEMA_VERSION=1 as const;
 export const MODEL_DOCUMENT_MAX_CHARACTERS=2_000_000;
 const PREFIX='fengchi:model-catalog:v1:';
-export type ModelDocument={schemaVersion:1;startName?:string;startPosition?:{x:number;y:number};sourceId?:string;sourceLabel?:string;id:string;name:string;category:string;nodes:ModelNode[];executionSettings:ExecutionSettings;importedTables:Record<string,TableDef>;revision:number;createdAt:string;updatedAt:string};
-export type ModelDraft=Pick<ModelDocument,'startName'|'startPosition'|'id'|'name'|'category'|'sourceId'|'sourceLabel'|'nodes'|'executionSettings'|'importedTables'>;
+export type ModelDocument={schemaVersion:1;sqlDraft?:{text:string;baseVersion:string};startName?:string;startPosition?:{x:number;y:number};sourceId?:string;sourceLabel?:string;id:string;name:string;category:string;nodes:ModelNode[];executionSettings:ExecutionSettings;importedTables:Record<string,TableDef>;revision:number;createdAt:string;updatedAt:string};
+export type ModelDraft=Pick<ModelDocument,'sqlDraft'|'startName'|'startPosition'|'id'|'name'|'category'|'sourceId'|'sourceLabel'|'nodes'|'executionSettings'|'importedTables'>;
 export type ModelStorage=Pick<Storage,'length'|'key'|'getItem'|'setItem'>;
 const fail=(message:string):never=>{throw new Error(message)};
 const record=(value:unknown):value is Record<string,unknown>=>Boolean(value)&&typeof value==='object'&&!Array.isArray(value);
 function text(value:unknown,max:number,label:string){if(typeof value!=='string'||!value.trim()||value.length>max)fail(`${label}为空或过长`);return value as string}
 function check(value:unknown):asserts value is ModelDocument {
  if(!record(value)||value.schemaVersion!==1)fail('模型版本不兼容，未覆盖原记录');
- const d=value as Record<string,unknown>;if(d.startName!==undefined)text(d.startName,100,'启动节点名称');if(d.startPosition!==undefined){if(!record(d.startPosition)||typeof d.startPosition.x!=='number'||typeof d.startPosition.y!=='number'||!Number.isFinite(d.startPosition.x)||!Number.isFinite(d.startPosition.y)||d.startPosition.x<12||d.startPosition.x>3200||d.startPosition.y<12||d.startPosition.y>2000)fail('开始节点位置无效')} text(d.id,100,'模型 ID');text(d.name,80,'模型名称');text(d.category,80,'业务分类');
+ const d=value as Record<string,unknown>;if(d.sqlDraft!==undefined){if(!record(d.sqlDraft)||typeof d.sqlDraft.text!=='string'||d.sqlDraft.text.length>100000||typeof d.sqlDraft.baseVersion!=='string'||d.sqlDraft.baseVersion.length>500000)fail('手写 SQL 草稿格式无效或过长')}if(d.startName!==undefined)text(d.startName,100,'启动节点名称');if(d.startPosition!==undefined){if(!record(d.startPosition)||typeof d.startPosition.x!=='number'||typeof d.startPosition.y!=='number'||!Number.isFinite(d.startPosition.x)||!Number.isFinite(d.startPosition.y)||d.startPosition.x<12||d.startPosition.x>3200||d.startPosition.y<12||d.startPosition.y>2000)fail('开始节点位置无效')} text(d.id,100,'模型 ID');text(d.name,80,'模型名称');text(d.category,80,'业务分类');
  if(!Number.isSafeInteger(d.revision)||Number(d.revision)<1)fail('模型修订号无效');
  for(const key of ['createdAt','updatedAt'])if(typeof d[key]!=='string'||!Number.isFinite(Date.parse(d[key] as string)))fail('模型保存时间无效');
  if(!record(d.executionSettings)||!['flink','spark'].includes(String(d.executionSettings.engine))||!['batch','stream'].includes(String(d.executionSettings.mode)))fail('模型执行设置无效');
