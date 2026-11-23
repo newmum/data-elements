@@ -10,6 +10,35 @@ import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class GlobalJsonRecordServicesTest {
+    @Test void jdbcCodecCopiesOnlyExistingFormatPropertiesWithoutAdditionalCatalogReads() {
+        var rows=HiveServiceFixtures.codecs().stream().<com.fasterxml.jackson.databind.JsonNode>map(row->row.deepCopy()).toList();
+        var expected=Map.of("Timestamp Format","yyyy-MM-dd HH:mm:ss.SSS","Allow Comments","true","Max String Length","8 MB");
+        rows.stream().filter(row->row.path("component").path("id").asText().equals("global-json-reader")).forEach(row->{
+            var props=((com.fasterxml.jackson.databind.node.ObjectNode)row.path("component")).putObject("properties");
+            expected.forEach(props::put);props.put("Schema Access Strategy","infer-schema").put("Starting Field Strategy","ROOT_NODE");
+        });
+        when(nifi.listControllerServices("root")).thenReturn(rows);
+        var selected=GlobalJsonRecordServices.resolve(nifi);
+        for(int count:List.of(20,100))for(int i=0;i<count;i++)assertThat(selected.jdbcReaderFormatProperties()).isEqualTo(expected);
+        verify(nifi).listControllerServices("root");verify(nifi).get("/flow/process-groups/root",com.fasterxml.jackson.databind.JsonNode.class);verifyNoMoreInteractions(nifi);
+    }
+    @Test void exactNumberPolicyIsExplicitAndUsesTheExistingRootCatalogOnly() {
+        for(var settings:List.of(Map.of("Schema Access Strategy","infer-schema","Starting Field Strategy","ROOT_NODE"),
+                Map.of("Schema Access Strategy","schema-text","Starting Field Strategy","ROOT_NODE"),
+                Map.of("Schema Access Strategy","infer-schema","Starting Field Strategy","NESTED_FIELD"))) {
+            var client=mock(NifiClient.class);
+            when(client.get("/flow/process-groups/root",com.fasterxml.jackson.databind.JsonNode.class)).thenReturn(HiveServiceFixtures.rootFlow());
+            var services=HiveServiceFixtures.codecs().stream().<com.fasterxml.jackson.databind.JsonNode>map(row->row.deepCopy()).toList();
+            services.stream().filter(row->row.path("component").path("id").asText().equals("global-json-reader")).forEach(row->{
+                var props=((com.fasterxml.jackson.databind.node.ObjectNode)row.path("component")).putObject("properties");settings.forEach(props::put);
+            });
+            when(client.listControllerServices("root")).thenReturn(services);
+            var resolved=GlobalJsonRecordServices.resolve(client);
+            boolean expected=settings.get("Schema Access Strategy").equals("infer-schema")&&settings.get("Starting Field Strategy").equals("ROOT_NODE");
+            for(int count:List.of(20,100))for(int i=0;i<count;i++)assertThat(resolved.preservesJsonNumbers()).isEqualTo(expected);
+            verify(client).get("/flow/process-groups/root",com.fasterxml.jackson.databind.JsonNode.class);verify(client).listControllerServices("root");verifyNoMoreInteractions(client);
+        }
+    }
     private final NifiClient nifi=mock(NifiClient.class);
     GlobalJsonRecordServicesTest(){when(nifi.get("/flow/process-groups/root",com.fasterxml.jackson.databind.JsonNode.class)).thenReturn(HiveServiceFixtures.rootFlow());}
     @Test void resolvesRealRootIdsAndIgnoresSameNamedTaskServices() {

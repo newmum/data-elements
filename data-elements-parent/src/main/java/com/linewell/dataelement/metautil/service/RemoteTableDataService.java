@@ -205,7 +205,7 @@ public class RemoteTableDataService {
         properties.setProperty("user", config.getUsername());
         properties.setProperty("password", config.getPassword());
         JdbcDriverPropertyResolver.apply(properties, config.getJdbcProperties());
-        return DriverManager.getConnection(config.buildJdbcUrl(), properties);
+        return DriverManager.getConnection(com.linewell.dataelement.metautil.jdbc.MySqlIntegerReadPolicy.url(config.buildJdbcUrl()), properties);
     }
 
     private String quoteQualifiedIdentifier(Connection connection, String identifier) throws Exception {

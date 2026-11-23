@@ -41,7 +41,7 @@ public final class ValueTypes {
             case "TINYINT", "SMALLINT", "MEDIUMINT", "INTEGER", "INT2", "INT4" -> "INT";
             case "BIGINT", "INT8" -> "LONG";
             case "NUMERIC", "NUMBER", "DEC" -> "DECIMAL";
-            case "FLOAT", "REAL", "DOUBLE PRECISION" -> "DOUBLE";
+            case "FLOAT", "REAL", "DOUBLE PRECISION", "FLOAT4", "FLOAT8", "BINARY_FLOAT", "BINARY_DOUBLE" -> "DOUBLE";
             case "BOOL", "BIT" -> "BOOLEAN";
             case "TIMESTAMP", "DATETIME2", "SMALLDATETIME", "DATETIME64" -> "DATETIME";
             case "TIMESTAMP WITH TIME ZONE", "TIMESTAMP WITH LOCAL TIME ZONE", "TIMESTAMPTZ", "DATETIMEOFFSET" -> "INSTANT";
@@ -69,7 +69,11 @@ public final class ValueTypes {
                 case "LONG" -> value instanceof Boolean b?(b?1L:0L):integer(value,"LONG",Long.MIN_VALUE,Long.MAX_VALUE).longValueExact();
                 case "DECIMAL" -> {
                     requireDecimalDimensions(precision, scale);
-                    BigDecimal original = decimal(value);
+                    // Oracle's NUMBER(1,0) is the physical carrier for a native SQL
+                    // boolean. Keep this exact contract separate from ordinary decimals
+                    // and from textual values such as "true".
+                    BigDecimal original = value instanceof Boolean flag && precision == 1 && scale == 0
+                            ? flag ? BigDecimal.ONE : BigDecimal.ZERO : decimal(value);
                     if (precision == 0) yield original;
                     BigDecimal n;
                     try { n = original.setScale(scale, rounding); }
@@ -121,10 +125,13 @@ public final class ValueTypes {
         return value instanceof Number ? decimal(value).stripTrailingZeros() : value;
     }
     public static String field(String name) {
+        if (name != null && name.codePoints().anyMatch(Character::isISOControl))
+            throw new MappingException("INVALID_FIELD", "字段引用必须是一级字段标识");
         String n = name == null ? "" : name.trim().replaceFirst("^/", "");
-        // Mongo/Elasticsearch commonly expose @timestamp as a literal top-level key.
+        // Registered SQL columns can start with digits; they remain literal keys,
+        // never array indexes or executable SQL. Mongo/ES also expose @timestamp.
         // Keep nested paths, SQL fragments and control characters outside this contract.
-        if (!n.matches("[\\p{L}_@][\\p{L}\\p{N}_$#]{0,127}")) throw new MappingException("INVALID_FIELD", "字段引用必须是一级字段标识");
+        if (!n.matches("[\\p{L}\\p{N}_@][\\p{L}\\p{N}_$#]{0,127}")) throw new MappingException("INVALID_FIELD", "字段引用必须是一级字段标识");
         return n;
     }
     public static long bytes(Object value, int depth) {

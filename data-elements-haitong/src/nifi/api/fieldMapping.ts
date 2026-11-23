@@ -81,6 +81,13 @@ export async function fieldMappingCapabilities() {
 export interface FunctionParameter { index: number; name: string; type: string; required: boolean; defaultValue: unknown; choices: string[] }
 export type FunctionParameterSchema = FunctionParameter[] & { additionalParametersAllowed?: boolean };
 export interface MappingTableRef { datasourceId: string; tableId?: string; table?: string }
+export interface MappingTargetRef { nodeId: string; label?: string; reference: MappingTableRef }
+export interface MappingTargetSnapshot extends MappingTargetRef { fields: (FieldMeta & { comment?: string; physicalType?: string })[]; hash?: string }
+export interface MappingSchemaContract extends Record<string, unknown> {
+  source?: (FieldMeta & { comment?: string; physicalType?: string })[];
+  target?: (FieldMeta & { comment?: string; physicalType?: string })[];
+  targets?: MappingTargetSnapshot[];
+}
 export interface MappingVersionRow { tid: string; node_id?: string; plan_revision?: number; draft_revision?: number; plan_hash?: string; resource_key?: string; version_no?: number; created_time: string }
 export const mappingVersions = {
   dictionaryTables: async (params:{datasourceId:string;search?:string;page?:number;size?:number}) => (await apiClient.get<{rows:{tid:string;table_name:string;table_name_cn?:string}[];total:number;page:number;size:number}>('/dict/tables',{params})).data,
@@ -91,7 +98,7 @@ export const mappingVersions = {
   saveTemplate: async (name:string,spec:UnifiedMappingDraft) => (await apiClient.post('/template/save',{name,spec})).data,
   importTemplate: async (id:string,body:Record<string,unknown>) => (await apiClient.post<UnifiedMappingDraft>(`/template/import?id=${encodeURIComponent(id)}`,body)).data,
   snapshot: async (name:string,definition:Record<string,unknown>) => (await apiClient.post<{id:string;hash:string;version:number}>('/dict/snapshot',{name,definition})).data,
-  schema: async (sourceRef?:MappingTableRef,targetRef?:MappingTableRef,verifyPhysical=false) => (await apiClient.post<Record<string,unknown>>('/map/schema',{sourceRef,targetRef,verifyPhysical})).data,
+  schema: async (sourceRef?:MappingTableRef,targetRef?:MappingTableRef,verifyPhysical=false,targetRefs:MappingTargetRef[]=[]) => (await apiClient.post<MappingSchemaContract>('/map/schema',{sourceRef,targetRef,verifyPhysical,...(targetRefs.length?{targetRefs}:{})})).data,
   sample: async (spec:UnifiedMappingDraft,sourceRef:MappingTableRef,limit:number) => (await apiClient.post<PreviewResponse&{sampleRows:Record<string,unknown>[]}>('/map/sample',{spec,sourceRef,limit},{transformResponse:[preciseJsonResponse]})).data,
   upgrade: async (pipelineId:string,nodeId:string,expectedPlanHash:string) => {const pipeline=(await apiClient.get<{updatedAt:number}>(`/flow/detail?id=${encodeURIComponent(pipelineId)}`)).data;return (await apiClient.post('/maprun/upgrade',{pipelineId,nodeId,expectedUpdatedAt:pipeline.updatedAt,expectedPlanHash,start:true})).data;},
   startPublished: async (pipelineId:string) => {const pipeline=(await apiClient.get<{updatedAt:number}>(`/flow/detail?id=${encodeURIComponent(pipelineId)}`)).data;return (await apiClient.post('/maprun/start',{pipelineId,expectedUpdatedAt:pipeline.updatedAt})).data;},
@@ -123,6 +130,12 @@ export type MappingRule = {
   transform?: TransformSpec;
   comment?: string;
   enabled?: boolean;
+  sourceType?: string;
+  targetType?: string;
+  targetNullable?: boolean;
+  targetLength?: number;
+  targetPrecision?: number;
+  targetScale?: number;
 };
 
 export interface FieldMappingSpec {
@@ -134,6 +147,7 @@ export interface FieldMappingSpec {
   onTypeMismatch?: 'CAST' | 'SKIP_ROW' | 'FAIL';
   defaultLocale?: string;
   mappings: MappingRule[];
+  schemaContract?: MappingSchemaContract;
 }
 
 export const emptyFieldMappingSpec = (): FieldMappingSpec => ({

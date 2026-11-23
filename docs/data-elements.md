@@ -372,6 +372,14 @@ Oracle／OB Oracle的物理对象采用数据库引号语义：未引号段按�
 
 同一身份规则延续到NiFi提取和来源SQL下推：按引号逐段解析所有者与表名，保留段内大小写、点号及转义引号，不能对整条限定名称转大写或直接按点号拆分。只有单段表名才补配置的Schema。含引号的Oracle族对象采用独立编译指纹，修复后需要重新发布对应提取流程；普通表的部署指纹不因这项规则变化而改变。
 
+### ClickHouse整数跨库映射
+
+ClickHouse的登记选择卡片、列表、类型筛选、字典选择、工作台、登记审查、数据探查、接入列表和海通画布统一使用官方柱形品牌标志 `clickhouse.svg`，`ClickHouse`、`ch`、`MRS_CLICKHOUSE` 等现有别名归一到同一图标。资源随前端本地打包，不按行请求图片或依赖外网；海通来源组件及实际类型为ClickHouse的JDBC目标使用相同矢量图。来源与归属说明见[海通图标说明](data-elements-haitong.md#source-icon-assets)。
+
+数据源登记卡片及海通来源组件把ClickHouse排列在Elasticsearch之后，复用已登记连接、JDBC探查和接入任务链路。连接默认HTTP/JDBC端口8123、数据库与用户名default，生成`jdbc:clickhouse://主机:端口/数据库`；保留手工端口和已保存连接。账号未配置密码时可留空，仍由实际ClickHouse服务器验证认证；用户名和数据库不可为空。列表、类型筛选、登记审查和数据探查使用同一类型身份，不将已有ClickHouse卡片误判为其他数据库。界面发布使用选定低代码热刷新，不重建已登记源或来源表。
+
+ClickHouse的Int8/16/32/64和UInt8/16/32/64按原生完整值域生成数字字段，Nullable/LowCardinality包装保留原类型血缘与已有可空约束。Int8必须按来源解释，不能套用PostgreSQL的int8（BIGINT）别名。Int64默认Oracle NUMBER(19,0)、Hive BIGINT；UInt64默认Oracle NUMBER(20,0)、Hive DECIMAL(20,0)，不能因驱动样本或已有精度值较小而收窄成有符号64位。登记快照、建表模板、DDL及治理目标契约共同保持数值类型；用户明确选择其他类型时不再强行恢复来源类型。超出已适配的整数宽度仍返回可编辑的文本及未适配提示，不声称已获目标库原生数值支持。值域及别名参见[ClickHouse整数类型](https://clickhouse.com/docs/reference/data-types/int-uint)。
+
 ### 登记接入申请字段
 
 `db_table_t.access_request_status`为0未申请、1待处理、2已受理，默认0；`access_requested_by`保存认证申请人标识，`access_requested_at`保存申请时间。申请字段不替代`asset_status`登记进度或NiFi实时状态。MySQL时间使用DATETIME(6)，达梦使用TIMESTAMP(6)。接口和状态规则见[接入任务状态契约](data-elements-haitong.md#access-task-lifecycle)。
@@ -733,6 +741,7 @@ Use the released `my-db` page at `/register/register-sjkb/list` as the default v
 - Validate Kerberos/Hive on the host that will run the service or NiFi process, because local desktop paths and credentials are not portable to a server.
 - Hive 分区入湖除已有 HiveServer2/HDFS 配置外，服务端 MRS 客户端目录须提供含 `hive.metastore.uris` 的 `hive-site.xml`，Kerberos 模式沿用已登记服务端 principal/keytab 及 `core-site.xml`。部署按本次计划一次调用 Metastore `getPartitionsByNames` 批量读取真实分区 Location（最多2000个），保留自定义分区目录；不能按分区逐条 DESCRIBE，也不能猜测或覆盖目录。目标表和 NiFi CSV Writer 均须使用 Ctrl-A 文本格式；缺少实际分区、权限或配置时拒绝部署，不将数据写入未核验路径。
 - Hive 分隔符核验按 `field.delim`、`serialization.format`、默认 Ctrl-A 的优先级解析，兼容 `DESCRIBE FORMATTED` 的控制字符转义、数字字节值及格式化空白；去除空白时不能吞掉真实的 U+0001。真实格式冲突须显示目标库表、属性、实际值及要求值，与连接/认证失败分别报告；不能自动修改已有表或全局 Writer 来绕过冲突。
+- Hive 准确计数、分页、分组与数据预览必须读取当前文件，不能把 Metastore 的 `numRows` 估计或陈旧查询缓存作为准确结果。JDBC 读取期间仅在当前连接关闭 `hive.compute.query.using.stats` 及受支持的 `hive.query.results.cache.enabled`，完成或失败后恢复借用前的布尔值；恢复失败驱逐物理连接，不将脏会话归还池。旧 Hive 明确返回结果缓存配置未定义时可跳过该可选项，权限或网络错误不能当作不支持。不会修改全局配置、表统计或数据；目录统计仍为估计，不能冒充实时准确行数。会话准备与恢复的 SQL 数固定，不按返回行数增长，其他数据库无该额外开销。
 
 
 <a id="magic-first-data-access"></a>
@@ -900,6 +909,7 @@ Use the released `my-db` page at `/register/register-sjkb/list` as the default v
   - `业务对标` is now `统一格式`.
   - `表数据查看` should be `表数据预览`.
 - 物化建表的接入方式由登记快照返回中文名称和独立代码，覆盖抽取 `explore`、推送 `receive`、抓取 `capture`、上报 `upload`、代理 `proxy`，兼容 `extract/extraction`、`push`、`pull`、`report`、`agent` 别名及大小写；字段处理中不能复用中文名称变量保存代码，页面也须兼容历史代码响应。推送、上报等非抽取来源允许没有来源 `db_type` 和连接，读取已登记字段及生成目标 DDL 不得因此失败；分区预览只对抽取或历史未记录方式的受支持数据库探查来源，其他来源返回不支持自动探查并保留手工目标分区。目标库仍必须具有有效数据库类型。来源表与最多20个目标库一次批量验证当前租户有效记录，分区预览固定两次业务查询，不逐目标补查；本契约不新增数据库列。
+- 登记页面的只读物理字段名按一级字面字段校验，保留原字段 ID、名称与顺序。首字符允许字母、数字、下划线或 `@`，后续还可包含 `$`、`#`，总长 1–128 个字符；数字开头、中文和 `@timestamp` 不因旧英文命名规则被强制改名。路径、数组下标、SQL 片段和控制字符仍拒绝。该校验只检查当前已加载字段，不另发逐字段请求，服务端仍按可信租户和真实登记关联校验字段身份。
 - 字段登记的统一格式 `DATE`（日期）/`DATETIME`（时间）必须进入 ODS 物化字段、DDL 与接入映射：日期使用目标库的 `DATE`；时间按目标方言使用 Oracle/达梦/OceanBase Oracle 的 `DATE`、PostgreSQL/人大金仓/Hive 等的 `TIMESTAMP`、MySQL/OceanBase MySQL 的 `DATETIME`、SQL Server 的 `DATETIME2`。多选目标库时分别生成类型，DDL 预览与提交元数据使用同一份目标字段。来源物理字段类型保持不变，字符型日期/时间由生成的字段映射显式转换，空字符串转 NULL；转换规则同时保存在画布 DSL 与字段映射记录中。仅采用已保存的登记配置，尊重显式清空，不从字段名猜测时间格式，也不自动改造已经存在的目标物理表。
 - 物化建表多选 ODS 目标库时，默认勾选、建表预览、物化提交和后台任务创建统一遵循资源中心 ODS 分域的配置顺序（`sym_dict_t.sort_no`，同序号按分域 ID 稳定排序），不能按复选框点击顺序、传入数组顺序或物化表创建时间决定链路。配置为 `huiju` 在 `yuanshi` 前时，生成原来源表→汇聚库、汇聚库→原始库的独立级联任务；管理员调整分域位置后，新建任务采用新的顺序。仅处理所选且已逐 ID 校验租户、角色范围与来源关联的目标，后台在锁定来源登记的事务内按分域 ID 分段读取有效绑定，按已授权数据源的准确 ID 匹配，并用数据库既有的空值顺序比较各批次的最早分域；非 ODS 分发目标保留显式选择顺序。每个任务和画布只包含一个目标库，任务记录的来源表/来源库必须是该跳的真实来源；在原来源表的展开列表汇总全部任务。后续跳直接映射前一跳物化字段，保留 `ODS_UUID`、`ODS_RKSJ`、`ODS_GXSJ` 和翻译结果，不重复生成主键或重复治理。重复提交按真实来源与目标复用任务；历史多目标画布只在明确确认后重建，任一目标校验失败不得留下部分任务。删除任务只影响指定任务；物化表仍被下游任务使用时拒绝物理删除。
 - 新建物化建表的目标数据源默认勾选当前租户、角色可见的 ODS 分域编码 `huiju`、`yuanshi` 对应数据源，并按上述分域配置顺序排列；只存在其中一个时选择该分域，均不存在时留空。不得用名称或选项首项猜测，也不覆盖已有目标表查看时的选择。接入任务外层列表的“数据表”和“接入任务”列不提供排序。
@@ -1063,6 +1073,8 @@ lowcode/
 <a id="resource-layout--租户菜单差异需要先确认"></a>
 
 #### 租户菜单差异需要先确认
+
+源数据管理平台不配置独立的租户管理、菜单管理菜单入口。权限管理页面继续提供菜单维护、角色功能授权和菜单数据范围配置；相关组件与接口保留，不能把菜单记录清理扩大为功能退役。
 
 共享低代码只有一套组件树，租户菜单目前并不完全一致：
 

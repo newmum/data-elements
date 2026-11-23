@@ -108,6 +108,8 @@
         bordered
         class="mb-2"
       ></JsonForm>
+      <el-alert v-if="nodeConfigurationProblem" :title="nodeConfigurationProblem" type="error"
+        :closable="false" show-icon class="mb-2" />
       <el-alert v-if="editable && accessTemplatesError" :title="accessTemplatesError" type="warning"
         :closable="false" show-icon class="mb-2">
         <el-button text type="primary" @click="openTemplateManagement">前往模板管理</el-button>
@@ -1308,18 +1310,27 @@ const getDefaultNifiNodeId = (networkCode?: any) => {
 };
 
 const resolveNifiNodeId = (value: any, networkCode?: any) => {
-  const candidates = networkCode ? getNifiNodesByNetwork(networkCode) : nifiNodeOptions.value;
-  if (value && candidates.some((item: any) => item.value === value)) {
-    return value;
-  }
-  return getDefaultNifiNodeId(networkCode);
+  // 仅初次未选择时预填默认项。已保存或用户选择的节点绝不替换为另一节点。
+  return String(value || "").trim() || getDefaultNifiNodeId(networkCode);
+};
+
+const nodeConfigurationProblem = ref("");
+const checkNifiNodeSelection = (nodeId: any, networkCode?: any) => {
+  const id = String(nodeId || "").trim();
+  const node = nifiNodeOptions.value.find((item: any) => String(item.value) === id);
+  if (!id) return "请选择数据接入节点";
+  if (!node) return `所选数据接入节点（ID：${id}）已停用、不存在或无访问权限，请重新选择`;
+  if (networkCode && node.networkCode !== String(networkCode).trim()) return `所选数据接入节点「${node.nodeName}」不属于当前选择的网络，请重新选择`;
+  if (node.configurationValid !== true) return node.configurationMessage || `未取得数据接入节点「${node.nodeName}」的配置检查结果，请重新加载`;
+  return "";
 };
 
 /** Keep the persisted API payload flat while presenting a true two-level selector in the drawer. */
 const syncNifiNodeSelection = (value: any) => {
   const path = Array.isArray(value) ? value : [];
   const networkCode = String(path[0] || "").trim();
-  const nodeId = resolveNifiNodeId(path[1], networkCode);
+  const nodeId = String(path[1] || "").trim();
+  nodeConfigurationProblem.value = checkNifiNodeSelection(nodeId, networkCode);
   jsonFormRef.value?.setValue?.({
     nifiNodePath: networkCode && nodeId ? [networkCode, nodeId] : [],
     nifiNetworkCode: networkCode,
@@ -1400,6 +1411,9 @@ const loadManagedNifiNodeOptions = (response: any) => {
       networkName: item.networkName || item.network_name || "",
       nodeName: item.nodeName || item.node_name || item.name || "",
       baseUrl: item.baseUrl || item.base_url || "",
+      configurationValid: item.configurationValid === true,
+      configurationMessage: item.configurationMessage || "",
+      authenticationMode: item.authenticationMode || "",
       isDefault: nodeDefault(item),
     }))
     .filter((item: any) => item.label && item.value);
@@ -1544,7 +1558,7 @@ const normalizeFormPayload = (data: any) => {
     targetDbIds,
     dbType: selected?.dbType || data?.dbType || "",
     nifiNetworkCode,
-    nifiNodeId: resolveNifiNodeId(selectedNodeId, nifiNetworkCode),
+    nifiNodeId: String(selectedNodeId || "").trim(),
   };
 };
 
@@ -1588,6 +1602,7 @@ const init = async () => {
   sourceDefinitionMessage.value = "";
   partitionError.value = "";
   loadError.value = "";
+  nodeConfigurationProblem.value = "";
   sourcePreflightError.value = "";
   reuseTypeNotice.value = "";
   materializationResults.value = [];
@@ -1675,7 +1690,7 @@ const init = async () => {
     } else if (propList.dbId) {
       propList.dbId = normalizeDatasourcePaths(propList.dbId);
     }
-    const existingNode = nifiNodeOptions.value.find((item: any) => item.value === propList.nifiNodeId);
+    const existingNode = nifiNodeOptions.value.find((item: any) => String(item.value) === String(propList.nifiNodeId));
     if (props.type === "add") {
       // The source datasource registration owns the network selection.  On a
       // new materialization, retain that network and preselect its managed
@@ -1697,6 +1712,7 @@ const init = async () => {
     propList.nifiNodePath = propList.nifiNetworkCode && propList.nifiNodeId
       ? [propList.nifiNetworkCode, propList.nifiNodeId]
       : [];
+    nodeConfigurationProblem.value = checkNifiNodeSelection(propList.nifiNodeId, propList.nifiNetworkCode);
     syncTargetTableNameInput(propList.tableName);
     formData.value = { ...propList };
     await nextTick();
@@ -1756,7 +1772,8 @@ const currentDdlInput = async () => {
   if (templateBindingIncomplete.value) {
     throw new Error('请选择已在模板管理中配置好目标库的模板');
   }
-  if (!data.nifiNodeId) throw new Error("请选择可用的数据接入节点");
+  nodeConfigurationProblem.value = checkNifiNodeSelection(data.nifiNodeId, data.nifiNetworkCode);
+  if (nodeConfigurationProblem.value) throw new Error(nodeConfigurationProblem.value);
   if (!data.targetDbIds.length) throw new Error("请至少选择一个目标数据源");
   if (data.targetDbIds.length > 20) throw new Error("一次最多选择 20 个目标数据源");
   syncOdsSystemTimeTypes(data.dbType);

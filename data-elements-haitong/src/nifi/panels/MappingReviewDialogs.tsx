@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Alert, Button, Empty, Modal, Skeleton, Space, Tabs, Tag, Typography } from 'antd';
 import { CheckCircleOutlined, ReloadOutlined } from '@ant-design/icons';
-import { compileFieldMapping, mappingVersions, validateFieldMapping, type CompileResponse, type FieldMeta, type MappingIssue, type MappingTableRef, type UnifiedMappingDraft, type ValidationResponse } from '../api/fieldMapping';
+import { compileFieldMapping, mappingVersions, validateFieldMapping, type CompileResponse, type FieldMeta, type MappingIssue, type MappingTableRef, type MappingTargetRef, type UnifiedMappingDraft, type ValidationResponse } from '../api/fieldMapping';
 import MappingDraftTable from './MappingDraftTable';
 import { concreteInputLabel, concreteRuleLabel } from './mappingRulePresentation';
 import { getNifiOverlayContainer } from './overlayContainer';
@@ -37,18 +37,18 @@ const INSPECTIONS = {
   compile: { title: '查看执行计划', description: '将当前草稿编译为执行计划，查看实际生效的取值和转换顺序。此处不会部署或启动任务。' },
   schema: { title: '锁定字段结构', description: '读取当前授权来源表与目标表的真实字段结构，并将快照附到草稿。后续校验和发布会检查结构是否变化。' },
 };
-export function MappingInspectionDialog({ kind, draft, sourceSchema, targetSchema, sourceRef, targetRef, onClose, onApplySchema }: {
+export function MappingInspectionDialog({ kind, draft, sourceSchema, targetSchema, sourceRef, targetRef, targetRefs, onClose, onApplySchema }: {
   kind: InspectionKind; draft: UnifiedMappingDraft; sourceSchema: FieldMeta[]; targetSchema: FieldMeta[];
-  sourceRef?: MappingTableRef; targetRef?: MappingTableRef; onClose: () => void; onApplySchema: (schema: Record<string, unknown>) => void;
+  sourceRef?: MappingTableRef; targetRef?: MappingTableRef; targetRefs?:MappingTargetRef[]; onClose: () => void; onApplySchema: (schema: Record<string, unknown>) => void;
 }) {
   const [result, setResult] = useState<InspectionResult | null>(null), [error, setError] = useState('');
   const [loading, setLoading] = useState(true), [revision, setRevision] = useState(0);
-  const references=JSON.stringify({sourceRef,targetRef});
+  const references=JSON.stringify({sourceRef,targetRef,targetRefs});
   useEffect(() => {
     let active = true; setLoading(true); setError('');
     const request = kind === 'validate' ? validateFieldMapping(draft, sourceSchema, targetSchema).then(data => ({ kind, data } as const))
       : kind === 'compile' ? compileFieldMapping(draft, sourceSchema, targetSchema).then(data => ({ kind, data } as const))
-      : mappingVersions.schema(JSON.parse(references).sourceRef, JSON.parse(references).targetRef, true).then(data => ({ kind, data } as const));
+      : mappingVersions.schema(JSON.parse(references).sourceRef, JSON.parse(references).targetRef, true, JSON.parse(references).targetRefs).then(data => ({ kind, data } as const));
     request.then(value => { if (active) setResult(value); }).catch(cause => { if (active) setError(mappingErrorText(cause)); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [kind, draft, sourceSchema, targetSchema, references, revision]);
@@ -83,18 +83,21 @@ function ValidationView({ result, draft }: { result: ValidationResponse; draft: 
 interface ContractField { id: string; side: string; name: string; type: string; nullable: string }
 function SchemaView({ contract }: { contract: Record<string, unknown> }) {
   const rows: ContractField[] = [];
-  for (const side of ['source', 'target']) {
-    const fields = contract[side];
+  const targets=Array.isArray(contract.targets)?contract.targets:[];
+  const groups: {key:string;label:string;fields:unknown}[]=[{key:'source',label:'来源',fields:contract.source},
+    ...(targets.length?targets.map((target,index)=>({key:'target'+index,label:String(target.label||target.reference?.table||`目标 ${index+1}`),fields:target.fields})):[{key:'target',label:'目标',fields:contract.target}])];
+  for (const group of groups) {
+    const fields = group.fields;
     if (!Array.isArray(fields)) continue;
     for (const [index, raw] of fields.entries()) {
       if (!raw || typeof raw !== 'object') continue;
       const field = raw as Record<string, unknown>;
-      rows.push({ id: side + index, side: side === 'source' ? '来源' : '目标', name: String(field.name ?? ''), type: String(field.logicalType ?? field.type ?? '保留类型'), nullable: field.nullable === false ? '不允许' : '允许' });
+      rows.push({ id: group.key + index, side: group.label, name: String(field.name ?? ''), type: String(field.physicalType ?? field.logicalType ?? field.type ?? '保留类型'), nullable: field.nullable === false ? '不允许' : '允许' });
     }
   }
-  return <><div className="fm-review-summary"><span>{rows.filter(row => row.side === '来源').length} 个来源字段</span><span>{rows.filter(row => row.side === '目标').length} 个目标字段</span><span>应用后随画布保存</span></div>
+  return <><div className="fm-review-summary"><span>{rows.filter(row => row.side === '来源').length} 个来源字段</span><span>{targets.length||1} 个目标 · {rows.filter(row => row.side !== '来源').length} 个物理字段</span><span>应用后随画布保存</span></div>
     <MappingDraftTable size="small" rowKey={row => row.id} dataSource={rows} fields={{ name: { kind: 'text', value: row => row.name } }} columns={[
-      { title: '所属表', dataIndex: 'side', width: 88 }, { title: '字段名称', dataIndex: 'name', key: 'name' }, { title: '字段类型', dataIndex: 'type', width: 160 }, { title: '空值', dataIndex: 'nullable', width: 90 },
+      { title: '所属表', dataIndex: 'side', width: 180 }, { title: '字段名称', dataIndex: 'name', key: 'name' }, { title: '字段类型', dataIndex: 'type', width: 160 }, { title: '空值', dataIndex: 'nullable', width: 90 },
     ]} />
   </>;
 }

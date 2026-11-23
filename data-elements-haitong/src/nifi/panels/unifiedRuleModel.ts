@@ -1,4 +1,4 @@
-import type { FieldMappingSpec, FieldMeta, FunctionParameter, FunctionParameterSchema, UnifiedMappingDraft, UnifiedMappingRule } from '../api/fieldMapping';
+import type { FieldMappingSpec, FieldMeta, FunctionParameter, FunctionParameterSchema, MappingRule, MappingSchemaContract, UnifiedMappingDraft, UnifiedMappingRule } from '../api/fieldMapping';
 
 export function functionParameterSlots(schema:FunctionParameterSchema,parameters:unknown[]):FunctionParameter[] {
   if(!schema.additionalParametersAllowed)return schema;
@@ -17,6 +17,27 @@ export function logicalFieldType(field:FieldMeta):string {
   if(['CHARACTER VARYING','CHAR VARYING','NCHAR VARYING','NATIONAL CHARACTER VARYING','NATIONAL CHAR VARYING','CHARACTER','NATIONAL CHARACTER','NATIONAL CHAR','LONGNVARCHAR','NCLOB','NTEXT','BPCHAR','TINYTEXT','MEDIUMTEXT','LONGTEXT','VARCHAR_IGNORECASE','VARCHAR_CASESENSITIVE'].includes(type))return 'STRING';
   if(type==='MEDIUMINT')return 'INT';
   return aliases[type]??type;
+}
+
+/** Build recommendations against the canonical output, preserving its temporal and decimal semantics. */
+export function recommendationCompileSpec(mappings:MappingRule[],sources:FieldMeta[],targets:FieldMeta[],contract?:MappingSchemaContract):FieldMappingSpec {
+  const fieldName=(path:string|undefined)=>String(path??'').replace(/^\//,'');
+  const sourceByName=new Map([...sources,...(contract?.source??[])].map(field=>[field.name,field]));
+  const targetByName=new Map([...targets,...(contract?.target??[])].map(field=>[field.name,field]));
+  const lookup=(fields:Map<string,FieldMeta>,name:string)=>{
+    if(fields.has(name))return fields.get(name);
+    const matches=[...fields.values()].filter(field=>field.name.toLowerCase()===name.toLowerCase());
+    return matches.length===1?matches[0]:undefined;
+  };
+  return {version:'1.0',...(contract?{schemaContract:contract}:{}),mappings:mappings.map(mapping=>{
+    const source=lookup(sourceByName,fieldName(mapping.from)),target=lookup(targetByName,fieldName(mapping.to));
+    const targetType=target?mapping.targetType??logicalFieldType(target):mapping.targetType;
+    return {...mapping,...(source&&!mapping.sourceType?{sourceType:logicalFieldType(source)}:{}),
+      ...(target?{targetType,targetNullable:target.nullable,
+        ...(['STRING','BINARY'].includes(targetType??'')?{targetLength:target.length}:{}),
+        ...(target.precision&&target.precision>0&&target.scale!=null&&target.scale>=0?{targetPrecision:target.precision,targetScale:target.scale}:{})}:{}),
+    };
+  })};
 }
 export const INPUT_LABELS:Record<string,string> = {FIELD:'源字段',LITERAL:'常量',EXPRESSION:'安全表达式',SYSTEM:'系统值'};
 export const OPERATOR_LABELS:Record<string,string> = {DIRECT:'原值',CAST:'类型转换',FUNCTION:'函数',LOOKUP:'单值码表',LOOKUP_MULTI:'拆分码表',STATIC_MAP:'枚举对标',DATE_PARSE:'日期解析',DATE_FORMAT:'日期格式化',ID_CARD_15_TO_18:'身份证15转18位',ID_CARD_VALIDATE:'身份证校验',CONCAT:'多字段合并',EXPRESSION:'安全表达式',VALIDATE:'输出校验',SYSTEM_VALUE:'系统值'};
@@ -46,7 +67,15 @@ export function isEditableRule(value:unknown):value is UnifiedMappingRule {
   try{validateRuleForm(rule);return true;}catch{return false;}
 }
 export function emptyUnifiedDraft(legacy?:Record<string,unknown>):UnifiedMappingDraft {
-  return {schemaVersion:'2.0',executionEngine:'JAVA_RECORD',policies:{recordErrorMode:'FAIL_FLOWFILE',onMissingSource:legacy?.onMissingSource??'NULL',allowUnmappedPassthrough:!!legacy?.passthroughUnmapped,caseSensitive:legacy?.passthroughCaseSensitive!==false,zoneId:legacy?.zoneId??'Asia/Shanghai',locale:legacy?.defaultLocale??'zh-CN'},rules:[],...(Array.isArray(legacy?.exclude)?{exclude:legacy.exclude}:{})};
+  return {schemaVersion:'2.0',executionEngine:'JAVA_RECORD',policies:{recordErrorMode:'FAIL_FLOWFILE',onMissingSource:legacy?.onMissingSource??'NULL',allowUnmappedPassthrough:!!legacy?.passthroughUnmapped,caseSensitive:legacy?.passthroughCaseSensitive===true,zoneId:legacy?.zoneId??'Asia/Shanghai',locale:legacy?.defaultLocale??'zh-CN'},rules:[],...(Array.isArray(legacy?.exclude)?{exclude:legacy.exclude}:{})};
+}
+export function hasRegisteredFieldContract(draft:UnifiedMappingDraft):boolean {
+  const contract=draft.schemaContract as MappingSchemaContract|undefined;
+  return !!(contract?.sourceRef||contract?.targetRef);
+}
+/** Old registered drafts used a strict default; database matching always preserves physical spelling. */
+export function withFieldNamePolicy(draft:UnifiedMappingDraft):UnifiedMappingDraft {
+  return {...draft,policies:{...draft.policies,caseSensitive:!hasRegisteredFieldContract(draft)&&draft.policies?.caseSensitive===true}};
 }
 export function stepDefaults(operator:string):Record<string,unknown> {
   switch(operator){

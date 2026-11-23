@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Button, ConfigProvider, Empty, Input, InputNumber, Modal, Segmented, Skeleton, Space, Tabs, Tag, Typography } from 'antd';
+import { Alert, Button, ConfigProvider, Empty, Input, InputNumber, Modal, Segmented, Select, Skeleton, Space, Tabs, Tag, Typography } from 'antd';
 import { DatabaseOutlined, ExperimentOutlined, PlayCircleOutlined } from '@ant-design/icons';
 import { isAxiosError } from 'axios';
 import { mappingVersions, previewFieldMapping, type FieldMeta, type MappingTableRef, type PreviewResponse, type UnifiedMappingDraft } from '../api/fieldMapping';
@@ -11,23 +11,28 @@ import { checkedPreview, parsePreviewSamples, previewCell, previewTableRows, pre
 
 interface Props {
   open: boolean; onClose: () => void; draft: UnifiedMappingDraft; sourceRef?: MappingTableRef;
+  sources?: {nodeId:string;label?:string;reference:MappingTableRef}[]; targetCount?:number;
   sourceSchema: FieldMeta[]; targetSchema: FieldMeta[]; sourceLabels?: Record<string, string>; targetLabels?: Record<string, string>;
 }
 type SampleMode = 'source' | 'manual';
 interface Outcome { result: PreviewResponse; inputs: Record<string, unknown>[]; mode: SampleMode; sampleText: string; limit: number }
 
-export default function GovernancePreviewDialog({ open, onClose, draft, sourceRef, sourceSchema, targetSchema, sourceLabels = {}, targetLabels = {} }: Props) {
+export default function GovernancePreviewDialog({ open, onClose, draft, sourceRef, sources=[], targetCount=1, sourceSchema, targetSchema, sourceLabels = {}, targetLabels = {} }: Props) {
   const [mode, setMode] = useState<SampleMode>(sourceRef ? 'source' : 'manual');
   const [limit, setLimit] = useState(20), [sampleText, setSampleText] = useState('[\n  {}\n]');
   const [loading, setLoading] = useState(false), [error, setError] = useState('');
   const [outcome, setOutcome] = useState<Outcome | null>(null), [resultTab, setResultTab] = useState('output');
   const sessionRevision = useSessionRevision(), request = useRef(0), running = useRef(false);
-  const sourceSignature = JSON.stringify(sourceRef);
+  const choices=sources.filter((source,index)=>sources.findIndex(other=>JSON.stringify(other.reference)===JSON.stringify(source.reference))===index);
+  const [sourceId,setSourceId]=useState('');
+  const selectedSource=choices.find(source=>source.nodeId===sourceId);
+  const sampleRef=selectedSource?.reference??sourceRef;
+  const sourceSignature = JSON.stringify(sampleRef);
   useEffect(() => {
     request.current++; running.current = false; setLoading(false); setError(''); setOutcome(null);
     return () => { request.current++; running.current = false; };
   }, [open, draft, sourceSignature, sessionRevision]);
-  useEffect(() => { setSampleText('[\n  {}\n]'); setMode(sourceRef ? 'source' : 'manual'); }, [sourceSignature, sessionRevision]);
+  useEffect(() => { setSampleText('[\n  {}\n]'); setMode(sampleRef ? 'source' : 'manual'); }, [sourceSignature, sessionRevision]);
 
   async function run() {
     if (running.current) return;
@@ -35,8 +40,8 @@ export default function GovernancePreviewDialog({ open, onClose, draft, sourceRe
     try {
       let inputs: Record<string, unknown>[] = [], response: PreviewResponse;
       if (mode === 'source') {
-        if (!sourceRef) throw new Error('请先配置来源表，或切换到手工样本');
-        const sampled = await mappingVersions.sample(draft, sourceRef, limit);
+        if (!sampleRef) throw new Error('请先配置来源表，或切换到手工样本');
+        const sampled = await mappingVersions.sample(draft, sampleRef, limit);
         if (!Array.isArray(sampled.sampleRows) || sampled.sampleRows.length > 100 || sampled.sampleRows.some(row => !row || typeof row !== 'object' || Array.isArray(row))) throw new Error('服务未返回完整来源样本，请重新取样');
         inputs = sampled.sampleRows; response = sampled;
       } else {
@@ -60,15 +65,16 @@ export default function GovernancePreviewDialog({ open, onClose, draft, sourceRe
   const stale = outcome && (Boolean(error) || outcome.mode !== mode || (mode === 'manual' ? outcome.sampleText !== sampleText : outcome.limit !== limit));
   return <ConfigProvider componentSize="small" theme={{ token: { controlHeightSM: 28, fontSizeSM: 13 } }}>
     <Modal className="fm-rule-modal fm-governance-preview" width={1120} open={open} title="治理预览" getContainer={getNifiOverlayContainer} onCancel={onClose}
-      footer={<div className="fm-rule-footer"><Typography.Text type="secondary">仅试算当前治理草稿，不保存规则或启动任务。</Typography.Text><Button size="middle" onClick={onClose}>关闭</Button></div>}>
+      footer={<div className="fm-rule-footer"><Typography.Text type="secondary">仅试算当前治理草稿{targetCount>1?`，展示供 ${targetCount} 个目标共用的转换结果`:''}，不保存规则或启动任务。</Typography.Text><Button size="middle" onClick={onClose}>关闭</Button></div>}>
       <div className="fm-preview-workspace">
         <section className="fm-preview-input" aria-label="预览样本">
           <div className="fm-preview-pane-heading"><strong>准备样本</strong><Typography.Text type="secondary">最多 100 行</Typography.Text></div>
           <Segmented block disabled={loading} aria-label="样本输入方式" value={mode} onChange={value => { if (value === 'source' || value === 'manual') setMode(value); setError(''); }} options={[
-            { value: 'source', label: '来源取样', disabled: !sourceRef }, { value: 'manual', label: '手工样本' },
+            { value: 'source', label: '来源取样', disabled: !sampleRef }, { value: 'manual', label: '手工样本' },
           ]}/>
           {mode === 'source' ? <>
-            <div className="fm-preview-source"><DatabaseOutlined/><div><Typography.Text strong>{sourceRef?.table || '当前节点的来源表'}</Typography.Text><Typography.Text type="secondary">读取授权来源样本，敏感值由服务端脱敏返回。</Typography.Text></div></div>
+            {choices.length>1&&<Select aria-label="选择取样来源" disabled={loading} value={selectedSource?.nodeId??choices[0]?.nodeId} onChange={setSourceId} options={choices.map(source=>({value:source.nodeId,label:source.label||source.reference.table||source.nodeId}))}/>}
+            <div className="fm-preview-source"><DatabaseOutlined/><div><Typography.Text strong>{sampleRef?.table || selectedSource?.label || '当前节点的来源表'}</Typography.Text><Typography.Text type="secondary">读取授权来源样本，敏感值由服务端脱敏返回。</Typography.Text></div></div>
             <div className="fm-preview-limit"><Typography.Text>采样行数</Typography.Text><InputNumber aria-label="采样行数" disabled={loading} min={1} max={100} value={limit} onChange={value => setLimit(Math.max(1, Math.min(100, value ?? 20)))}/><Typography.Text type="secondary">1–100 行</Typography.Text></div>
           </> : <div className="fm-preview-manual"><Typography.Text>样本 JSON</Typography.Text><Input.TextArea aria-label="手工样本 JSON" disabled={loading} value={sampleText} onChange={event => { setSampleText(event.target.value); setError(''); }} rows={9} spellCheck={false} status={error ? 'error' : undefined}/><Typography.Text type="secondary">填写对象数组，例如 {`[{"字段名":"值"}]`}。</Typography.Text></div>}
           <Button block type="primary" icon={<PlayCircleOutlined/>} loading={loading} onClick={() => void run()}>{mode === 'source' ? '取样并预览' : '执行样本预览'}</Button>

@@ -469,6 +469,7 @@ const dbTypeNameMap = {
   api: "API",
   kafka: "Kafka",
   elasticsearch: "Elasticsearch 搜索引擎",
+  clickhouse: "ClickHouse",
   other: "其他类型",
 };
 const dbTypeOrder = [
@@ -490,6 +491,7 @@ const dbTypeOrder = [
   "api",
   "kafka",
   "elasticsearch",
+  "clickhouse",
   "other",
 ];
 const dbTypeIconMap = {
@@ -511,6 +513,7 @@ const dbTypeIconMap = {
   api: "api",
   kafka: "kafka",
   elasticsearch: "elasticsearch",
+  clickhouse: "clickhouse",
   other: "database-network",
 };
 const normalizeDbType = (value) => {
@@ -531,6 +534,8 @@ const normalizeDbType = (value) => {
     es: "elasticsearch",
     elastic: "elasticsearch",
     elasticsearch: "elasticsearch",
+    ch: "clickhouse",
+    mrsclickhouse: "clickhouse",
   };
   return alias[normalized] || normalized || "other";
 };

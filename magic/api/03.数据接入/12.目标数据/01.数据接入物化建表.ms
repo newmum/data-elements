@@ -22,6 +22,7 @@
   "responseBodyDefinition": null
 }
 ================================
+import '@/common/nifinodeconfig' as nodeConfiguration
 import tenantRuntime
 import metadataAsset
 import request
@@ -593,11 +594,16 @@ for (target in submittedTargets) {
         pendingCleanup: batch && dryRun && target?.pendingTargetCleanup == true})
 }
 if (requestedNodeIds.size() > 0) {
-    var availableNodes = db.table('nifi_node_t').columns('tid').where().eq('tenant_id', tenantId)
+    var availableNodes = db.table('nifi_node_t').columns('tid','node_name','node_code','base_url','auth_username','auth_password').where().eq('tenant_id', tenantId)
         .eq('is_del', 0).eq('enabled', 1).in('tid', requestedNodeIds).select()
     var availableNodeIds = availableNodes.map(node => text(node.tid))
     for (requestedNodeId in requestedNodeIds) {
-        if (!availableNodeIds.contains(requestedNodeId)) { exit 400, '所选数据接入节点已停用或不属于当前租户，请重新选择' }
+        if (!availableNodeIds.contains(requestedNodeId)) { exit 400, '所选数据接入节点（ID：' + requestedNodeId + '）已停用、不存在或不属于当前租户，请重新选择' }
+    }
+    // 单次批量读取后在内存检查，任何节点配置失败都早于外部DDL、物化登记及任务写入。
+    for (availableNode in availableNodes) {
+        var configuration = nodeConfiguration(availableNode)
+        if (!configuration.configurationValid) { exit 400, configuration.configurationMessage }
     }
 }
 if (batch && (totalFields > 10000 || totalPartitions > 10000 || totalDdlSize > 4000000)) {

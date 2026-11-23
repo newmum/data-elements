@@ -11,6 +11,7 @@
   "description": "供运行采样、流程编译和节点探查共用。可信行业上下文读取指定节点或最多100个启用节点，由服务端回调消费凭据。"
 }
 ================================
+import '@/common/nifinodeconfig' as nodeConfiguration
 import tableRead
 import tenantRuntime
 
@@ -44,4 +45,7 @@ if (nodeId == null) {
     node.where(tableRead.equal(fields.tid, nodeId))
     rows = node.rows(fields, 1)
 }
-return rows.isEmpty() ? null : consume(rows[0])
+if (rows.isEmpty()) { return null }
+var configuration = nodeConfiguration(rows[0])
+if (!configuration.configurationValid) { throw new IllegalStateException(configuration.configurationMessage) }
+return consume(rows[0])

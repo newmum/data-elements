@@ -106,3 +106,73 @@ test('changing a table clears its old registered ID; reading the same table pres
     assert.equal(node.config[key], 'old-id');
   }
 });
+
+test('one shared governance discovers JDBC and Hive targets through independent transport adapters', () => {
+  const nodes = {
+    source: source({ table: 'events', sourceColumns: [{ columnName: 'ID' }] }),
+    backfill: { ...source({ table: 'events', sourceColumns: [{ columnName: 'ID' }] }), id: 'backfill' },
+    hiveTime: { id: 'hiveTime', category: 'transform', manifestKey: 'transform.timestamp', config: {} },
+    merge: { id: 'merge', category: 'transform', manifestKey: 'transform.merge', config: {} },
+    hive: { ...target({ table: 'ods_events', targetColumns: [{ columnName: 'id' }] }), id: 'hive', manifestKey: 'sink.hive' },
+    oracle: { ...target({ table: 'ODS_EVENTS', targetColumns: [{ columnName: 'ID' }] }), id: 'oracle' },
+    failure: { ...target({ table: 'ERRORS' }), id: 'failure' },
+  };
+  const edges = Object.fromEntries([
+    ['source', 'mapping'], ['backfill', 'mapping'], ['mapping', 'hiveTime'], ['hiveTime', 'merge'],
+    ['merge', 'hive'], ['mapping', 'oracle'], ['hiveTime', 'hiveTime', 'failure'], ['mapping', 'failure', 'retry'],
+  ].map(([source, target, outlet], index) => [index, { source, target, outlet }]));
+  const context = mappingColumnNodes('mapping', nodes, edges);
+  assert.deepEqual(context.sources.map(node => node.id), ['source', 'backfill']);
+  assert.deepEqual(context.targets.map(node => node.id), ['oracle', 'hive']);
+  assert.equal(context.target.id, 'oracle', 'Hive edge order must not change the canonical logical output');
+  assert.deepEqual(missingMappingColumnProbes(context), []);
+});
+
+test('downstream governance owns a separate schema and graph cycles terminate', () => {
+  const nodes = {
+    next: { id: 'next', manifestKey: 'transform.field-enrichment', category: 'transform', config: {} },
+    adapter: { id: 'adapter', manifestKey: 'transform.timestamp', category: 'transform', config: {} },
+    target: target({ table: 'separate_contract' }),
+  };
+  const edges = {
+    first: { source: 'mapping', target: 'adapter' },
+    cycle: { source: 'adapter', target: 'mapping' },
+    separate: { source: 'adapter', target: 'next' },
+    output: { source: 'next', target: 'target' },
+  };
+  assert.deepEqual(mappingColumnNodes('mapping', nodes, edges).targets, []);
+});
+
+test('SQL and external scripts form schema boundaries instead of borrowing renamed sink fields', () => {
+  for (const manifestKey of ['transform.sql', 'transform.java', 'transform.python', 'transform.shell']) {
+    const nodes = { source: source({ table: 'events', sourceColumns: [{ columnName: 'ID' }] }),
+      transform: { id: 'transform', manifestKey, category: 'transform', config: { outputColumns: [{ columnName: 'ACCOUNT_ID' }] } },
+      target: target({ table: 'events_ods', targetColumns: [{ columnName: 'ID' }] }),
+      hive: { ...target({ table: 'accounts', targetColumns: [{ columnName: 'ACCOUNT_ID' }] }), id: 'hive', manifestKey: 'sink.hive' } };
+    const edges = { input: { source: 'source', target: 'mapping' }, direct: { source: 'mapping', target: 'target' },
+      transformed: { source: 'mapping', target: 'transform' }, output: { source: 'transform', target: 'hive' } };
+    assert.deepEqual(mappingColumnNodes('mapping', nodes, edges).targets.map(node => node.id), ['target'], manifestKey);
+    const upstream = mappingColumnNodes('nextMapping', nodes, { input: { source: 'source', target: 'transform' }, output: { source: 'transform', target: 'nextMapping' } });
+    assert.equal(upstream.source.id, 'transform');
+    assert.equal(columnsForMapping(upstream.source, 'source')[0].columnName, 'ACCOUNT_ID');
+    delete nodes.transform.config.outputColumns;
+    const unknown = mappingColumnNodes('nextMapping', nodes, { input: { source: 'source', target: 'transform' }, output: { source: 'transform', target: 'nextMapping' } });
+    assert.equal(unknown.source.id, 'transform', 'Unknown script output must not be replaced by raw source ID');
+    assert.deepEqual(missingMappingColumnProbes(unknown), []);
+  }
+});
+
+test('20 and 100 target fields remain local graph work and preserve per-target physical identity', () => {
+  for (const count of [20, 100]) {
+    const columns = Array.from({ length: count }, (_, index) => ({ columnName: `FIELD_${index}` }));
+    const nodes = { source: source({ table: 'events', sourceColumns: columns }),
+      target: target({ table: 'events_ods', targetColumns: columns }),
+      hive: { ...target({ table: 'events_hive', targetColumns: columns.map(column => ({ columnName: column.columnName.toLowerCase() })) }), id: 'hive', manifestKey: 'sink.hive' } };
+    const context = mappingColumnNodes('mapping', nodes, { input: { source: 'source', target: 'mapping' },
+      ob: { source: 'mapping', target: 'target' }, hive: { source: 'mapping', target: 'hive' } });
+    assert.equal(context.targets.length, 2);
+    assert.equal(columnsForMapping(context.targets[0], 'target').length, count);
+    assert.equal(columnsForMapping(context.targets[1], 'target')[0].columnName, 'field_0');
+    assert.deepEqual(missingMappingColumnProbes(context), []);
+  }
+});

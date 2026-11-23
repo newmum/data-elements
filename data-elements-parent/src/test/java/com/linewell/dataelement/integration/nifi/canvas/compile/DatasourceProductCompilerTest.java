@@ -55,7 +55,7 @@ class DatasourceProductCompilerTest {
                 "database","business","table","orders","incrementalColumn","updated_at","driverLocations","/lib/hive")));
         verify(hive,never()).resolveRuntimeProfile(anyString());
         verify(nifi).createControllerService(anyString(),eq("org.apache.nifi.dbcp.DBCPConnectionPool"),anyString(),argThat(properties ->
-                properties.get("Database Connection URL").startsWith("jdbc:hive2://validation.invalid:10000/business")
+                properties.get("Database Connection URL").startsWith("jdbc:haitong:hive2://validation.invalid:10000/business")
                         && !properties.containsKey("Kerberos User Service")));
         verify(nifi,never()).createControllerService(anyString(),eq("org.apache.nifi.kerberos.KerberosKeytabUserService"),anyString(),anyMap());
     }

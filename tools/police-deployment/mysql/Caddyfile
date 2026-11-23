@@ -1,0 +1,16 @@
+{
+    admin off
+    auto_https off
+}
+
+http://:{$POLICE_WEB_PORT:18191} {
+    bind {$POLICE_WEB_BIND:127.0.0.1}
+    handle_path /prod-api/* {
+        reverse_proxy 127.0.0.1:{$POLICE_BACKEND_PORT:18188}
+    }
+    handle {
+        root * ./www
+        try_files {path} /index.html
+        file_server
+    }
+}

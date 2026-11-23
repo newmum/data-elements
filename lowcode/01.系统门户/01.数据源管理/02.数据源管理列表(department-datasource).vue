@@ -599,6 +599,7 @@ const loadSourcePage = async (generation = loadGeneration) => {
     const dataScope = ["ALL", "ORG", "OWNER"].includes(result.dataScope) ? result.dataScope : "";
     if (state.dataScope !== dataScope) {
       state.dataScope = dataScope;
+      rebuildTree();
       if (!state.treeLoading && !state.treeError) void applyDefaultTreeState(generation, true);
     }
     state.sourcePage = total === 0 ? 1 : pageNum;
@@ -691,7 +692,8 @@ const getTreeNodeCount = (node) => {
 
 const filterZeroNodes = (nodes) =>
   (nodes || [])
-    .filter((node) => getTreeNodeCount(node) > 0)
+    // 管理员的新环境尚无数据源，也应显示已初始化的组织；其他数据范围仍按可见资产筛选。
+    .filter((node) => state.dataScope === "ALL" || getTreeNodeCount(node) > 0)
     .map((node) => ({ ...node, children: filterZeroNodes(node.children || []) }));
 
 const appendApplicationNodes = (nodes) =>
@@ -979,6 +981,7 @@ const supportedDatasourceTypes = [
   "api",
   "kafka",
   "elasticsearch",
+  "clickhouse",
   "mongodb",
 ];
 
@@ -1000,6 +1003,8 @@ const normalizeDatasourceType = (value) => {
     es: "elasticsearch",
     elastic: "elasticsearch",
     elasticsearch: "elasticsearch",
+    ch: "clickhouse",
+    mrsclickhouse: "clickhouse",
   };
   return alias[normalized] || normalized;
 };
@@ -1084,6 +1089,7 @@ const sourceTypeName = (item) => {
     api: "API",
     kafka: "Kafka",
     elasticsearch: "Elasticsearch 搜索引擎",
+    clickhouse: "ClickHouse",
     mongodb: "MongoDB",
     other: "其他类型数据源",
   };

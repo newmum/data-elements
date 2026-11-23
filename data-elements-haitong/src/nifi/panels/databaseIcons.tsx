@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { normalizeSourceManifestKey } from './registeredDatasourceType';
 import api from '../icons/api.svg';
-import clickhouse from '../icons/clickhouse.png';
+import clickhouse from '../icons/clickhouse.svg';
 import dameng from '../icons/dameng.svg';
 import db2 from '../icons/db2.svg';
 import doris from '../icons/doris.svg';

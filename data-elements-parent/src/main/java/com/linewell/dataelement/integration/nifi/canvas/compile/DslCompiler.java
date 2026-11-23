@@ -195,12 +195,64 @@ public class DslCompiler {
     /** Validate the selected writer bundle once for the whole graph before replacing any old group. */
     public void preflightWriters(Pipeline pipeline) {
         boolean linewell = false;
+        boolean timestampFormatter = false;
+        boolean backfillProcessor = false;
+        Pipeline.Node exactHiveReaderNode=null;
         for (Pipeline.Node node : pipeline.dsl().nodes()) {
-            if (!"sink.jdbc".equals(node.manifestKey())) continue;
             Map<String, Object> config = node.config() == null ? Map.of() : node.config();
-            linewell |= LINEWELL_DATABASE_RECORD_MODE.equals(effectiveJdbcWriterType(config));
+            boolean manualBackfill=Boolean.parseBoolean(configText(config,"manualBackfill"));
+            boolean explicitBackfill=Boolean.parseBoolean(configText(config,"backfillSource"));
+            if(manualBackfill||explicitBackfill) {
+                if(!"source".equals(node.category())||!supportsSyncSettings(effectiveManifestKey(node)))
+                    throw new NodeConfigException(node.id(),node.label(),manualBackfill?"manualBackfill":"backfillSource","补数入口只支持已配置的 JDBC 数据库来源",null);
+                backfillProcessor=true;
+            }
+            if(explicitBackfill) {
+                String where=firstNonBlankStatic(configText(config,"customWherePredicate"),configText(config,"whereClause"),configText(config,"additionalWhereClause"));
+                if(!where.isBlank())validateWherePredicate(where);
+                String query=firstNonBlankStatic(configText(config,"customQuery"),configText(config,"sql"));
+                if(!query.isBlank()&&!isResultQuery(query))
+                    throw new NodeConfigException(node.id(),node.label(),"customQuery","补数查询只支持 SELECT 或 WITH 查询",null);
+            }
+            if ("sink.jdbc".equals(node.manifestKey())) {
+                linewell |= LINEWELL_DATABASE_RECORD_MODE.equals(effectiveJdbcWriterType(config));
+                if (Boolean.parseBoolean(configText(config, "insertThenMerge"))) {
+                    Map<String,Object> fallback = new LinkedHashMap<>(config);
+                    fallback.put("statementType", usesLinewellJdbcWriter(config) ? "MERGE" : "UPSERT");
+                    if ("INSERT".equals(jdbcStatementType(configText(fallback,"statementType"),configText(config,"dbType"),fallback)))
+                        throw new NodeConfigException(node.id(),node.label(),"insertThenMerge","当前目标写入组件不支持冲突后的更新写入",null);
+                    normalizeJdbcSinkKeys(node, fallback, Set.of());
+                }
+            }
+            if (Boolean.parseBoolean(configText(config,"hiveTimestampFormat"))
+                    && (!hiveTimestampFields(config).isEmpty()||!hiveDateFields(config,Set.of()).isEmpty()))
+                timestampFormatter = true;
+            if(HiveSinkPublicationPolicy.usesHdfsMerge(node))hiveMergeMaxAge(config);
+            if(exactHiveReaderNode==null&&"sink.hive".equals(node.manifestKey())
+                    &&HiveSinkPublicationPolicy.isHdfsWriteMode(configText(config,"hiveWriteMode"))
+                    &&!hiveNumberFields(config,Set.of()).isEmpty())exactHiveReaderNode=node;
         }
+        if(exactHiveReaderNode!=null)requireHiveExactReader(exactHiveReaderNode);
         if (linewell) nifi.requireLinewellDatabaseRecordExtension();
+        if (backfillProcessor && nifi.findProcessorType("org.apache.nifi.processors.standard.QueryDatabaseTableRecord").isEmpty())
+            throw new IllegalStateException("当前 NiFi 节点缺少 QueryDatabaseTableRecord，无法生成备用补数入口；旧流程已保留");
+        if (timestampFormatter && nifi.findProcessorType("com.linewell.microservice.processor.record.TimestampFormatProcessor").isEmpty())
+            throw new IllegalStateException("当前 NiFi 节点缺少 TimestampFormatProcessor，无法生成 Hive 分支时间格式转换；旧流程已保留");
+    }
+
+    private void requireHiveExactReader(Pipeline.Node node) {
+        JsonNode response=nifi.get("/flow/controller-service-types",JsonNode.class);
+        String version=com.linewell.dataelement.mapping.core.MappingEngine.engineVersion();
+        int matches=0;
+        if(response!=null)for(JsonNode type:response.path("controllerServiceTypes")) {
+            JsonNode bundle=type.path("bundle");
+            if("com.linewell.dataelement.nifi.HaitongJdbcRecordReader".equals(type.path("type").asText())
+                    &&"com.linewell.dataelement".equals(bundle.path("group").asText())
+                    &&"haitong-mapping-nar".equals(bundle.path("artifact").asText())
+                    &&version.equals(bundle.path("version").asText()))matches++;
+        }
+        if(matches!=1)throw new NodeConfigException(node.id(),node.label(),"targetColumns",
+                "Hive 精确数值写入需要当前 NiFi 注册唯一匹配版本的 HaitongJdbcRecordReader（haitong-mapping-nar:"+version+"）；旧流程已保留",null);
     }
 
     private void preflightScriptProcesses(Pipeline pipeline) {
@@ -219,6 +271,7 @@ public class DslCompiler {
         boolean dateFetchRequired = false;
         for (Pipeline.Node node : pipeline.dsl().nodes()) {
             if (!supportsSyncSettings(effectiveManifestKey(node))) continue;
+            if (Boolean.parseBoolean(configText(node.config(),"backfillSource"))) continue;
             for (String key : List.of("batchSize", "maxRowsPerRun")) {
                 try { sourceRowCount(node.config(), key); }
                 catch (IllegalStateException ex) {
@@ -229,6 +282,13 @@ public class DslCompiler {
             try { DateTableFetchPolicy.apply(node.config(), new LinkedHashMap<>()); }
             catch (IllegalStateException ex) {
                 throw new NodeConfigException(node.id(), node.label(), "incrementalColumn", ex.getMessage(), ex);
+            }
+            String registeredType=currentMaximumSource(node.config())?null:registeredWatermarkType(node.config());
+            if(registeredType!=null) {
+                String logical=com.linewell.dataelement.mapping.core.JdbcTemporalTypes.logicalType(registeredType,node.config());
+                if(!"ANY".equals(logical)&&!Set.of("DATE","DATETIME").contains(logical))
+                    throw new NodeConfigException(node.id(),node.label(),"incrementalColumn","时间分片字段 "+configText(node.config(),"incrementalColumn")
+                            +" 的登记类型为 "+registeredType+"，当前组件只支持不带时区的 DATE/TIMESTAMP 时间水位",null);
             }
             dateFetchRequired |= !currentMaximumSource(node.config());
         }
@@ -381,6 +441,7 @@ public class DslCompiler {
         Map<String, FieldMappingService.CompiledMapping> fieldMappingPlans = new LinkedHashMap<>();
         Map<String,UnifiedMappingService.Compiled> javaMappingPlans=new LinkedHashMap<>();
         Set<String> sourceConfigOnlyNodes = new LinkedHashSet<>();
+        Map<String,Map<String,String>> dateFetchPoolCandidates=new LinkedHashMap<>();
 
         // ---- PHASE 1：创建所有 Controller Service（初始为 DISABLED）。----
         for (Pipeline.Node n : pipeline.dsl().nodes()) {
@@ -462,6 +523,17 @@ public class DslCompiler {
                     NifiEntity cs = createOrReuseControllerService(pgId, controllerServiceScopeId,
                             serviceType, n.label() + "/" + csSpec.localId(), resolved);
                     nc.csIds.put(csSpec.localId(), cs.id());
+                    if("source".equals(m.category())&&"dbcp".equals(csSpec.localId())
+                            &&"org.apache.nifi.dbcp.DBCPConnectionPool".equals(serviceType)
+                            &&requiresOracleDateFetchPool(m,cfg,resolved)) {
+                        Map<String,String> fetchProperties=new LinkedHashMap<>(resolved);
+                        // The installed date fetcher calls getObject on timestamp MIN/MAX values.
+                        // Confine Oracle's standard Timestamp transport to this task-local pool:
+                        // applying J2EE13Compliant to ExecuteSQL/backfill can turn unconstrained
+                        // NUMBER metadata/results into FLOAT/Double and lose business precision.
+                        fetchProperties.put("oracle.jdbc.J2EE13Compliant","true");
+                        dateFetchPoolCandidates.put(n.id(),fetchProperties);
+                    }
                 }
             }
             if (isStructuredObjectSource(m.key())) {
@@ -554,6 +626,37 @@ public class DslCompiler {
         if(pipeline.dsl().edges()!=null)for(var edge:pipeline.dsl().edges())if(javaMappingPlans.containsKey(edge.source())&&compiled.containsKey(edge.target())){
             compiled.get(edge.target()).csIds.put("jsonReader", globalJson.readerId());
         }
+        // Final JDBC readers and INSERT projections share the same exact physical-type boundary.
+        // Other fields retain the selected public JSON codec's inference and time settings.
+        for (var node : pipeline.dsl().nodes()) {
+            if (!"sink.jdbc".equals(manifestByNode.get(node.id()).key())) continue;
+            List<String> binary = oracleBlobColumns(cfgByNode.get(node.id()));
+            List<String> numbers = oracleNumberColumns(cfgByNode.get(node.id()));
+            if(!numbers.isEmpty()){
+                Map<String,String> properties=new LinkedHashMap<>(globalJson.jdbcReaderFormatProperties());
+                properties.put("number-fields",MAPPER.valueToTree(numbers).toString());
+                if(!binary.isEmpty())properties.put("binary-fields",MAPPER.valueToTree(binary).toString());
+                var service=nifi.createControllerService(pgId,"com.linewell.dataelement.nifi.HaitongJdbcRecordReader",node.label()+"/JDBC精确字段Reader",properties);
+                compiled.get(node.id()).csIds.put("jdbc-value-reader",service.id());continue;
+            }
+            if (binary.isEmpty()) continue;
+            var service = nifi.createControllerService(pgId, "com.linewell.dataelement.nifi.HaitongBinaryRecordReader",
+                    node.label()+"/二进制字段Reader", Map.of("delegate-reader",globalJson.readerId(),"binary-fields",MAPPER.valueToTree(binary).toString()));
+            compiled.get(node.id()).csIds.put("jdbc-value-reader", service.id());
+        }
+        // Every Hive JSON reread must preserve the same authorized canonical numeric fields.
+        // Create the branch reader before the shared enable phase, never inside processor creation.
+        for(Pipeline.Node node:pipeline.dsl().nodes()) {
+            if(!isHiveBatchPutHdfs(manifestByNode.get(node.id()),"put",cfgByNode.get(node.id())))continue;
+            List<String> numbers;
+            try { numbers=hiveNumberFields(cfgByNode.get(node.id()),resolveUpstreamOutputFields(pipeline,node.id(),manifestByNode,cfgByNode,fieldMappingPlans)); }
+            catch(IllegalStateException error){throw new NodeConfigException(node.id(),node.label(),"targetColumns",error.getMessage(),error);}
+            if(numbers.isEmpty())continue;
+            Map<String,String> properties=new LinkedHashMap<>(globalJson.jdbcReaderFormatProperties());
+            properties.put("number-fields",MAPPER.valueToTree(numbers).toString());
+            NifiEntity reader=nifi.createControllerService(pgId,"com.linewell.dataelement.nifi.HaitongJdbcRecordReader",node.label()+"/Hive精确数值Reader",properties);
+            compiled.get(node.id()).csIds.put("hive-value-reader",reader.id());
+        }
         // Resolve once per deployment. Several Hive targets can share one
         // server-managed writer without a NiFi read per sink.
         Map<Boolean, String> hiveCsvWriterIds = new LinkedHashMap<>();
@@ -577,6 +680,14 @@ public class DslCompiler {
 
         sourceConfigOnlyNodes.addAll(resolveSourceConfigOnlyNodes(pipeline, manifestByNode, cfgByNode));
         attachExternalSqlPreStatementsToDownstreamSinks(pipeline, manifestByNode, cfgByNode);
+        // An external SQL transform borrows source configuration but never creates its fetcher.
+        // Decide from the expanded graph before allocating any private compatibility pool.
+        for(Pipeline.Node node:pipeline.dsl().nodes()) {
+            Map<String,String> properties=dateFetchPoolCandidates.get(node.id());
+            if(properties==null||sourceConfigOnlyNodes.contains(node.id()))continue;
+            NifiEntity pool=nifi.createControllerService(pgId,"org.apache.nifi.dbcp.DBCPConnectionPool",node.label()+"/date-fetch-dbcp",properties);
+            compiled.get(node.id()).csIds.put("date-fetch-dbcp",pool.id());
+        }
 
         // ---- PHASE 2：批量启用 CS，并等待全部进入 ENABLED。----
         // 顺序很关键：若 CS 仍在 ENABLING，NiFi 会拒绝启动依赖它的处理器。
@@ -595,6 +706,11 @@ public class DslCompiler {
             NodeCompilation nc = compiled.get(n.id());
             Map<String, Object> cfg = cfgByNode.get(n.id());
             NodeLayout nodeLayout = layoutByNode.get(n.id());
+            if (nc.csIds.containsKey("jdbc-value-reader")) {
+                sharedCs.put("jsonReader", nc.csIds.get("jdbc-value-reader"));
+                nc.csIds.put("jsonReader", nc.csIds.get("jdbc-value-reader"));
+            }
+            if(nc.csIds.containsKey("hive-value-reader"))sharedCs.put("hiveJsonReader",nc.csIds.get("hive-value-reader"));
 
             if (sourceConfigOnlyNodes.contains(n.id())) {
                 continue;
@@ -613,12 +729,18 @@ public class DslCompiler {
             if (isHiveBatchPutHdfs(m, "put", cfg)) {
                 buildHiveHdfsSink(pgId, n, nc, nodeLayout, cfg, sharedCs,
                         hiveCsvWriterIds.get("open-source".equalsIgnoreCase(configText(cfg, "hiveConnectionMode"))),
-                        hiveHdfsWriterTypes.get(hiveHdfsWriterMode(cfg)));
+                        hiveHdfsWriterTypes.get(hiveHdfsWriterMode(cfg)),
+                        resolveUpstreamOutputFields(pipeline,n.id(),manifestByNode,cfgByNode,fieldMappingPlans));
                 continue;
             }
 
             if ("source.api".equals(m.key())) {
                 buildApiSource(pgId, n, nc, nodeLayout, cfg);
+                continue;
+            }
+
+            if ("source".equals(m.category()) && Boolean.parseBoolean(configText(cfg,"backfillSource"))) {
+                buildBackfillSource(pgId,n,nc,nodeLayout,cfg,sharedCs);
                 continue;
             }
 
@@ -638,6 +760,10 @@ public class DslCompiler {
                 normalizeJdbcSinkTableName(cfg);
                 boolean typedJavaInput=pipeline.dsl().edges()!=null&&pipeline.dsl().edges().stream().anyMatch(e->e.target().equals(n.id())&&javaMappingPlans.containsKey(e.source()));
                 boolean insertAuditProjection = requiresLinewellInsertAuditProjection(m, cfg, availableFields);
+                if (Boolean.parseBoolean(configText(cfg,"insertThenMerge"))) {
+                    buildInsertThenMergeJdbcSink(pgId,n,m,spec,nc,nodeLayout,cfg,sharedCs,availableFields,!typedJavaInput);
+                    continue;
+                }
                 if (insertAuditProjection || hasAvailableTemporalTargetColumns(cfg, availableFields)&&!typedJavaInput) {
                     buildTemporalJdbcSink(pgId, n, m, spec, nc, nodeLayout, cfg, sharedCs, availableFields,
                             !typedJavaInput, insertAuditProjection);
@@ -656,7 +782,7 @@ public class DslCompiler {
             }
 
             if (isFieldMappingTransform(m)) {
-                if(javaMappingPlans.containsKey(n.id())){buildJavaMapping(pgId,n,nc,javaMappingPlans.get(n.id()),sharedCs,planVersionIds.get(n.id()),pipeline.id()+":"+n.id());continue;}
+                if(javaMappingPlans.containsKey(n.id())){buildJavaMapping(pgId,n,nc,javaMappingPlans.get(n.id()),sharedCs,planVersionIds.get(n.id()),pipeline.id()+":"+n.id(),jdbcAliasesForInput(pipeline,n.id()),hiveBinaryTextOutput(pipeline,n.id(),javaMappingPlans.get(n.id())),globalJson.preservesJsonNumbers());continue;}
                 FieldMappingService.CompiledMapping plan = fieldMappingPlans.get(n.id());
                 if (plan != null && !plan.lookups().isEmpty()) {
                     buildFieldMappingLookupChain(pgId, pipeline, n, spec, nc, nodeLayout, plan,
@@ -730,6 +856,8 @@ public class DslCompiler {
                     }
                     if (strategy != null && strategy.isBlank()) strategy = null;
                     String processorType = resolveProcessorType(m, pSpec.localId(), pSpec.type(), cfg);
+                    if(DateTableFetchPolicy.TYPE.equals(processorType)&&nc.csIds.containsKey("date-fetch-dbcp"))
+                        resolved.put("Database Connection Pooling Service",nc.csIds.get("date-fetch-dbcp"));
                     log.info("Create processor node={} manifest={} localId={} type={}",
                             n.id(), m.key(), pSpec.localId(), processorType);
                     //创建处理器
@@ -787,6 +915,8 @@ public class DslCompiler {
             nc.processorIds.put("registered-normalize",normalized.id());nc.outlets.put("default",new Outlet(normalized.id(),"success"));
         }
 
+        Map<String,String> nativeBackfills=buildAutomaticBackfillSources(pgId,pipeline,compiled,cfgByNode,layoutByNode,sharedGlobalCs,globalJson);
+
         // ---- PHASE 4：创建跨组件边连接（源 outlet -> 目标 inlet）。----
         Map<String, String> edgeConnectionIds = new LinkedHashMap<>();
         if (pipeline.dsl().edges() != null) {
@@ -813,6 +943,13 @@ public class DslCompiler {
                                 dst.inletProcessorId, "PROCESSOR", List.of(out.relationship));
                 edgeConnectionIds.put(e.id(), connection.id());
                 src.usedOutgoing.computeIfAbsent(out.processorId, k -> new LinkedHashSet<>()).add(out.relationship);
+                String backfill=nativeBackfills.get(e.source());
+                if(backfill!=null) {
+                    if(dst.processorIds.containsKey("hive-merge"))
+                        nifi.createBufferedConnection(pgId,backfill,dst.inletProcessorId,"PROCESSOR",List.of("success"));
+                    else nifi.createConnection(pgId,backfill,"PROCESSOR",dst.inletProcessorId,"PROCESSOR",List.of("success"));
+                    src.usedOutgoing.computeIfAbsent(backfill,k->new LinkedHashSet<>()).add("success");
+                }
             }
         }
 
@@ -848,8 +985,83 @@ public class DslCompiler {
         new FileConsumptionCompiler(nifi).acknowledge(pgId,pipeline,compiled,cfgByNode);
         nifi.finalizeGeneratedProcessGroup(pgId);
         if (periodicSource != null) nifi.finalizeGeneratedProcessGroup(rootPgId);
+        disableManualBackfillSources(pgId,pipeline,compiled);
 
         return new CompileResult(rootPgId, sharedGlobalCs, compiled, edgeConnectionIds,planVersionIds);
+    }
+
+    /** A native-only replay source shares the governed downstream graph without changing the saved DSL. */
+    private Map<String,String> buildAutomaticBackfillSources(String pgId,Pipeline pipeline,Map<String,NodeCompilation> compiled,
+            Map<String,Map<String,Object>> configs,Map<String,NodeLayout> layouts,Map<String,String> sharedCs,GlobalJsonRecordServices globalJson) {
+        Map<String,String> result=new LinkedHashMap<>();
+        for(Pipeline.Node node:pipeline.dsl().nodes()) {
+            Map<String,Object> config=configs.get(node.id());
+            if(!Boolean.parseBoolean(configText(config,"manualBackfill"))||Boolean.parseBoolean(configText(config,"backfillSource")))continue;
+            boolean explicit=pipeline.dsl().nodes().stream().anyMatch(other->Boolean.parseBoolean(configText(other.config(),"backfillSource"))
+                    &&sameBackfillSource(node,other,compiled,configs));
+            if(explicit)continue;
+            NodeCompilation main=compiled.get(node.id());
+            if(main==null||!main.processorIds.containsKey("fetch"))
+                throw new NodeConfigException(node.id(),node.label(),"manualBackfill","当前来源没有独立读取处理器，无法派生备用补数入口",null);
+            Map<String,Object> replayConfig=new LinkedHashMap<>(config);
+            for(String key:List.of("customQuery","sql","whereClause","additionalWhereClause","incrementalColumn"))replayConfig.remove(key);
+            replayConfig.put("customWherePredicate","1=0");
+            replayConfig.put("backfillSource",true);
+            var replay=new Pipeline.Node(node.id()+"/manual-backfill",node.manifestKey(),node.label()+"/备用补数",node.category(),node.x(),node.y(),replayConfig);
+            NodeCompilation generated=new NodeCompilation();generated.csIds.putAll(main.csIds);
+            NodeLayout layout=layouts.get(node.id());
+            buildBackfillSource(pgId,replay,generated,new NodeLayout(layout.column(),layout.row()+1),replayConfig,sharedJsonForNode(sharedCs,globalJson,node.id()));
+            String processor=generated.processorIds.get("fetch");
+            main.processorIds.put("manual-backfill-fetch",processor);
+            result.put(node.id(),processor);
+        }
+        return result;
+    }
+
+    private static boolean sameBackfillSource(Pipeline.Node main,Pipeline.Node other,Map<String,NodeCompilation> compiled,Map<String,Map<String,Object>> configs) {
+        String db=configText(main.config(),"registeredDatasourceId"),table=configText(main.config(),"sourceTableId");
+        if(!db.isBlank()&&!table.isBlank())return db.equals(configText(other.config(),"registeredDatasourceId"))&&table.equals(configText(other.config(),"sourceTableId"));
+        NodeCompilation mainNative=compiled.get(main.id()),otherNative=compiled.get(other.id());
+        String pool=mainNative==null?null:mainNative.csIds.get("dbcp");
+        return pool!=null&&otherNative!=null&&pool.equals(otherNative.csIds.get("dbcp"))
+                &&configText(configs.get(main.id()),"table").equals(configText(configs.get(other.id()),"table"));
+    }
+
+    /** Disable manual sources only after NiFi can validate their completed outgoing relationships. */
+    private void disableManualBackfillSources(String pgId,Pipeline pipeline,Map<String,NodeCompilation> compiled) {
+        Set<String> processorIds=new LinkedHashSet<>();
+        for(Pipeline.Node node:pipeline.dsl().nodes()) {
+            NodeCompilation source=compiled.get(node.id());
+            if(source!=null&&source.processorIds.containsKey("manual-backfill-fetch"))processorIds.add(source.processorIds.get("manual-backfill-fetch"));
+            if(!"source".equals(node.category())||!Boolean.parseBoolean(configText(node.config(),"backfillSource")))continue;
+            String id=source==null?null:source.processorIds.get("fetch");
+            if(id==null||id.isBlank())throw new IllegalStateException("补数入口未生成读取处理器："+node.id());
+            processorIds.add(id);
+        }
+        if(processorIds.isEmpty())return;
+
+        // One snapshot supplies all revisions; never query each source separately while iterating.
+        JsonNode snapshot=nifi.get("/flow/process-groups/"+pgId,JsonNode.class);
+        Map<String,JsonNode> entities=new LinkedHashMap<>();
+        if(snapshot!=null)for(JsonNode entity:snapshot.path("processGroupFlow").path("flow").path("processors")) {
+            String id=entity.path("id").asText(entity.path("component").path("id").asText());
+            if(processorIds.contains(id))entities.put(id,entity);
+        }
+        // Validate the complete batch before changing any state. Creation always remains STOPPED.
+        for(String id:processorIds) {
+            JsonNode entity=entities.get(id);
+            if(entity==null||!NifiClient.isManualBackfill(entity)
+                    ||!"STOPPED".equals(entity.path("component").path("state").asText())
+                    ||!entity.path("revision").isObject()||!entity.path("revision").has("version"))
+                throw new IllegalStateException("补数入口状态或标记不完整，无法安全禁用："+id);
+        }
+        for(String id:processorIds) {
+            ObjectNode request=MAPPER.createObjectNode();
+            request.set("revision",entities.get(id).path("revision"));
+            request.put("state","DISABLED");
+            request.put("disconnectedNodeAcknowledged",false);
+            nifi.put("/processors/"+id+"/run-status",request,NifiEntity.class);
+        }
     }
 
     private static String effectiveManifestKey(Pipeline.Node node) {
@@ -970,6 +1182,35 @@ public class DslCompiler {
         nifi.executeOnPrimaryNode(processor.id());
         compiled.processorIds.put("fetch", processor.id());
         compiled.outlets.put("default", new Outlet(processor.id(), "success"));
+    }
+
+    /** A manual replay has no watermark: an operator selects a bounded predicate and runs it once. */
+    private void buildBackfillSource(String pgId,Pipeline.Node node,NodeCompilation compiled,NodeLayout layout,
+                                     Map<String,Object> cfg,Map<String,String> sharedCs) {
+        Map<String,String> properties=new LinkedHashMap<>();
+        properties.put("Database Connection Pooling Service",compiled.csIds.get("dbcp"));
+        properties.put("Table Name",configText(cfg,"table"));
+        properties.put("Database Type",nifiDatabaseType(configText(cfg,"dbType")));
+        properties.put("Record Writer",sourceQueryRecordWriter(sharedCs,cfg));
+        properties.put("Initial Load Strategy","Start at Beginning");
+        properties.put("Set Auto Commit","false");
+        properties.put("Use Avro Logical Types","true");
+        properties.put("Normalize Table/Column Names","false");
+        String where=firstNonBlankStatic(configText(cfg,"customWherePredicate"),configText(cfg,"whereClause"),configText(cfg,"additionalWhereClause"));
+        String query=firstNonBlankStatic(configText(cfg,"customQuery"),configText(cfg,"sql"));
+        if(!where.isBlank())properties.put("Additional WHERE Clause",validateWherePredicate(where));
+        if(!query.isBlank()) {
+            if(!isResultQuery(query))throw new NodeConfigException(node.id(),node.label(),"customQuery","补数查询只支持 SELECT 或 WITH 查询",null);
+            properties.put("Custom Query",query);
+        }
+        String projection=OracleTemporalProjection.columns(cfg);
+        if(!Boolean.TRUE.equals(cfg.get("_runtimeHiveTargetInput"))&&!projection.isBlank())properties.put("Columns to Return",projection);
+        configureSourceRecordWindow(cfg,properties);
+        NifiEntity processor=nifi.createProcessor(pgId,"org.apache.nifi.processors.standard.QueryDatabaseTableRecord",
+                node.label()+"/fetch",nodeOriginX(layout),nodeOriginY(layout),properties,"1 min","TIMER_DRIVEN",NifiClient.MANUAL_BACKFILL_MARKER);
+        nifi.executeOnPrimaryNode(processor.id());
+        compiled.processorIds.put("fetch",processor.id());
+        compiled.outlets.put("default",new Outlet(processor.id(),"success"));
     }
 
     /**
@@ -1448,13 +1689,16 @@ public class DslCompiler {
         return targetColumnMetadata(cfg).stream().anyMatch(column -> isTemporalColumn(column.type()));
     }
 
-    private void buildJavaMapping(String pgId,Pipeline.Node node,NodeCompilation compiled,UnifiedMappingService.Compiled plan,Map<String,String>shared,String planId,String contextNodeId){
+    private void buildJavaMapping(String pgId,Pipeline.Node node,NodeCompilation compiled,UnifiedMappingService.Compiled plan,Map<String,String>shared,String planId,String contextNodeId,Map<String,String> jdbcAliases,boolean binaryAsText,boolean exactJsonNumbers){
         ObjectNode execution=plan.plan().document().deepCopy();
         ObjectNode deployment=execution.putObject("_deployment").put("contextNodeId",contextNodeId);
         if(planId!=null)deployment.put("planId",planId);
         Map<String,String>properties=new LinkedHashMap<>();properties.put("record-reader",compiled.csIds.getOrDefault("jsonReader",shared.get("jsonReader")));properties.put("record-writer",compiled.csIds.get("typed-json-writer"));properties.put("execution-plan",execution.toString());
         if(compiled.csIds.containsKey("dictionary-batch"))properties.put("dictionary-service",compiled.csIds.get("dictionary-batch"));
         properties.put("typed-record-reader",compiled.csIds.get("typed-json-reader"));
+        if(!jdbcAliases.isEmpty())properties.put("jdbc-field-aliases",MAPPER.valueToTree(jdbcAliases).toString());
+        if(binaryAsText)properties.put("binary-output-encoding","BASE64_TEXT");
+        if(exactJsonNumbers)properties.put("preserve-json-numbers","true");
         NifiEntity processor=nifi.createProcessor(pgId,"com.linewell.dataelement.nifi.HaitongTransformRecord",node.label(),node.x(),node.y(),properties,"0 sec","TIMER_DRIVEN");compiled.processorIds.put("map",processor.id());compiled.inletProcessorId=processor.id();compiled.outlets.put("default",new Outlet(processor.id(),"success"));
         // Preserve original failed input for backoff/replay; isolate invalid record envelopes.
         nifi.createConnection(pgId,processor.id(),"PROCESSOR",processor.id(),"PROCESSOR",List.of("failure","retry"));
@@ -1476,7 +1720,41 @@ public class DslCompiler {
         for(var connection:prepared.connections().entrySet()){NifiEntity service=nifi.createControllerService(group,"org.apache.nifi.dbcp.DBCPConnectionPool",node.label()+"/升级字典连接",buildSourceDbcpProperties(connection.getValue()));compiled.csIds.put("dict:"+connection.getKey(),service.id());created.add(service);}
         for(NifiEntity service:created){enableCreatedService(service);nifi.waitForControllerServiceEnabled(service.id(),30_000L);}
         if(!prepared.plan().dictionaries().isEmpty()){Map<String,String>properties=new LinkedHashMap<>();prepared.connections().keySet().forEach(id->properties.put(id,compiled.csIds.get("dict:"+id)));properties.put("authorized-definitions",prepared.plan().document().path("dictionaryBindings").toString());properties.put("snapshot-payloads",prepared.snapshots().toString());NifiEntity service=nifi.createControllerService(group,"com.linewell.dataelement.nifi.JdbcHaitongDictionaryService",node.label()+"/升级批量字典",properties);compiled.csIds.put("dictionary-batch",service.id());enableCreatedService(service);}
-        buildJavaMapping(group,node,compiled,prepared,Map.of("jsonReader",globalJson.readerId()),ids.get(node.id()),pipeline.id()+":"+node.id());return new MappingReplacement(compiled,ids.get(node.id()));
+        buildJavaMapping(group,node,compiled,prepared,Map.of("jsonReader",globalJson.readerId()),ids.get(node.id()),pipeline.id()+":"+node.id(),jdbcAliasesForInput(pipeline,node.id()),hiveBinaryTextOutput(pipeline,node.id(),prepared),globalJson.preservesJsonNumbers());return new MappingReplacement(compiled,ids.get(node.id()));
+    }
+    private boolean hiveBinaryTextOutput(Pipeline pipeline,String nodeId,UnifiedMappingService.Compiled plan){
+        if(plan.plan().outputContracts().values().stream().noneMatch(type->type.logicalType().equals("BINARY")))return false;
+        boolean textTarget=false,otherTarget=false;
+        for(Pipeline.Edge edge:pipeline.dsl().edges()){
+            if(!nodeId.equals(edge.source()))continue;
+            Pipeline.Node target=pipeline.dsl().nodes().stream().filter(node->node.id().equals(edge.target())).findFirst().orElse(null);
+            ComponentManifest manifest=target==null?null:registry.get(effectiveManifestKey(target));
+            boolean text=manifest!=null&&isHiveBatchPutHdfs(manifest,"put",manifestConfig(manifest,target.config()));
+            textTarget|=text;otherTarget|=!text;
+        }
+        if(textTarget&&otherTarget)throw new IllegalStateException("二进制字段需要独立的Hive文本写入分支，不能和其他目标共享同一传输编码");
+        return textTarget;
+    }
+    /** Only a direct JDBC source emits wire aliases. Downstream mapping nodes
+     * already receive restored names and must not reinterpret their output keys. */
+    private Map<String,String> jdbcAliasesForInput(Pipeline pipeline,String nodeId){
+        Map<String,String> result=Map.of();
+        for(Pipeline.Edge edge:pipeline.dsl().edges()){
+            if(!nodeId.equals(edge.target()))continue;
+            Pipeline.Node source=pipeline.dsl().nodes().stream().filter(candidate->candidate.id().equals(edge.source())).findFirst().orElse(null);
+            if(source==null)continue;
+            ComponentManifest manifest=registry.get(effectiveManifestKey(source));
+            if(manifest==null||!"source".equals(manifest.category()))continue;
+            Map<String,Object> config=manifestConfig(manifest,source.config());
+            inferDbTypeFromSourceManifest(source.manifestKey(),manifest.key()).ifPresent(type->config.putIfAbsent("dbType",type));
+            normalizeJdbcSourceConfig(config,manifest.key());
+            Map<String,String> aliases=JdbcSourceProjection.aliases(config);
+            if(!aliases.isEmpty()){
+                if(!result.isEmpty())throw new IllegalStateException("字段治理输入有多个JDBC来源，无法唯一恢复登记字段");
+                result=aliases;
+            }
+        }
+        return result;
     }
     private void enableCreatedService(NifiEntity service){ObjectNode body=MAPPER.createObjectNode();body.set("revision",MAPPER.valueToTree(service.revision()));body.put("state","ENABLED").put("disconnectedNodeAcknowledged",false);nifi.put("/controller-services/"+service.id()+"/run-status",body,JsonNode.class);}
     private static Map<String,String> sharedJsonForNode(Map<String,String> globals,GlobalJsonRecordServices services,String nodeId) {
@@ -1494,6 +1772,31 @@ public class DslCompiler {
                         && availableLower.contains(column.name().toLowerCase(Locale.ROOT)));
     }
 
+    private List<String> oracleBlobColumns(Map<String,Object> cfg) {
+        if (!"ORACLE".equalsIgnoreCase(configText(cfg,"dbType"))) return List.of();
+        if (!(cfg.get("targetColumns") instanceof List<?> columns)) return List.of();
+        Set<String> result = new LinkedHashSet<>();
+        for (Object raw : columns) {
+            Map<String,Object> column = objectMap(raw);
+            String type = firstNonBlankStatic(configText(column,"columnType"),configText(column,"column_type"),
+                    configText(column,"typeName"),configText(column,"dataType"),configText(column,"data_type"));
+            if (!"BLOB".equalsIgnoreCase(type.replaceFirst("\\s*\\(.*$", "").trim())) continue;
+            String name = firstNonBlankStatic(configText(column,"columnName"),configText(column,"name"));
+            if (!name.isBlank()) result.add(name);
+        }
+        return List.copyOf(result);
+    }
+    private List<String> oracleNumberColumns(Map<String,Object> cfg) {
+        if(!isLinewellOracleWriterTarget(configText(cfg,"dbType")))return List.of();
+        if(!(cfg.get("targetColumns") instanceof List<?> columns))return List.of();
+        Set<String> result=new LinkedHashSet<>();
+        for(Object raw:columns){Map<String,Object> column=objectMap(raw);
+            String type=firstNonBlankStatic(configText(column,"columnType"),configText(column,"column_type"),configText(column,"typeName"),configText(column,"dataType"),configText(column,"data_type"));
+            if(!Set.of("NUMBER","DECIMAL","NUMERIC").contains(type.replaceFirst("\\s*\\(.*$","").trim().toUpperCase(Locale.ROOT)))continue;
+            String name=firstNonBlankStatic(configText(column,"columnName"),configText(column,"name"));if(!name.isBlank())result.add(name);
+        }return List.copyOf(result);
+    }
+
     private boolean requiresLinewellInsertAuditProjection(ComponentManifest manifest, Map<String,Object> cfg, Set<String> availableFields) {
         if (!usesLinewellJdbcWriter(manifest,"put",cfg)
                 || !"INSERT".equals(jdbcStatementType(configText(cfg,"statementType"),configText(cfg,"dbType"),cfg))) return false;
@@ -1508,6 +1811,35 @@ public class DslCompiler {
     private void buildTemporalJdbcSink(String pgId, Pipeline.Node node, ComponentManifest manifest, CompileSpec spec, NodeCompilation nc,
                                        NodeLayout nodeLayout, Map<String, Object> cfg, Map<String, String> sharedCs,
                                        Set<String> availableFields, boolean normalizeTemporalValues, boolean insertAuditProjection) {
+        double x = nodeOriginX(nodeLayout);
+        double y = nodeOriginY(nodeLayout);
+        NifiEntity normalize=createJdbcSinkProjection(pgId,node,nc,nodeLayout,cfg,sharedCs,availableFields,normalizeTemporalValues,insertAuditProjection);
+
+        CompileSpec.ProcessorSpec putSpec = spec.processors().stream()
+                .filter(processor -> "put".equals(processor.localId()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("sink.jdbc manifest missing processor"));
+        Map<String, String> resolved = resolveProps(putSpec.properties(), cfg, nc.csIds, sharedCs);
+        applyJdbcSinkPreProcessingSql(null, putSpec.localId(), cfg, resolved);
+        normalizeLinewellJdbcSinkProperties(manifest, putSpec.localId(), cfg, resolved);
+        String processorType = resolveProcessorType(manifest, putSpec.localId(), putSpec.type(), cfg);
+        // 转换后的记录批次可以直接写入；额外 MergeRecord 会再次编码并等待合并桶。
+        NifiEntity put = nifi.createProcessor(pgId, processorType, node.label() + "/" + putSpec.localId(),
+                x, y + PROCESSOR_ROW_GAP, resolved, null, null);
+        nc.processorIds.put(putSpec.localId(), put.id());
+        connectInternal(pgId,nc,normalize.id(),put.id(),"success");
+        if (insertAuditProjection) retainProjectionFailure(pgId,nc,normalize.id(),x,y);
+        if (spec.outlets() != null) {
+            for (CompileSpec.Outlet outlet : spec.outlets()) {
+                nc.outlets.put(outlet.name(), new Outlet(put.id(), outlet.relationship()));
+            }
+        }
+    }
+
+    /** Project database-clock audit columns only inside the JDBC branch, after shared governance. */
+    private NifiEntity createJdbcSinkProjection(String pgId,Pipeline.Node node,NodeCompilation nc,NodeLayout nodeLayout,
+            Map<String,Object> cfg,Map<String,String> sharedCs,Set<String> availableFields,
+            boolean normalizeTemporalValues,boolean insertAuditProjection) {
         List<TargetColumnMetadata> columns = targetColumnMetadata(cfg);
         Set<String> availableLower = availableFields.stream()
                 .map(field -> field.toLowerCase(Locale.ROOT))
@@ -1539,32 +1871,50 @@ public class DslCompiler {
                 ), null, null);
         nc.processorIds.put("normalize", normalize.id());
         nc.inletProcessorId = normalize.id();
+        return normalize;
+    }
 
-        CompileSpec.ProcessorSpec putSpec = spec.processors().stream()
-                .filter(processor -> "put".equals(processor.localId()))
-                .findFirst()
-                .orElseThrow(() -> new IllegalStateException("sink.jdbc manifest missing processor"));
-        Map<String, String> resolved = resolveProps(putSpec.properties(), cfg, nc.csIds, sharedCs);
-        applyJdbcSinkPreProcessingSql(null, putSpec.localId(), cfg, resolved);
-        normalizeLinewellJdbcSinkProperties(manifest, putSpec.localId(), cfg, resolved);
-        String processorType = resolveProcessorType(manifest, putSpec.localId(), putSpec.type(), cfg);
-        // 转换后的记录批次可以直接写入；额外 MergeRecord 会再次编码并等待合并桶。
-        NifiEntity put = nifi.createProcessor(pgId, processorType, node.label() + "/" + putSpec.localId(),
-                x, y + PROCESSOR_ROW_GAP, resolved, null, null);
-        nc.processorIds.put(putSpec.localId(), put.id());
-        nifi.createConnection(pgId, normalize.id(), "PROCESSOR", put.id(), "PROCESSOR", List.of("success"));
-        nc.usedOutgoing.computeIfAbsent(normalize.id(), key -> new LinkedHashSet<>()).add("success");
-        if (insertAuditProjection) {
-            // Keep a failed projection's original input in a separate queue for controlled recovery.
-            NifiEntity retained=nifi.createRetentionFunnel(pgId,x+PROCESSOR_ROW_GAP,y);
-            nifi.createConnection(pgId,normalize.id(),"PROCESSOR",retained.id(),"FUNNEL",List.of("failure"));
-            nc.usedOutgoing.get(normalize.id()).add("failure");
-        }
-        if (spec.outlets() != null) {
-            for (CompileSpec.Outlet outlet : spec.outlets()) {
-                nc.outlets.put(outlet.name(), new Outlet(put.id(), outlet.relationship()));
-            }
-        }
+    private void retainProjectionFailure(String pgId,NodeCompilation nc,String projection,double x,double y) {
+        NifiEntity retained=nifi.createRetentionFunnel(pgId,x+PROCESSOR_ROW_GAP,y);
+        nifi.createConnection(pgId,projection,"PROCESSOR",retained.id(),"FUNNEL",List.of("failure"));
+        nc.usedOutgoing.computeIfAbsent(projection,key->new LinkedHashSet<>()).add("failure");
+    }
+
+    /** New rows take the INSERT path; only permanent INSERT failures fall back to keyed update/insert. */
+    private void buildInsertThenMergeJdbcSink(String pgId,Pipeline.Node node,ComponentManifest manifest,CompileSpec spec,
+            NodeCompilation nc,NodeLayout layout,Map<String,Object> cfg,Map<String,String> sharedCs,
+            Set<String> availableFields,boolean normalizeTemporalValues) {
+        Map<String,Object> fallbackCfg=new LinkedHashMap<>(cfg);
+        fallbackCfg.put("statementType",usesLinewellJdbcWriter(cfg)?"MERGE":"UPSERT");
+        normalizeJdbcSinkKeys(node,fallbackCfg,availableFields);
+        Map<String,Object> insertCfg=new LinkedHashMap<>(fallbackCfg);
+        insertCfg.put("statementType","INSERT");
+        // An absent historical writerType otherwise forces the legacy MERGE default.
+        insertCfg.put("writerType",effectiveJdbcWriterType(cfg));
+        boolean projectAudit=requiresLinewellInsertAuditProjection(manifest,insertCfg,availableFields);
+        boolean project=projectAudit||normalizeTemporalValues&&hasAvailableTemporalTargetColumns(cfg,availableFields);
+        double x=nodeOriginX(layout),y=nodeOriginY(layout);
+        NifiEntity projection=project?createJdbcSinkProjection(pgId,node,nc,layout,cfg,sharedCs,availableFields,normalizeTemporalValues,projectAudit):null;
+        CompileSpec.ProcessorSpec putSpec=spec.processors().stream().filter(p->"put".equals(p.localId())).findFirst()
+                .orElseThrow(()->new IllegalStateException("sink.jdbc manifest missing processor"));
+        String processorType=resolveProcessorType(manifest,"put",putSpec.type(),cfg);
+        Map<String,String> insertProps=resolveProps(putSpec.properties(),insertCfg,nc.csIds,sharedCs);
+        normalizeLinewellJdbcSinkProperties(manifest,"put",insertCfg,insertProps);
+        applyJdbcSinkPreProcessingSql(manifest,"put",cfg,insertProps);
+        NifiEntity insert=nifi.createProcessor(pgId,processorType,node.label()+"/insert",x+(project?PROCESSOR_COLUMN_GAP:0),y,insertProps,null,null);
+        Map<String,String> fallbackProps=resolveProps(putSpec.properties(),fallbackCfg,nc.csIds,sharedCs);
+        normalizeLinewellJdbcSinkProperties(manifest,"put",fallbackCfg,fallbackProps);
+        NifiEntity fallback=nifi.createProcessor(pgId,processorType,node.label()+"/put",x+(project?2:1)*PROCESSOR_COLUMN_GAP,y,fallbackProps,null,null);
+        nc.processorIds.put("insert",insert.id());nc.processorIds.put("put",fallback.id());
+        nc.inletProcessorId=projection==null?insert.id():projection.id();
+        if(projection!=null){connectInternal(pgId,nc,projection.id(),insert.id(),"success");retainProjectionFailure(pgId,nc,projection.id(),x,y);}
+        connectInternal(pgId,nc,insert.id(),fallback.id(),"failure");
+        connectInternal(pgId,nc,insert.id(),insert.id(),"retry");
+        NifiEntity retained=nifi.createRetentionFunnel(pgId,x+3*PROCESSOR_COLUMN_GAP,y+PROCESSOR_ROW_GAP);
+        nifi.createConnection(pgId,fallback.id(),"PROCESSOR",retained.id(),"FUNNEL",List.of("failure","retry"));
+        nc.usedOutgoing.computeIfAbsent(fallback.id(),key->new LinkedHashSet<>()).addAll(List.of("failure","retry"));
+        if(spec.outlets()!=null)for(CompileSpec.Outlet outlet:spec.outlets())
+            nc.outlets.put(outlet.name(),new Outlet(fallback.id(),outlet.relationship()));
     }
 
     private Set<String> resolveUpstreamOutputFields(Pipeline pipeline,
@@ -1608,6 +1958,17 @@ public class DslCompiler {
         if (isFieldMappingTransform(manifest)) {
             FieldMappingService.CompiledMapping plan = mappingPlans.get(nodeId);
             if (plan != null) fields.addAll(plan.outputFields());
+            else {
+                JsonNode specification=mappingJson(cfg.get("mappings"));
+                for(JsonNode rule:specification.path("rules")) {
+                    String name=rule.path("target").path("name").asText();
+                    if(!name.isBlank())fields.add(name);
+                }
+                for(JsonNode rule:specification.path("mappings")) {
+                    String name=rule.path("to").asText().replaceFirst("^/","");
+                    if(!name.isBlank())fields.add(name);
+                }
+            }
             if (mappingPassthroughEnabled(cfg.get("mappings"))) {
                 fields.addAll(resolveInputFields(pipeline, nodeId, manifestByNode, cfgByNode, mappingPlans, visited));
             }
@@ -2600,6 +2961,7 @@ public class DslCompiler {
      */
     private static int nativeCanvasHeightUnits(Pipeline.Node node) {
         if (node == null) return 1;
+        if (Boolean.parseBoolean(configText(node.config(),"manualBackfill"))) return 2;
         String key = node.manifestKey() == null ? "" : node.manifestKey();
         return switch (key) {
             case "source.ftp", "source.sftp" -> 3;
@@ -3229,7 +3591,7 @@ public class DslCompiler {
     }
 
     private String sourceSqlIdentifier(String identifier, Map<String, Object> sourceCfg) {
-        if (identifier == null || !identifier.matches("[A-Za-z_][A-Za-z0-9_$]*")) {
+        if (identifier == null || !identifier.matches("[A-Za-z0-9_][A-Za-z0-9_$]*")) {
             throw new IllegalArgumentException("非法 SQL 标识符: " + identifier);
         }
         String dbType = stringConfig(sourceCfg, "dbType").toUpperCase(Locale.ROOT);
@@ -3417,13 +3779,67 @@ public class DslCompiler {
     private Map<String, String> buildSourceDbcpProperties(Map<String, Object> sourceCfg) {
         Map<String, String> props = new LinkedHashMap<>();
         JdbcDriverSpec driver = jdbcDriverSpec(sourceCfg);
-        props.put("Database Connection URL", buildSourceJdbcUrl(sourceCfg));
-        props.put("Database Driver Class Name", driver.driverClass());
+        String jdbcUrl = jdbcConnectionUrl(sourceCfg);
+        boolean openSourceHive = "HIVE".equalsIgnoreCase(configText(sourceCfg, "dbType"))
+                && "open-source".equalsIgnoreCase(configText(sourceCfg, "hiveConnectionMode"));
+        if (openSourceHive) {
+            String nativePrefix = com.linewell.dataelement.metautil.jdbc.NifiHiveJdbcDriver.NATIVE_URL_PREFIX;
+            String compatiblePrefix = com.linewell.dataelement.metautil.jdbc.NifiHiveJdbcDriver.URL_PREFIX;
+            if (jdbcUrl.startsWith(nativePrefix)) jdbcUrl = compatiblePrefix + jdbcUrl.substring(nativePrefix.length());
+            else if (!jdbcUrl.startsWith(compatiblePrefix)) throw new IllegalStateException("开源Hive来源需要HiveServer2 JDBC地址");
+            if (nifiNodeRuntimeResolver != null && !java.util.Objects.toString(driver.driverLocations(), "").contains(
+                    com.linewell.dataelement.metautil.jdbc.NifiHiveJdbcDriver.ASSET_NAME))
+                throw new IllegalStateException("开源Hive来源需要在节点HIVE_OPEN_SOURCE驱动路径中同时配置原生Hive客户端和"
+                        + com.linewell.dataelement.metautil.jdbc.NifiHiveJdbcDriver.ASSET_NAME);
+        }
+        props.put("Database Connection URL", com.linewell.dataelement.metautil.jdbc.MySqlIntegerReadPolicy.url(jdbcUrl));
+        props.put("Database Driver Class Name", openSourceHive
+                ? com.linewell.dataelement.metautil.jdbc.NifiHiveJdbcDriver.class.getName() : driver.driverClass());
         props.put("Database Driver Locations", requiredJdbcDriverLocation(sourceCfg, driver.driverLocations()));
-        props.put("Database User", String.valueOf(sourceCfg.getOrDefault("username", "")));
-        props.put("Password", String.valueOf(sourceCfg.getOrDefault("password", "")));
+        // NiFi's optional credentials reject an explicit empty value. Omit
+        // absent credentials instead of turning Java null into the password
+        // "null"; preserve every character of a configured nonempty secret.
+        putOptionalDbcpCredential(props, "Database User", sourceCfg.get("username"));
+        putOptionalDbcpCredential(props, "Password", sourceCfg.get("password"));
         appendJdbcDriverProperties("org.apache.nifi.dbcp.DBCPConnectionPool", sourceCfg, props);
         return props;
+    }
+
+    /** Use only trusted, non-time-zone Oracle temporal watermarks; never infer support from an OB alias. */
+    private boolean requiresOracleDateFetchPool(ComponentManifest manifest,Map<String,Object> config,Map<String,String> pool) {
+        if(!"oracle.jdbc.OracleDriver".equals(pool.get("Database Driver Class Name"))
+                ||!Objects.toString(pool.get("Database Connection URL"),"").startsWith("jdbc:oracle:")
+                ||Boolean.parseBoolean(configText(config,"backfillSource"))||currentMaximumSource(config)
+                ||configText(config,"registeredDatasourceId").isBlank()||configText(config,"sourceTableId").isBlank()
+                ||manifest.compile()==null||manifest.compile().processors()==null
+                ||manifest.compile().processors().stream().noneMatch(processor->"fetch".equals(processor.localId())
+                    &&DateTableFetchPolicy.TYPE.equals(resolveProcessorType(manifest,processor.localId(),processor.type(),config))))return false;
+        String type=registeredWatermarkType(config);
+        return type!=null&&("DATE".equals(type)||type.matches("TIMESTAMP(?:\\s*\\(\\d+\\))?"));
+    }
+
+    private static String registeredWatermarkType(Map<String,Object> config) {
+        String watermark=configText(config,"incrementalColumn");
+        if(configText(config,"registeredDatasourceId").isBlank()||configText(config,"sourceTableId").isBlank()
+                ||!(config.get("sourceColumns") instanceof List<?> columns)||watermark.isBlank())return null;
+        List<Map<?,?>> matches=new ArrayList<>();
+        for(Object item:columns)if(item instanceof Map<?,?> column) {
+            String name=firstColumnValue(column,"columnName","name");
+            if(watermark.equalsIgnoreCase(name))matches.add(column);
+        }
+        if(matches.size()!=1)return null;
+        String type=firstColumnValue(matches.getFirst(),"sourceColumnType","columnType","column_type","typeName","dataType","data_type","type")
+                .toUpperCase(Locale.ROOT).replaceAll("\\s+"," ").trim();
+        return type.isBlank()?null:type;
+    }
+
+    private static String firstColumnValue(Map<?,?> column,String... keys) {
+        for(String key:keys){Object value=column.get(key);if(value!=null&&!value.toString().isBlank())return value.toString().trim();}
+        return "";
+    }
+
+    private static void putOptionalDbcpCredential(Map<String, String> properties, String key, Object value) {
+        if (value != null && !String.valueOf(value).isEmpty()) properties.put(key, String.valueOf(value));
     }
 
     static void appendJdbcDriverProperties(String serviceType, Map<String, Object> config,
@@ -3727,7 +4143,8 @@ public class DslCompiler {
     /** Expand one Hive sink into the production-proven record-to-HDFS chain. */
     private void buildHiveHdfsSink(String pgId, Pipeline.Node node, NodeCompilation nc,
                                    NodeLayout layout, Map<String, Object> cfg,
-                                   Map<String, String> sharedCs, String csvWriterId, String putType) {
+                                   Map<String, String> sharedCs, String csvWriterId, String putType,
+                                   Set<String> availableFields) {
         if (csvWriterId == null || csvWriterId.isBlank()) {
             throw new IllegalStateException("Hive HDFS 写入缺少受管的 CSV Record Writer");
         }
@@ -3738,6 +4155,21 @@ public class DslCompiler {
         Map<String, Object> writerConfig = new LinkedHashMap<>(cfg);
         double x = nodeOriginX(layout);
         double y = nodeOriginY(layout);
+        NifiEntity timestamp=null;
+        List<String> timestampFields=hiveTimestampFields(cfg,availableFields);
+        NifiEntity date=null;
+        if(Boolean.parseBoolean(configText(cfg,"hiveTimestampFormat"))) {
+            if(!timestampFields.isEmpty()) {
+                timestamp=createHiveTimeFormatter(pgId,node.label()+"/timestamp-format",x,y,sharedCs,timestampFields,"yyyy-MM-dd HH:mm:ss");
+                nc.processorIds.put("hive-timestamp",timestamp.id());x+=PROCESSOR_COLUMN_GAP;
+            }
+            List<String> dateFields=hiveDateFields(cfg,availableFields);
+            if(!dateFields.isEmpty()) {
+                date=createHiveTimeFormatter(pgId,node.label()+"/date-format",x,y,sharedCs,dateFields,"yyyy-MM-dd");
+                nc.processorIds.put("hive-date",date.id());x+=PROCESSOR_COLUMN_GAP;
+                if(timestamp!=null)connectInternal(pgId,nc,timestamp.id(),date.id(),"success");
+            }
+        }
         NifiEntity merge = null;
         if (HiveSinkPublicationPolicy.usesHdfsMerge(node)) {
             merge = createHiveHdfsRecordMerge(pgId, node, sharedCs, x, y);
@@ -3758,7 +4190,16 @@ public class DslCompiler {
         nc.processorIds.put("convert", convert.id());
         nc.processorIds.put("filename", filename.id());
         nc.processorIds.put("put", put.id());
-        nc.inletProcessorId = merge == null ? convert.id() : merge.id();
+        nc.inletProcessorId = timestamp!=null?timestamp.id():date!=null?date.id():merge == null ? convert.id() : merge.id();
+        NifiEntity lastFormatter=date==null?timestamp:date;
+        if(lastFormatter!=null) {
+            connectInternal(pgId,nc,lastFormatter.id(),merge==null?convert.id():merge.id(),"success");
+            NifiEntity retained=nifi.createRetentionFunnel(pgId,x,y+PROCESSOR_ROW_GAP);
+            for(NifiEntity formatter:timestamp==null?List.of(date):date==null?List.of(timestamp):List.of(timestamp,date)) {
+                nifi.createBufferedConnection(pgId,formatter.id(),retained.id(),"FUNNEL",List.of("failure"));
+                nc.usedOutgoing.computeIfAbsent(formatter.id(),key->new LinkedHashSet<>()).add("failure");
+            }
+        }
         nifi.createConnection(pgId, convert.id(), "PROCESSOR", filename.id(), "PROCESSOR", List.of("success"));
         nifi.createConnection(pgId, filename.id(), "PROCESSOR", put.id(), "PROCESSOR", List.of("success"));
         nc.usedOutgoing.computeIfAbsent(convert.id(), ignored -> new LinkedHashSet<>()).add("success");
@@ -3770,6 +4211,55 @@ public class DslCompiler {
             nifi.createBufferedConnection(pgId, convert.id(), failed.id(), "FUNNEL", List.of("failure"));
             nifi.createBufferedConnection(pgId, put.id(), failed.id(), "FUNNEL", nifi.configureWriteFailureRetries(put));
         }
+    }
+
+    private NifiEntity createHiveTimeFormatter(String pgId,String name,double x,double y,Map<String,String> shared,
+            List<String> fields,String format) {
+        return nifi.createProcessor(pgId,"com.linewell.microservice.processor.record.TimestampFormatProcessor",name,x,y,Map.of(
+                "record-reader",shared.get("hiveJsonReader"),"record-writer",shared.get("jsonWriter"),
+                "timestamp-fields",String.join(",",fields),"timestamp-unit","milliseconds",
+                "auto-detect-timestamp-fields","false","date-format",format,
+                "include-zero-record-flowfiles","false"),null,null);
+    }
+    /** Format only declared time fields, keeping numeric identifiers outside both selections. */
+    private List<String> hiveTimestampFields(Map<String,Object> cfg) {
+        return hiveTimestampFields(cfg,Set.of());
+    }
+    private List<String> hiveNumberFields(Map<String,Object> config,Set<String> availableFields) {
+        if(firstNonBlankStatic(configText(config,"targetDbId"),configText(config,"registeredDatasourceId"),configText(config,"selectedDatabaseId"),configText(config,"datasourceId"),configText(config,"dataSourceId"),configText(config,"dbId")).isBlank()
+                ||firstNonBlankStatic(configText(config,"targetTableId"),configText(config,"tableId")).isBlank())return List.of();
+        Set<String> fields=new LinkedHashSet<>();
+        for(TargetColumnMetadata column:targetColumnMetadata(config)) {
+            if(!Set.of("INT","LONG","DECIMAL").contains(com.linewell.dataelement.mapping.core.ValueTypes.type(column.type())))continue;
+            String canonical=column.name();
+            if(!availableFields.contains(canonical)) {
+                List<String> matches=availableFields.stream().filter(name->name.equalsIgnoreCase(column.name())).toList();
+                if(matches.size()>1)throw new IllegalStateException("Hive 数值字段在共享记录中存在大小写歧义："+column.name());
+                if(!availableFields.isEmpty()&&matches.isEmpty())continue;
+                if(!matches.isEmpty())canonical=matches.getFirst();
+            }
+            fields.add(com.linewell.dataelement.mapping.core.ValueTypes.field(canonical));
+        }
+        if(fields.size()>1000)throw new IllegalStateException("Hive 精确数值字段超过1000项，请缩小登记输出字段范围");
+        return List.copyOf(fields);
+    }
+    private List<String> hiveTimestampFields(Map<String,Object> cfg,Set<String> availableFields) {
+        return hiveTemporalFields(cfg,availableFields,false);
+    }
+    private List<String> hiveDateFields(Map<String,Object> cfg,Set<String> availableFields) {
+        return hiveTemporalFields(cfg,availableFields,true);
+    }
+    private List<String> hiveTemporalFields(Map<String,Object> cfg,Set<String> availableFields,boolean dateOnly) {
+        List<String> result=new ArrayList<>();
+        for(TargetColumnMetadata column:targetColumnMetadata(cfg)) {
+            String type=column.type().toUpperCase(Locale.ROOT);
+            if(dateOnly?!type.matches("DATE(?:\\s*\\(.*\\))?"):!type.contains("TIMESTAMP")&&!type.contains("DATETIME"))continue;
+            List<String> matches=availableFields.stream().filter(name->name.equalsIgnoreCase(column.name())).toList();
+            if(matches.size()>1)throw new IllegalStateException("Hive 时间字段在共享记录中存在大小写歧义："+column.name());
+            if(!availableFields.isEmpty()&&matches.isEmpty())continue;
+            result.add(matches.isEmpty()?column.name():matches.getFirst());
+        }
+        return result;
     }
 
     private NifiEntity createHiveHdfsRecordMerge(String pgId, Pipeline.Node node,
@@ -3784,8 +4274,22 @@ public class DslCompiler {
                         "Maximum Number of Records", "100000",
                         "Minimum Bin Size", "128 MB",
                         "Maximum Bin Size", "256 MB",
-                        "Max Bin Age", "5 min",
+                        "Max Bin Age", hiveMergeMaxAge(node.config()),
                         "Maximum Number of Bins", "10"), "5 sec", "TIMER_DRIVEN");
+    }
+
+    /** Bound buffering latency explicitly; existing canvases retain their five-minute default. */
+    private static String hiveMergeMaxAge(Map<String,Object> cfg) {
+        String configured=configText(cfg,"mergeMaxBinAge");
+        if(configured.isBlank())return "5 min";
+        Matcher match=Pattern.compile("^([0-9]+(?:\\.[0-9]+)?)\\s*(ms|milliseconds?|s|sec|seconds?|m|min|minutes?|h|hours?|d|days?)$",Pattern.CASE_INSENSITIVE).matcher(configured);
+        if(!match.matches())throw new IllegalStateException("Hive 合并最长等待须为1秒至1天的有效时长，例如30 sec");
+        String unit=match.group(2).toLowerCase(Locale.ROOT);
+        long multiplier=unit.startsWith("ms")||unit.startsWith("milli")?1L:unit.startsWith("s")?1000L:unit.startsWith("m")?60_000L:unit.startsWith("h")?3_600_000L:86_400_000L;
+        java.math.BigDecimal millis=new java.math.BigDecimal(match.group(1)).multiply(java.math.BigDecimal.valueOf(multiplier));
+        if(millis.compareTo(java.math.BigDecimal.valueOf(1000))<0||millis.compareTo(java.math.BigDecimal.valueOf(86_400_000))>0)
+            throw new IllegalStateException("Hive 合并最长等待须在1秒至1天之间");
+        return configured;
     }
 
     /**
@@ -3876,6 +4380,7 @@ public class DslCompiler {
             String key = expr.substring("config.".length());
             Object v = cfg.get(key);
             if ("jdbcUrl".equals(key)) {
+                if (requiresOracleTypedBinding(cfg)) return jdbcConnectionUrl(cfg);
                 return normalizeJdbcUrlForDbType(v == null ? null : String.valueOf(v), String.valueOf(cfg.getOrDefault("dbType", "MYSQL")));
             }
             return v == null ? null : String.valueOf(v);
@@ -3889,7 +4394,7 @@ public class DslCompiler {
         if (expr.startsWith("jdbc.")) {
             JdbcDriverSpec spec = jdbcDriverSpec(cfg);
             return switch (expr.substring("jdbc.".length())) {
-                case "url" -> buildSourceJdbcUrl(cfg);
+                case "url" -> jdbcConnectionUrl(cfg);
                 case "driverClass" -> spec.driverClass();
                 case "driverLocations" -> spec.driverLocations();
                 case "dialectServiceType" -> spec.dialectServiceType();
@@ -3920,15 +4425,15 @@ public class DslCompiler {
                 stringConfig(config, "driverLocations"),
                 stringConfig(config, "nifiDriverLocations"));
         if (configuredLocations != null) {
-            return new JdbcDriverSpec(resolved.driverClass(),
-                    productDriverLocation(dbType, configuredLocations, variant), resolved.dialectServiceType());
+            return oracleBindingDriver(config, new JdbcDriverSpec(resolved.driverClass(),
+                    productDriverLocation(dbType, configuredLocations, variant), resolved.dialectServiceType()));
         }
         // Focused compiler tests do not bootstrap a tenant runtime node. Production compilation
         // always has a resolver and must not silently fall back to a path from the developer host.
         if (nifiNodeRuntimeResolver == null) {
-            return resolved;
+            return oracleBindingDriver(config, resolved);
         }
-        String driverKey="HIVE".equalsIgnoreCase(dbType) && "open-source".equalsIgnoreCase(configText(config,"hiveConnectionMode"))
+        String driverKey=requiresOracleTypedBinding(config) ? "ORACLE_TYPED" : "HIVE".equalsIgnoreCase(dbType) && "open-source".equalsIgnoreCase(configText(config,"hiveConnectionMode"))
                 ? "HIVE_OPEN_SOURCE" : variant == null ? dbType : variant.nodeDriverKey();
         String nodeConfiguredLocation = nifi.jdbcDriverLocation(driverKey);
         if (nodeConfiguredLocation.isBlank() && variant != null) nodeConfiguredLocation = nifi.jdbcDriverLocation(dbType);
@@ -3936,8 +4441,46 @@ public class DslCompiler {
             throw new IllegalStateException("NiFi 节点“" + nifi.runtimeNodeCode()
                     + "”未配置 JDBC 驱动目录；请在【节点管理】编辑该节点后补充实际目录路径。");
         }
-        return new JdbcDriverSpec(resolved.driverClass(),
-                productDriverLocation(dbType, nodeConfiguredLocation, variant), resolved.dialectServiceType());
+        return oracleBindingDriver(config, new JdbcDriverSpec(resolved.driverClass(),
+                productDriverLocation(dbType, nodeConfiguredLocation, variant), resolved.dialectServiceType()));
+    }
+
+    private boolean requiresOracleTypedBinding(Map<String,Object> config) {
+        try {
+            if (com.linewell.dataelement.metautil.model.enums.DatabaseType.fromCode(configText(config,"dbType"))
+                    != com.linewell.dataelement.metautil.model.enums.DatabaseType.ORACLE) return false;
+        } catch (IllegalArgumentException unknown) { return false; }
+        if (!(config.get("targetColumns") instanceof List<?> columns)) return false;
+        for (Object raw : columns) {
+            if (raw == null) continue;
+            Map<String,Object> column = objectMap(raw);
+            String type = firstNonBlankStatic(configText(column,"columnType"), configText(column,"column_type"),
+                    configText(column,"typeName"), configText(column,"dataType"), configText(column,"data_type"));
+            type = type.toUpperCase(Locale.ROOT).replaceAll("\\(.*", "").trim();
+            if (Set.of("BLOB","NCLOB","BINARY_FLOAT","BINARY_DOUBLE").contains(type)) return true;
+        }
+        return false;
+    }
+
+    private JdbcDriverSpec oracleBindingDriver(Map<String,Object> config, JdbcDriverSpec driver) {
+        if (!requiresOracleTypedBinding(config)) return driver;
+        if (nifiNodeRuntimeResolver != null && !java.util.Objects.toString(driver.driverLocations(), "").contains(
+                com.linewell.dataelement.metautil.jdbc.NifiOracleJdbcDriver.ASSET_NAME)) {
+            throw new IllegalStateException("Oracle厂商类型目标需要在节点ORACLE_TYPED路径同时配置原生Oracle JDBC客户端和"
+                    + com.linewell.dataelement.metautil.jdbc.NifiOracleJdbcDriver.ASSET_NAME);
+        }
+        return new JdbcDriverSpec(com.linewell.dataelement.metautil.jdbc.NifiOracleJdbcDriver.class.getName(),
+                driver.driverLocations(), driver.dialectServiceType());
+    }
+
+    private String jdbcConnectionUrl(Map<String,Object> config) {
+        String url = buildSourceJdbcUrl(config);
+        if (!requiresOracleTypedBinding(config)) return url;
+        String nativePrefix = com.linewell.dataelement.metautil.jdbc.NifiOracleJdbcDriver.NATIVE_URL_PREFIX;
+        String compatiblePrefix = com.linewell.dataelement.metautil.jdbc.NifiOracleJdbcDriver.URL_PREFIX;
+        if (url.startsWith(nativePrefix)) return compatiblePrefix + url.substring(nativePrefix.length());
+        if (url.startsWith(compatiblePrefix)) return url;
+        throw new IllegalStateException("Oracle厂商类型目标需要原生Oracle JDBC地址");
     }
 
     private String productDriverLocation(String type, String location, com.linewell.dataelement.metautil.jdbc.GaussDbVariant variant) {
@@ -3965,6 +4508,13 @@ public class DslCompiler {
         if ("HIVE".equals(type)) {
             return location;
         }
+        // The official 0.6.5 all classifier omits ClickHouseClient; the main
+        // artifact and its same-version dependency bundle must share a loader.
+        if ("CLICKHOUSE".equals(type)) {
+            String directory = location.replaceAll("/+$", "");
+            return directory + "/clickhouse-jdbc-0.6.5.jar,"
+                    + directory + "/clickhouse-jdbc-0.6.5-all.jar";
+        }
         String driverFile = switch (type) {
             case "MYSQL", "TDSQL_MYSQL", "DORIS", "STARROCKS" -> "mysql-connector-j-8.4.0.jar";
             case "MARIADB" -> "mariadb-java-client-3.4.1.jar";
@@ -3980,7 +4530,6 @@ public class DslCompiler {
             case "GBASE8S" -> "gbasedbtjdbc.jar";
             case "OCEANBASE_ORACLE", "OCEANBASEORACLE", "OCEANBASE_MYSQL", "OCEANBASEMYSQL" ->
                     "oceanbase-client-2.4.10.jar";
-            case "CLICKHOUSE" -> "clickhouse-jdbc-0.6.5-all.jar";
             case "HIGHGO" -> "HgdbJdbc-6.0.4.jar";
             case "OSCAR" -> "oscarJDBC-7.jar";
             default -> "";
@@ -4209,7 +4758,9 @@ public class DslCompiler {
             resolved.put("Database Type", databaseType);
         }
         String temporalProjection=OracleTemporalProjection.columns(cfg);
-        if(Boolean.TRUE.equals(cfg.get("_runtimeHiveTargetInput")))resolved.put("Columns to Return",null);
+        String jdbcProjection=JdbcSourceProjection.columns(cfg);
+        if(!jdbcProjection.isBlank())resolved.put("Columns to Return",jdbcProjection);
+        else if(Boolean.TRUE.equals(cfg.get("_runtimeHiveTargetInput")))resolved.put("Columns to Return",null);
         else if(!temporalProjection.isBlank())resolved.put("Columns to Return",temporalProjection);
     }
 

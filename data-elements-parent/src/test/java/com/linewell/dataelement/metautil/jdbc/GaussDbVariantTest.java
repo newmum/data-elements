@@ -59,7 +59,7 @@ class GaussDbVariantTest {
         assertEquals(config.buildJdbcUrl(),RegisteredDatasourceType.jdbcUrl("gaussdb",values,Map.of()));
         Object probe=ReflectionTestUtils.invokeMethod(new NifiConnectionProbe(null,null),"resolve","source.gaussdb",values);
         assertEquals(driver,ReflectionTestUtils.getField(probe,"driverClass"));
-        assertEquals(config.buildJdbcUrl(),ReflectionTestUtils.getField(probe,"url"));
+        assertEquals(MySqlIntegerReadPolicy.url(config.buildJdbcUrl()),ReflectionTestUtils.getField(probe,"url"));
     }
 
     @Test void mismatchedOrUnknownProductNeverFallsBackToAnotherVendor() {

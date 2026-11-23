@@ -14,13 +14,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.linewell.dataelement.dataassets.base.mapper.DataApplyFormTMapper;
 import com.linewell.dataelement.dataassets.base.service.IDataApplyFormTService;
 import com.linewell.dataelement.elasticsearch.EsCommonService;
-import com.linewell.dataelement.feature.approval.api.ApprovalFlowMagicModule;
+import com.linewell.dataelement.magic.module.ApprovalFlowMagicModule;
 import com.linewell.dataelement.feature.approval.domain.ApprovalEngineModels.EngineInstance;
 import com.linewell.dataelement.feature.approval.domain.ApprovalEngineModels.StartCommand;
 import com.linewell.dataelement.feature.approval.infrastructure.persistence.service.IFlowSuggestionService;
 import com.linewell.dataelement.magic.runtime.route.RegisteredMagicApiInvoker;
 import com.linewell.dataelement.integration.workflow.CustomGlobalListener;
-import com.linewell.dataelement.feature.assetcenter.application.AssetCenterApprovalBridge;
 import com.linewell.dataelement.feature.delivery.application.ResourceDeliveryService;
 import com.linewell.dataelement.feature.identity.application.IdentityUserLookupService;
 import com.linewell.dataelement.model.approval.ApprovalCallbackRequest;
@@ -29,6 +28,7 @@ import com.linewell.dataelement.platform.magic.CanonicalMagicSources;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Function;
 import org.dromara.warm.flow.core.entity.Instance;
 import org.dromara.warm.flow.core.entity.Node;
 import org.dromara.warm.flow.core.listener.ListenerVariable;
@@ -45,9 +45,8 @@ class ApprovalFlowAssociationTest {
     private final EsCommonService search = mock(EsCommonService.class);
     private final IdentityUserLookupService identities = mock(IdentityUserLookupService.class);
     private final ResourceDeliveryService delivery = mock(ResourceDeliveryService.class);
-    private final AssetCenterApprovalBridge bridge = mock(AssetCenterApprovalBridge.class);
     private final ApprovalFlowService service = new ApprovalFlowService(engine, forms,
-            mock(IFlowSuggestionService.class), search, identities, delivery, bridge, associations);
+            mock(IFlowSuggestionService.class), search, identities, delivery, associations);
     private final ApprovalBusinessAssociationService.Business business =
             new ApprovalBusinessAssociationService.Business("form", "tenant-a", "applyForm", "订阅申请", "org-a",
                     "owner", "owner", "CATALOG_SUBSCRIPTION");
@@ -76,14 +75,20 @@ class ApprovalFlowAssociationTest {
         verifyNoInteractions(search);
     }
 
-    @Test void subscriptionCallbackKeepsCurrentDeliveryBridgeAndAvoidsLegacyAssetQueries() {
+    @Test void subscriptionCallbackPassesOnlyVerifiedAssociationAndDecisionToTheResource() {
         when(associations.load("form")).thenReturn(business);
         ApprovalCallbackRequest request = new ApprovalCallbackRequest();
         request.setBusinessId("form"); request.setApproveType("haoyueSubscription");
         request.setHandleType("PASS"); request.setNextNodeCode("end");
-        assertThat(service.finshHandle(request)).isEqualTo(true);
+        try (var auth = mockStatic(StpUtil.class)) {
+            auth.when(StpUtil::getLoginId).thenReturn("reviewer");
+            assertThat(service.finish(request, verified -> {
+                assertThat(verified).containsExactlyInAnyOrderEntriesOf(Map.of("type", "haoyueSubscription",
+                        "id", "form", "decision", 2, "actor", "reviewer"));
+                return true;
+            })).isEqualTo(true);
+        }
         verify(associations).requireCompatible(business, "haoyueSubscription");
-        verify(bridge).complete("haoyueSubscription", "form", 2);
         verifyNoInteractions(forms, search, delivery);
     }
 
@@ -98,13 +103,15 @@ class ApprovalFlowAssociationTest {
         request.setHandleType("PASS");
         request.setNextNodeCode("end");
 
-        assertThat(service.finshHandle(request)).isEqualTo(true);
+        @SuppressWarnings("unchecked")
+        Function<Map<String, Object>, Object> assetCompletion = mock(Function.class);
+        assertThat(service.finish(request, assetCompletion)).isEqualTo(true);
 
         verify(associations).requireCompatible(catalogApplication, "catalogSubscribe");
         verify(forms).update(any());
         verify(search).saveOrUpdate("dataassets_apply_form", "form", "{\"flowStatus\":2}", true);
         verify(delivery).completeApprovedApplication("form");
-        verifyNoInteractions(bridge);
+        verifyNoInteractions(assetCompletion);
     }
 
     @Test void warmFlowFinishesThroughTheRegisteredResourceUsingTheEngineBusinessId() throws Exception {
@@ -119,10 +126,13 @@ class ApprovalFlowAssociationTest {
         when(event.getNextNodes()).thenReturn(List.of(node));
         when(event.getVariable()).thenReturn(Map.of("businessId", "untrusted-form",
                 "approveType", "haoyueSubscription", "handleType", "PASS"));
-        when(associations.load("form")).thenReturn(business);
+        var originalForm = new ApprovalBusinessAssociationService.Business("form", "tenant-a", "applyForm",
+                "目录申请", "org-a", "owner", "owner", "catalogSubscribe");
+        when(associations.load("form")).thenReturn(originalForm);
+        new MybatisConfiguration().addMapper(DataApplyFormTMapper.class);
         var magic = new ApprovalFlowMagicModule(service, new ObjectMapper());
         var script = MagicScript.create(CanonicalMagicSources.byId("c30f3718868148ce84e65217f49a7720")
-                .replaceFirst("(?m)^import approvalFlow\\R", ""), null);
+                .replaceAll("(?m)^import (?:approvalFlow|tableRead|tableWrite|tenantRuntime)\\R", ""), null);
         when(api.execute(org.mockito.ArgumentMatchers.eq("c30f3718868148ce84e65217f49a7720"), any())).thenAnswer(call -> {
                     var input = Map.<String, Object>of("approvalFlow", magic, "engineEvent",
                             ((Map<?, ?>) call.getArgument(1)).get("engineEvent"));
@@ -134,15 +144,16 @@ class ApprovalFlowAssociationTest {
                 "engineEvent", Map.of("businessId", "form", "handleType", "PASS"))));
         assertThat(forged).isInstanceOf(ExitValue.class);
         assertThat(((ExitValue) forged).getValues()[0]).isEqualTo(403);
-        verifyNoInteractions(associations, bridge);
+        verifyNoInteractions(associations, forms, delivery);
 
         when(event.getVariable()).thenReturn(Map.of("approveType", "checkIn"));
         listener.finish(event);
-        verifyNoInteractions(api, associations, bridge);
+        verifyNoInteractions(api, associations, forms, delivery);
         when(event.getVariable()).thenReturn(Map.of("businessId", "untrusted-form",
-                "approveType", "haoyueSubscription", "handleType", "PASS"));
+                "approveType", "catalogSubscribe", "handleType", "PASS"));
         listener.finish(event);
         verify(associations).load("form");
-        verify(bridge).complete("haoyueSubscription", "form", 2);
+        verify(associations).requireCompatible(originalForm, "catalogSubscribe");
+        verify(delivery).completeApprovedApplication("form");
     }
 }

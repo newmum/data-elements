@@ -18,6 +18,61 @@ import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 class PortableDdlConverterTest {
+    @ParameterizedTest
+    @CsvSource({"Int8,3,SMALLINT,int", "UInt8,3,SMALLINT,int", "Int16,5,SMALLINT,int", "UInt16,5,INTEGER,int",
+        "Int32,10,INTEGER,int", "UInt32,10,BIGINT,bigint", "Int64,19,BIGINT,bigint", "UInt64,20,DECIMAL(20;0),decimal",
+        "TINYINT,3,SMALLINT,int", "SMALLINT UNSIGNED,5,INTEGER,int", "INT UNSIGNED,10,BIGINT,bigint", "BIGINT UNSIGNED,20,DECIMAL(20;0),decimal"})
+    @SuppressWarnings("unchecked")
+    void clickHouseIntegerDomainsSurviveNativeWrappersAndCrossDialectConversion(String nativeType,int digits,String hive,String logical) {
+        var converter=new PortableDdlConverter();
+        for(String raw:List.of(nativeType,"Nullable("+nativeType+")","LowCardinality(Nullable("+nativeType+"))")) {
+            var column=new ColumnInfo(); column.setColumnName("native_integer"); column.setColumnType(raw);
+            column.setDataType(raw); column.setSourceDatabaseType("clickhouse"); column.setPrecision(1); column.setLength(1L); column.setScale(7); column.setNullable(true);
+            assertEquals(logical,converter.logicalType(raw,"clickhouse"));
+            assertEquals(raw,converter.originTypeForEditor(logical,raw,"clickhouse"));
+            for(var target:List.of(DatabaseType.ORACLE,DatabaseType.HIVE)) {
+                var result=converter.prepare(List.of(column),target);
+                var prepared=((List<ColumnInfo>)result.get("columns")).getFirst();
+                assertEquals(target==DatabaseType.ORACLE?"NUMBER("+digits+",0)":hive.replace(';',','),prepared.getColumnType());
+                assertEquals(digits,prepared.getPrecision()); assertEquals(0,prepared.getScale()); assertTrue(prepared.getNullable());
+                assertEquals((long)digits,prepared.getLength()); assertTrue(((List<?>)result.get("warnings")).isEmpty());
+                assertEquals(prepared.getColumnType(),((List<ColumnInfo>)converter.prepare(List.of(prepared),target).get("columns")).getFirst().getColumnType());
+            }
+            assertEquals(raw,column.getColumnType()); assertEquals(1,column.getPrecision()); assertEquals(7,column.getScale());
+        }
+    }
+
+    @Test
+    void clickHouseInt8DoesNotChangePostgresInt8AndWideIntegersAreNotSilentlyNarrowed() {
+        var converter=new PortableDdlConverter();
+        assertEquals("int",converter.logicalType("Int8","clickhouse"));
+        assertEquals("bigint",converter.logicalType("int8","postgresql"));
+        assertEquals(PortableColumnType.Kind.BIGINT,PortableColumnType.kind("int8"));
+        for(String wide:List.of("Int128","UInt128","Int256","UInt256","LowCardinality(".repeat(10)+"UInt64"+")".repeat(10))) {
+            assertEquals("text",converter.logicalType(wide,"clickhouse"));
+            assertNull(converter.originTypeForEditor("decimal",wide,"clickhouse"));
+        }
+        var source=new ColumnInfo();source.setColumnType("int8");source.setSourceDatabaseType("postgresql");
+        assertEquals("NUMBER(19)",PortableColumnType.render(DatabaseType.ORACLE,source,"int8"));
+    }
+
+    @Test
+    void unsigned64BoundaryStaysExactDecimalAndSigned64StaysExactLong() {
+        var converter=new PortableDdlConverter();
+        var maximum=new java.math.BigInteger("18446744073709551615");
+        assertEquals("decimal",converter.logicalType("Nullable(UInt64)","clickhouse"));
+        assertEquals(new java.math.BigDecimal(maximum),com.linewell.dataelement.mapping.core.ValueTypes.cast(
+                maximum,"DECIMAL",20,0,java.math.RoundingMode.UNNECESSARY));
+        assertEquals(java.math.BigDecimal.ZERO,com.linewell.dataelement.mapping.core.ValueTypes.cast(
+                java.math.BigInteger.ZERO,"DECIMAL",20,0,java.math.RoundingMode.UNNECESSARY));
+        assertNull(com.linewell.dataelement.mapping.core.ValueTypes.cast(null,"DECIMAL",20,0,java.math.RoundingMode.UNNECESSARY));
+        for(long endpoint:new long[]{Long.MIN_VALUE,Long.MAX_VALUE}) {
+            assertEquals(endpoint,com.linewell.dataelement.mapping.core.ValueTypes.cast(endpoint,"BIGINT",0,0,java.math.RoundingMode.UNNECESSARY));
+        }
+        assertThrows(com.linewell.dataelement.mapping.core.MappingException.class,()->com.linewell.dataelement.mapping.core.ValueTypes.cast(
+                maximum,"BIGINT",0,0,java.math.RoundingMode.UNNECESSARY));
+    }
+
     @ParameterizedTest @ValueSource(strings={"elasticsearch","ELASTICSEARCH"})
     void elasticDateDefaultsPreserveTimestampWhileExplicitDateRemainsAvailable(String source) throws Exception {
         var converter=new PortableDdlConverter();

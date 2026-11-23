@@ -18,6 +18,40 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.response.MockRestResponseCreators.*;
 
 class NifiClientRuntimeScopeTest {
+    @Test void selectedAnonymousNodeDoesNotInheritTheCredentialedNodesToken() {
+        var resolver = mock(NifiNodeRuntimeResolver.class);
+        var secured = new RuntimeNode("tenant-a", "secured", "secured", "https://secured-nifi.test",
+                "validation-user", "validation-password", false, "root");
+        var anonymous = new RuntimeNode("tenant-a", "anonymous", "anonymous", "http://anonymous-nifi.test",
+                "", "", false, "root");
+        var securedBuilder = RestClient.builder().baseUrl(secured.baseUrl());
+        var anonymousBuilder = RestClient.builder().baseUrl(anonymous.baseUrl());
+        var securedServer = MockRestServiceServer.bindTo(securedBuilder).build();
+        var anonymousServer = MockRestServiceServer.bindTo(anonymousBuilder).build();
+        when(resolver.resolveAssignedNode("secured")).thenReturn(secured);
+        when(resolver.resolveAssignedNode("anonymous")).thenReturn(anonymous);
+        when(resolver.restClient(secured)).thenReturn(securedBuilder.build());
+        when(resolver.restClient(anonymous)).thenReturn(anonymousBuilder.build());
+        securedServer.expect(requestTo("https://secured-nifi.test/nifi-api/access/token"))
+                .andRespond(withSuccess("secured-token", MediaType.TEXT_PLAIN));
+        securedServer.expect(ExpectedCount.times(2), requestTo("https://secured-nifi.test/nifi-api/process-groups/group"))
+                .andExpect(header("Authorization", "Bearer secured-token"))
+                .andRespond(withSuccess("{\"component\":{\"id\":\"group\"}}", MediaType.APPLICATION_JSON));
+        anonymousServer.expect(requestTo("http://anonymous-nifi.test/nifi-api/process-groups/group"))
+                .andExpect(headerDoesNotExist("Authorization"))
+                .andRespond(withSuccess("{\"component\":{\"id\":\"group\"}}", MediaType.APPLICATION_JSON));
+        var client = new NifiClient(resolver, new ObjectMapper());
+        try (var tenant = TenantContext.use("tenant-a")) {
+            for (String id : new String[]{"secured", "anonymous", "secured"}) {
+                try (var scope = client.bindAssignedNode(id)) {
+                    assertThat(client.getProcessGroup("group").path("component").path("id").asText()).isEqualTo("group");
+                }
+            }
+        }
+        verify(resolver, never()).resolve();
+        securedServer.verify();
+        anonymousServer.verify();
+    }
     @ParameterizedTest @ValueSource(ints = {20, 100})
     void resolvesTenantNodeOnceBeforeCreatingTwentyOrOneHundredProcessors(int count) {
         var resolver = mock(NifiNodeRuntimeResolver.class);

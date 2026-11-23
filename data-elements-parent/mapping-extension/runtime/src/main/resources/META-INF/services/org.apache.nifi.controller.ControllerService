@@ -1,1 +1,3 @@
 com.linewell.dataelement.nifi.JdbcHaitongDictionaryService
+com.linewell.dataelement.nifi.HaitongBinaryRecordReader
+com.linewell.dataelement.nifi.HaitongJdbcRecordReader

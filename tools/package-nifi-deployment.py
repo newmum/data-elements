@@ -104,6 +104,28 @@ def inspect_nar(path):
     return fields, types
 
 
+def validate_clickhouse_classpath(directory, files, driver_template):
+    """Check the managed 0.6.5 pair without imposing it on explicit newer clients."""
+    names = ("clickhouse-jdbc-0.6.5.jar", "clickhouse-jdbc-0.6.5-all.jar")
+    mappings = [line.split("=", 1)[1].strip() for line in driver_template.splitlines()
+                if line.strip().startswith("CLICKHOUSE=")]
+    selected = {name: [relative for relative in files if Path(relative).name == name] for name in names}
+    if not any(selected.values()) and not any("clickhouse-jdbc-0.6.5" in value for value in mappings):
+        return
+    if any(len(selected[name]) != 1 for name in names):
+        raise ValueError("ClickHouse 0.6.5 requires exactly one main JAR and one same-version all JAR")
+    relative_paths = [selected[name][0] for name in names]
+    expected = ",".join("@DRIVER_DIR@/" + relative for relative in relative_paths)
+    if mappings != [expected]:
+        raise ValueError("ClickHouse 0.6.5 mapping must load the main JAR followed by its all JAR")
+    driver = "com/clickhouse/jdbc/ClickHouseDriver.class"
+    with ZipFile(directory / relative_paths[0]) as main, ZipFile(directory / relative_paths[1]) as dependencies:
+        if "com/clickhouse/client/ClickHouseClient.class" not in main.namelist():
+            raise ValueError("ClickHouse main JAR is missing ClickHouseClient")
+        if driver not in main.namelist() or driver not in dependencies.namelist() or main.read(driver) != dependencies.read(driver):
+            raise ValueError("ClickHouse main and all JARs must contain the same JDBC driver")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ("base", "custom-directory", "mapping", "java", "drivers", "driver-template", "output"):
@@ -139,6 +161,7 @@ def main():
         path = (args.drivers / relative).resolve()
         if not path.is_relative_to(args.drivers.resolve()) or digest(path) != item["sha256"]:
             raise ValueError("Driver checksum mismatch: " + relative)
+    validate_clickhouse_classpath(args.drivers, drivers["files"], args.driver_template.read_text(encoding="utf8"))
     output.parent.mkdir(parents=True, exist_ok=True)
     temporary = output.with_suffix(".zip.partial")
     checksums = {}

@@ -1,0 +1,27 @@
+{
+  "control": {
+    "jdbcUrl": "jdbc:mysql://CONTROL_MYSQL_HOST:3306/baseline?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC",
+    "username": "",
+    "password": ""
+  },
+  "tenant": {
+    "jdbcUrl": "jdbc:mysql://TENANT_MYSQL_HOST:3306/baseline_ga?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC",
+    "username": "",
+    "password": ""
+  },
+  "redis": {
+    "host": "REDIS_HOST",
+    "port": 6379,
+    "database": 0,
+    "username": "",
+    "password": ""
+  },
+  "elasticsearch": {
+    "hosts": ["ES_HOST:9200"],
+    "username": "",
+    "password": ""
+  },
+  "identity": {
+    "transportKey": ""
+  }
+}

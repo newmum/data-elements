@@ -1,7 +1,7 @@
 import {parsePreciseJson} from '../utils/preciseJson.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createRule,emptyUnifiedDraft,setConditional,setNullHandling,nullHandling,parseNumericConstant,validateRuleForm,usesUnifiedRecordRules,isEditableRule,assertExactJsonNumbers,primaryRuleMode,changePrimaryRuleMode,includeOdsSystemMappings,logicalFieldType,functionParameterSlots,setRuleSteps} from './unifiedRuleModel.ts';
+import {createRule,emptyUnifiedDraft,setConditional,setNullHandling,nullHandling,parseNumericConstant,validateRuleForm,usesUnifiedRecordRules,isEditableRule,assertExactJsonNumbers,primaryRuleMode,changePrimaryRuleMode,includeOdsSystemMappings,logicalFieldType,functionParameterSlots,setRuleSteps,recommendationCompileSpec,withFieldNamePolicy} from './unifiedRuleModel.ts';
 
 test('time target defaults to a datetime parser and ODS system value fits varchar32',()=>{
  const rule={...createRule('DIRECT','r'),input:{kind:'FIELD',name:'created_time'},target:{name:'created_time',logicalType:'DATETIME'}};
@@ -16,6 +16,19 @@ test('physical field types use the kernel type semantics in the configuration fo
  assert.equal(logicalFieldType({name:'f',type:'timestamp',logicalType:'INSTANT'}),'INSTANT');
  for(const type of ['CHARACTER VARYING(200)','national   character varying(20)','LONGNVARCHAR','NCLOB','NTEXT','BPCHAR','TINYTEXT','MEDIUMTEXT','LONGTEXT'])assert.equal(logicalFieldType({name:'f',type}),'STRING');
  assert.equal(logicalFieldType({name:'f',type:'MEDIUMINT UNSIGNED'}),'INT');
+});
+
+test('shared automatic recommendations retain the canonical NUMBER and Oracle DATE contract',()=>{
+ const contract={source:[{name:'amount',logicalType:'DECIMAL'},{name:'occurred_at',logicalType:'DATETIME'}],
+  target:[{name:'AMOUNT',logicalType:'DECIMAL',precision:22,scale:6,nullable:false},{name:'OCCURRED_AT',physicalType:'DATE',logicalType:'DATETIME',length:11}],
+  targets:[{nodeId:'hive',reference:{datasourceId:'hive',tableId:'events'},fields:[{name:'occurred_at',logicalType:'STRING'}]}]};
+ const result=recommendationCompileSpec([{from:'/amount',to:'/AMOUNT'},{from:'/occurred_at',to:'/OCCURRED_AT'}],
+  [{name:'amount',type:'NUMBER'},{name:'occurred_at',type:'DATE'}],[{name:'AMOUNT',type:'NUMBER'},{name:'OCCURRED_AT',type:'DATE'}],contract);
+ assert.equal(result.schemaContract,contract);
+ assert.deepEqual(result.mappings.map(mapping=>[mapping.sourceType,mapping.targetType]),[['DECIMAL','DECIMAL'],['DATETIME','DATETIME']]);
+ assert.equal(result.mappings[0].targetPrecision,22);assert.equal(result.mappings[0].targetScale,6);assert.equal(result.mappings[0].targetNullable,false);
+ assert.equal(result.mappings[1].targetLength,undefined,'JDBC temporal storage/display width is not a character limit');
+ assert.equal(result.mappings[1].to,'/OCCURRED_AT','Hive carrier spelling must not replace the shared output identifier');
 });
 
 test('variadic function parameters remain individually editable after saving and reopening',()=>{
@@ -135,4 +148,14 @@ test('manual date, cast and array outputs follow the chosen conversion without t
   assert.equal(setRuleSteps(rule,steps,false).target.logicalType,output);assert.equal(setRuleSteps(rule,steps,true).target.logicalType,'STRING');
   const trailing={stepId:'format',operator:'DATE_FORMAT',args:{pattern:'uuuu-MM-dd'}};assert.equal(setRuleSteps({...rule,steps:[...rule.steps,trailing]},[...steps,trailing],false).target.logicalType,'STRING');
  }
+});
+
+ test('field names default to insensitive and registered legacy strict drafts are normalized',()=>{
+ assert.equal(emptyUnifiedDraft().policies.caseSensitive,false);
+ const draft={...emptyUnifiedDraft(),policies:{caseSensitive:true},schemaContract:{sourceRef:{datasourceId:'validation',tableId:'source'}}};
+ assert.equal(withFieldNamePolicy(draft).policies.caseSensitive,false);
+ assert.equal(draft.policies.caseSensitive,true);
+ assert.equal(withFieldNamePolicy({...draft,schemaContract:undefined}).policies.caseSensitive,true);
+ const spec=recommendationCompileSpec([{from:'/id',to:'/AMOUNT'}],[{name:'ID',logicalType:'LONG'}],[{name:'amount',logicalType:'DECIMAL',precision:22,scale:6}]);
+ assert.equal(spec.mappings[0].sourceType,'LONG');assert.equal(spec.mappings[0].targetPrecision,22);assert.equal(spec.mappings[0].targetScale,6);
 });

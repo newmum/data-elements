@@ -25,6 +25,53 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 class DslCompilerHiveTemporalWriterTest {
+    @ParameterizedTest @ValueSource(strings={"Oracle 12+","OCEANBASE_ORACLE","ORACLE12"})
+    void oracleDialectAliasesKeepTheirPhysicalNumberReader(String databaseType) {
+        var sink=new Pipeline.Node("jdbc","sink.jdbc","Oracle目标","sink",600,0,Map.of("dbType",databaseType,
+                "jdbcUrl","jdbc:oracle:thin:@//validation.invalid:1521/validation","username","validation","password","validation",
+                "table","ODS_VALIDATION","writerType","LINEWELL_PUT_DATABASE_RECORD","statementType","INSERT",
+                "targetColumns",List.of(Map.of("columnName","N","columnType","NUMBER(38,18)","dataType","decimal"))));
+        compiler.compile(flow(List.of(source("source","mysql",Map.of()),sink)));
+        var readers=services.stream().filter(s->s.type().equals("com.linewell.dataelement.nifi.HaitongJdbcRecordReader")).toList();
+        assertThat(readers).hasSize(1);
+        assertThat(readers.getFirst().properties()).containsEntry("number-fields","[\"N\"]");
+        assertThat(namedProcessor("Oracle目标/put").properties()).containsEntry("put-db-record-record-reader",readers.getFirst().id());
+    }
+    @Test
+    void physicalOracleNumbersUseOneExactReaderAcrossInsertProjectionAndWriter() {
+        var columns=List.of(Map.<String,Object>of("columnName","HEIGH","columnType","NUMBER","dataType","decimal"),
+                Map.<String,Object>of("columnName","DATA","columnType","BLOB","dataType","binary"),
+                Map.<String,Object>of("columnName","ODS_RKSJ","columnType","TIMESTAMP","dataType","datetime"));
+        var sink=new Pipeline.Node("jdbc","sink.jdbc","Oracle目标","sink",600,0,Map.of("dbType","ORACLE",
+                "jdbcUrl","jdbc:oracle:thin:@//validation.invalid:1521/validation","username","validation","password","validation",
+                "table","ODS_VALIDATION","writerType","LINEWELL_PUT_DATABASE_RECORD","statementType","INSERT","targetColumns",columns));
+        compiler.compile(flow(List.of(source("source","mysql",Map.of()),sink)));
+        var readers=services.stream().filter(s->s.type().equals("com.linewell.dataelement.nifi.HaitongJdbcRecordReader")).toList();
+        assertThat(readers).hasSize(1);
+        var reader=readers.getFirst();assertThat(reader.properties()).containsEntry("number-fields","[\"HEIGH\"]").containsEntry("binary-fields","[\"DATA\"]");
+        assertThat(namedProcessor("Oracle目标/normalize").properties()).containsValue(reader.id());
+        assertThat(namedProcessor("Oracle目标/put").properties()).containsEntry("put-db-record-record-reader",reader.id());
+        assertThat(services).noneMatch(s->s.type().equals("com.linewell.dataelement.nifi.HaitongBinaryRecordReader"));
+        verify(nifi,times(1)).listControllerServices("root");
+    }
+
+    @ParameterizedTest @ValueSource(strings={"BLOB","VARBINARY"})
+    void onlyPhysicalOracleBlobTargetsRestoreTheirBinaryReaderContract(String physicalType) {
+        var sink=new Pipeline.Node("jdbc","sink.jdbc","Oracle目标","sink",600,0,Map.of("dbType","ORACLE",
+                "jdbcUrl","jdbc:oracle:thin:@//validation.invalid:1521/validation","username","validation","password","validation",
+                "table","ODS_VALIDATION","writerType","LINEWELL_PUT_DATABASE_RECORD","statementType","INSERT",
+                "targetColumns",List.of(Map.of("columnName","ID","dataType","INT"),
+                        Map.of("columnName","DATA","columnType",physicalType,"dataType","binary"))));
+        compiler.compile(flow(List.of(source("source","mysql",Map.of()),sink)));
+        var binary=services.stream().filter(s->s.type().equals("com.linewell.dataelement.nifi.HaitongBinaryRecordReader")).toList();
+        String expected="global-json-reader";
+        if(physicalType.equals("BLOB")) {
+            assertThat(binary).hasSize(1);expected=binary.getFirst().id();
+            assertThat(binary.getFirst().properties()).containsEntry("delegate-reader","global-json-reader").containsEntry("binary-fields","[\"DATA\"]");
+        } else assertThat(binary).isEmpty();
+        assertThat(namedProcessor("Oracle目标/put").properties()).containsEntry("put-db-record-record-reader",expected);
+        assertNoTaskJsonServices();
+    }
     private record Created(String id, String type, String name, Map<String, String> properties) {}
     private final List<Created> services = new ArrayList<>();
     private final List<Created> processors = new ArrayList<>();
@@ -210,7 +257,7 @@ class DslCompilerHiveTemporalWriterTest {
         compiler.compile(flow(List.of(source("source",database,Map.of()),mapping)));
         Created processor=namedProcessor("字段映射");
         assertThat(processor.properties()).containsEntry("record-writer",database.equals("hive")?"global-hive-json-writer":"global-json-writer")
-                .containsEntry("record-reader","global-json-reader").containsEntry("typed-record-reader","global-json-reader");
+                .containsEntry("record-reader","global-json-reader").containsEntry("typed-record-reader","global-json-reader").containsEntry("preserve-json-numbers","true");
         assertThat(processor.type()).isEqualTo("com.linewell.dataelement.nifi.HaitongTransformRecord");
         assertEmbeddedMappingMetadata(processor);
         verify(nifi,never()).waitForControllerServiceEnabled(eq("true"),anyLong());
@@ -244,7 +291,7 @@ class DslCompilerHiveTemporalWriterTest {
     void fieldOnlyUpgradeBindsCorrectWriterAndNeverRecreatesOrModifiesSources(String database) {
         compiler.createMappingReplacement(flow(List.of(source("source",database,Map.of()),mapping())),mapping(),"existing-group","reader","typed-reader","existing-writer",prepared());
         assertThat(namedProcessor("字段映射").properties()).containsEntry("record-writer",database.equals("hive")?"global-hive-json-writer":"global-json-writer")
-                .containsEntry("record-reader","global-json-reader").containsEntry("typed-record-reader","global-json-reader");
+                .containsEntry("record-reader","global-json-reader").containsEntry("typed-record-reader","global-json-reader").containsEntry("preserve-json-numbers","true");
         assertEmbeddedMappingMetadata(namedProcessor("字段映射"));
         assertThat(processors).hasSize(1);
         // The same policy applies to field-only replacement, without touching source IDs/state.
@@ -256,6 +303,18 @@ class DslCompilerHiveTemporalWriterTest {
         assertNoTaskJsonServices();
     }
 
+    @Test void numericJdbcWireProjectionAndGovernanceUseTheSameRegisteredNamesOnBuildAndUpgrade() throws Exception {
+        var columns=List.of(Map.of("columnName","1231313","dataType","VARCHAR"),Map.of("columnName","id","dataType","INT"));
+        var input=source("source","mysql",Map.of("sourceColumns",columns));
+        var pipeline=flow(List.of(input,mapping()));
+        compiler.compile(pipeline);
+        String aliases=namedProcessor("字段映射").properties().get("jdbc-field-aliases");
+        var parsed=new ObjectMapper().readTree(aliases);assertThat(parsed.size()).isEqualTo(1);
+        assertThat(namedProcessor("source/fetch").properties().get("Columns to Return")).contains("`1231313` AS `"+parsed.path("1231313").asText()+"`");
+        processors.clear();services.clear();
+        compiler.createMappingReplacement(pipeline,mapping(),"existing-group","reader","typed","writer",prepared());
+        assertThat(processors).hasSize(1);assertThat(namedProcessor("字段映射").properties()).containsEntry("jdbc-field-aliases",aliases);
+    }
     private static Pipeline.Node mapping(){return new Pipeline.Node("mapping","transform.field-mapping","字段映射","transform",300,0,Map.of("executionEngine","JAVA_RECORD","mappings","{\"schemaVersion\":\"2.0\",\"rules\":[]}"));}
     @ParameterizedTest @ValueSource(ints={20,100})
     void mappingPreflightChecksClusterCapabilitiesOncePerGraph(int count) {
@@ -290,17 +349,25 @@ class DslCompilerHiveTemporalWriterTest {
         assertNoTaskJsonServices();
     }
 
-    @ParameterizedTest @ValueSource(strings = {"hive", "mysql"})
+    @ParameterizedTest @ValueSource(strings = {"hive", "mysql", "oracle"})
     void queryExecutedInSourceDatabaseUsesTheSameTemporalWriter(String database) {
-        Pipeline.Node source = source("h", database, Map.of());
+        Map<String,Object> sourceConfig="oracle".equals(database)?Map.of("dbType","ORACLE",
+                "jdbcUrl","jdbc:oracle:thin:@//validation.invalid:1521/validation","username","validation","password","validation",
+                "syncMode","FULL_THEN_INCR","registeredDatasourceId","validation-source-db","sourceTableId","validation-source-table",
+                "sourceColumns",List.of(Map.of("columnName","EVENT_TIME","dataType","TIMESTAMP"))):Map.of();
+        Pipeline.Node source = source("h", database, sourceConfig);
         Pipeline.Node query = new Pipeline.Node("q", "transform.sql", "query", "transform", 300, 0,
                 Map.of("executionMode", "SOURCE_DB", "sql", "SELECT event_time FROM EVENT_LOG"));
         Pipeline base = flow(List.of(source, query));
         Pipeline pipeline = new Pipeline(base.id(), base.name(), null, null, null,
                 new Pipeline.Dsl(1, base.dsl().nodes(), List.of(new Pipeline.Edge("edge", "h", "q", "default"))),
                 null, null, null, null, null, null, null);
-        compiler.compile(pipeline);
+        var result=compiler.compile(pipeline);
         assertThat(namedProcessor("query/query").properties()).containsEntry("Record Writer", "global-hive-json-writer");
+        assertThat(result.nodes().get("h").processorIds).isEmpty();
+        assertThat(result.nodes().get("h").csIds).doesNotContainKey("date-fetch-dbcp");
+        assertThat(services).noneMatch(service->service.name().endsWith("/date-fetch-dbcp")
+                ||service.properties().containsKey("oracle.jdbc.J2EE13Compliant"));
     }
 
     @Test void missingTimeFormatWriterStopsSqlCompilationBeforeAnyProcessGroupIsCreated() {
@@ -475,6 +542,19 @@ class DslCompilerHiveTemporalWriterTest {
         assertErrorRoutes(mapped);
         assertThat(convert.properties()).containsEntry("Record Reader","global-json-reader").containsEntry("Record Writer","csv-service-id");
         verify(nifi,times(1)).listControllerServices("root");
+    }
+    @ParameterizedTest @ValueSource(strings={"HDFS_BATCH","LINEWELL_HDFS","HIVE_RECORD_PUT"})
+    void binaryTransportEncodingIsOnlyEnabledForTheDeclaredHiveTextTarget(String mode) throws Exception {
+        var spec=new ObjectMapper().readTree("{\"version\":\"1.0\",\"mappings\":[{\"from\":\"data\",\"to\":\"data\",\"targetType\":\"BLOB\"}]}");
+        var prepared=new UnifiedMappingService.Compiled(MappingEngine.compile(spec),Map.of());
+        var sink=new Pipeline.Node("sink","sink.hive","Hive目标","sink",600,0,Map.of("hiveWriteMode",mode,"table","VALIDATION"));
+        var pipeline=hiveTargetFlow(List.of(source("source","mysql",Map.of()),mapping(),sink),
+                List.of(new Pipeline.Edge("sm","source","mapping","default"),new Pipeline.Edge("mh","mapping","sink","default")));
+        compiler.createMappingReplacement(pipeline,mapping(),"existing-group","reader","typed","writer",prepared);
+        if(mode.equals("HIVE_RECORD_PUT"))assertThat(namedProcessor("字段映射").properties()).doesNotContainKey("binary-output-encoding");
+        else assertThat(namedProcessor("字段映射").properties()).containsEntry("binary-output-encoding","BASE64_TEXT");
+        assertThat(prepared.plan().outputContracts().get("data").logicalType()).isEqualTo("BINARY");
+        verify(nifi,never()).putWithRevision(contains("/processors/"),anyString(),any());
     }
     private static Pipeline.Node hiveSink(String id){return new Pipeline.Node(id,"sink.hive",id,"sink",600,0,Map.of("table","EVENT_LOG","database","default","hiveHdfsMerge",false));}
     private static Pipeline hiveTargetFlow(List<Pipeline.Node> nodes,List<Pipeline.Edge> edges){return new Pipeline("target-hive","Hive target",null,null,null,new Pipeline.Dsl(1,nodes,edges),null,null,null,null,null,null,null);}

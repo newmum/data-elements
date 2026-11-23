@@ -40,10 +40,10 @@ public class PublishedMappingLifecycleService {
             // Read revisions once per native scope; no per-processor GET calls.
             for(var scope:flows.entrySet()){
                 ObjectNode body=JSON.createObjectNode().put("id",scope.getKey()).put("state","RUNNING").put("disconnectedNodeAcknowledged",false);ObjectNode components=body.putObject("components");
-                for(JsonNode entity:scope.getValue().path("processors")){if(!entity.path("component").path("state").asText().equals("DISABLED")&&!oneShot(entity)&&!entity.path("component").path("state").asText().equals("RUNNING"))components.set(entity.path("id").asText(),entity.path("revision"));}
+                for(JsonNode entity:scope.getValue().path("processors")){if(!NifiClient.isManualBackfill(entity)&&!entity.path("component").path("state").asText().equals("DISABLED")&&!oneShot(entity)&&!entity.path("component").path("state").asText().equals("RUNNING"))components.set(entity.path("id").asText(),entity.path("revision"));}
                 if(!components.isEmpty())nifi.put("/flow/process-groups/"+scope.getKey(),body,JsonNode.class);
             }
-            for(JsonNode entity:all.values())if(!entity.path("component").path("state").asText().equals("DISABLED")&&oneShot(entity)&&!entity.path("component").path("state").asText().equals("RUNNING")){
+            for(JsonNode entity:all.values())if(!NifiClient.isManualBackfill(entity)&&!entity.path("component").path("state").asText().equals("DISABLED")&&oneShot(entity)&&!entity.path("component").path("state").asText().equals("RUNNING")){
                 ObjectNode body=JSON.createObjectNode();body.set("revision",entity.path("revision"));body.put("state","RUN_ONCE").put("disconnectedNodeAcknowledged",false);nifi.put("/processors/"+entity.path("id").asText()+"/run-status",body,JsonNode.class);once++;
             }
             Pipeline updated=pipelines.updateStatus(pipelineId,PipelineStatus.RUNNING);return Map.of("pipeline",updated,"mode","PUBLISHED_NATIVE_GRAPH","draftPublished",false,"oneShotSourceCount",once);

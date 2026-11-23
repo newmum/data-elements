@@ -16,7 +16,6 @@ import com.linewell.dataelement.dataassets.base.service.IDataApplyFormTService;
 import com.linewell.dataelement.elasticsearch.EsCommonService;
 import com.linewell.dataelement.feature.identity.application.IdentityUserLookupService;
 import com.linewell.dataelement.feature.delivery.application.ResourceDeliveryService;
-import com.linewell.dataelement.feature.assetcenter.application.AssetCenterApprovalBridge;
 import com.linewell.dataelement.feature.identity.domain.IdentityUser;
 import com.linewell.dataelement.feature.approval.infrastructure.persistence.entity.FlowSuggestion;
 import com.linewell.dataelement.feature.approval.infrastructure.persistence.service.IFlowSuggestionService;
@@ -28,6 +27,7 @@ import java.util.List;
 import java.util.Map;
 import com.linewell.dataelement.platform.persistence.id.NumericId;
 import java.util.Objects;
+import java.util.function.Function;
 import lombok.extern.slf4j.Slf4j;
 import com.linewell.dataelement.feature.approval.domain.ApprovalEngineModels.CompleteCommand;
 import com.linewell.dataelement.feature.approval.domain.ApprovalEngineModels.EngineInstance;
@@ -47,7 +47,6 @@ public class ApprovalFlowService {
     private final EsCommonService esCommonService;
     private final IdentityUserLookupService identityUserLookupService;
     private final ResourceDeliveryService resourceDeliveryService;
-    private final AssetCenterApprovalBridge assetCenterApprovalBridge;
 
     public ApprovalFlowService(
         ApprovalEnginePort approvalEngine,
@@ -56,7 +55,6 @@ public class ApprovalFlowService {
         EsCommonService esCommonService,
         IdentityUserLookupService identityUserLookupService,
         ResourceDeliveryService resourceDeliveryService,
-        AssetCenterApprovalBridge assetCenterApprovalBridge,
         ApprovalBusinessAssociationService businessAssociations
     ) {
         this.approvalEngine = approvalEngine;
@@ -66,7 +64,6 @@ public class ApprovalFlowService {
         this.esCommonService = esCommonService;
         this.identityUserLookupService = identityUserLookupService;
         this.resourceDeliveryService = resourceDeliveryService;
-        this.assetCenterApprovalBridge = assetCenterApprovalBridge;
     }
 
     public Map<String, Object> start(ApprovalStartRequest request) {
@@ -299,7 +296,8 @@ public class ApprovalFlowService {
         return nodes;
     }
 
-    public Object finshHandle(ApprovalCallbackRequest request) {
+    @Transactional(rollbackFor = Exception.class)
+    public Object finish(ApprovalCallbackRequest request, Function<Map<String, Object>, Object> assetCompletion) {
         String approveType = request == null ? null : request.getApproveType();
         String handleType = request == null ? null : request.getHandleType();
         String businessId = request == null ? null : request.getBusinessId();
@@ -324,29 +322,29 @@ public class ApprovalFlowService {
 
         var business = businessAssociations.load(businessId);
         businessAssociations.requireCompatible(business, approveType);
-        LocalDateTime now = LocalDateTime.now();
         if ("haoyuePublication".equals(approveType) || "haoyueSubscription".equals(approveType)) {
-            assetCenterApprovalBridge.complete(approveType, businessId, flowStatus);
-        } else {
-            dataApplyFormTService.update(
+            if (assetCompletion == null) throw new IllegalStateException("资产审批完成资源尚未更新");
+            return assetCompletion.apply(Map.of("type", approveType, "id", businessId, "decision", flowStatus,
+                    "actor", String.valueOf(StpUtil.getLoginId())));
+        }
+        dataApplyFormTService.update(
                 new LambdaUpdateWrapper<DataApplyFormT>()
                     .eq(DataApplyFormT::getTid, businessId)
                     .eq(DataApplyFormT::getTenantId, business.tenantId())
                     .and(active -> active.eq(DataApplyFormT::getIsDel, 0).or().isNull(DataApplyFormT::getIsDel))
                     .set(DataApplyFormT::getFlowStatus, String.valueOf(flowStatus))
-                    .set(DataApplyFormT::getUpdatedTime, now)
-            );
-            esCommonService.saveOrUpdate(
+                    .set(DataApplyFormT::getUpdatedTime, LocalDateTime.now())
+        );
+        esCommonService.saveOrUpdate(
                 "dataassets_apply_form",
                 businessId,
                 "{\"flowStatus\":" + flowStatus + "}",
                 true
-            );
+        );
 
-            // 审批完全通过后，按资源类型生成库表分发任务或 API 授权记录。
-            if (flowStatus == 2) {
-                resourceDeliveryService.completeApprovedApplication(businessId);
-            }
+        // 审批完全通过后，按资源类型生成库表分发任务或 API 授权记录。
+        if (flowStatus == 2) {
+            resourceDeliveryService.completeApprovedApplication(businessId);
         }
         return true;
     }

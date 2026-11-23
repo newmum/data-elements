@@ -38,6 +38,7 @@ public final class DslHasher {
     private static final String FILE_TRANSFER_COMPILER_REVISION = "ftp-file-dataset-parser-v2";
     private static final String FILE_CONSUMPTION_COMPILER_REVISION = "file-consumption-direct-list-native-path-v2";
     private static final String ORACLE_QUOTED_NAME_COMPILER_REVISION = "oracle-quoted-object-identity-v1";
+    private static final String MYSQL_TINY_INTEGER_COMPILER_REVISION = "mysql-native-tinyint-read-v1";
 
     private static final ObjectMapper SORTED = new ObjectMapper()
             .configure(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS, true);
@@ -104,6 +105,9 @@ public final class DslHasher {
                 && Boolean.TRUE.equals(plan.get("enabled")))) effectiveRevision += "|" + HIVE_PARTITION_COMPILER_REVISION;
         if (usesFieldMapping(dsl)) effectiveRevision += "|" + FIELD_MAPPING_COMPILER_REVISION;
         if(usesJavaMapping(dsl))effectiveRevision+="|"+JAVA_MAPPING_COMPILER_REVISION;
+        if (dsl.nodes() != null && dsl.nodes().stream().anyMatch(DslHasher::usesLegacyMySqlTinyIntegerReader)) {
+            effectiveRevision += "|" + MYSQL_TINY_INTEGER_COMPILER_REVISION;
+        }
         if(dsl.nodes()!=null&&dsl.nodes().stream().anyMatch(node->{
             if(node==null||node.config()==null)return false;
             String type=java.util.Objects.toString(node.config().get("dbType"),"").toUpperCase(java.util.Locale.ROOT);
@@ -134,6 +138,31 @@ public final class DslHasher {
         if(dsl==null||dsl.nodes()==null)return false;
         for(var node:HiveSinkPublicationPolicy.forPublication(dsl).nodes())if(node!=null&&node.config()!=null&&node.config().containsKey("mappings")){
             try{Object raw=node.config().get("mappings");var spec=raw instanceof String text?SORTED.readTree(text):SORTED.valueToTree(raw);if(spec.path("schemaVersion").asText().equals("2.0")||spec.path("executionEngine").asText().equals("JAVA_RECORD"))return true;}catch(Exception ignored){}
+        }
+        return false;
+    }
+
+    /** Only saved MySQL sources whose registered fields could have been read as Boolean need this upgrade. */
+    private static boolean usesLegacyMySqlTinyIntegerReader(Pipeline.Node node) {
+        if (node == null || !"source".equals(node.category()) || node.config() == null) return false;
+        Map<String, Object> config = node.config();
+        String url = java.util.Objects.toString(config.get("jdbcUrl"), "");
+        if (!url.isBlank()) {
+            if (!url.startsWith("jdbc:mysql:") || url.equals(
+                    com.linewell.dataelement.metautil.jdbc.MySqlIntegerReadPolicy.url(url))) return false;
+        } else if (!"source.mysql".equals(node.manifestKey())
+                && !"MYSQL".equalsIgnoreCase(java.util.Objects.toString(config.get("dbType"), ""))) return false;
+        if (!(config.get("sourceColumns") instanceof List<?> columns)) return false;
+        for (Object column : columns) {
+            if (!(column instanceof Map<?, ?> values)) continue;
+            for (String key : List.of("sourceColumnType", "columnType", "column_type", "typeName", "dataType", "data_type")) {
+                String type = java.util.Objects.toString(values.get(key), "").trim();
+                if (type.isEmpty()) continue;
+                // Older managed snapshots retain TINYINT but omit its display width.
+                String physical = type.toLowerCase(java.util.Locale.ROOT).replaceAll("\\s+", "");
+                if (List.of("tinyint", "tinyint(1)", "tinyint(1)unsigned", "tinyint(1)unsignedzerofill").contains(physical)) return true;
+                break;
+            }
         }
         return false;
     }

@@ -22,6 +22,7 @@
   "responseBodyDefinition": null
 }
 ================================
+import '@/common/nifinodeconfig' as nodeConfiguration
 import cn.hutool.core.util.IdUtil
 import jsons
 import cn.hutool.json.JSONUtil as poolJsons
@@ -839,25 +840,26 @@ var isOdsSystemColumn = (name) => {
     return n == 'ODS_UUID' || n == 'ODS_RKSJ' || n == 'ODS_GXSJ'
 }
 var odsSystemMapping = (name) => {
-    var n = text(name).toUpperCase()
+    var targetName = text(name)
+    var n = targetName.toUpperCase()
     if (n == 'ODS_UUID') {
         return {
             expression: odsUuidExpression,
-            to: '/ODS_UUID',
+            to: '/' + targetName,
             comment: '逐记录生成32位UUID，重试保持相同行身份'
         }
     }
     if (n == 'ODS_RKSJ') {
         return {
             expression: odsNowExpression,
-            to: '/ODS_RKSJ',
+            to: '/' + targetName,
             comment: 'NiFi写入当前入库时间'
         }
     }
     if (n == 'ODS_GXSJ') {
         return {
             expression: odsNowExpression,
-            to: '/ODS_GXSJ',
+            to: '/' + targetName,
             comment: 'NiFi写入当前更新时间'
         }
     }
@@ -942,10 +944,18 @@ var temporalMappingsOf = (sourceColumns, governanceConfig) => {
 var mappingDsl = (sourceColumns, targetColumns, sourceTable, lookupSources, transformBindings, sourceLookupConfig, temporalMappings, preserveSystemFields, atomicFileBatch) => {
     var sourceNames = {}
     var sourceDataTypes = {}
+    var sourceNativeIntegers = {}
+    var mysqlSource = sourceLookupConfig != null && text(sourceLookupConfig.dbType).trim().toLowerCase() == 'mysql'
     var relations = preserveSystemFields ? {} : dictionaryRelations(sourceTable)
     for (c in (sourceColumns == null ? [] : sourceColumns)) {
         sourceNames[text(colName(c)).toLowerCase()] = colName(c)
         sourceDataTypes[text(colName(c)).toLowerCase()] = first(c, ['dataType', 'data_type', 'columnType', 'column_type'])
+        // MySQL的(1)是显示宽度，来源仍有完整整数域；兼容旧驱动已读取的Boolean载体。
+        // 按登记物理类型生成现有INT转换，不扩大其它Boolean到NUMBER的规则。
+        var physicalType = text(first(c, ['columnType', 'column_type', 'dataType', 'data_type'])).trim().toLowerCase().replaceAll('\\s+', '')
+        if (mysqlSource && ['tinyint(1)', 'tinyint(1)unsigned', 'tinyint(1)unsignedzerofill'].contains(physicalType)) {
+            sourceNativeIntegers[text(colName(c)).toLowerCase()] = true
+        }
     }
     var bindingsByTarget = {}
     for (binding in (transformBindings == null ? [] : transformBindings)) {
@@ -1014,6 +1024,9 @@ var mappingDsl = (sourceColumns, targetColumns, sourceTable, lookupSources, tran
             var temporalExpression = temporalMappings[text(sourceName).toLowerCase()]
             if (!blank(temporalExpression)) {
                 mappings.add({ from: '/' + sourceName, to: '/' + name, expression: temporalExpression })
+            } else if (sourceNativeIntegers[text(sourceName).toLowerCase()] == true) {
+                mappings.add({ from: '/' + sourceName, to: '/' + name, sourceType: 'INT',
+                    expression: 'CAST(${field:' + sourceName + '} AS INTEGER)' })
             } else {
                 mappings.add({ from: '/' + sourceName, to: '/' + name })
             }
@@ -1041,7 +1054,7 @@ var mappingDsl = (sourceColumns, targetColumns, sourceTable, lookupSources, tran
         version: '1.0',
         executionEngine: 'JAVA_RECORD',
         passthroughUnmapped: false,
-        passthroughCaseSensitive: true,
+        passthroughCaseSensitive: false,
         onMissingSource: 'NULL',
         onTypeMismatch: 'SKIP_ROW',
         recordErrorMode: atomicFileBatch == true ? 'FAIL_FLOWFILE' : 'ROUTE_INVALID',
@@ -1182,6 +1195,18 @@ var instantiateTemplateFlow = (template, pipelineRows, taskRows) => {
     }
     // 模板树包含原生JSON空值，克隆与写出统一使用同一JSON实现。
     var definition = poolJsons.parseObj(poolJsons.toJsonStr(template.spec.flow))
+    // 备用补数仅复用当前已授权JDBC来源；文件、消息和接口来源省略这个可选入口。
+    var backfillNodes = definition.nodes.filter(node => text(node.config.templateBinding) == 'source:backfill')
+    if (!backfillNodes.isEmpty()) {
+        var registeredSource = runtimeByBinding.source
+        var jdbcBackfill = registeredSource != null && !blank(registeredSource.config.dbType)
+            && sourceTypes.databaseType(text(registeredSource.config.dbType), registeredSource.config).isRelational()
+        if (!jdbcBackfill) {
+            var excludedIds = backfillNodes.map(node => node.id)
+            definition.nodes = definition.nodes.filter(node => !excludedIds.contains(node.id))
+            definition.edges = definition.edges.filter(edge => !excludedIds.contains(edge.source) && !excludedIds.contains(edge.target))
+        }
+    }
     var remappedIds = {}
     for (node in definition.nodes) { remappedIds[node.id] = 'template-' + taskRows[0].tid + '-' + node.id }
     var protectedFields = ['dbType','registeredDatasourceId','sourceDbId','targetDbId','sourceTableId','targetTableId',
@@ -1198,7 +1223,7 @@ var instantiateTemplateFlow = (template, pipelineRows, taskRows) => {
     for (node in definition.nodes) {
         var preset = node.config
         var binding = text(preset.templateBinding)
-        var runtime = runtimeByBinding[binding]
+        var runtime = runtimeByBinding[binding == 'source:backfill' ? 'source' : binding]
         var config = {}
         if (runtime != null) { config.putAll(runtime.config) }
         config.putAll(preset)
@@ -1208,6 +1233,13 @@ var instantiateTemplateFlow = (template, pipelineRows, taskRows) => {
                 // 无业务主键的新增任务是追加写入，不能因模板默认MERGE或空writerType变成需要主键的更新。
                 config.statementType = 'INSERT'
                 if (blank(config.writerType) && !blank(runtime.config.writerType)) { config.writerType = runtime.config.writerType }
+            }
+            if (binding.startsWith('target:') && config.insertThenMerge == true) {
+                // 随机生成的ODS行标识不能作为补数更新键；没有稳定业务匹配键时保持单INSERT及失败留存。
+                var businessKeys = text(runtime.config.updateKeys).split(',')
+                    .map(key => text(key).trim()).filter(key => !blank(key) && !isOdsSystemColumn(key.replace('"','')))
+                config.updateKeys = businessKeys.join(',')
+                if (businessKeys.size() == 0) { config.insertThenMerge = false; config.statementType = 'INSERT' }
             }
             if (binding.startsWith('target:') && runtime.config.hiveConnectionMode == 'open-source') {
                 // Hive 认证来自已授权的登记连接，模板不得替换真实目标的认证方式。
@@ -1226,7 +1258,37 @@ var instantiateTemplateFlow = (template, pipelineRows, taskRows) => {
                 // 注册来源的轮询、文件提交确认和接口分页不能被占位节点覆盖。
                 config.schedulingPeriod = runtime.config.schedulingPeriod
                 applyTemplateSourceDefaults(template,node.manifestKey,config)
+                if (config.manualBackfill == true) {
+                    // 新模板只在JDBC主来源内部生成原生补数处理器；旧显式补数入口继续独立保留。
+                    config.manualBackfill = backfillNodes.isEmpty() && !blank(runtime.config.dbType)
+                        && sourceTypes.databaseType(text(runtime.config.dbType), runtime.config).isRelational()
+                }
             }
+            if (binding == 'source:backfill') {
+                // 补数入口与主来源使用同一资产，但具有独立状态；部署/整组启动均不得自动启用。
+                node.manifestKey = runtime.manifestKey
+                config.backfillSource = true
+                config.enabled = false
+                config.scheduledState = 'DISABLED'
+                config.incrementalColumn = ''
+                config.syncMode = 'FULL'
+                config.schedulingPeriod = preset.schedulingPeriod || '60 sec'
+            }
+        }
+        if (config.sharedGovernance == true) {
+            // 仅供画布展示的授权快照；部署仍须根据实际连线校验每个目标身份及物理字段。
+            var sharedTargets = []
+            for (targetNode in definition.nodes) {
+                var targetBinding = text(targetNode.config.templateBinding)
+                var targetRuntime = runtimeByBinding[targetBinding]
+                if (!targetBinding.startsWith('target:') || targetRuntime == null) { continue }
+                sharedTargets.add({nodeId: remappedIds[targetNode.id] || targetNode.id,
+                    manifestKey: targetRuntime.manifestKey,
+                    datasourceId: text(targetRuntime.config.targetDbId || targetRuntime.config.registeredDatasourceId),
+                    tableId: text(targetRuntime.config.targetTableId), table: text(targetRuntime.config.table),
+                    targetColumns: targetRuntime.config.targetColumns})
+            }
+            config.sharedTargets = sharedTargets
         }
         node.config = config
         node.id = remappedIds[node.id]
@@ -1642,11 +1704,15 @@ for (target in targetTables) {
     if (!requestedNodeIds.contains(nodeId)) { requestedNodeIds.add(nodeId) }
 }
 if (requestedNodeIds.size() > 0) {
-    var availableNodes = db.table('nifi_node_t').columns('tid').where().eq('tenant_id', tenantId)
+    var availableNodes = db.table('nifi_node_t').columns('tid','node_name','node_code','base_url','auth_username','auth_password').where().eq('tenant_id', tenantId)
         .eq('is_del', 0).eq('enabled', 1).in('tid', requestedNodeIds).select()
     var availableNodeIds = availableNodes.map(node => text(node.tid))
     for (requestedNodeId in requestedNodeIds) {
-        if (!availableNodeIds.contains(requestedNodeId)) { exit 400, '物化记录的数据接入节点已停用或不属于当前租户，请重新选择' }
+        if (!availableNodeIds.contains(requestedNodeId)) { exit 400, '物化记录的数据接入节点（ID：' + requestedNodeId + '）已停用、不存在或不属于当前租户，请重新选择' }
+    }
+    for (availableNode in availableNodes) {
+        var configuration = nodeConfiguration(availableNode)
+        if (!configuration.configurationValid) { exit 400, configuration.configurationMessage }
     }
 }
 

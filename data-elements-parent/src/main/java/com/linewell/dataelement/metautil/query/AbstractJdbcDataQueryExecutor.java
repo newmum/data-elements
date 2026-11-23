@@ -67,7 +67,8 @@ public abstract class AbstractJdbcDataQueryExecutor extends AbstractMetadataExpl
         int pageSize = request.getPageSize() == null || request.getPageSize() < 1 ? 20 : Math.min(request.getPageSize(), 200);
         TableRef tableRef = resolveTableRef(request);
 
-        try (Connection connection = getConnection(request.getDataSource())) {
+        try (Connection connection = getConnection(request.getDataSource());
+             var session = readSession(request.getDataSource(), connection)) {
             TableRef realTableRef = resolveRealTableRef(connection, tableRef, databaseType);
             List<String> selectableColumns = loadSelectableColumns(connection, request, realTableRef);
             if (selectableColumns.isEmpty()) {
@@ -109,7 +110,8 @@ public abstract class AbstractJdbcDataQueryExecutor extends AbstractMetadataExpl
             throw new BizException(500, "当前数据库类型暂不支持分组查询: " + databaseType);
         }
         TableRef tableRef = resolveTableRef(request);
-        try (Connection connection = getConnection(request.getDataSource())) {
+        try (Connection connection = getConnection(request.getDataSource());
+             var session = readSession(request.getDataSource(), connection)) {
             TableRef realTableRef = resolveRealTableRef(connection, tableRef, databaseType);
             List<String> selectableColumns = loadSelectableColumns(connection, request, realTableRef);
             if (selectableColumns.isEmpty()) {

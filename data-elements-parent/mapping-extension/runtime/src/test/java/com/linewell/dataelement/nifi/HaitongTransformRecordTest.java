@@ -17,6 +17,70 @@ import static org.mockito.Mockito.*;
 
 class HaitongTransformRecordTest {
     private static final ObjectMapper JSON=new ObjectMapper();
+    @Test void nativeJsonBooleansWriteExactSingleDigitDecimalNumbersAndRetainInvalidText() throws Exception {
+        for (String mode : List.of("target", "expression", "function")) for (int count : List.of(20, 100)) {
+            var spec = JSON.createObjectNode().put("version", "1.0").put("recordErrorMode", "ROUTE_INVALID");
+            var mapping = spec.putArray("mappings").addObject().put("from", "/x").put("to", "/y").put("targetType", "NUMBER(1)");
+            if (mode.equals("expression")) mapping.put("expression", "CAST(${field:x} AS DECIMAL(1,0))");
+            if (mode.equals("function")) mapping.putObject("transform").put("fn", "cast").putArray("args").add("DECIMAL").add(1).add(0);
+            var plan = MappingEngine.compile(spec);
+            var runner = TestRunners.newTestRunner(HaitongTransformRecord.class);
+            var reader = new org.apache.nifi.json.JsonTreeReader();
+            runner.addControllerService("reader", reader);
+            runner.setProperty(reader, "Schema Access Strategy", "infer-schema"); runner.enableControllerService(reader);
+            var writer = new org.apache.nifi.json.JsonRecordSetWriter();
+            runner.addControllerService("writer", writer);
+            runner.setProperty(writer, "Schema Access Strategy", "inherit-record-schema");
+            runner.setProperty(writer, "Suppress Null Values", "never-suppress"); runner.enableControllerService(writer);
+            runner.setProperty(HaitongTransformRecord.READER, "reader"); runner.setProperty(HaitongTransformRecord.WRITER, "writer");
+            runner.setProperty(HaitongTransformRecord.PLAN, plan.document().toString());
+            var rows = new ArrayList<Map<String,Object>>();
+            for (int i = 0; i < count; i++) rows.add(Collections.singletonMap("x", i % 3 == 0 ? null : i % 3 == 1));
+            runner.enqueue(JSON.writeValueAsBytes(rows)); runner.run();
+            runner.assertTransferCount(HaitongTransformRecord.SUCCESS, 1);
+            runner.assertTransferCount(HaitongTransformRecord.INVALID, 0); runner.assertTransferCount(HaitongTransformRecord.FAILURE, 0);
+            var output = runner.getFlowFilesForRelationship(HaitongTransformRecord.SUCCESS).getFirst();
+            var values = JSON.readTree(output.toByteArray()); assertEquals(count, values.size());
+            assertEquals("0", output.getAttribute("ht.dictionary.batches"));
+            for (int i = 0; i < count; i++) {
+                if (i % 3 == 0) assertTrue(values.get(i).path("y").isNull());
+                else { assertTrue(values.get(i).path("y").isNumber()); assertEquals(i % 3 == 1 ? 1 : 0, values.get(i).path("y").asInt()); }
+            }
+            runner.enqueue("[{\"x\":\"true\"}]"); runner.run();
+            runner.assertTransferCount(HaitongTransformRecord.SUCCESS, 1);
+            runner.assertTransferCount(HaitongTransformRecord.INVALID, 1); runner.assertTransferCount(HaitongTransformRecord.FAILURE, 0);
+            var invalid = JSON.readTree(runner.getFlowFilesForRelationship(HaitongTransformRecord.INVALID).getFirst().toByteArray());
+            assertEquals("TYPE_MISMATCH", invalid.path("errors").get(0).path("code").asText());
+            runner.shutdown();
+        }
+    }
+    @Test void nativeFloatingTargetsWriteNumericRecordsAndRetainOverflowSeparately() throws Exception {
+        for (String alias : List.of("BINARY_DOUBLE", "BINARY_FLOAT", "FLOAT4", "FLOAT8")) {
+            var spec = JSON.createObjectNode().put("version", "1.0").put("recordErrorMode", "ROUTE_INVALID");
+            spec.putArray("mappings").addObject().put("from", "/x").put("to", "/y").put("targetType", alias);
+            var plan = MappingEngine.compile(spec);
+            for (int count : List.of(20, 100)) {
+                var runner = runner("NULL", "ROUTE_INVALID", RecordFieldType.DOUBLE.getDataType());
+                runner.setProperty(HaitongTransformRecord.PLAN, plan.document().toString());
+                runner.setProperty(HaitongTransformRecord.HASH, plan.hash());
+                var rows = new ArrayList<Map<String,Object>>();
+                for (int i = 0; i < count; i++) rows.add(Map.of("x", i % 2 == 0 ? 123.45678901234567 : -0.00000012345));
+                rows.add(Map.of("x", "1e309"));
+                runner.enqueue(JSON.writeValueAsBytes(rows)); runner.run();
+                runner.assertTransferCount(HaitongTransformRecord.SUCCESS, 1);
+                runner.assertTransferCount(HaitongTransformRecord.INVALID, 1); runner.assertTransferCount(HaitongTransformRecord.FAILURE, 0);
+                var output = runner.getFlowFilesForRelationship(HaitongTransformRecord.SUCCESS).getFirst();
+                var values = JSON.readTree(output.toByteArray()); assertEquals(count, values.size());
+                for (int i = 0; i < count; i++) {
+                    assertTrue(values.get(i).path("y").isNumber());
+                    assertEquals(rows.get(i).get("x"), values.get(i).path("y").asDouble());
+                }
+                assertEquals("0", output.getAttribute("ht.dictionary.batches"));
+                var invalid = JSON.readTree(runner.getFlowFilesForRelationship(HaitongTransformRecord.INVALID).getFirst().toByteArray());
+                assertEquals("TYPE_MISMATCH", invalid.path("errors").get(0).path("code").asText());
+            }
+        }
+    }
     @Test void simplePropertiesRunOldPlansAndQueuedInputsWithoutManualHashesOrVersionEdits() throws Exception {
         for(int count:List.of(20,100))for(boolean legacy:List.of(false,true)) {
             var runner=runner("NULL","ROUTE_INVALID");runner.removeProperty(HaitongTransformRecord.HASH);

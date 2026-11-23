@@ -7,6 +7,7 @@ import com.linewell.dataelement.dataassets.runtime.DataSourceConnectionPropertyR
 import com.linewell.dataelement.platform.tenant.domain.TenantContext;
 import com.linewell.dataelement.metautil.ddl.DdlDialect;
 import com.linewell.dataelement.metautil.jdbc.JdbcMetadataScope;
+import com.linewell.dataelement.metautil.jdbc.SqlServerIdentityTypes;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import java.sql.*;
@@ -27,6 +28,9 @@ public class RegisteredMappingSchemaService {
     private final UnifiedMappingService engine;
     private final com.linewell.dataelement.platform.persistence.TenantIdentifierSql identifiers;
     public RegisteredMappingSchemaService(JdbcTemplate jdbc,DataSourceConnectionPropertyResolver sources,UnifiedMappingService engine){this.jdbc=jdbc;this.sources=sources;this.engine=engine;identifiers=new com.linewell.dataelement.platform.persistence.TenantIdentifierSql(jdbc);}
+    private static String jdbcLogicalType(String physicalType,Map<String,?> config) {
+        return JdbcTemporalTypes.logicalType(SqlServerIdentityTypes.forConnection(physicalType,config),config);
+    }
     public record Resolved(String datasourceId,String tableId,String schema,String table,JsonNode fields,Map<String,Map<String,Object>> connections,boolean schemaQuoted,boolean tableQuoted,JsonNode sourceRecordShape) {
         public Resolved(String datasourceId,String tableId,String schema,String table,JsonNode fields,Map<String,Map<String,Object>> connections){this(datasourceId,tableId,schema,table,fields,connections,false,false,NullNode.getInstance());}
     }
@@ -41,7 +45,7 @@ public class RegisteredMappingSchemaService {
         String query="SELECT `table_id`,`column_name`,`column_comment`,`data_type`,`length`,`precision_length`,`scale`,`nullable`,`is_masking`,`data_standard_id` FROM `db_table_column_t` WHERE `table_id` IN ("+String.join(",",Collections.nCopies(tableIds.size(),"?"))+") AND `tenant_id`=? AND `is_del`=0 ORDER BY `ordinal_position`,`tid`";
         var columns=jdbc.queryForList(query.replace("`",quote),columnArgs.toArray());if(columns.size()>MAX_TOTAL_FIELDS)throw new MappingException("BUDGET_EXCEEDED","登记Schema字段总数超过20000个");Map<String,ArrayNode> fields=new HashMap<>();
         Map<String,String> tableSources=new HashMap<>();matched.values().forEach(row->tableSources.put(String.valueOf(row.get("tid")),String.valueOf(row.get("datasource_id"))));
-        for(var column:columns){String tableId=String.valueOf(column.get("table_id"));var tableFields=fields.computeIfAbsent(tableId,ignored->JSON.createArrayNode());if(tableFields.size()>=MAX_FIELDS_PER_TABLE)throw new MappingException("BUDGET_EXCEEDED","登记Schema单表字段超过2000个");String physicalType=String.valueOf(column.get("data_type"));String logical=JdbcTemporalTypes.logicalType(physicalType,connections.get(tableSources.get(tableId)));var field=tableFields.addObject();field.put("name",String.valueOf(column.get("column_name"))).put("comment",Objects.toString(column.get("column_comment"),"")).put("logicalType",logical).put("physicalType",physicalType).put("dateContainsTime",ValueTypes.type(physicalType).equals("DATE")&&logical.equals("DATETIME")).put("nullable",number(column.get("nullable"))!=0).put("length",number(column.get("length"))).put("precision",number(column.get("precision_length"))).put("scale",number(column.get("scale"))).put("sensitive",number(column.get("is_masking"))!=0);}
+        for(var column:columns){String tableId=String.valueOf(column.get("table_id"));var tableFields=fields.computeIfAbsent(tableId,ignored->JSON.createArrayNode());if(tableFields.size()>=MAX_FIELDS_PER_TABLE)throw new MappingException("BUDGET_EXCEEDED","登记Schema单表字段超过2000个");String physicalType=String.valueOf(column.get("data_type"));String logical=jdbcLogicalType(physicalType,connections.get(tableSources.get(tableId)));var field=tableFields.addObject();field.put("name",String.valueOf(column.get("column_name"))).put("comment",Objects.toString(column.get("column_comment"),"")).put("logicalType",logical).put("physicalType",physicalType).put("dateContainsTime",ValueTypes.type(physicalType).equals("DATE")&&logical.equals("DATETIME")).put("nullable",number(column.get("nullable"))!=0).put("length",Set.of("STRING","BINARY").contains(logical)?number(column.get("length")):0).put("precision",number(column.get("precision_length"))).put("scale",number(column.get("scale"))).put("sensitive",number(column.get("is_masking"))!=0);}
         applyRegisteredFormats(matched.values(),columns,fields);
         Map<String,Resolved> result=new LinkedHashMap<>();matched.forEach((key,row)->{String source=String.valueOf(row.get("datasource_id")),tableId=String.valueOf(row.get("tid"));var names=DdlDialect.names(String.valueOf(row.get("table_name")));if(names.size()>2)throw new MappingException("INVALID_SCHEMA","登记表须明确schema和表名");String schema=names.size()==2?names.getFirst().value():"";String table=names.getLast().value();boolean schemaQuoted=names.size()==2?names.getFirst().quoted():configuredSchemaQuoted(connections.get(source));if(schema.isBlank()){schema=Objects.toString(JdbcMetadataScope.configuredSchema(connections.get(source)),"");}
             if(schema.isBlank()){String url=String.valueOf(connections.get(source).getOrDefault("jdbcURL",connections.get(source).getOrDefault("jdbcUrl","")));var database=java.util.regex.Pattern.compile("^jdbc:(?:mysql|mariadb)://[^/]+/([^?;]+)").matcher(url);if(database.find())schema=database.group(1);}
@@ -256,6 +260,7 @@ public class RegisteredMappingSchemaService {
         catch (SQLFeatureNotSupportedException | AbstractMethodError | UnsupportedOperationException ignored) { catalogQualified=false; }
         String tablePattern=byTable.size()==1?escape(metadata,byTable.keySet().iterator().next().table()):"%";
         try (ResultSet columns=metadata.getColumns(catalog,escape(metadata,schema),tablePattern,"%")) {
+            String identityColumn=identityColumn(columns);
             int scanned=0;
             while (columns.next()) {
                 if (++scanned>MAX_METADATA_SCAN_ROWS) throw new MappingException("BUDGET_EXCEEDED","驱动元数据扫描包含过多非请求表字段，已停止扫描；这不是当前表的字段数，请检查驱动批量适配");
@@ -271,7 +276,7 @@ public class RegisteredMappingSchemaService {
                 ArrayNode fields=byTable.get(new TableIdentity(schema,columns.getString("TABLE_NAME")));
                 if (fields==null) continue;
                 appendPhysicalField(fields,columns,columns.getInt("NULLABLE")!=DatabaseMetaData.columnNoNulls,
-                        columns.getString("COLUMN_DEF")!=null || "YES".equalsIgnoreCase(columns.getString("IS_AUTOINCREMENT")),totalFields,temporalConfig);
+                        columns.getString("COLUMN_DEF")!=null || identityValue(columns,identityColumn),totalFields,temporalConfig);
             }
         }
     }
@@ -294,7 +299,7 @@ public class RegisteredMappingSchemaService {
     private static void appendPhysicalField(ArrayNode fields,ResultSet columns,boolean nullable,boolean hasDefault,int[] totalFields,Map<String,Object> temporalConfig)throws SQLException {
         if (fields.size()>=MAX_FIELDS_PER_TABLE) throw new MappingException("BUDGET_EXCEEDED","物理Schema单表字段超过2000个");
         if (++totalFields[0]>MAX_TOTAL_FIELDS) throw new MappingException("BUDGET_EXCEEDED","物理Schema字段总数超过20000个");
-        String physicalType=columns.getString("TYPE_NAME"),type=JdbcTemporalTypes.logicalType(physicalType,temporalConfig);
+        String physicalType=columns.getString("TYPE_NAME"),type=jdbcLogicalType(physicalType,temporalConfig);
         var field=fields.addObject().put("name",columns.getString("COLUMN_NAME")).put("logicalType",type).put("physicalType",physicalType).put("dateContainsTime",ValueTypes.type(physicalType).equals("DATE")&&type.equals("DATETIME")).put("nullable",nullable).put("hasDefault",hasDefault);
         if (type.equals("STRING")) field.put("length",columns.getInt("COLUMN_SIZE"));
         if (type.equals("DECIMAL")) {
@@ -303,11 +308,27 @@ public class RegisteredMappingSchemaService {
             field.put("precision",precision).put("scale",scale);
         }
     }
+    /** Resolve optional JDBC metadata labels once per result set; some drivers use IS_AUTO_INCREMENT. */
+    private static String identityColumn(ResultSet columns)throws SQLException {
+        ResultSetMetaData metadata=columns.getMetaData();
+        if(metadata==null)return "IS_AUTOINCREMENT";
+        for(int i=1;i<=metadata.getColumnCount();i++){
+            String name=metadata.getColumnLabel(i);
+            if(name==null||name.isBlank())name=metadata.getColumnName(i);
+            if("IS_AUTOINCREMENT".equalsIgnoreCase(name)||"IS_AUTO_INCREMENT".equalsIgnoreCase(name))return name;
+        }
+        return null;
+    }
+    private static boolean identityValue(ResultSet columns,String column)throws SQLException {
+        if(column==null)return false;String value=columns.getString(column);
+        return "YES".equalsIgnoreCase(value)||"TRUE".equalsIgnoreCase(value)||"1".equals(value);
+    }
     public void checkContract(JsonNode contract){
         checkContracts(Map.of("node",contract));
     }
     /** Editor validation authorizes every reference and field without requiring a live JDBC source/target. */
     public void checkRegisteredContracts(Map<String,JsonNode> contracts){
+        contracts=withTargetBranches(contracts);
         Map<String,JsonNode> refs=references(contracts);var registered=resolve(refs);
         for(JsonNode contract:contracts.values())for(String side:List.of("source","target")){
             JsonNode reference=contract.path(side+"Ref");if(!reference.isObject())continue;
@@ -336,7 +357,31 @@ public class RegisteredMappingSchemaService {
     private static Map<String,JsonNode> references(Map<String,JsonNode> contracts){
         Map<String,JsonNode> refs=new LinkedHashMap<>();for(JsonNode contract:contracts.values())for(String side:List.of("source","target"))if(contract.path(side+"Ref").isObject()){JsonNode ref=contract.path(side+"Ref");refs.put(MappingEngine.hash(ref),ref);}return refs;
     }
+    /** All target branches share one batch authorization; each retains its own physical contract. */
+    private static Map<String,JsonNode> withTargetBranches(Map<String,JsonNode> contracts){
+        Map<String,JsonNode> result=new LinkedHashMap<>(contracts);
+        int branchIndex=0;
+        for(var entry:contracts.entrySet()){
+            JsonNode targets=entry.getValue().path("targets");
+            if(!targets.isMissingNode()&&!targets.isArray())throw new MappingException("INVALID_SCHEMA","共享目标字段结构必须是数组");
+            if(targets.size()>16)throw new MappingException("BUDGET_EXCEEDED","共享治理最多关联16个目标");
+            Set<String> nodes=new HashSet<>();
+            for(JsonNode target:targets){
+                String node=target.path("nodeId").asText();
+                if(!(target instanceof ObjectNode branch)||node.isBlank()||!nodes.add(node)||!target.path("reference").isObject())
+                    throw new MappingException("INVALID_SCHEMA","目标分支标识须唯一且包含登记表引用");
+                // Reuse the actual branch object so authoritative fields and hashes are retained in the plan.
+                branch.set("targetRef",target.path("reference"));
+                if(target.path("fields").isArray())branch.set("target",target.path("fields"));
+                String key=entry.getKey()+" / target / "+node;
+                while(result.containsKey(key))key="__target_branch__"+(branchIndex++);
+                result.put(key,branch);
+            }
+        }
+        return result;
+    }
     public void checkContracts(Map<String,JsonNode> contracts){
+        contracts=withTargetBranches(contracts);
         Map<String,JsonNode> refs=references(contracts);
         var registered=resolve(refs);var observed=physicalBatch(registered);
         for(var contract:contracts.entrySet())for(String side:List.of("source","target")){JsonNode reference=contract.getValue().path(side+"Ref");if(!reference.isObject())continue;JsonNode actual=observed.get(MappingEngine.hash(reference));
@@ -377,8 +422,41 @@ public class RegisteredMappingSchemaService {
     public List<Map<String,Object>> sample(Resolved resolved,int limit){
         limit=Math.max(1,Math.min(100,limit));try(Connection connection=engine.openRegistered(resolved.datasourceId(),resolved.connections())){
             String quote=connection.getMetaData().getIdentifierQuoteString().trim();if(quote.isBlank())throw new MappingException("UNSUPPORTED_DATABASE","驱动未提供标识符引用");java.util.function.Function<String,String> q=name->quote.equals("[")?"["+name.replace("]","]]")+"]":quote+name.replace(quote,quote+quote)+quote;List<String> names=new ArrayList<>();resolved.fields().forEach(field->names.add(field.path("name").asText()));String table=(resolved.schema().isBlank()?"":q.apply(resolved.schema())+".")+q.apply(resolved.table());
-            try(PreparedStatement statement=connection.prepareStatement("SELECT "+String.join(",",names.stream().map(name->{String quoted=q.apply(name);boolean dateTime=false;for(JsonNode field:resolved.fields())if(field.path("name").asText().equals(name)&&field.path("dateContainsTime").asBoolean())dateTime=true;return dateTime?"CAST("+quoted+" AS TIMESTAMP) AS "+quoted:quoted;}).toList())+" FROM "+table)){statement.setMaxRows(limit);statement.setQueryTimeout(10);List<Map<String,Object>> rows=new ArrayList<>();long bytes=0;try(ResultSet result=statement.executeQuery()){while(result.next()&&rows.size()<limit){Map<String,Object> row=new LinkedHashMap<>();for(int i=0;i<names.size();i++){Object value=result.getObject(i+1);if(value instanceof Clob clob){if(clob.length()>262144)throw new MappingException("BUDGET_EXCEEDED","样本大文本超限");value=clob.getSubString(1,(int)clob.length());clob.free();}row.put(names.get(i),value);}bytes+=ValueTypes.bytes(row,0);if(bytes>2_097_152)throw new MappingException("BUDGET_EXCEEDED","样本超过2MiB");rows.add(row);}}return rows;}
+            try(PreparedStatement statement=connection.prepareStatement("SELECT "+String.join(",",names.stream().map(name->{String quoted=q.apply(name);boolean dateTime=false;for(JsonNode field:resolved.fields())if(field.path("name").asText().equals(name)&&field.path("dateContainsTime").asBoolean())dateTime=true;return dateTime?"CAST("+quoted+" AS TIMESTAMP) AS "+quoted:quoted;}).toList())+" FROM "+table)){
+                statement.setMaxRows(limit);statement.setQueryTimeout(10);List<Map<String,Object>> rows=new ArrayList<>();long bytes=0;
+                try(ResultSet result=statement.executeQuery()){
+                    ResultSetMetaData metadata=result.getMetaData();int[] types=new int[names.size()];
+                    for(int i=0;i<types.length;i++)types[i]=metadata==null?Types.OTHER:metadata.getColumnType(i+1);
+                    while(result.next()&&rows.size()<limit){
+                        Map<String,Object> row=new LinkedHashMap<>();
+                        for(int i=0;i<names.size();i++){
+                            Object value=sampleValue(result,i+1,types[i]);
+                            if(value instanceof Clob clob){if(clob.length()>262144)throw new MappingException("BUDGET_EXCEEDED","样本大文本超限");value=clob.getSubString(1,(int)clob.length());clob.free();}
+                            row.put(names.get(i),value);
+                        }
+                        bytes+=ValueTypes.bytes(row,0);if(bytes>2_097_152)throw new MappingException("BUDGET_EXCEEDED","样本超过2MiB");rows.add(row);
+                    }
+                }
+                return rows;
+            }
         }catch(MappingException error){throw error;}catch(SQLException error){throw new MappingException("SAMPLE_UNAVAILABLE","来源取样失败，未回传原始值");}
+    }
+    /** Normalize JDBC temporal carriers at the driver boundary, without guessing numeric date units. */
+    private static Object sampleValue(ResultSet result,int index,int sqlType)throws SQLException {
+        return switch(sqlType){
+            case Types.TIMESTAMP->result.getTimestamp(index);
+            case Types.DATE->result.getDate(index);
+            case Types.TIME->result.getTime(index);
+            case Types.TIMESTAMP_WITH_TIMEZONE->{
+                try{yield result.getObject(index,java.time.OffsetDateTime.class);}
+                catch(SQLFeatureNotSupportedException|AbstractMethodError unsupported){yield result.getTimestamp(index);}
+            }
+            case Types.TIME_WITH_TIMEZONE->{
+                try{yield result.getObject(index,java.time.OffsetTime.class);}
+                catch(SQLFeatureNotSupportedException|AbstractMethodError unsupported){yield result.getTime(index);}
+            }
+            default->result.getObject(index);
+        };
     }
     private static int number(Object value){return value instanceof Number n?n.intValue():0;}
     private static String escape(DatabaseMetaData metadata,String name)throws SQLException{String token=metadata.getSearchStringEscape();if(token==null||token.isEmpty()){if(name.contains("_")||name.contains("%"))throw new MappingException("UNSUPPORTED_SCHEMA_BATCH","驱动未提供schema通配符转义方式");return name;}return name.replace(token,token+token).replace("_",token+"_").replace("%",token+"%");}

@@ -3,6 +3,7 @@ package com.linewell.dataelement.metautil.ddl;
 import com.linewell.dataelement.metautil.model.dto.ColumnInfo;
 import com.linewell.dataelement.metautil.model.dto.DataSourceConfig;
 import com.linewell.dataelement.metautil.model.enums.DatabaseType;
+import com.linewell.dataelement.metautil.jdbc.SqlServerIdentityTypes;
 import java.util.Locale;
 import java.util.Set;
 import java.util.regex.Pattern;
@@ -40,6 +41,59 @@ public final class PortableColumnType {
             case "JSON", "JSONB", "OBJECT", "ARRAY" -> Kind.JSON;
             case "UUID", "UNIQUEIDENTIFIER" -> Kind.UUID;
             default -> Kind.UNKNOWN;
+        };
+    }
+
+    /** Int8 在 PostgreSQL 表示 BIGINT，在 ClickHouse 表示有符号8位；必须带来源解释。 */
+    public static Kind kind(String raw, String sourceCode) {
+        DatabaseType source = optionalSourceType(text(sourceCode));
+        if (source == DatabaseType.SQLSERVER) return kind(SqlServerIdentityTypes.baseType(raw));
+        if (source != DatabaseType.CLICKHOUSE) return kind(raw);
+        return switch (clickHouseBase(raw)) {
+            case "INT8", "INT16", "UINT8" -> Kind.SMALLINT;
+            case "INT32", "UINT16" -> Kind.INTEGER;
+            case "INT64", "UINT32" -> Kind.BIGINT;
+            case "UINT64" -> Kind.DECIMAL;
+            default -> kind(clickHouseBase(raw));
+        };
+    }
+
+    /** 原生整数值域所需的十进制位数，不能沿用驱动样本宽度或有符号64位容量。 */
+    public static int integralPrecision(String raw, String sourceCode) {
+        if (optionalSourceType(text(sourceCode)) != DatabaseType.CLICKHOUSE) return 0;
+        return switch (clickHouseBase(raw)) {
+            case "INT8", "UINT8" -> 3;
+            case "INT16", "UINT16" -> 5;
+            case "INT32", "UINT32" -> 10;
+            case "INT64" -> 19;
+            case "UINT64" -> 20;
+            default -> 0;
+        };
+    }
+
+    private static String clickHouseBase(String raw) {
+        String value = text(raw);
+        for (int depth = 0; depth < 8; depth++) {
+            int open = value.indexOf('(');
+            if (open < 0) return clickHousePrimitive(value);
+            String wrapper = value.substring(0, open).trim().toUpperCase(Locale.ROOT);
+            if (!Set.of("NULLABLE", "LOWCARDINALITY").contains(wrapper)) return clickHousePrimitive(value);
+            if (!value.endsWith(")")) return "";
+            value = value.substring(open + 1, value.length() - 1).trim();
+        }
+        return "";
+    }
+
+    private static String clickHousePrimitive(String value) {
+        boolean unsigned = value.toUpperCase(Locale.ROOT).contains("UNSIGNED");
+        return switch (base(value)) {
+            case "TINYINT", "INT1", "BYTE", "TINYINT SIGNED", "INT1 SIGNED" -> unsigned ? "UINT8" : "INT8";
+            case "SMALLINT", "SMALLINT SIGNED" -> unsigned ? "UINT16" : "INT16";
+            case "INT", "INTEGER", "MEDIUMINT", "INT SIGNED", "INTEGER SIGNED", "MEDIUMINT SIGNED" -> unsigned ? "UINT32" : "INT32";
+            case "BIGINT", "SIGNED", "BIGINT SIGNED" -> unsigned ? "UINT64" : "INT64";
+            case "YEAR" -> "UINT16";
+            case "UNSIGNED", "BIT", "SET" -> "UINT64";
+            default -> base(value);
         };
     }
 
@@ -85,7 +139,9 @@ public final class PortableColumnType {
         if (raw == null || raw.isBlank()) throw new IllegalArgumentException("字段类型不能为空");
         if(column!=null&&target.getCode().equals(column.getDdlTargetDatabaseType())&&raw.equals(column.getColumnType()))return raw;
         DdlDialect.Family family = DdlDialect.family(target);
-        Kind kind = kind(raw);
+        String source = column == null ? "" : text(column.getSourceDatabaseType());
+        raw = SqlServerIdentityTypes.forSource(raw, source);
+        Kind kind = kind(raw, source);
         var args = ARGS.matcher(raw);
         Long length = column == null ? null : column.getLength();
         Integer precision = column == null ? null : column.getPrecision(), scale = column == null ? null : column.getScale();
@@ -95,17 +151,20 @@ public final class PortableColumnType {
             if (precision == null || precision <= 0) precision = first > Integer.MAX_VALUE ? null : (int) first;
             if (scale == null && args.group(2) != null) scale = Integer.parseInt(args.group(2));
         }
-        String source = column == null ? "" : text(column.getSourceDatabaseType());
         DatabaseType sourceType = optionalSourceType(source);
+        int integralPrecision = integralPrecision(raw, source);
+        if (integralPrecision > 0) { precision = integralPrecision; scale = 0; }
         boolean oracleSource = sourceType != null && DdlDialect.family(sourceType) == DdlDialect.Family.ORACLE;
         if (base(raw).equals("LONG") && !oracleSource) kind = Kind.BIGINT;
         if (sourceType == DatabaseType.SQLSERVER && isSqlServerTimestamp(raw)) { kind = Kind.BINARY; length = 8L; }
         if (oracleSource && base(raw).equals("DATE") && family != DdlDialect.Family.ORACLE) kind = Kind.TIMESTAMP;
         if (oracleSource && base(raw).equals("FLOAT")) kind = Kind.DECIMAL;
         boolean unsigned = raw.toUpperCase(Locale.ROOT).contains("UNSIGNED");
-        if (unsigned && kind == Kind.BIGINT) { kind = Kind.DECIMAL; precision = 20; scale = 0; }
-        else if (unsigned && kind == Kind.INTEGER) kind = Kind.BIGINT;
-        else if (unsigned && kind == Kind.SMALLINT) kind = Kind.INTEGER;
+        if (integralPrecision == 0) {
+            if (unsigned && kind == Kind.BIGINT) { kind = Kind.DECIMAL; precision = 20; scale = 0; }
+            else if (unsigned && kind == Kind.INTEGER) kind = Kind.BIGINT;
+            else if (unsigned && kind == Kind.SMALLINT) kind = Kind.INTEGER;
+        }
         long size = length == null ? 0 : length;
         String numeric = precision != null && precision > 0
                 ? "(" + precision + (scale == null ? "" : "," + scale) + ")" : "";
@@ -115,9 +174,9 @@ public final class PortableColumnType {
             }
             case TEXT -> target == DatabaseType.HETU ? "VARCHAR" : family==DdlDialect.Family.ORACLE
                     &&Set.of("NTEXT","NCLOB","NVARCHAR","NVARCHAR2","LONGNVARCHAR","LONG NVARCHAR").contains(base(raw))?"NCLOB":textType(family);
-            case SMALLINT -> family == DdlDialect.Family.ORACLE ? "NUMBER(5)" : "SMALLINT";
-            case INTEGER -> family == DdlDialect.Family.ORACLE ? "NUMBER(10)" : "INTEGER";
-            case BIGINT -> family == DdlDialect.Family.ORACLE ? "NUMBER(19)" : "BIGINT";
+            case SMALLINT -> family == DdlDialect.Family.ORACLE ? integralPrecision > 0 ? "NUMBER" + numeric : "NUMBER(5)" : "SMALLINT";
+            case INTEGER -> family == DdlDialect.Family.ORACLE ? integralPrecision > 0 ? "NUMBER" + numeric : "NUMBER(10)" : "INTEGER";
+            case BIGINT -> family == DdlDialect.Family.ORACLE ? integralPrecision > 0 ? "NUMBER" + numeric : "NUMBER(19)" : "BIGINT";
             case DECIMAL -> {
                 if (family == DdlDialect.Family.HIVE && (precision == null || precision <= 0 || precision > 38 || scale == null || scale < 0 || scale > precision)) yield "STRING";
                 yield (family == DdlDialect.Family.ORACLE ? "NUMBER" : family == DdlDialect.Family.POSTGRES ? "NUMERIC" : "DECIMAL")

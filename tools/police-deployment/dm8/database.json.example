@@ -1,0 +1,7 @@
+{
+  "jdbcUrl": "jdbc:dm://127.0.0.1:5236",
+  "control": {"username": "baseline", "schema": "baseline", "password": ""},
+  "tenant": {"username": "baseline_ga", "schema": "baseline_ga", "password": ""},
+  "createUsers": false,
+  "dba": {"username": "SYSDBA", "password": ""}
+}

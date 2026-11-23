@@ -6776,14 +6776,16 @@ function clearFieldValidationError(field, type) {
 function validateFieldDefinitions(table, fields) {
   const bucket = fieldValidationBucket(table.tableName);
   Object.keys(bucket).forEach((key) => delete bucket[key]);
-  const invalidName = fields.find(
-    (field) => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(String(field?.columnName || "").trim())
-  );
+  // 字段名来自物理元数据，只核验一级字面名称，不能因首字符是数字而要求改名。
+  const invalidName = fields.find((field) => {
+    const name = String(field?.columnName || "");
+    return /[\u0000-\u001f\u007f-\u009f]/.test(name) || !/^[\p{L}\p{N}_@][\p{L}\p{N}_$#]{0,127}$/u.test(name);
+  });
   if (invalidName) {
     bucket[invalidName.columnName] = "name";
     activeTableName.value = table.tableName;
     showBusinessFields();
-    throw new Error(`字段名称“${invalidName.columnName || "(空)"}”不规范：只能使用字母、数字和下划线，且必须以字母或下划线开头`);
+    throw new Error(`字段名称“${invalidName.columnName || "(空)"}”不支持：首字符可为字母、数字、下划线或 @，其余还可包含 $、#，长度为 1–128 个字符`);
   }
   const invalidComment = fields.find((field) => {
     const comment = String(field?.columnComment || "").trim();

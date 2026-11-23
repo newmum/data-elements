@@ -93,6 +93,7 @@ const names: Record<string, string> = {
   api: "API",
   kafka: "Kafka",
   elasticsearch: "Elasticsearch",
+  clickhouse: "ClickHouse",
 };
 const modes: Record<string, { label: string; icon: string; color: string }> = {
   "mode:receive": { label: "数据推送方式", icon: "el-icon-Download", color: "#079669" },

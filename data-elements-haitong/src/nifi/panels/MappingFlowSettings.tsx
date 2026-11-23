@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { AutoComplete, Button, Checkbox, Input, Modal, Space, Typography } from 'antd';
 import type { UnifiedMappingDraft } from '../api/fieldMapping';
+import { hasRegisteredFieldContract } from './unifiedRuleModel';
 import { Choice } from './UnifiedRuleForms';
 import { getNifiOverlayContainer } from './overlayContainer';
 import ConfigFieldLabel from './ConfigFieldLabel';
@@ -8,6 +9,7 @@ import ConfigFieldLabel from './ConfigFieldLabel';
 export default function MappingFlowSettings({ draft, onApply, onClose }: {
   draft: UnifiedMappingDraft; onApply: (draft: UnifiedMappingDraft) => void; onClose: () => void;
 }) {
+  const registered=hasRegisteredFieldContract(draft);
   const [policies, setPolicies] = useState(() => ({ ...draft.policies }));
   const [exclude, setExclude] = useState(Array.isArray(draft.exclude) ? draft.exclude.join(',') : '');
   const patch = (key: string, value: unknown) => setPolicies(current => ({ ...current, [key]: value }));
@@ -23,7 +25,8 @@ export default function MappingFlowSettings({ draft, onApply, onClose }: {
         <Choice label="源字段不存在时" value={policies.onMissingSource ?? 'NULL'} choices={{ NULL: '以 NULL 进入规则', FAIL: '记录报错' }} onChange={value => patch('onMissingSource', value)} />
       </div></section>
       <section className="unified-rule-section"><div className="fm-rule-section-title">字段处理</div>
-        <Checkbox checked={policies.caseSensitive !== false} onChange={e => patch('caseSensitive', e.target.checked)}>字段名区分大小写</Checkbox>
+        <Checkbox checked={!registered && policies.caseSensitive === true} disabled={registered} onChange={e => patch('caseSensitive', e.target.checked)}>字段名区分大小写</Checkbox>
+        {registered && <Typography.Text type="secondary">登记表字段忽略大小写匹配，输出保留目标字段原名。</Typography.Text>}
         <Checkbox checked={!!policies.allowUnmappedPassthrough} onChange={e => patch('allowUnmappedPassthrough', e.target.checked)}>保留未配置规则的源字段</Checkbox>
         {!!policies.allowUnmappedPassthrough && <div className="unified-form-field"><Typography.Text>需要排除的源字段</Typography.Text><Input aria-label="需要排除的源字段" value={exclude} onChange={e => setExclude(e.target.value)} placeholder="多个字段名用英文逗号分隔" /></div>}
       </section>

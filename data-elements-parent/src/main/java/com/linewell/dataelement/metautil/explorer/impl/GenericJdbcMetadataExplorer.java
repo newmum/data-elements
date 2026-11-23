@@ -10,6 +10,7 @@ import com.linewell.dataelement.metautil.model.dto.SampleRequest;
 import com.linewell.dataelement.metautil.model.dto.TableInfo;
 import com.linewell.dataelement.metautil.model.dto.TablePageResult;
 import com.linewell.dataelement.metautil.model.enums.DatabaseType;
+import com.linewell.dataelement.metautil.jdbc.SqlServerIdentityTypes;
 import lombok.extern.slf4j.Slf4j;
 
 import java.sql.Connection;
@@ -197,9 +198,10 @@ public class GenericJdbcMetadataExplorer extends AbstractMetadataExplorer {
         try (Connection connection = getConnection(config)) {
             DatabaseMetaData meta = connection.getMetaData();
             TableName name = resolveTableName(connection, config, tableName);
-            collectColumns(meta, name.catalog(), name.schema(), name.table(), columns);
+            boolean sqlServer = config.getEffectiveDatabaseType() == DatabaseType.SQLSERVER;
+            collectColumns(meta, name.catalog(), name.schema(), name.table(), columns, sqlServer);
             if (columns.isEmpty() && name.schema() != null) {
-                collectColumns(meta, name.catalog(), name.schema().toUpperCase(Locale.ROOT), name.table().toUpperCase(Locale.ROOT), columns);
+                collectColumns(meta, name.catalog(), name.schema().toUpperCase(Locale.ROOT), name.table().toUpperCase(Locale.ROOT), columns, sqlServer);
             }
             markPrimaryKeys(meta, name, columns);
             markIndexedColumns(meta, name, columns);
@@ -348,14 +350,18 @@ public class GenericJdbcMetadataExplorer extends AbstractMetadataExplorer {
         return matched - existingMatched;
     }
 
-    private void collectColumns(DatabaseMetaData meta, String catalog, String schema, String table, List<ColumnInfo> columns) throws Exception {
+    private void collectColumns(DatabaseMetaData meta, String catalog, String schema, String table, List<ColumnInfo> columns, boolean sqlServer) throws Exception {
         try (ResultSet rs = meta.getColumns(catalog, schema, table, "%")) {
             while (rs.next()) {
                 ColumnInfo column = new ColumnInfo();
                 column.setColumnName(rs.getString("COLUMN_NAME"));
                 column.setColumnComment(rs.getString("REMARKS"));
-                column.setDataType(rs.getString("TYPE_NAME"));
-                column.setColumnType(buildColumnType(rs));
+                String nativeType = rs.getString("TYPE_NAME");
+                String type = sqlServer ? SqlServerIdentityTypes.baseType(nativeType) : nativeType;
+                column.setDataType(type);
+                column.setColumnType(buildColumnType(rs, type, sqlServer));
+                if (sqlServer) column.setAutoIncrement("YES".equalsIgnoreCase(safeString(rs, "IS_AUTOINCREMENT"))
+                        || SqlServerIdentityTypes.hasIdentity(nativeType));
                 column.setLength(safeLong(rs, "COLUMN_SIZE"));
                 column.setPrecision(safeInteger(rs, "COLUMN_SIZE"));
                 column.setScale(safeInteger(rs, "DECIMAL_DIGITS"));
@@ -495,15 +501,14 @@ public class GenericJdbcMetadataExplorer extends AbstractMetadataExplorer {
         return type.toUpperCase(Locale.ROOT).contains("VIEW") ? "VIEW" : "TABLE";
     }
 
-    private String buildColumnType(ResultSet rs) {
-        String type = safeString(rs, "TYPE_NAME");
+    private String buildColumnType(ResultSet rs, String type, boolean sqlServer) {
         int jdbcType = safeInteger(rs, "DATA_TYPE") == null ? Types.VARCHAR : safeInteger(rs, "DATA_TYPE");
         Integer size = safeInteger(rs, "COLUMN_SIZE");
         Integer scale = safeInteger(rs, "DECIMAL_DIGITS");
         if (type == null || type.isBlank()) {
             return "VARCHAR";
         }
-        if (scale != null && scale > 0 && isNumberType(jdbcType)) {
+        if (size != null && size > 0 && scale != null && (scale > 0 || sqlServer && (jdbcType == Types.NUMERIC || jdbcType == Types.DECIMAL)) && isNumberType(jdbcType)) {
             return type + "(" + size + "," + scale + ")";
         }
         if (size != null && size > 0 && supportsLength(jdbcType)) {

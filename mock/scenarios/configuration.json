@@ -771,19 +771,6 @@
           "sortNum": 3
         },
         {
-          "id": "2080224459360894976",
-          "name": "菜单管理",
-          "parentId": "2068931876657647616",
-          "staticIcon": "plan",
-          "status": 0,
-          "resourceType": 0,
-          "sno": "menu-manage",
-          "url": "/menu-manage",
-          "code": "",
-          "openType": 0,
-          "sortNum": 3
-        },
-        {
           "id": "2081000000000000001",
           "name": "数据源管理",
           "parentId": "ROOT",
@@ -808,19 +795,6 @@
           "code": "",
           "openType": 0,
           "sortNum": 3
-        },
-        {
-          "id": "178716197791100005",
-          "name": "租户管理",
-          "parentId": "2068931876657647616",
-          "staticIcon": null,
-          "status": 0,
-          "resourceType": 0,
-          "sno": "tenant-manage",
-          "url": "/tenant-manage",
-          "code": null,
-          "openType": 0,
-          "sortNum": 4
         },
         {
           "id": "2068931869846097920",

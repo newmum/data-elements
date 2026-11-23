@@ -676,7 +676,7 @@
                       <span class="field-label">
                         用户名
                         <el-tooltip
-                          content="创建一个linewell专用账号，分配所有对象只读权限"
+                          :content="sourceType === 'clickhouse' ? '填写已获授权的 ClickHouse 只读账号。' : '创建一个linewell专用账号，分配所有对象只读权限'"
                           placement="top"
                         >
                           <Icon icon="el-icon-QuestionFilled" />
@@ -685,7 +685,7 @@
                     </template>
                     <el-input
                       v-model="connectorForm.username"
-                      placeholder="分配所有对象只读权限给新建linewell账号"
+                      :placeholder="sourceType === 'clickhouse' ? '例如 default' : '分配所有对象只读权限给新建linewell账号'"
                       @change="refreshJdbcUrl"
                     />
                   </el-form-item>
@@ -696,14 +696,14 @@
                     "
                     label="密码"
                     :required="
-                      !['hive', 'elasticsearch', 'mongodb'].includes(sourceType)
+                      !['hive', 'elasticsearch', 'clickhouse', 'mongodb'].includes(sourceType)
                     "
                   >
                     <el-input
                       v-model="connectorForm.password"
                       v-bind="passwordInputBindings('connectorForm.password')"
                       autocomplete="new-password"
-                      placeholder="请输入连接密码"
+                      :placeholder="sourceType === 'clickhouse' ? '账号未配置密码时可留空' : '请输入连接密码'"
                     />
                   </el-form-item>
                   <el-form-item v-if="sourceType === 'mongodb'" label="认证数据库">
@@ -2895,6 +2895,7 @@ const relationalSourceTypes = [
   "postgresql",
   "kingbase8",
   "elasticsearch",
+  "clickhouse",
   "mongodb",
 ];
 const resourceCatalogSourceTypes = ["api", "ftp", "kafka", "minio"];
@@ -2912,6 +2913,7 @@ const sourceTypeLabels = {
   kafka: "Kafka",
   minio: "MinIO",
   elasticsearch: "Elasticsearch",
+  clickhouse: "ClickHouse",
   mongodb: "MongoDB",
   gbase8a: "GBase 8a",
   sqlserver: "SQL Server",
@@ -2939,6 +2941,8 @@ const normalizeSourceType = (value) => {
     es: "elasticsearch",
     elastic: "elasticsearch",
     elasticsearch: "elasticsearch",
+    ch: "clickhouse",
+    mrsclickhouse: "clickhouse",
   };
   const type = alias[normalized] || normalized;
   return sourceTypeLabels[type] ? type : "";
@@ -2963,6 +2967,7 @@ const sourceTypeDescriptions = {
   api: "接口数据源",
   kafka: "消息流数据源",
   elasticsearch: "搜索与分析引擎",
+  clickhouse: "列式分析数据库",
   mongodb: "文档型数据库",
 };
 const sourceTypeCardOptions = computed(() =>
@@ -3001,6 +3006,7 @@ const defaultPorts = {
   postgresql: "5432",
   kingbase8: "54321",
   elasticsearch: "9200",
+  clickhouse: "8123",
   mongodb: "27017",
 };
 const templateTableHeaders = [
@@ -3469,6 +3475,8 @@ const sourceFieldTypeOptions = {
     "ip",
     "geo_point",
   ],
+  clickhouse: ["Int8", "UInt8", "Int16", "UInt16", "Int32", "UInt32", "Int64", "UInt64",
+    "Float32", "Float64", "Decimal", "String", "FixedString", "Date", "DateTime", "DateTime64", "UUID", "Array", "Map"],
 };
 const sourceTemplateExamples = {
   mysql: {
@@ -3582,6 +3590,13 @@ const sourceTemplateExamples = {
     fieldName: "case_id",
     fieldComment: "案件标识",
     fieldType: "keyword",
+  },
+  clickhouse: {
+    tableName: "event_record",
+    tableComment: "事件记录",
+    fieldName: "record_id",
+    fieldComment: "记录标识",
+    fieldType: "Int64",
   },
   ftp: {
     tableName: "ftp_file_record",
@@ -8800,6 +8815,10 @@ function changeSourceType(value, defaultProvideConnection = true) {
     ) {
       connectorForm.port = sourceDefaultPort(sourceType.value) || "";
     }
+    if (sourceType.value === "clickhouse") {
+      if (!connectorForm.username) connectorForm.username = "default";
+      if (!connectorForm.database) connectorForm.database = "default";
+    }
     refreshJdbcUrl();
   }
   nextTick(() => {
@@ -9213,12 +9232,15 @@ function validateConnector() {
       return;
     }
     if (
-      !["hive", "elasticsearch"].includes(sourceType.value) &&
+      !["hive", "elasticsearch", "clickhouse"].includes(sourceType.value) &&
       (!connectorForm.username || !connectorForm.password)
     ) {
       throw new Error(
         `请填写 ${sourceTypeLabels[sourceType.value]} 用户名和密码`,
       );
+    }
+    if (sourceType.value === "clickhouse" && !String(connectorForm.username || "").trim()) {
+      throw new Error("请填写 ClickHouse 用户名");
     }
     if (!connectorForm.jdbcURL) {
       throw new Error(
@@ -9463,6 +9485,7 @@ function refreshJdbcUrl() {
     postgresql: `jdbc:postgresql://${host}:${port}/${database}${schema}`,
     kingbase8: `jdbc:kingbase8://${host}:${port}/${database}${schema}`,
     elasticsearch: /^https?:\/\//i.test(host) ? host : `http://${host}:${port}`,
+    clickhouse: `jdbc:clickhouse://${host}:${port}/${database}`,
   };
   connectorForm.jdbcURL = urls[sourceType.value] || "";
 }

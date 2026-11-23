@@ -101,8 +101,8 @@ class MaterializationBatchSubmitMagicTest {
     @SuppressWarnings("unchecked")
     void materializationPersistsTheSelectedNodeAndRejectsAnUnavailableNodeBeforeDdl() throws Exception {
         var fixture = new Fixture(2);
-        fixture.jdbc.execute("create table nifi_node_t(tid varchar(64),tenant_id varchar(32),is_del int,enabled int)");
-        fixture.jdbc.update("insert into nifi_node_t values('secondary','police',0,1),('disabled','police',0,0)");
+        fixture.jdbc.execute("create table nifi_node_t(tid varchar(64),tenant_id varchar(32),is_del int,enabled int,node_name varchar(64),node_code varchar(64),base_url varchar(255),auth_username varchar(64),auth_password varchar(64))");
+        fixture.jdbc.update("insert into nifi_node_t(tid,tenant_id,is_del,enabled,node_name,node_code,base_url) values('secondary','police',0,1,'分节点','secondary','http://secondary.example'),('disabled','police',0,0,'停用节点','disabled','http://disabled.example')");
         var targets = fixture.targets(2);
         var firstTarget = (Map<String, Object>) targets.getFirst().get("propList");
         var secondTarget = (Map<String, Object>) targets.getLast().get("propList");
@@ -112,11 +112,21 @@ class MaterializationBatchSubmitMagicTest {
         assertNoWrites(fixture);
 
         secondTarget.put("nifiNodeId", "secondary");
+        fixture.jdbc.update("update nifi_node_t set base_url='https://secondary.example:8443',auth_username='validation-user' where tid='secondary'");
+        var incomplete = fixture.batch(targets);
+        assertStatus(400, incomplete);
+        assertThat(((ExitValue) incomplete).getValues()[1].toString())
+                .contains("分节点", "https://secondary.example:8443", "缺少NiFi密码");
+        assertNoWrites(fixture);
+        fixture.jdbc.update("update nifi_node_t set auth_password='validation-password' where tid='secondary'");
+        fixture.jdbc.update("insert into nifi_node_t(tid,tenant_id,is_del,enabled,node_name,node_code,base_url) values('anonymous','police',0,1,'免认证节点','anonymous','http://anonymous.example')");
+        secondTarget.put("nifiNodeId", "anonymous");
         assertThat(success(fixture.batch(targets)).get("complete")).isEqualTo(true);
         var configs = fixture.jdbc.queryForList("select field_governance_config from db_table_t where datasource_id like 'db-%'",
                 String.class);
-        assertThat(configs).hasSize(2).allSatisfy(config ->
-                assertThat(cn.hutool.json.JSONUtil.parseObj(config).getStr("nifiNodeId")).isEqualTo("secondary"));
+        assertThat(configs).hasSize(2);
+        assertThat(configs.stream().map(config -> cn.hutool.json.JSONUtil.parseObj(config).getStr("nifiNodeId")))
+                .containsExactlyInAnyOrder("secondary", "anonymous");
     }
 
     @Test
@@ -462,6 +472,7 @@ class MaterializationBatchSubmitMagicTest {
                     "jsons", new JsonModule(), "metadataAsset", this, "esCommonService", this,
                     "connectionProperties", connections, "request", request));
             context.put("tableRead", tableRead);
+            context.put("nodeConfiguration", NifiNodeConfigurationMagicTest.function());
             context.put("redissonClient", locks);
             context.put("platformJdbc", jdbc);
             context.put("log", LoggerFactory.getLogger(MaterializationBatchSubmitMagicTest.class));

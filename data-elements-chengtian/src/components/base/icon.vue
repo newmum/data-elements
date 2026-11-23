@@ -41,6 +41,9 @@ const normalizedIcon = computed(() => {
     es: "elasticsearch",
     elastic: "elasticsearch",
     elasticsearch: "elasticsearch",
+    clickhouse: "clickhouse",
+    ch: "clickhouse",
+    mrsclickhouse: "clickhouse",
     other: "database-network",
   };
   return aliases[key] || raw;

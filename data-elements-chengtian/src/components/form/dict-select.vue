@@ -186,6 +186,7 @@ const databaseTypeIconMap: Record<string, string> = {
   dameng: "dameng",
   gaussdb: "gaussdb",
   elasticsearch: "elasticsearch",
+  clickhouse: "clickhouse",
   hive: "hive",
 };
 const databaseTypeAlias: Record<string, string> = {
@@ -194,6 +195,8 @@ const databaseTypeAlias: Record<string, string> = {
   mssql: "sqlserver",
   dm: "dameng",
   es: "elasticsearch",
+  ch: "clickhouse",
+  mrsclickhouse: "clickhouse",
 };
 
 // eslint-disable-next-line vue/no-dupe-keys

@@ -29,15 +29,16 @@ public final class SyncPolicy {
     }
     public static Pipeline.Node periodicSource(Pipeline p) {
         if (p.dsl() == null || p.dsl().nodes() == null) return null;
-        List<Pipeline.Node> sources = p.dsl().nodes().stream().filter(n -> "source".equals(n.category())).toList();
+        List<Pipeline.Node> sources = p.dsl().nodes().stream().filter(n -> "source".equals(n.category())&&!backfill(n.config())).toList();
         Pipeline.Node periodic = sources.stream().filter(n -> "PERIODIC_FULL".equals(mode(n.config()))).findFirst().orElse(null);
         if (periodic != null && sources.size() != 1) throw new IllegalStateException("定时全量任务必须只有一个数据库来源节点；多来源请拆分独立任务");
         return periodic;
     }
     public static boolean needsCleanupConfirmation(Pipeline p) {
         if (p.dsl() == null || p.dsl().nodes() == null) return false;
-        return p.dsl().nodes().stream().filter(n -> "source".equals(n.category())).anyMatch(n ->
+        return p.dsl().nodes().stream().filter(n -> "source".equals(n.category())&&!backfill(n.config())).anyMatch(n ->
                 (List.of("FULL", "FULL_THEN_INCR").contains(mode(n.config())) && Boolean.parseBoolean(text(n.config(), "deleteTargetData")))
                 || ("PERIODIC_FULL".equals(mode(n.config())) && "TRUNCATE_RELOAD".equals(fullStrategy(n.config()))));
     }
+    public static boolean backfill(Map<String,Object> config){return Boolean.parseBoolean(text(config,"backfillSource"));}
 }

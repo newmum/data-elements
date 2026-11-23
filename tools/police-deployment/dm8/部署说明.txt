@@ -1,0 +1,49 @@
+源数据管理平台 · 公安租户 · 麒麟 Linux aarch64/ARM64 · 已有达梦8 · 无Nacos
+
+1. 运行条件
+目标为ARM64麒麟服务器，建议银河麒麟V10；系统提供Python3.6或更新版本、Bash及GNU tar。
+包内JDK21、Valkey、Caddy和Elasticsearch7.17.29均为aarch64版，使用包内固定相对路径。
+启动子服务时不继承其他Spring/Nacos实例或外部JDK选项中的连接覆盖，连接和端口以本目录配置文件为准。
+包内不安装或启停达梦服务端。数据库由现场已有的达梦8实例提供。
+建议至少4GB可用内存、6GB可用磁盘空间。
+
+2. 准备达梦连接
+解压到独立目录，复制config/database.json.example为config/database.json并填写实际连接。
+jdbcUrl示例：jdbc:dm://数据库IP:5236，不带schema参数及账号口令。
+control和tenant填写两套独立空schema对应的账号、同名schema和密码。
+默认账号/schema为baseline和baseline_ga，也可指定其他同名独立账号/schema。
+数据库须为UTF-8、大小写不敏感(CASE_SENSITIVE=0)、COMPATIBLE_MODE=4。
+完整结构需要PAGE_SIZE=32KB，避免宽字段表和索引超限。安装器只检查参数，不会修改实例、删除旧数据或重启数据库。
+已有schema含任何表、视图等对象时拒绝全量初始化，不能将本包用作已有业务库升级脚本。
+如果DBA已准备两个账号，保持createUsers=false，dba密码留空。
+如果需要安装器创建缺少的账号，设置createUsers=true并填写dba连接；只给新账号授予RESOURCE，已有账号不改密、不重授权。
+实际口令只保存在目标机器的config/database.json，请设为0600；不得将填写后的文件放回公开包。
+
+3. 一键初始化与启动
+在解压目录执行：
+  bash start.sh
+首次自动导入控制库/公安库原生结构、Magic、低代码、动态表单、公开配置、字典、业务导航、公安组织和管理员账号。
+保留权限管理页面中的菜单新增、编辑、排序、删除及相关接口、组件；不初始化独立租户管理/菜单管理菜单条目。
+默认访问http://服务器IP:18291，账号admin，随机初始密码位于data/local/admin-login.txt。
+首次启动会准备独立本机ES索引，检查登录、会话、导航、组织树和应用系统查询；未通过检查则停止本次新启动的服务并保留日志。
+root执行时自动创建本目录专用服务账号。服务账号需要部署目录读写权限。
+
+4. 启停和检查
+  bash stop.sh
+  bash status.sh
+  python3 tools/standalone.py check-db
+  python3 tools/standalone.py init-db
+stop只停止本包网关、后端、ES和缓存，不会停止外部达梦。
+端口在config/ports.json设置；只有网页默认对外开放，后端、缓存和ES仅本机监听。
+NiFi及其他业务连接仍须在实际部署后配置节点与连接；本包不附带现场业务连接及凭据。
+
+5. 初始化脚本及数据
+db/01-control-dm8.sql和db/02-police-dm8.sql为达梦原生结构，不是MySQL脚本。
+数据通过db/seeds.json及对应TSV文件，用包内JDBC导入器参数化导入；CLOB按字符流处理，避免中文、长Magic脚本及低代码被截断。
+首次导入完成标记保存在data/local/initialized.json。数据目录、受限连接配置及运行密钥须随实际部署保留。
+初始化中途失败会保留已创建对象并阻止盲目重复全量导入，请根据logs/dm-initialize.log由DBA核查处理；安装器不自动清库。
+
+6. 校验与日志
+  sha256sum -c package-manifest.sha256
+压缩包整体摘要见交付目录SHA256SUMS.txt。
+日志位于logs/，初始化报告及初始账号位于data/local/。部署前不要将其他实例的data/local复制进新目录。

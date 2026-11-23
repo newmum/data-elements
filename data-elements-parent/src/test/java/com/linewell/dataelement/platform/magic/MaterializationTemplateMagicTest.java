@@ -37,6 +37,102 @@ import org.ssssssss.script.runtime.ExitValue;
 
 /** The template must stay local-first, bounded and scoped to the current role. */
 class MaterializationTemplateMagicTest {
+    @ParameterizedTest @ValueSource(booleans={true,false})
+    void normalizedSqlServerColumnKeepsBooleanIdentityFlagsAsNumericLineage(boolean identity)throws Exception {
+        var fixture=new Fixture(1);fixture.jdbc.execute("alter table db_table_column_t add auto_increment boolean");
+        fixture.jdbc.update("update db_datasource_t set db_type='sqlserver' where tid='source-db'");
+        fixture.jdbc.update("update db_table_column_t set data_type='int',column_type='int',length=10,precision_length=10,scale=0,auto_increment=? where tid='col-1'",identity);
+        var response=assertInstanceOf(Map.class,fixture.run(false));var field=(Map<?,?>)((List<?>)response.get("tableItems")).getFirst();
+        assertEquals("int",field.get("dataType"));assertEquals(identity?1:0,field.get("sourceAutoIncrement"));assertEquals(0,field.get("autoIncrement"));
+        assertEquals(1,field.get("primaryKey"));assertEquals(0,field.get("nullable"));assertEquals("col-1",field.get("sourceColumnId"));
+        assertEquals(identity,fixture.jdbc.queryForObject("select auto_increment from db_table_column_t where tid='col-1'",Boolean.class));
+        assertEquals(0,fixture.explorer.calls);assertEquals(0,fixture.connectionConfigCalls);
+    }
+    @ParameterizedTest @CsvSource(delimiter='|',value={"int identity|int|10", "bigint identity|bigint|19", "numeric identity|decimal|18"})
+    void legacySqlServerIdentityKeepsNumericTypeSourceLineageAndExistingIds(String raw,String expected,int precision)throws Exception {
+        var fixture=new Fixture(1);fixture.jdbc.execute("alter table db_table_column_t add auto_increment int");
+        fixture.jdbc.update("update db_datasource_t set db_type='sqlserver' where tid='source-db'");
+        fixture.jdbc.update("update db_table_column_t set data_type=?,column_type=?,length=?,precision_length=?,scale=0,auto_increment=null where tid='col-1'",raw,raw,precision,precision);
+        var response=assertInstanceOf(Map.class,fixture.run(false));var field=(Map<?,?>)((List<?>)response.get("tableItems")).getFirst();
+        assertEquals(expected,field.get("dataType"));assertEquals(raw,field.get("sourceColumnType"));assertEquals(raw,field.get("sourceDataType"));
+        assertEquals(1,field.get("sourceAutoIncrement"));assertEquals(0,field.get("autoIncrement"));assertEquals(1,field.get("primaryKey"));assertEquals(0,field.get("nullable"));
+        assertEquals("col-1",field.get("sourceColumnId"));assertEquals(0,fixture.explorer.calls);assertEquals(0,fixture.connectionConfigCalls);
+        assertEquals(raw,fixture.jdbc.queryForObject("select data_type from db_table_column_t where tid='col-1'",String.class));
+    }
+    @ParameterizedTest
+    @ValueSource(strings={"minio","ftp","api","kafka","elasticsearch","mongodb","hdfs","hbase"})
+    void sampledTextWidthsSuggestCapacityWithoutChangingTheSnapshotOrGrowingQueries(String sourceType) throws Exception {
+        List<Integer> reads=new ArrayList<>();
+        for(int count:List.of(20,100)){
+            var fixture=new Fixture(1);fixture.jdbc.update("update db_datasource_t set db_type=? where tid='source-db'",sourceType);
+            fixture.jdbc.update("update db_table_column_t set column_type='VARCHAR',length=2 where tid='col-1'");
+            for(int index=1;index<count;index++)fixture.jdbc.update("insert into db_table_column_t (tid,tenant_id,table_id,column_name,data_type,column_type,length,nullable,ordinal_position,is_del) values(?,'police','source-1',?,'varchar','VARCHAR',2,1,?,0)","col-"+(index+1),"field_"+index,index+1);
+            fixture.jdbc.update("insert into db_table_column_t (tid,tenant_id,table_id,column_name,data_type,column_type,length,nullable,is_del) values('foreign','hospital','source-1','foreign_field','varchar','VARCHAR',2,1,0)");
+            var response=assertInstanceOf(Map.class,fixture.run(false));var fields=assertInstanceOf(List.class,response.get("tableItems"));
+            assertEquals(count+3,fields.size());assertFalse(fields.stream().anyMatch(row->"foreign_field".equals(((Map<?,?>)row).get("columnName"))));
+            for(int index=0;index<count;index++){
+                var field=(Map<?,?>)fields.get(index);assertEquals("col-"+(index+1),field.get("sourceColumnId"));assertEquals(255,((Number)field.get("length")).intValue());
+                assertEquals("VARCHAR",field.get("sourceColumnType"));
+            }
+            assertTrue(((List<?>)response.get("warnings")).stream().anyMatch(value->value.toString().contains("样本观察")));
+            assertEquals(2,fixture.jdbc.queryForObject("select length from db_table_column_t where tid='col-1'",Integer.class));
+            assertEquals(0,fixture.explorer.calls);assertEquals(0,fixture.fileProbe.calls);assertEquals(0,fixture.connectionConfigCalls);reads.add(fixture.counter.queries);
+            var column=new ColumnInfo();column.setDataType("varchar");column.setColumnType("varchar");column.setLength(255L);column.setSourceDatabaseType(sourceType);
+            assertEquals("VARCHAR2(255 CHAR)",com.linewell.dataelement.metautil.ddl.PortableColumnType.render(DatabaseType.ORACLE,column,"varchar"));
+        }
+        assertEquals(reads.getFirst(),reads.getLast());assertTrue(reads.getFirst()<=20);
+    }
+
+    @ParameterizedTest
+    @CsvSource({"mysql,VARCHAR,2,2", "minio,VARCHAR(2),2,2", "minio,VARCHAR,1000,1000", "minio,VARCHAR,0,0", "minio,CHAR,2,2", "minio,TEXT,2,0"})
+    void declaredSqlWidthsExplicitTypesUnboundedTextAndFixedCharRemainUnchanged(String source,String nativeType,int observed,int expected)throws Exception {
+        var fixture=new Fixture(1);fixture.jdbc.update("update db_datasource_t set db_type=? where tid='source-db'",source);
+        fixture.jdbc.update("update db_table_column_t set data_type=?,column_type=?,length=? where tid='col-1'",nativeType,nativeType,observed);
+        var response=assertInstanceOf(Map.class,fixture.run(false));var field=(Map<?,?>)((List<?>)response.get("tableItems")).getFirst();
+        assertEquals(expected,((Number)field.get("length")).intValue());assertEquals(1,field.get("primaryKey"));assertEquals(0,field.get("nullable"));assertEquals("col-1",field.get("sourceColumnId"));
+        assertEquals(0,fixture.explorer.calls);assertEquals(0,fixture.fileProbe.calls);
+    }
+
+    @ParameterizedTest @ValueSource(strings={"character_length","byte_length"})
+    void explicitNativeCapacityIsNotConfusedWithASampleEvenForDocumentSources(String capacity)throws Exception {
+        var fixture=new Fixture(1);fixture.jdbc.execute("alter table db_table_column_t add "+capacity+" bigint");
+        fixture.jdbc.update("update db_datasource_t set db_type='minio' where tid='source-db'");
+        fixture.jdbc.update("update db_table_column_t set column_type='VARCHAR',length=2,"+capacity+"=2 where tid='col-1'");
+        var response=assertInstanceOf(Map.class,fixture.run(false));var field=(Map<?,?>)((List<?>)response.get("tableItems")).getFirst();
+        assertEquals(2,((Number)field.get("length")).intValue());assertFalse(((List<?>)response.get("warnings")).stream().anyMatch(value->value.toString().contains("样本观察")));
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {0, 1})
+    void sourceAutoIncrementIsLineageAndDoesNotRequestNewTargetIds(int sourceIdentity) throws Exception {
+        var fixture = new Fixture(1);
+        fixture.jdbc.execute("alter table db_table_column_t add auto_increment int");
+        fixture.jdbc.update("update db_datasource_t set db_type='mysql' where tid='source-db'");
+        fixture.jdbc.update("update db_table_column_t set data_type='int',column_type='int',length=10,auto_increment=? where tid='col-1'", sourceIdentity);
+        var response = assertInstanceOf(Map.class, fixture.run(false));
+        var field = assertInstanceOf(Map.class, ((List<?>) response.get("tableItems")).getFirst());
+        assertEquals("col-1", field.get("sourceColumnId")); assertEquals("person_id", field.get("columnName"));
+        assertEquals(sourceIdentity, field.get("sourceAutoIncrement")); assertEquals(0, field.get("autoIncrement"));
+        assertEquals(1, field.get("primaryKey")); assertEquals(0, field.get("nullable"));
+        assertEquals(sourceIdentity == 1, ((List<?>) response.get("warnings")).stream().anyMatch(warning -> warning.toString().contains("保留来源已有值")));
+        assertEquals(0, fixture.explorer.calls); assertEquals(0, fixture.connectionConfigCalls);
+    }
+
+    @ParameterizedTest
+    @CsvSource({"Int64,bigint,19", "Nullable(Int64),bigint,19", "LowCardinality(Nullable(UInt64)),decimal,20", "Int8,int,3", "UInt32,bigint,10"})
+    void clickHouseNativeIntegerSnapshotsKeepNumericTypesFullCapacityAndNoSourceReads(String raw,String logical,int precision) throws Exception {
+        var fixture=new Fixture(1);
+        fixture.jdbc.update("update db_datasource_t set db_type='clickhouse' where tid='source-db'");
+        fixture.jdbc.update("update db_table_column_t set data_type=?,column_type=?,length=1,precision_length=1,scale=0,nullable=1 where tid='col-1'",raw,raw);
+        var response=assertInstanceOf(Map.class,fixture.run(false));
+        var field=assertInstanceOf(Map.class,((List<?>)response.get("tableItems")).getFirst());
+        assertEquals("col-1",field.get("sourceColumnId")); assertEquals(raw,field.get("sourceColumnType"));
+        assertEquals(logical,field.get("dataType")); assertEquals(logical,field.get("columnType"));
+        assertEquals(precision,((Number)field.get("length")).intValue());assertEquals(precision,((Number)field.get("precisionLength")).intValue());
+        assertEquals(0,((Number)field.get("scale")).intValue());assertEquals(1,field.get("nullable"));
+        assertTrue(((List<?>)response.get("warnings")).isEmpty());
+        assertEquals(0,fixture.explorer.calls);assertEquals(0,fixture.fileProbe.calls);assertEquals(0,fixture.connectionConfigCalls);
+    }
 
     @ParameterizedTest
     @CsvSource({"explore,数据抽取方式", "extract,数据抽取方式", "extraction,数据抽取方式",
@@ -138,7 +234,7 @@ class MaterializationTemplateMagicTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"", "api", "ftp", "kafka", "minio", "FILE_UPLOAD", "elasticsearch"})
+    @ValueSource(strings = {"", "api", "ftp", "kafka", "minio", "FILE_UPLOAD", "elasticsearch", "clickhouse"})
     void connectorIndependentSnapshotsKeepConstantReadsForTwentyAndHundredFields(String sourceType) throws Exception {
         List<Integer> reads = new ArrayList<>();
         for (int count : List.of(20, 100)) {

@@ -63,6 +63,8 @@ class HiveModuleQueryTimeoutTest {
         HiveModule module = spy(new HiveModule());
         doReturn(connection).when(module).getConnection();
 
+        stubReadSettings(connection);
+
         assertThat(module.queryTable("select 1")).isEqualTo(List.of(Map.of("id", 42)));
 
         InOrder order = inOrder(statement);
@@ -86,6 +88,8 @@ class HiveModuleQueryTimeoutTest {
         when(metadata.getColumnCount()).thenReturn(0);
         HiveModule module = spy(new HiveModule());
         doReturn(connection).when(module).getConnection();
+
+        stubReadSettings(connection);
 
         module.queryTable("select 1");
 
@@ -128,5 +132,16 @@ class HiveModuleQueryTimeoutTest {
 
         verify(statement, never()).setQueryTimeout(anyInt());
         verify(statement).execute();
+    }
+
+    private static void stubReadSettings(Connection connection) throws Exception {
+        var setting = mock(java.sql.Statement.class);
+        when(connection.createStatement()).thenReturn(setting);
+        when(setting.executeQuery(startsWith("SET "))).thenAnswer(call -> {
+            var rows = mock(ResultSet.class);
+            when(rows.next()).thenReturn(true, false);
+            when(rows.getString(1)).thenReturn(call.<String>getArgument(0).substring(4) + "=false");
+            return rows;
+        });
     }
 }

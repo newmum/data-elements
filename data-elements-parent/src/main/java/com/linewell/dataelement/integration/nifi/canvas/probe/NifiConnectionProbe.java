@@ -1164,6 +1164,7 @@ public class NifiConnectionProbe {
             }
             default -> throw new IllegalArgumentException("不支持测试连接的组件: " + manifestKey);
         }
+        if (manifestKey.startsWith("source.")) r.url = com.linewell.dataelement.metautil.jdbc.MySqlIntegerReadPolicy.url(r.url);
         return r;
     }
 

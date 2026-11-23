@@ -22,6 +22,27 @@ import org.junit.jupiter.api.Test;
 class DslCompilerJdbcWriterTest {
 
     @Test
+    void bothJdbcWritersQuoteOracleUidInItsActualRegisteredCase() throws Exception {
+        for (String writer : List.of("LINEWELL_PUT_DATABASE_RECORD", "NIFI_PUT_DATABASE_RECORD")) {
+            for (String name : List.of("uid", "UID", "1231313")) {
+                var nifi = mockNifi();
+                when(nifi.findProcessorType("LinewellPutDatabaseRecord")).thenReturn(java.util.Optional.of("com.linewell.microservice.processors.database.LinewellPutDatabaseRecord"));
+                var config = new LinkedHashMap<String,Object>(oracleConfig("Oracle"));
+                config.put("writerType", writer); config.put("statementType", "INSERT");
+                config.put("targetColumns", List.of(Map.of("columnName", name, "dataType", "VARCHAR2"),
+                        Map.of("columnName", "ID", "dataType", "NUMBER")));
+                compile(nifi, config);
+                ArgumentCaptor<Map<String,String>> properties = ArgumentCaptor.captor();
+                verify(nifi).createProcessor(eq("pg"), anyString(), eq("目标表/put"), anyDouble(), anyDouble(), properties.capture(), nullable(String.class), nullable(String.class));
+                org.assertj.core.api.Assertions.assertThat(properties.getValue())
+                        .containsEntry(writer.startsWith("LINEWELL") ? "put-db-record-quoted-identifiers" : "Quote Column Identifiers", "true");
+                org.assertj.core.api.Assertions.assertThat(config.get("targetColumns")).isEqualTo(List.of(
+                        Map.of("columnName", name, "dataType", "VARCHAR2"), Map.of("columnName", "ID", "dataType", "NUMBER")));
+            }
+        }
+    }
+
+    @Test
     void bothJdbcWritersQuoteActualMongoNamesAndKeepUnderscoreKeysDistinct() throws Exception {
         for (String writer : List.of("LINEWELL_PUT_DATABASE_RECORD", "NIFI_PUT_DATABASE_RECORD")) {
             var nifi = mockNifi();

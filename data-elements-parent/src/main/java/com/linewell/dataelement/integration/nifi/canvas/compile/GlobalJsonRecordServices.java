@@ -67,6 +67,26 @@ record GlobalJsonRecordServices(String rootId, List<JsonNode> services, Map<Stri
     }
 
     String writerId() { return writerIds.getOrDefault(HiveTemporalJsonPolicy.DEFAULT_WRITER_NAME,writerIds.get(HiveTemporalJsonPolicy.WRITER_NAME)); }
+    boolean preservesJsonNumbers() {
+        for (JsonNode service : services) {
+            JsonNode component=service.path("component");
+            if (!readerId.equals(component.path("id").asText(service.path("id").asText()))) continue;
+            JsonNode properties=component.path("properties");
+            return "infer-schema".equals(properties.path("Schema Access Strategy").asText("infer-schema"))
+                    && "ROOT_NODE".equals(properties.path("Starting Field Strategy").asText("ROOT_NODE"));
+        }
+        return false;
+    }
+    Map<String,String> jdbcReaderFormatProperties() {
+        if(!preservesJsonNumbers())throw new IllegalStateException("精确JDBC数值读取需要顶层infer-schema JSON配置，未修改旧流程");
+        for(JsonNode service:services){JsonNode component=service.path("component");
+            if(!readerId.equals(component.path("id").asText(service.path("id").asText())))continue;
+            Map<String,String> result=new LinkedHashMap<>();
+            for(String key:List.of("Date Format","Time Format","Timestamp Format","Max String Length","Allow Comments")){
+                JsonNode value=component.path("properties").get(key);if(value!=null&&!value.isNull())result.put(key,value.asText());
+            }return result;
+        }throw new IllegalStateException("公共JSON Reader配置已不可核验");
+    }
     String writerForNode(String nodeId) {
         String name=hiveNodes.contains(nodeId)?HiveTemporalJsonPolicy.WRITER_NAME:HiveTemporalJsonPolicy.DEFAULT_WRITER_NAME;
         String id=writerIds.get(name);

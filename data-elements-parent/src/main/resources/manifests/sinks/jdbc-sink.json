@@ -39,7 +39,8 @@
       { "label": "\u66f4\u65b0\uff08UPDATE\uff09", "value": "UPDATE" },
       { "label": "\u5220\u9664\uff08DELETE\uff09", "value": "DELETE" }
     ] },
-    { "key": "updateKeys", "label": "\u66f4\u65b0\u952e", "type": "text", "default": "", "placeholder": "id", "help": "UPSERT\u3001UPDATE \u6216 DELETE \u65f6\u7528\u4e8e\u5339\u914d\u76ee\u6807\u8868\u8bb0\u5f55" }
+    { "key": "updateKeys", "label": "\u66f4\u65b0\u952e", "type": "text", "default": "", "placeholder": "id", "help": "UPSERT\u3001UPDATE \u6216 DELETE \u65f6\u7528\u4e8e\u5339\u914d\u76ee\u6807\u8868\u8bb0\u5f55" },
+    { "key": "insertThenMerge", "label": "先新增，失败后合并", "type": "switch", "default": false, "help": "先批量INSERT，失败批次再按匹配键MERGE；连接重试仍由原写入组件处理。须选择支持MERGE的Linewell组件并配置真实业务匹配键；合并仍失败时保留数据待处理。" }
   ],
   "compile": {
     "controllerServices": [{ "localId": "dbcp", "type": "org.apache.nifi.dbcp.DBCPConnectionPool", "properties": {

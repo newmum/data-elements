@@ -8,6 +8,98 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ValueTypesTest {
+    @Test void numericColumnNamesAreLiteralFieldsAndNeverPathsOrSqlFragments() throws Exception {
+        for (String name : List.of("0", "0123", "1231313", "123_name")) {
+            assertEquals(name, ValueTypes.field("/" + name));
+            for (String expression : List.of("${field:" + name + "}", "123")) {
+                var spec=JSON.createObjectNode().put("version","1.0");
+                spec.putArray("mappings").addObject().put("from","/"+name).put("to","/"+name).put("expression",expression);
+                var result=MappingEngine.execute(MappingEngine.compile(spec),List.of(Map.of(name,"validation")),0,CONTEXT,null);
+                assertTrue(result.rows().getFirst().success());
+                assertEquals(expression.equals("123")?123L:"validation",result.rows().getFirst().output().get(name));
+            }
+        }
+        for (String invalid : List.of("123/child", "123.child", "123[0]", "123 OR 1=1", "123;DROP", "123--", "123\u0000"))
+            assertThrows(MappingException.class,()->ValueTypes.field(invalid));
+    }
+    @Test void nativeBooleansUseSingleDigitScaleZeroDecimalsInLegacySchemaAndExplicitCasts() throws Exception {
+        for (String alias : List.of("NUMBER", "NUMERIC", "DECIMAL")) {
+            assertEquals(java.math.BigDecimal.ONE, ValueTypes.cast(true, alias, 1, 0, RoundingMode.UNNECESSARY));
+            assertEquals(java.math.BigDecimal.ZERO, ValueTypes.cast(false, alias, 1, 0, RoundingMode.UNNECESSARY));
+            assertNull(ValueTypes.cast(null, alias, 1, 0, RoundingMode.UNNECESSARY));
+        }
+        var specs = List.of(
+                "{\"version\":\"1.0\",\"mappings\":[{\"from\":\"/x\",\"to\":\"/y\",\"targetType\":\"NUMBER(1)\"}]}",
+                "{\"schemaVersion\":\"2.0\",\"schemaContract\":{\"target\":[{\"name\":\"y\",\"logicalType\":\"DECIMAL\",\"precision\":1,\"scale\":0}]},\"rules\":[{\"ruleId\":\"boolean\",\"target\":{\"name\":\"y\"},\"input\":{\"kind\":\"FIELD\",\"name\":\"x\"},\"steps\":[]}]}",
+                "{\"version\":\"1.0\",\"mappings\":[{\"from\":\"/x\",\"to\":\"/y\",\"expression\":\"CAST(${field:x} AS DECIMAL(1,0))\"}]}",
+                "{\"version\":\"1.0\",\"mappings\":[{\"from\":\"/x\",\"to\":\"/y\",\"transform\":{\"fn\":\"cast\",\"args\":[\"DECIMAL\",1,0]}}]}");
+        for (String spec : specs) {
+            var plan = MappingEngine.compile(JSON.readTree(spec));
+            for (int count : List.of(20, 100)) {
+                var rows = new ArrayList<Map<String,Object>>();
+                for (int i = 0; i < count; i++) rows.add(Collections.singletonMap("x", i % 3 == 0 ? null : i % 3 == 1));
+                var result = MappingEngine.execute(plan, rows, 0, CONTEXT, null);
+                assertEquals(count, result.rows().size()); assertEquals(0, result.dictionaryBatches());
+                for (int i = 0; i < count; i++) {
+                    var row = result.rows().get(i); assertTrue(row.success(), row.errors().toString());
+                    assertEquals(i % 3 == 0 ? null : i % 3 == 1 ? java.math.BigDecimal.ONE : java.math.BigDecimal.ZERO, row.output().get("y"));
+                }
+            }
+        }
+    }
+    @Test void booleanDecimalCarrierDoesNotCoerceTextOrBroadenOtherDecimalDimensions() throws Exception {
+        for (int[] dimensions : List.of(new int[]{0,0}, new int[]{2,0}, new int[]{1,1}, new int[]{38,10})) {
+            for (boolean value : List.of(false, true)) assertEquals("TYPE_MISMATCH", assertThrows(MappingException.class,
+                    () -> ValueTypes.cast(value, "DECIMAL", dimensions[0], dimensions[1], RoundingMode.UNNECESSARY)).code());
+        }
+        for (String value : List.of("true", "false", "yes", "no")) assertEquals("TYPE_MISMATCH", assertThrows(MappingException.class,
+                () -> ValueTypes.cast(value, "DECIMAL", 1, 0, RoundingMode.UNNECESSARY)).code());
+        assertEquals(new java.math.BigDecimal("2"), ValueTypes.cast(2, "DECIMAL", 1, 0, RoundingMode.UNNECESSARY));
+        var required = MappingEngine.compile(JSON.readTree("{\"version\":\"1.0\",\"mappings\":[{\"from\":\"/x\",\"to\":\"/y\",\"targetType\":\"NUMBER(1)\",\"targetNullable\":false}]}"));
+        var invalid = MappingEngine.execute(required, List.of(Collections.singletonMap("x", null), Map.of("x", "true")), 0, CONTEXT, null);
+        assertEquals("REQUIRED_FIELD", invalid.rows().get(0).errors().getFirst().code());
+        assertEquals("TYPE_MISMATCH", invalid.rows().get(1).errors().getFirst().code());
+    }
+    @Test void nativeFloatingAliasesUseFiniteDoubleValuesForLegacyAndSchemaRules() throws Exception {
+        for (String alias : List.of("BINARY_DOUBLE", "binary_float", "FLOAT4", "FLOAT8")) {
+            assertEquals("DOUBLE", ValueTypes.requireType(alias));
+            assertNull(ValueTypes.cast(null, alias, 0, 0, RoundingMode.UNNECESSARY));
+            for (double value : new double[]{0.0, -0.0, 1.2345678901234567, -0.00000012345, Double.MIN_VALUE, Double.MAX_VALUE}) {
+                assertEquals(Double.doubleToLongBits(value), Double.doubleToLongBits((Double)ValueTypes.cast(value, alias, 0, 0, RoundingMode.UNNECESSARY)));
+            }
+            for (boolean legacy : List.of(false, true)) {
+                var spec = JSON.createObjectNode();
+                if (legacy) {
+                    spec.put("version", "1.0");
+                    spec.putArray("mappings").addObject().put("from", "/x").put("to", "/y").put("targetType", alias);
+                } else {
+                    spec.put("schemaVersion", "2.0");
+                    spec.putObject("schemaContract").putArray("target").addObject().put("name", "y").put("logicalType", alias).put("physicalType", alias);
+                    var rule = spec.putArray("rules").addObject().put("ruleId", "floating");
+                    rule.putObject("target").put("name", "y").put("logicalType", alias);
+                    rule.putObject("input").put("kind", "FIELD").put("name", "x"); rule.putArray("steps");
+                }
+                var plan = MappingEngine.compile(spec);
+                for (int size : List.of(20, 100)) {
+                    var result = MappingEngine.execute(plan, Collections.nCopies(size, Map.of("x", 123.45678901234567)), 0, CONTEXT, null);
+                    assertEquals(size, result.rows().size()); assertEquals(0, result.dictionaryBatches());
+                    for (var row : result.rows()) {
+                        assertTrue(row.success(), row.errors().toString());
+                        assertInstanceOf(Double.class, row.output().get("y")); assertEquals(123.45678901234567, row.output().get("y"));
+                    }
+                }
+            }
+        }
+    }
+    @Test void floatingAliasesContinueRejectingNonfiniteOverflowAndUnknownTypes() {
+        for (String type : List.of("BINARY_FLOAT", "BINARY_DOUBLE", "FLOAT4", "FLOAT8")) {
+            for (Object bad : List.of("NaN", "Infinity", "-Infinity", "1e309", Double.NaN, Double.POSITIVE_INFINITY)) {
+                assertEquals("TYPE_MISMATCH", assertThrows(MappingException.class,
+                        () -> ValueTypes.cast(bad, type, 0, 0, RoundingMode.UNNECESSARY)).code());
+            }
+        }
+        assertEquals("UNSUPPORTED_TYPE", assertThrows(MappingException.class, () -> ValueTypes.requireType("BINARY_UNKNOWN")).code());
+    }
     @Test void atPrefixedTopLevelFieldsRemainLiteralAndCannotBecomePathsOrSql() {
         assertEquals("@timestamp",ValueTypes.field("/@timestamp"));
         assertEquals("_id",ValueTypes.field("/_id"));

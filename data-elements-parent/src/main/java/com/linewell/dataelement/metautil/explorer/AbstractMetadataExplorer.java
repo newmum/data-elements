@@ -9,6 +9,7 @@ import com.linewell.dataelement.metautil.model.dto.TableInfo;
 import com.linewell.dataelement.metautil.ddl.DdlDialect;
 import com.linewell.dataelement.metautil.jdbc.JdbcDriverPropertyResolver;
 import com.linewell.dataelement.metautil.jdbc.GaussDbVariant;
+import com.linewell.dataelement.metautil.jdbc.HiveReadSession;
 import com.linewell.dataelement.metautil.model.dto.SampleDataResult;
 import com.linewell.dataelement.metautil.model.dto.SampleRequest;
 import com.linewell.dataelement.metautil.model.dto.SqlValidationResult;
@@ -411,7 +412,8 @@ public abstract class AbstractMetadataExplorer implements MetadataExplorer {
         boolean driverVisible = ensureDriverVisible(config, driverClass);
 
         HikariConfig hikariConfig = new HikariConfig();
-        hikariConfig.setJdbcUrl(config.buildJdbcUrl());
+        String readUrl = com.linewell.dataelement.metautil.jdbc.MySqlIntegerReadPolicy.url(config.buildJdbcUrl());
+        hikariConfig.setJdbcUrl(readUrl);
         hikariConfig.setUsername(config.getUsername());
         hikariConfig.setPassword(config.getPassword());
         if (config.getDatabaseType() == DatabaseType.HETU && config.getSsl() != null) {
@@ -429,7 +431,7 @@ public abstract class AbstractMetadataExplorer implements MetadataExplorer {
         applyDriverTimeouts(hikariConfig, config.getEffectiveDatabaseType(), connectionTimeoutSeconds, connectionTimeoutMillis);
         if (!driverVisible) {
             Driver selected = EXTERNAL_DRIVER_INSTANCES.get(externalDriverKey(config,driverClass));
-            if (selected != null) hikariConfig.setDataSource(new VendorDriverDataSource(selected,config.buildJdbcUrl(),
+            if (selected != null) hikariConfig.setDataSource(new VendorDriverDataSource(selected,readUrl,
                     config.getUsername(),config.getPassword(),hikariConfig.getDataSourceProperties()));
         }
         hikariConfig.setIdleTimeout(600000L);
@@ -764,6 +766,16 @@ public abstract class AbstractMetadataExplorer implements MetadataExplorer {
         return dataSource.getConnection();
     }
 
+    /** 仅 Hive 数据读取需避免外部文件写入后的陈旧统计/缓存，其他 JDBC 方言无额外 SQL。 */
+    protected HiveReadSession readSession(DataSourceConfig config, Connection connection) throws SQLException {
+        if (config.getEffectiveDatabaseType() != DatabaseType.HIVE) return HiveReadSession.none();
+        return HiveReadSession.open(connection, () -> {
+            var pool = DATA_SOURCE_CACHE.getIfPresent(poolCacheKey(effectiveConfig(config)));
+            if (pool != null) pool.evictConnection(connection);
+            else connection.close();
+        });
+    }
+
     /**
      * 通用建表 DDL 生成：使用 ColumnInfo 中的 columnType / dataType 等信息拼装 ANSI 风格 DDL。
      * 具体数据库若有差异，可在各自实现类中覆盖。
@@ -1013,6 +1025,7 @@ public abstract class AbstractMetadataExplorer implements MetadataExplorer {
         assertWritableDdlSchema(effectiveConfig);
         try (Connection conn = getConnection(effectiveConfig);
              Statement stmt = conn.createStatement()) {
+            com.linewell.dataelement.metautil.ddl.CanvasTableDdl.validateIdentityVersion(ddl, effectiveConfig, conn);
             // 在执行 DDL 之前，根据不同数据库类型应用 schema / search_path / current_schema 等设置
             applySchemaForDdl(conn, effectiveConfig);
             List<String> statements = com.linewell.dataelement.metautil.ddl.NativeDdlStatements.split(ddl);
@@ -1121,6 +1134,7 @@ public abstract class AbstractMetadataExplorer implements MetadataExplorer {
         List<String> columnTypes = new ArrayList<>();
 
         try (Connection conn = getConnection(config);
+             var session = readSession(config, conn);
              Statement stmt = conn.createStatement();
              ResultSet rs = stmt.executeQuery(sql)) {
 

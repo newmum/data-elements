@@ -87,7 +87,9 @@ public class PortableDdlConverter {
             String raw = source.getColumnType() == null || source.getColumnType().isBlank() ? source.getDataType() : source.getColumnType();
             String rendered = PortableColumnType.render(config, source, raw);
             column.setColumnType(rendered); column.setDataType(rendered.replaceAll("\\(.*$", ""));
-            var kind=PortableColumnType.kind(raw);
+            var kind=PortableColumnType.kind(raw,source.getSourceDatabaseType());
+            int integralPrecision=PortableColumnType.integralPrecision(raw,source.getSourceDatabaseType());
+            if(integralPrecision>0){column.setLength((long)integralPrecision);column.setPrecision(integralPrecision);column.setScale(0);}
             if(kind==PortableColumnType.Kind.UUID&&PortableColumnType.kind(rendered)==PortableColumnType.Kind.VARCHAR){column.setLength(36L);column.setLengthSemantics("CHAR");}
             if((kind==PortableColumnType.Kind.CHAR||kind==PortableColumnType.Kind.VARCHAR)
                     && !target.getCode().equals(source.getDdlTargetDatabaseType())) {
@@ -134,7 +136,7 @@ public class PortableDdlConverter {
             if(target==DatabaseType.MYSQL&&PortableColumnType.kind(rendered)==PortableColumnType.Kind.TEXT
                     &&value.value()!=null&&!value.value().isBlank())
                 warnings.add(Map.of("field",source.getColumnName(),"message","目标已使用大文本类型，默认值语法受MySQL版本限制，请确认默认值表达式后再建表","requiresEdit",true));
-            if (PortableColumnType.kind(raw) == PortableColumnType.Kind.UNKNOWN && !rendered.equalsIgnoreCase(raw))
+            if (kind == PortableColumnType.Kind.UNKNOWN && !rendered.equalsIgnoreCase(raw))
                 warnings.add(Map.of("field", source.getColumnName(), "message", "来源原生类型已转为目标库长文本，请确认写入表示", "requiresEdit", false));
             if (DdlDialect.family(target) == DdlDialect.Family.ORACLE && Set.of("CLOB", "NCLOB", "BLOB", "LONG").contains(rendered)
                     && (Boolean.TRUE.equals(column.getPrimaryKey()) || Boolean.TRUE.equals(column.getUnique())))
@@ -169,7 +171,7 @@ public class PortableDdlConverter {
     }
 
     public String logicalType(String raw, String sourceCode) {
-        var kind = PortableColumnType.kind(raw);
+        var kind = PortableColumnType.kind(raw, sourceCode);
         // Registered snapshots remain editable even when an old source has no
         // protocol label. The optional origin only refines vendor semantics;
         // actual connection and imported-DDL parsing still use strict resolution.
@@ -220,7 +222,7 @@ public class PortableDdlConverter {
 
     /** Keep origin semantics such as UUID and time zones until the user selects another type family. */
     public String originTypeForEditor(String selected, String origin, String sourceCode) {
-        if (origin == null || origin.isBlank() || PortableColumnType.kind(origin) == PortableColumnType.Kind.UNKNOWN) return null;
+        if (origin == null || origin.isBlank() || PortableColumnType.kind(origin,sourceCode) == PortableColumnType.Kind.UNKNOWN) return null;
         DatabaseType source = optionalSourceType(sourceCode);
         if ((source == DatabaseType.MONGODB || source == DatabaseType.ELASTICSEARCH)
                 && "DATE".equals(PortableColumnType.base(origin))) return null;
@@ -235,6 +237,8 @@ public class PortableDdlConverter {
             Map<String,Object> item = items.get(index);
             item.put("sourceColumnType", column.getColumnType()); item.put("sourceDataType", column.getDataType());
             item.put("dataType", type); item.put("columnType", type);
+            int integralPrecision=PortableColumnType.integralPrecision(column.getColumnType(),column.getSourceDatabaseType());
+            if(integralPrecision>0){item.put("length",integralPrecision);item.put("precisionLength",integralPrecision);item.put("scale",0);}
             if (PortableColumnType.kind(column.getColumnType()) == PortableColumnType.Kind.UUID) item.put("length", 36);
         }
         return items;

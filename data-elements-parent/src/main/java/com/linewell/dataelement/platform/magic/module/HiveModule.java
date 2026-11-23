@@ -20,6 +20,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.sql.Connection;
+import com.linewell.dataelement.metautil.jdbc.HiveReadSession;
 import java.sql.Statement;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -352,6 +353,11 @@ public class HiveModule {
         }
         List<Map<String, Object>> resultList = new ArrayList<>();
         try (Connection connection = getConnection();
+             var session = HiveReadSession.open(connection, () -> {
+                 var pool = dataSource;
+                 if (pool != null) pool.evictConnection(connection);
+                 else connection.close();
+             });
              PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setQueryTimeout(readQueryTimeoutSeconds());
             try (ResultSet resultSet = statement.executeQuery()) {

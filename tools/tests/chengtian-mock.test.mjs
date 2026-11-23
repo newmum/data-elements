@@ -95,6 +95,34 @@ test("接入模板下拉按行业、发布状态和名称分页", async () => {
   assert.equal((await request(runtime, "/nifi/canvas/templatedetail", { tid: published.tid })).body.code, 403);
 });
 
+test("并行模板详情保留四节点、原生补数开关及分支策略且不模拟执行", async () => {
+  const { runtime } = setup("admin");
+  const targets = runtime.database.sources.filter(row => row.tenantId === runtime.session.tenantId && !row.isDel).slice(0, 2);
+  assert.equal(targets.length, 2);
+  const tid = "validation-shared-template";
+  const flow = { version: 1, nodes: [
+    { id: "source", category: "source", config: { templateBinding: "source", manualBackfill: true } },
+    { id: "governance", category: "transform", manifestKey: "transform.field-enrichment", config: { templateBinding: "governance:0", sharedGovernance: true } },
+    { id: "target-0", category: "sink", config: { templateBinding: "target:0", insertThenMerge: true } },
+    { id: "target-1", category: "sink", config: { templateBinding: "target:1", hiveTimestampFormat: true } },
+  ], edges: [
+    { id: "main", source: "source", target: "governance" },
+    { id: "first", source: "governance", target: "target-0" }, { id: "second", source: "governance", target: "target-1" },
+  ] };
+  runtime.database.accessTemplates = [{ tenantId: runtime.session.tenantId, tid, name: "共享治理并行验证", status: "PUBLISHED",
+    spec: { topology: "PARALLEL", targetDatasourceIds: targets.map(row => row.tid), flow } }];
+  runtime.persist(runtime.database);
+  const detail = (await request(runtime, "/nifi/canvas/templatedetail", { tid })).body.data;
+  assert.deepEqual(detail.spec.flow, flow);
+  assert.deepEqual(detail.targets.map(row => row.tid), targets.map(row => row.tid));
+  assert.equal(detail.spec.flow.nodes.length, 4);
+  assert.equal(detail.spec.flow.edges.length, 3);
+  detail.spec.flow.nodes[0].config.manualBackfill = false;
+  const again = (await request(runtime, "/nifi/canvas/templatedetail", { tid })).body.data;
+  assert.equal(again.spec.flow.nodes[0].config.manualBackfill, true);
+  assert.equal((await request(runtime, "/nifi/canvas/templateversion", { action: "publish", tid })).body.code, 501);
+});
+
 test("采集启动预检、旧 POST 地址、任务轮询和改名拒绝使用同一来源范围", async () => {
   const { runtime } = setup("registrar");
   const own = runtime.database.sources.find((row) => row.createdBy === runtime.session.userId);
@@ -385,6 +413,20 @@ test("编辑保存、分页与详情回读一致，刷新后保留，且不覆�
   ).body.data;
   assert.equal(page.total, 1);
   assert.equal(page.list[0].tid, id);
+});
+
+test("ClickHouse登记使用共享来源身份并在详情和类型筛选中保持，不连接真实服务器", async () => {
+  const {runtime,storage,sessionStorage}=setup("registrar");
+  const source=runtime.database.sources.find(row=>row.createdBy===runtime.session.userId);
+  const result=await request(runtime,"/dst/db/srcsave",{tid:source.tid,propList:{dbType:"clickhouse",host:"validation-host",port:8123,database:"default"}});
+  assert.equal(result.status,200);
+  const restored=new ChengtianMockRuntime({role:"registrar",storage,sessionStorage});
+  const detail=(await request(restored,"/dst/db/srcdetail",{tid:source.tid})).body.data;
+  assert.equal(detail.dbType,"clickhouse");assert.equal(detail.dbTypeName,"ClickHouse");
+  assert.equal(detail.poolCfg.database,"default");assert.equal(Number(detail.poolCfg.port),8123);
+  const page=(await request(restored,"/dst/db/srcpage",{typeKey:"clickhouse",pageSize:20})).body.data;
+  assert.ok(page.list.some(row=>row.tid===source.tid));
+  assert.ok(page.list.every(row=>row.tenantId===restored.session.tenantId&&row.createdBy===restored.session.userId));
 });
 
 test("本地存储失败不提交内存修改，dryRun 不持久化", async () => {

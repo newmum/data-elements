@@ -98,6 +98,116 @@ class AccessTemplateMagicTest {
         public String toJSONStr(Object value) { return JSONUtil.toJsonStr(value); }
     }
 
+    @Test void sharedGovernanceBindsEveryTargetAndOptionalBackfillUsesOnlyTheAuthorizedSource() throws Exception {
+        String canonical=source("api/03.数据接入/03.接入任务/05.按来源表补齐接入任务.ms");
+        int start=canonical.indexOf("var applyTemplateSourceDefaults ="),end=canonical.indexOf("return db.transaction",start);
+        String program="""
+                import cn.hutool.json.JSONUtil as poolJsons
+                import com.linewell.dataelement.integration.nifi.canvas.compile.RegisteredDatasourceType as sourceTypes
+                var text = value => value == null ? '' : value.toString()
+                var blank = value => value == null || text(value).trim() == ''
+                var isOdsSystemColumn = value => ['ODS_UUID','ODS_RKSJ','ODS_GXSJ'].contains(text(value).toUpperCase())
+                var parseGovernanceConfig = value => poolJsons.parseObj(value)
+                """+canonical.substring(start,end)+"\nreturn poolJsons.toJsonStr(instantiateTemplateFlow(template,pipelines,tasks))";
+        var template=JSONUtil.parseObj("""
+                {"spec":{"sourceType":"ANY","sourceSchedule":"REGISTERED","fetchSize":5000,"intervalSeconds":60,
+                "flow":{"version":1,"nodes":[
+                {"id":"source","manifestKey":"source.mysql","category":"source","config":{"templateBinding":"source"}},
+                {"id":"backfill","manifestKey":"source.mysql","category":"source","config":{"templateBinding":"source:backfill","enabled":true,"customWherePredicate":"ID BETWEEN 1 AND 2","host":"wrong"}},
+                {"id":"governance","manifestKey":"transform.field-enrichment","category":"transform","config":{"templateBinding":"governance:0","sharedGovernance":true}},
+                {"id":"ob","manifestKey":"sink.jdbc","category":"sink","config":{"templateBinding":"target:0","insertThenMerge":true}},
+                {"id":"hive","manifestKey":"sink.hive","category":"sink","config":{"templateBinding":"target:1"}}],
+                "edges":[{"id":"main","source":"source","target":"governance"},{"id":"backfill","source":"backfill","target":"governance"},
+                {"id":"ob","source":"governance","target":"ob"},{"id":"hive","source":"governance","target":"hive"}]}}}
+                """);
+        for(String sourceKind:List.of("ORACLE","FTP")) for(String keys:List.of("ID","","ODS_UUID")) {
+            var sourceCfg=Map.<String,Object>of("dbType",sourceKind,"host","authorized-host","sourceTableId","authorized-source",
+                    "registeredDatasourceId","source-db","incrementalColumn","UPDATE_TIME","password","validation-private");
+            var pipelines=new java.util.ArrayList<Map<String,Object>>();
+            for(int branch=0;branch<2;branch++) {
+                var target=Map.<String,Object>of("targetDbId","target-db-"+branch,"targetTableId","target-"+branch,"table","target_table_"+branch,"updateKeys",keys,
+                        "targetColumns",List.of(Map.of("columnName",branch==0?"ODS_UUID":"ods_uuid")),"password","not-a-public-snapshot");
+                pipelines.add(Map.of("dsl_json",JSONUtil.toJsonStr(Map.of("nodes",List.of(
+                        Map.of("id","old-source","manifestKey",sourceKind.equals("ORACLE")?"source.oracle":"source.ftp","category","source","config",sourceCfg),
+                        Map.of("id","old-mapping","manifestKey","transform.field-enrichment","category","transform","config",Map.of("mappings","validation-mapping-"+branch)),
+                        Map.of("id","old-target","manifestKey",branch==0?"sink.jdbc":"sink.hive","category","sink","config",target))))));
+            }
+            var result=JSONUtil.parseObj(MagicScript.create(program,null).execute(new MagicScriptContext(Map.of(
+                    "template",template,"pipelines",pipelines,"tasks",List.of(Map.of("tid","validation-shared"))))).toString());
+            var nodes=result.getJSONArray("nodes");
+            assertThat(nodes).hasSize(sourceKind.equals("ORACLE")?5:4);
+            var mapping=nodes.stream().map(JSONUtil::parseObj).filter(n->n.getStr("id").endsWith("-governance")).findFirst().orElseThrow().getJSONObject("config");
+            assertThat(mapping.getStr("mappings")).isEqualTo("validation-mapping-0");
+            var snapshots=mapping.getJSONArray("sharedTargets");
+            assertThat(snapshots).hasSize(2);
+            assertThat(snapshots.getJSONObject(0).getStr("nodeId")).isEqualTo("template-validation-shared-ob");
+            assertThat(snapshots.getJSONObject(1).getStr("tableId")).isEqualTo("target-1");
+            assertThat(snapshots.toString()).doesNotContain("password","not-a-public-snapshot");
+            var sink=nodes.stream().map(JSONUtil::parseObj).filter(n->n.getStr("id").endsWith("-ob")).findFirst().orElseThrow().getJSONObject("config");
+            assertThat(sink.getBool("insertThenMerge")).isEqualTo(keys.equals("ID"));
+            assertThat(sink.getStr("updateKeys")).isEqualTo(keys.equals("ID")?"ID":"");
+            if(sourceKind.equals("ORACLE")) {
+                var backup=nodes.stream().map(JSONUtil::parseObj).filter(n->n.getStr("id").endsWith("-backfill")).findFirst().orElseThrow();
+                assertThat(backup.getStr("manifestKey")).isEqualTo("source.oracle");
+                var cfg=backup.getJSONObject("config");
+                assertThat(cfg.getStr("host")).isEqualTo("authorized-host");
+                assertThat(cfg.getStr("sourceTableId")).isEqualTo("authorized-source");
+                assertThat(cfg.getBool("enabled")).isFalse();assertThat(cfg.getBool("backfillSource")).isTrue();
+                assertThat(cfg.getStr("scheduledState")).isEqualTo("DISABLED");
+                assertThat(cfg.getStr("incrementalColumn")).isEmpty();
+                assertThat(cfg.getStr("syncMode")).isEqualTo("FULL");
+                assertThat(cfg.getStr("customWherePredicate")).isEqualTo("ID BETWEEN 1 AND 2");
+            } else {
+                assertThat(result.getJSONArray("edges")).hasSize(3);
+                assertThat(result.getJSONArray("edges").toString()).doesNotContain("backfill");
+            }
+            // Current templates keep replay solely inside the native source component.
+            var nativeOnly=JSONUtil.parseObj(template.toString());
+            var nativeFlow=nativeOnly.getJSONObject("spec").getJSONObject("flow");
+            nativeFlow.getJSONArray("nodes").removeIf(value->"backfill".equals(JSONUtil.parseObj(value).getStr("id")));
+            nativeFlow.getJSONArray("edges").removeIf(value->"backfill".equals(JSONUtil.parseObj(value).getStr("source")));
+            nativeFlow.getJSONArray("nodes").getJSONObject(0).getJSONObject("config").set("manualBackfill",true);
+            var nativeResult=JSONUtil.parseObj(MagicScript.create(program,null).execute(new MagicScriptContext(Map.of(
+                    "template",nativeOnly,"pipelines",pipelines,"tasks",List.of(Map.of("tid","validation-shared"))))).toString());
+            assertThat(nativeResult.getJSONArray("nodes")).hasSize(4);
+            assertThat(nativeResult.getJSONArray("edges")).hasSize(3);
+            assertThat(nativeResult.getJSONArray("nodes").getJSONObject(0).getJSONObject("config").getBool("manualBackfill"))
+                    .isEqualTo(sourceKind.equals("ORACLE"));
+            assertThat(nativeResult.getJSONArray("nodes").toString()).doesNotContain("source:backfill");
+        }
+    }
+
+    @Test void templateAcceptsOnlyOneOptionalDisabledBackfillRootAndKeepsSinksTerminal() throws Exception {
+        var fixture=new Fixture();when(fixture.scope.dataSource()).thenReturn(Map.of("scope","ALL"));
+        var manifests=mock(ManifestRegistry.class);
+        for(String[] type:new String[][]{{"source.oracle","source"},{"transform.field-enrichment","transform"},{"sink.jdbc","sink"},{"sink.hive","sink"}}) {
+            var manifest=mock(ComponentManifest.class);when(manifest.category()).thenReturn(type[1]);when(manifests.get(type[0])).thenReturn(manifest);
+        }
+        var spec=JSONUtil.parseObj("""
+                {"topology":"PARALLEL","sourceType":"ANY","targets":["ORACLE","HIVE"],"intervalSeconds":60,"fetchSize":5000,
+                "flow":{"version":1,"nodes":[
+                {"id":"source","manifestKey":"source.oracle","category":"source","config":{"templateBinding":"source"}},
+                {"id":"backfill","manifestKey":"source.oracle","category":"source","config":{"templateBinding":"source:backfill","enabled":true}},
+                {"id":"mapping","manifestKey":"transform.field-enrichment","category":"transform","config":{"templateBinding":"governance:0","sharedGovernance":true}},
+                {"id":"ob","manifestKey":"sink.jdbc","category":"sink","config":{"templateBinding":"target:0","insertThenMerge":true}},
+                {"id":"hive","manifestKey":"sink.hive","category":"sink","config":{"templateBinding":"target:1"}}],
+                "edges":[{"id":"main","source":"source","target":"mapping"},{"id":"backfill","source":"backfill","target":"mapping"},
+                {"id":"ob","source":"mapping","target":"ob"},{"id":"hive","source":"mapping","target":"hive"}]}}
+                """);
+        String program=source(MANAGE);program=program.substring(0,program.indexOf("var actor ="))+"\nreturn definition";
+        program=program.replaceAll("(?m)^import (?:tenantRuntime|dataScope|tableRead|tableWrite|jsons|[^\\r\\n]+ as manifests)\\R","");
+        var inputs=new HashMap<String,Object>(Map.of("body",Map.of("action","create","name","validation-shared","spec",spec),
+                "tenantRuntime",new TenantMagicModule(null),"dataScope",fixture.scope,"manifests",manifests,"jsons",new TemplateJson()));
+        try(var ignored=TenantContext.use("ga")) {
+            var result=JSONUtil.parseObj(MagicScript.create(program,null).execute(new MagicScriptContext(inputs)).toString());
+            var cfg=result.getJSONObject("flow").getJSONArray("nodes").getJSONObject(1).getJSONObject("config");
+            assertThat(cfg.getBool("enabled")).isFalse();assertThat(cfg.getBool("backfillSource")).isTrue();
+            assertThat(cfg.getStr("syncMode")).isEqualTo("FULL");assertThat(cfg.getStr("customWherePredicate")).isEqualTo("1=0");
+            spec.getJSONObject("flow").getJSONArray("edges").add(Map.of("id","invalid-sink-edge","source","ob","target","hive"));
+            assertThat(status(MagicScript.create(program,null).execute(new MagicScriptContext(inputs)))).isEqualTo(400);
+        }
+    }
+
     @Test void templateValidationScrubsSensitiveFieldsIncludingNestedJsonProperties() throws Exception {
         var fixture = new Fixture();
         when(fixture.scope.dataSource()).thenReturn(Map.of("scope", "ALL"));

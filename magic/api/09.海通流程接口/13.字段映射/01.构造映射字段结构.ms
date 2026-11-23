@@ -42,6 +42,26 @@ return withHttp(() => {
             references[side] = reference
         }
     }
+    // 单次治理可分写多个目标：合并全部引用后批量鉴权、读取，不能按目标逐个查库。
+    var targets = input.path('targetRefs')
+    if (!targets.isMissingNode() && !targets.isNull() && !targets.isArray()) {
+        throw new MappingException('INVALID_SCHEMA', '共享目标引用必须是数组')
+    }
+    if (targets.isArray() && targets.size() > 16) {
+        throw new MappingException('BUDGET_EXCEEDED', '共享治理最多关联16个目标')
+    }
+    var targetIds = {}
+    if (targets.isArray()) {
+        for (index, target in targets) {
+            var nodeId = target.path('nodeId').asText().trim()
+            var reference = target.path('reference')
+            if (nodeId.isEmpty() || targetIds[nodeId] != null || !reference.isObject()) {
+                throw new MappingException('INVALID_SCHEMA', '目标分支标识须唯一且包含登记表引用')
+            }
+            targetIds[nodeId] = true
+            references['target:' + index] = reference
+        }
+    }
     if (references.isEmpty()) {
         throw new MappingException('INVALID_SCHEMA', '请选择已登记来源或目标表')
     }
@@ -51,12 +71,25 @@ return withHttp(() => {
     var result = JsonNodeFactory.instance.objectNode()
         .put('allowAdditionalSourceFields', input.path('allowAdditionalSourceFields').asBoolean(true))
         .put('schemaOrigin', verifyPhysical ? 'PHYSICAL' : 'REGISTERED')
-    for (side in bound.keySet()) {
+    for (side in ['source', 'target']) {
+        if (!bound.containsKey(side)) { continue }
         var table = bound.get(side)
         var fields = verifyPhysical ? physical.get(side) : table.fields()
         result.set(side, fields)
         result.put(side + 'Hash', MappingEngine.hash(fields))
         result.putObject(side + 'Ref').put('datasourceId', table.datasourceId()).put('tableId', table.tableId())
+    }
+    if (targets.isArray()) {
+        var branches = result.putArray('targets')
+        for (index, target in targets) {
+            var key = 'target:' + index
+            var table = bound.get(key)
+            var fields = verifyPhysical ? physical.get(key) : table.fields()
+            var branch = branches.addObject().put('nodeId', target.path('nodeId').asText())
+                .put('label', target.path('label').asText()).put('hash', MappingEngine.hash(fields))
+            branch.set('fields', fields)
+            branch.putObject('reference').put('datasourceId', table.datasourceId()).put('tableId', table.tableId())
+        }
     }
     return ResponseEntity.ok(result)
 })

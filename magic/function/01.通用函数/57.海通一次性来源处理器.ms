@@ -30,11 +30,12 @@ import com.linewell.dataelement.integration.nifi.canvas.compile.SyncPolicy
 import java.util.LinkedHashSet
 
 // @/common/nifiOneShotSources 为部署和启动解析一次性来源处理器。
-// 仅使用已授权画布和当前编译或保存的节点映射。
+// 仅使用已授权画布和当前编译或保存的节点映射；备用补数必须由操作员单次运行，不参加普通启动。
 
 var result = new LinkedHashSet()
 if (primary != null) {
     for (node in canvas.dsl()?.nodes() || []) {
+        if (SyncPolicy.backfill(node.config())) { continue }
         if (node.category() == 'source' && (node.manifestKey() == 'source.api' && node.config()?.get('scheduleMode') == 'once'
             || compiler.supportsSyncSettings(node.manifestKey()) && SyncPolicy.mode(node.config()) == 'FULL')) {
             var processor = primary.get(node.id())

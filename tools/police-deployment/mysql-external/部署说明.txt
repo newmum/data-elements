@@ -1,0 +1,58 @@
+源数据管理平台 公安租户 MySQL R3：外部中间件覆盖补丁
+适用：20261122-r3、Linux x86_64、已有完整部署目录；系统Python3.6及以上。
+
+一、覆盖范围
+覆盖 start.sh、stop.sh、status.sh、tools/standalone.py；新增 check.sh、外部连接示例和此说明。
+没有JAR、前端、数据库初始化数据或任何中间件二进制。
+config/application.yml、config/Caddyfile、config/ports.json、data、www、backend保持原文件。
+启动器仅解压原包的JDK21和Caddy供平台使用；不会解压、安装、启动、停止或探测包内MySQL/Redis/ES进程。
+start只启动backend和web；stop只停止这两个进程；启动失败也仅清理本次启动的这两个进程。
+原init-db操作已移除。没有自动建库、导入、创建用户、改密码或数据迁移步骤。
+
+二、使用步骤（在原部署根目录操作）
+1. 先备份上述4个将被覆盖的脚本。将补丁zip直接解压覆盖到原目录，不要再套一层文件夹。
+   解压后同一目录应同时有 start.sh、backend/data-element.jar、www/、config/。
+2. 先用覆盖后的脚本执行 bash stop.sh，仅停止平台网页和后端。
+   如由systemd等托管，应通过原平台服务单元安排停启，避免守护程序自动拉起；ExecStart应仍使用本目录start.sh。
+3. 执行：
+   cp -n config/external-services.json.example config/external-services.json
+   chmod 600 config/external-services.json
+   用编辑器填写连接参数，不要将实际账号密码写入启动命令或发送到聊天中。
+4. 以原来运行平台的账号执行：
+   bash check.sh
+   bash start.sh
+   bash status.sh
+   停止仍用 bash stop.sh。
+
+三、外部连接配置
+control.jdbcUrl / username / password：控制MySQL库，默认库名baseline；包含Magic、低代码和身份控制数据。
+tenant.jdbcUrl / username / password：公安业务MySQL库，默认库名baseline_ga；包含组织、业务配置和业务数据。
+两个库可以在同一MySQL实例上，但不能指向同一个库；数据库名不同时以jdbcUrl中的实际名称为准。
+jdbcUrl不包含账号密码；账号密码填写独立字段。按数据库服务要求设置useSSL等JDBC参数。
+redis：填写host、port、database、password，以单节点或代理入口连接；无认证时password留空。
+R3的Redis客户端只支持默认用户的密码认证，username须留空；命名ACL用户、原生集群/哨兵及TLS配置不在此脚本补丁的支持范围。
+elasticsearch.hosts：填写HTTP节点的主机:端口数组，例如["es.internal:9200"]，多节点用逗号分隔JSON数组项。
+ES有Basic认证时同时填写username/password，否则同时留空。
+R3现有后端的自定义ES客户端仅支持HTTP主机:端口，不支持HTTPS或IPv6；本补丁会明确拒绝这两种地址。
+使用兼容原包的MySQL8、Redis协议服务和ES7.17.x；不是将后端升级为ES8/9或其他数据库协议。
+identity.transportKey通常保持空字符串：自动读取本目录data/local/credentials.json中原transport值。
+已有密钥缺失时应从原环境受限备份恢复，或填写同一原值；启动器不会生成新密钥。
+data/keys/protocol-signing.jwk等原身份签名文件必须保留，不要删除data目录。
+已有管理员账号密码沿用外部数据库中的现有账号，不创建或重置管理员。
+网页/后端端口与绑定仍读取原config/ports.json中的web、backend、webBind；其他旧中间件端口字段不再控制进程。
+其余平台参数仍读取原config/application.yml；实际外部连接由启动器通过进程环境注入，优先于该YAML中的旧本机地址。
+启动时会隔离继承的Spring/Nacos/IDAAS环境覆盖，并明确关闭Nacos配置与注册。不要用旧命令直接java -jar启动。
+
+四、已有数据和旧中间件
+配置外部地址不会迁移原包内数据库或ES索引。外部MySQL必须已包含正确的两个库及其数据；保留公安租户ID和身份配置。
+首次使用空库时，应由数据库管理员审阅原包db目录的完整结构、Magic、低代码和公安初始化材料并单独初始化；禁止把全量脚本导入已有业务库。
+本补丁不执行db目录中的任何脚本。ES索引仍沿用原application.yml的公安命名空间，由平台按现有初始化设置处理自己的索引。
+若原内置库已有业务，应先备份并迁移数据库及所需索引再切换地址；不要为了腾空间直接删除data/local。
+已经由旧脚本启动的内置中间件，不会因覆盖补丁或新版stop自动退出。确认数据迁移完成后，由管理员单独停用其原进程或服务。
+vendor和runtime中的旧中间件文件也不会自动删除。它们不再被新版启动器使用；确认已停用和无需回退后，可单独清理二进制归档以释放空间，保留业务数据备份。
+
+五、检查范围
+check只验证配置、原密钥及外部TCP端口可达，不执行SQL、不导入数据，也不表示账号认证和业务数据已完整验证。
+start等待后端和网页健康检查；启动后还需实际登录，核对公安组织、应用系统和数据源列表。
+日志仍在logs/backend.log、logs/web.log；不要公开日志中的实际业务连接或敏感内容。
+此补丁不变更前端、Magic、低代码、组织、菜单或业务数据，不需要重新编译或发布业务资源。

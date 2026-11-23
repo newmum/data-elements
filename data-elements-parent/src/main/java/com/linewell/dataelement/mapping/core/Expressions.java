@@ -76,7 +76,15 @@ public final class Expressions {
         if(e instanceof ParenthesedExpressionList<?> list&&list.size()==1)return compileAst((Expression)list.getFirst(),refs,depth+1);
         if(e instanceof CastExpression c){Expr child=compileAst(c.getLeftExpression(),refs,depth+1);String type=c.getColDataType().getDataType();var args=c.getColDataType().getArgumentsStringList();
             int precision=args!=null&&!args.isEmpty()?Integer.parseInt(args.getFirst()):0;int scale=args!=null&&args.size()>1?Integer.parseInt(args.get(1)):0;
-            return s->ValueTypes.cast(child.evaluate(s),type,precision,scale,RoundingMode.UNNECESSARY,s.context().zone());}
+            // Some parser versions retain dimensions in the type text instead of
+            // the argument list. They still constrain the cast; never silently
+            // turn DECIMAL(p,s) into an unconstrained decimal.
+            if(args==null||args.isEmpty()){
+                var dimensions=Pattern.compile("\\(\\s*([+-]?\\d+)\\s*(?:,\\s*([+-]?\\d+)\\s*)?\\)").matcher(type);
+                if(dimensions.find()){precision=Integer.parseInt(dimensions.group(1));scale=dimensions.group(2)==null?0:Integer.parseInt(dimensions.group(2));}
+            }
+            int castPrecision=precision,castScale=scale;
+            return s->ValueTypes.cast(child.evaluate(s),type,castPrecision,castScale,RoundingMode.UNNECESSARY,s.context().zone());}
         if(e instanceof TrimFunction trim){if(trim.getFromExpression()!=null||trim.isUsingFromKeyword())throw unsupported();Expr child=compileAst(trim.getExpression(),refs,depth+1);return s->{Object value=child.evaluate(s);return value==null?null:value.toString().strip();};}
         if(e instanceof Function f){List<Expr> params=new ArrayList<>();if(f.getParameters()!=null)for(Object item:f.getParameters())params.add(compileAst((Expression)item,refs,depth+1));
             String name=f.getName().toLowerCase(Locale.ROOT);

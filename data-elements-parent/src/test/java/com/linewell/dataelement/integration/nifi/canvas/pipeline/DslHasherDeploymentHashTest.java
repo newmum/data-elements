@@ -10,6 +10,29 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class DslHasherDeploymentHashTest {
+    @Test
+    void tinyIntegerReaderUpgradeInvalidatesOnlyAffectedMysqlSources() throws Exception {
+        String revision = DslHasher.CURRENT_COMPILER_REVISION + "|direct-date-fetch-source-record-window-v3-"
+                + com.linewell.dataelement.integration.nifi.canvas.compile.DateTableFetchPolicy.BUNDLE_VERSION;
+        for (String nativeType : List.of("tinyint", "TINYINT(1)", "tinyint(1) unsigned")) {
+            var config = Map.<String, Object>of("jdbcUrl", "jdbc:mysql://validation.invalid/business",
+                    "sourceColumns", List.of(Map.of("name", "flag", "dataType", nativeType)));
+            var dsl = new Pipeline.Dsl(1, List.of(new Pipeline.Node("source", "source.mysql", "来源", "source", 0, 0, config)), List.of());
+            assertThat(DslHasher.deploymentHash(dsl, DslHasher.CURRENT_COMPILER_REVISION))
+                    .isEqualTo(previousDeploymentHash(dsl, revision + "|mysql-native-tinyint-read-v1"))
+                    .isNotEqualTo(previousDeploymentHash(dsl, revision));
+            assertThat(dsl.nodes().getFirst().config()).isEqualTo(config);
+        }
+        for (var config : List.of(
+                Map.<String, Object>of("jdbcUrl", "jdbc:mysql://validation.invalid/business?tinyInt1isBit=false", "sourceColumns", List.of(Map.of("dataType", "tinyint"))),
+                Map.<String, Object>of("jdbcUrl", "jdbc:postgresql://validation.invalid/business", "sourceColumns", List.of(Map.of("dataType", "tinyint"))),
+                Map.<String, Object>of("jdbcUrl", "jdbc:mysql://validation.invalid/business", "sourceColumns", List.of(Map.of("dataType", "int"))),
+                Map.<String, Object>of("sourceColumns", List.of(Map.of("columnType", "tinyint(4)", "dataType", "tinyint"))))) {
+            var dsl = new Pipeline.Dsl(1, List.of(new Pipeline.Node("source", "source.mysql", "来源", "source", 0, 0, config)), List.of());
+            assertThat(DslHasher.deploymentHash(dsl, DslHasher.CURRENT_COMPILER_REVISION)).isEqualTo(previousDeploymentHash(dsl, revision));
+        }
+    }
+
     @Test void quotedOracleObjectFixInvalidatesOnlyTheAffectedDeploymentContract()throws Exception {
         String revision=DslHasher.CURRENT_COMPILER_REVISION;
         for(String type:List.of("ORACLE","OCEANBASE_ORACLE","DAMENG")) {

@@ -142,7 +142,20 @@ if (action == 'create' || action == 'save') {
                 if (bindings[binding] != null) { exit 400, '模板绑定槽位重复' }
                 bindings[binding] = node
             }
-            if (node.category == 'source' && binding != 'source') { exit 400, '来源组件须绑定source槽位' }
+            if (node.category == 'source' && !['source','source:backfill'].contains(binding)) {
+                exit 400, '来源组件须绑定source或source:backfill槽位'
+            }
+            if (binding == 'source:backfill') {
+                if (node.category != 'source') { exit 400, '备用补数绑定必须使用来源组件' }
+                // 模板中的补数入口默认禁用，窗口条件由操作者填写后单独启用，不复用主源水位。
+                node.config.backfillSource = true
+                node.config.enabled = false
+                node.config.scheduledState = 'DISABLED'
+                node.config.syncMode = 'FULL'
+                var backfillRange = (node.config.customWherePredicate || node.config.whereClause
+                    || node.config.additionalWhereClause || node.config.customQuery || '').toString().trim()
+                if (backfillRange == '') { node.config.customWherePredicate = '1=0' }
+            } else if (node.config.backfillSource == true) { exit 400, '备用补数来源须绑定source:backfill槽位' }
             if (node.category == 'sink' && !binding.matches('target:[0-7]')) { exit 400, '目标组件须绑定目标槽位' }
             if (binding.startsWith('target:') && (node.category != 'sink'
                 || binding.substring(7)::int >= targets.size())) { exit 400, '目标槽位与模板目标数量不一致' }
@@ -172,7 +185,11 @@ if (action == 'create' || action == 'save') {
         }
         var ready = []
         for (node in flow.nodes) { if (incoming[node.id] == 0) { ready.add(node.id) } }
-        if (ready.size() != 1 || ready[0] != bindings.source.id) { exit 400, '所有组件须从唯一来源可达' }
+        var allowedRoots = [bindings.source.id]
+        if (bindings['source:backfill'] != null) { allowedRoots.add(bindings['source:backfill'].id) }
+        if (ready.size() != allowedRoots.size() || !ready.containsAll(allowedRoots)) {
+            exit 400, '流程仅允许主来源和默认禁用的备用补数来源作为起点'
+        }
         var visited = 0
         while (visited < ready.size()) {
             var currentId = ready[visited]

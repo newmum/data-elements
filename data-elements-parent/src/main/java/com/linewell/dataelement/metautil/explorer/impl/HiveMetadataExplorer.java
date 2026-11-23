@@ -564,6 +564,7 @@ public class HiveMetadataExplorer extends AbstractMetadataExplorer {
     @Override
     public Long getTableRowCount(DataSourceConfig config, String tableName) {
         try (Connection conn = getConnection(config);
+             var session = readSession(config, conn);
              Statement stmt = conn.createStatement()) {
             
             // 切换数据库
@@ -576,6 +577,7 @@ public class HiveMetadataExplorer extends AbstractMetadataExplorer {
                 if (rs.next()) {
                     return rs.getLong(1);
                 }
+                throw new java.sql.SQLException("Hive 准确计数未返回结果");
             }
             
         } catch (Exception e) {
@@ -583,7 +585,6 @@ public class HiveMetadataExplorer extends AbstractMetadataExplorer {
             throw new RuntimeException("获取表记录数失败: " + e.getMessage(), e);
         }
         
-        return 0L;
     }
 
     @Override

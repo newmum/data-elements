@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, App, Button, Checkbox, Dropdown, Empty, Skeleton, Space, Tooltip, Typography } from 'antd';
+import { Alert, App, Button, Checkbox, Dropdown, Empty, Skeleton, Space, Tag, Tooltip, Typography } from 'antd';
 import { AppstoreOutlined, BulbOutlined, CodeOutlined, DeleteOutlined, DownOutlined, EyeOutlined, MoreOutlined, PlusOutlined, SettingOutlined, SwapOutlined, UnorderedListOutlined, UpOutlined } from '@ant-design/icons';
 import { nanoid } from 'nanoid';
-import { compileFieldMapping, fieldMappingCapabilities, mappingVersions, recommendFieldMapping, validateFieldMapping, type FieldMeta, type FunctionParameterSchema, type MappingIssue, type MappingTableRef, type UnifiedMappingDraft, type UnifiedMappingRule, type MappingRule } from '../api/fieldMapping';
+import { compileFieldMapping, fieldMappingCapabilities, mappingVersions, recommendFieldMapping, validateFieldMapping, type FieldMeta, type FunctionParameterSchema, type MappingIssue, type MappingTableRef, type MappingTargetRef, type MappingSchemaContract, type UnifiedMappingDraft, type UnifiedMappingRule, type MappingRule } from '../api/fieldMapping';
 import { fetchDatabases } from '../api/dataassets';
 import { useSessionRevision } from '../api/bridgeSession';
 import MappingDraftTable from './MappingDraftTable';
@@ -16,7 +16,7 @@ import CodeMirror from '@uiw/react-codemirror';
 import {json} from '@codemirror/lang-json';
 import MappingRuleDialog from './MappingRuleDialog';
 import { type DatasourceChoice } from './UnifiedRuleForms';
-import { assertExactJsonNumbers, createRule, emptyUnifiedDraft, inputSummary, logicalFieldType, includeOdsSystemMappings, isEditableRule } from './unifiedRuleModel';
+import { assertExactJsonNumbers, createRule, emptyUnifiedDraft, inputSummary, logicalFieldType, includeOdsSystemMappings, isEditableRule, recommendationCompileSpec, withFieldNamePolicy } from './unifiedRuleModel';
 import { concreteInputLabel, concreteRuleLabel } from './mappingRulePresentation';
 import MappingFlowSettings from './MappingFlowSettings';
 import { MappingInspectionDialog, MappingRuntimeDialog, mappingErrorText } from './MappingReviewDialogs';
@@ -25,11 +25,13 @@ import './unifiedMapping.css';
 
 interface Props {
   value:unknown; onChange:(value:string)=>void;
-  columnMeta?: {sourceLabels:Record<string,string>;targetLabels:Record<string,string>;sourceSchema?:FieldMeta[];targetSchema?:FieldMeta[]};
+  columnMeta?: {sourceLabels:Record<string,string>;targetLabels:Record<string,string>;sourceSchema?:FieldMeta[];targetSchema?:FieldMeta[];
+    targets?:{nodeId:string;label:string;table:string;fields:FieldMeta[]}[]};
   datasources?:DatasourceChoice[];
   columnsLoading?:boolean; columnsError?:string; onReloadColumns?:()=>void;
   onViewModeChange?:(mode:'list'|'visual'|'dsl')=>void;
-  assetContext?:{pipelineId?:string|null;nodeId?:string;sourceRef?:MappingTableRef;targetRef?:MappingTableRef};
+  assetContext?:{pipelineId?:string|null;nodeId?:string;sourceRef?:MappingTableRef;targetRef?:MappingTableRef;targetRefs?:MappingTargetRef[];
+    sources?:{nodeId:string;label?:string;reference:MappingTableRef}[]};
 }
 const ODS_UUID_EXPRESSION = 'UUID()';
 const EMPTY_SCHEMA:FieldMeta[]=[];
@@ -41,11 +43,11 @@ export default function FieldMappingEditor(props:Props) {
       const raw=typeof props.value==='string'?(assertExactJsonNumbers(props.value),JSON.parse(props.value)):props.value;
       const spec=raw||emptyUnifiedDraft();
       if(spec.schemaVersion==='2.0'&&(!Array.isArray(spec.rules)||spec.rules.some((rule:unknown)=>!isEditableRule(rule))))throw new Error('治理规则结构不完整，请检查配置内容');
-      return {spec,error:''};
+      return {spec:spec.schemaVersion==='2.0'?withFieldNamePolicy(spec):spec,error:''};
     }catch(cause:any){return {spec:null,error:cause.message};}
   },[props.value]);
   const schemaSignature=JSON.stringify([props.columnMeta?.sourceSchema??[],props.columnMeta?.targetSchema??[]]);
-  const referenceSignature=JSON.stringify({sourceRef:props.assetContext?.sourceRef,targetRef:props.assetContext?.targetRef});
+  const referenceSignature=JSON.stringify({sourceRef:props.assetContext?.sourceRef,targetRef:props.assetContext?.targetRef,targetRefs:props.assetContext?.targetRefs});
   const [loaded,setLoaded]=useState<{source:unknown;schema:string;references:string;draft:UnifiedMappingDraft}|null>(null);
   const [error,setError]=useState(''),[retry,setRetry]=useState(0);
   useEffect(()=>{
@@ -53,7 +55,7 @@ export default function FieldMappingEditor(props:Props) {
     let active=true;setError('');
     const context=JSON.parse(referenceSignature) as NonNullable<Props['assetContext']>;
     const specification=context?.sourceRef||context?.targetRef
-      ?mappingVersions.schema(context.sourceRef,context.targetRef).then(schemaContract=>({...parsed.spec,schemaContract}))
+      ?mappingVersions.schema(context.sourceRef,context.targetRef,false,context.targetRefs).then(schemaContract=>({...parsed.spec,schemaContract}))
       :Promise.resolve(parsed.spec);
     specification.then(spec=>compileFieldMapping(spec,props.columnMeta?.sourceSchema??[],props.columnMeta?.targetSchema??[]))
       .then(result=>{if(!result.plan)throw new Error('未能读取治理规则，请重试');if(active)setLoaded({source:props.value,schema:schemaSignature,references:referenceSignature,draft:{...result.plan.executionPlan,executionEngine:'JAVA_RECORD'}});})
@@ -75,6 +77,20 @@ function FieldMappingEditorContent({value,onChange,columnMeta,datasources=EMPTY_
   const targetSchema=useMemo(()=>schemaFields(columnMeta?.targetSchema??EMPTY_SCHEMA,'target'),[columnMeta?.targetSchema,value.schemaContract]);
   const sessionRevision=useSessionRevision();
   const [draft,setDraft]=useState(value),[selected,setSelected]=useState<React.Key[]>([]);
+  const targetReferences=JSON.stringify({sourceRef:assetContext?.sourceRef,targetRef:assetContext?.targetRef,targetRefs:assetContext?.targetRefs??[]});
+  const [sharedContract,setSharedContract]=useState<MappingSchemaContract|null>(null),[sharedContractError,setSharedContractError]=useState('');
+  useEffect(()=>{
+    let active=true;setSharedContract(null);setSharedContractError('');
+    const context=JSON.parse(targetReferences) as NonNullable<Props['assetContext']>;
+    if(!context.sourceRef&&!context.targetRef&&!(context.targetRefs?.length))return;
+    const current=value.schemaContract as MappingSchemaContract|undefined;
+    if(current&&current.targets?.length===context.targetRefs?.length&&context.targetRefs?.every(target=>current.targets?.some(existing=>existing.nodeId===target.nodeId&&existing.reference?.datasourceId===target.reference.datasourceId&&(existing.reference.tableId??existing.reference.table)===(target.reference.tableId??target.reference.table)))) {
+      setSharedContract(current);return;
+    }
+    mappingVersions.schema(context.sourceRef,context.targetRef,false,context.targetRefs).then(contract=>{if(active)setSharedContract(contract);}).catch(error=>{if(active)setSharedContractError(mappingErrorText(error));});
+    return()=>{active=false;};
+  },[targetReferences,sessionRevision]);
+  const boundDraft=useMemo(()=>withFieldNamePolicy(sharedContract?{...draft,schemaContract:{...(draft.schemaContract as Record<string,unknown>??{}),...sharedContract}}:draft),[draft,sharedContract]);
   const [editing,setEditing]=useState<UnifiedMappingRule|null>(null);
   const [mode,setMode]=useState<'list'|'visual'|'dsl'>('list'),[dslText,setDslText]=useState(()=>JSON.stringify(value,null,2));
   useEffect(()=>onViewModeChange?.(mode),[mode,onViewModeChange]);
@@ -98,14 +114,14 @@ function FieldMappingEditorContent({value,onChange,columnMeta,datasources=EMPTY_
   },[]);
   useEffect(()=>{
     let active=true;setIssues(null);setValidationError('');
-    const timer=setTimeout(()=>validateFieldMapping(draft,sourceSchema,targetSchema).then(result=>{if(active)setIssues({errors:result.errors??[],warnings:result.warnings??[]});}).catch(cause=>{if(active)setValidationError(mappingErrorText(cause));}),350);
+    const timer=setTimeout(()=>validateFieldMapping(boundDraft,sourceSchema,targetSchema).then(result=>{if(active)setIssues({errors:result.errors??[],warnings:result.warnings??[]});}).catch(cause=>{if(active)setValidationError(mappingErrorText(cause));}),350);
     return ()=>{active=false;clearTimeout(timer);};
-  },[draft,sourceSchema,targetSchema,validationRetry]);
-  function update(next:UnifiedMappingDraft){setDraft(next);onChange(JSON.stringify({...next,executionEngine:'JAVA_RECORD'},null,2));}
+  },[boundDraft,sourceSchema,targetSchema,validationRetry]);
+  function update(next:UnifiedMappingDraft,contract=sharedContract){const bound=withFieldNamePolicy(contract?{...next,schemaContract:{...(next.schemaContract as Record<string,unknown>??{}),...contract}}:next);setDraft(bound);onChange(JSON.stringify({...bound,executionEngine:'JAVA_RECORD'},null,2));}
   function openRule(rule:UnifiedMappingRule){setEditing(structuredClone(rule));}
   function add(template='DIRECT'){setEditing(createRule(template,nanoid()));}
   function updateRule(rule:UnifiedMappingRule){update({...draft,rules:draft.rules.map(item=>item.ruleId===rule.ruleId?rule:item)});}
-  function createMapping(source:string,target:string){const current=draft.rules.find(rule=>rule.target.name===target);if(current){openRule(current);return;}const rule=createRule('DIRECT',nanoid());rule.input.name=source;const field=targetSchema.find(field=>field.name===target);rule.target={...rule.target,name:target,...(field?{logicalType:logicalFieldType(field),nullable:field.nullable,length:field.length,precision:field.precision,scale:field.scale}:{})};openRule(rule);}
+  function createMapping(source:string,target:string){const current=draft.rules.find(rule=>identifierMatchKey(rule.target.name)===identifierMatchKey(target));if(current){openRule(current);return;}const rule=createRule('DIRECT',nanoid());rule.input.name=source;const field=targetSchema.find(field=>field.name===target);rule.target={...rule.target,name:target,...(field?{logicalType:logicalFieldType(field),nullable:field.nullable,length:field.length,precision:field.precision,scale:field.scale}:{})};openRule(rule);}
   function saveRule(rule:UnifiedMappingRule){
     const index=draft.rules.findIndex(r=>r.ruleId===editing?.ruleId),rules=[...draft.rules];
     if(index<0)rules.push(rule);else rules[index]=rule;
@@ -260,8 +276,13 @@ function FieldMappingEditorContent({value,onChange,columnMeta,datasources=EMPTY_
     }
   };
 
-  async function normalizeMappings(mappings:MappingRule[]) {
-    const compiled=await compileFieldMapping({version:'1.0',mappings},sourceSchema,targetSchema);
+  async function normalizeMappings(mappings:MappingRule[],complete=true) {
+    const contract=(sharedContract??boundDraft.schemaContract) as MappingSchemaContract|undefined;
+    const spec=recommendationCompileSpec(mappings,sourceSchema,targetSchema,contract);
+    // Adding a subset template is an intermediate editor operation. Keep the
+    // declared types, then validate the combined draft with its full contract.
+    if(!complete)delete spec.schemaContract;
+    const compiled=await compileFieldMapping(spec,sourceSchema,targetSchema);
     if(!compiled.plan)throw new Error('无法生成治理规则');
     return compiled.plan.executionPlan.rules.map(rule=>({...rule,ruleId:nanoid()}));
   }
@@ -271,9 +292,9 @@ function FieldMappingEditorContent({value,onChange,columnMeta,datasources=EMPTY_
   }
   async function applyTemplate(mappings:MappingRule[]){
     setBusy(true);try{
-      const selected=mappings.filter(mapping=>!draft.rules.some(rule=>rule.target.name===displayPath(mapping.to)));
+      const selected=mappings.filter(mapping=>!draft.rules.some(rule=>identifierMatchKey(rule.target.name)===identifierMatchKey(displayPath(mapping.to))));
       if(!selected.length){message.info('对应目标字段已配置治理规则');setTemplateOpen(false);return;}
-      const rules=await normalizeMappings(selected);
+      const rules=await normalizeMappings(selected,false);
       update({...draft,rules:[...draft.rules,...rules]});setTemplateOpen(false);message.success('已添加 '+rules.length+' 条模板规则');
     }catch(error:any){message.error(error?.response?.data?.error??error.message);}finally{setBusy(false);}
   }
@@ -288,7 +309,7 @@ function FieldMappingEditorContent({value,onChange,columnMeta,datasources=EMPTY_
   async function confirmRuntimeOperation() {
     if (!assetContext?.pipelineId) throw new Error('请先保存并发布当前任务');
     if (runtimeOperation === 'upgrade') {
-      const plan = await compileFieldMapping(draft, sourceSchema, targetSchema);
+      const plan = await compileFieldMapping(boundDraft, sourceSchema, targetSchema);
       if (!plan.plan || !assetContext.nodeId) throw new Error('未能确认当前节点的执行计划，请先保存并发布');
       await mappingVersions.upgrade(assetContext.pipelineId, assetContext.nodeId, plan.plan.planHash);
       message.success('运行字段节点已升级，来源 ID 与水位保留');
@@ -313,6 +334,12 @@ function FieldMappingEditorContent({value,onChange,columnMeta,datasources=EMPTY_
         <Dropdown trigger={['click']} getPopupContainer={getNifiOverlayContainer} menu={{items:more,onClick:({key})=>{if(key==='validate'||key==='compile'||key==='schema')setInspection(key);if(key==='assets')setAssetsOpen(true);if(key==='upgrade'||key==='start')setRuntimeOperation(key);}}}><Button size="small" aria-label="更多治理操作" icon={<MoreOutlined/>}/></Dropdown>
       </div>
     </header>
+    {(columnMeta?.targets?.length??0)>1&&<Alert className="fm-shared-targets" type="info" showIcon message={`共享字段治理 · 一次转换供 ${columnMeta!.targets!.length} 个目标使用`} description={<>
+      <div>自动匹配以“{columnMeta!.targets![0].label}”为逻辑输出参考；各分支独立适配字段名称、物理类型和时间格式。</div>
+      <Space size={[6,6]} wrap>{columnMeta!.targets!.map(target=><Tag key={target.nodeId}>{target.label} · {target.fields.length} 个字段</Tag>)}</Space>
+      <Button size="small" type="link" onClick={()=>setInspection('schema')}>查看各目标字段</Button>
+    </>}/>}
+    {sharedContractError&&<Alert type="warning" showIcon message="多目标字段读取未完成" description={sharedContractError}/>}
     {(columnsLoading||columnsError)&&<Alert type={columnsError?'warning':'info'} showIcon message={columnsError||'正在读取上下游字段'} action={onReloadColumns&&<Button size="small" loading={columnsLoading} onClick={onReloadColumns}>重新读取</Button>}/>}
     {capabilityError&&<Alert message={capabilityError} type="warning" showIcon/>}
     {validationError&&<Alert type="warning" showIcon message="自动校验未完成，草稿仍可编辑" description={validationError} action={<Button size="small" onClick={()=>setValidationRetry(value=>value+1)}>重试校验</Button>}/>}
@@ -329,11 +356,11 @@ function FieldMappingEditorContent({value,onChange,columnMeta,datasources=EMPTY_
       ]}/>
     </section>:mode==='visual'?<FieldMappingVisual draft={draft} sourceMeta={sourceSchema} targetMeta={targetSchema} sourceLabels={columnMeta?.sourceLabels??{}} targetLabels={columnMeta?.targetLabels??{}} onOpen={openRule} onChange={updateRule} onCreate={createMapping} onAdd={add} onDelete={id=>update({...draft,rules:draft.rules.filter(rule=>rule.ruleId!==id)})} onMove={moveRule}/>
       :<div className="field-mapping-dsl-view"><CodeMirror className="fm-dsl-editor" value={dslText} height="100%" extensions={[json()]} onChange={text=>{dslDirty.current=true;setDslText(text);}} basicSetup={{lineNumbers:true,highlightActiveLine:true}}/><div className="fm-dsl-actions"><Button size="small" onClick={()=>{dslDirty.current=false;setDslText(JSON.stringify(draft,null,2));}}>重置</Button><Button size="small" type="primary" loading={busy} onClick={applyDsl}>应用</Button></div></div>}
-    {flowSettingsOpen&&<MappingFlowSettings draft={draft} onApply={update} onClose={()=>setFlowSettingsOpen(false)}/>}
-    {inspection&&<MappingInspectionDialog kind={inspection} draft={draft} sourceSchema={sourceSchema} targetSchema={targetSchema} sourceRef={assetContext?.sourceRef} targetRef={assetContext?.targetRef} onClose={()=>setInspection(null)} onApplySchema={schema=>{update({...draft,schemaContract:schema});setInspection(null);message.success('字段结构已附到当前草稿，保存画布后保留');}}/>}
+    {flowSettingsOpen&&<MappingFlowSettings draft={boundDraft} onApply={update} onClose={()=>setFlowSettingsOpen(false)}/>}
+    {inspection&&<MappingInspectionDialog kind={inspection} draft={boundDraft} sourceSchema={sourceSchema} targetSchema={targetSchema} sourceRef={assetContext?.sourceRef} targetRef={assetContext?.targetRef} targetRefs={assetContext?.targetRefs} onClose={()=>setInspection(null)} onApplySchema={schema=>{setSharedContract(schema);update({...draft,schemaContract:schema},schema);setInspection(null);message.success('字段结构已附到当前草稿，保存画布后保留');}}/>}
     {runtimeOperation&&<MappingRuntimeDialog operation={runtimeOperation} onClose={()=>setRuntimeOperation(null)} onConfirm={confirmRuntimeOperation}/>}
     {editing&&<MappingRuleDialog initial={editing} creating={!draft.rules.some(r=>r.ruleId===editing.ruleId)} draft={draft} fields={sourceSchema} targets={targetSchema} sourceLabels={columnMeta?.sourceLabels??{}} targetLabels={columnMeta?.targetLabels??{}} functionSchemas={functionSchemas} datasources={sourceOptions} loadDatasources={loadDatasources} onApply={saveRule} onClose={()=>setEditing(null)}/>}
-    <GovernancePreviewDialog open={previewOpen} onClose={()=>setPreviewOpen(false)} draft={draft} sourceRef={assetContext?.sourceRef} sourceSchema={sourceSchema} targetSchema={targetSchema} sourceLabels={columnMeta?.sourceLabels} targetLabels={columnMeta?.targetLabels}/>
+    <GovernancePreviewDialog open={previewOpen} onClose={()=>setPreviewOpen(false)} draft={boundDraft} sourceRef={assetContext?.sourceRef} sources={assetContext?.sources} targetCount={columnMeta?.targets?.length} sourceSchema={sourceSchema} targetSchema={targetSchema} sourceLabels={columnMeta?.sourceLabels} targetLabels={columnMeta?.targetLabels}/>
     <RecommendModal open={recommendOpen} recommendations={recommendations} applying={busy} onCancel={()=>setRecommendOpen(false)} onApply={picked=>void applyRecommendations(picked)}/>
     <TemplateModal open={templateOpen} sourceFields={sourceFields} targetFields={targetFields} onCancel={()=>setTemplateOpen(false)} onApply={mappings=>void applyTemplate(mappings)}/>
     <MappingAssetsPanel open={assetsOpen} onClose={()=>setAssetsOpen(false)} draft={draft} onChange={update} pipelineId={assetContext?.pipelineId} nodeId={assetContext?.nodeId}/>

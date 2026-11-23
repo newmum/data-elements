@@ -54,13 +54,124 @@ public class UnifiedMappingService {
         for(var entry:drafts.entrySet()){
             ObjectNode draft=entry.getValue();ArrayNode rules=byNode.getOrDefault(entry.getKey(),JSON.createArrayNode());draft.set("rules",rules);Set<String> used=new HashSet<>();dictionaryReferences(rules,used);ObjectNode bindings=JSON.createObjectNode();
             resolved.path("dictionaryBindings").fields().forEachRemaining(binding->{if(used.contains(binding.getKey())||specifications.size()==1&&rules.isEmpty())bindings.set(binding.getKey(),binding.getValue());});draft.set("dictionaryBindings",bindings);
+            applyFieldNamePolicy(draft);
+            alignSourceNames(draft);
+            alignRegisteredTargetNames(draft);
             applyRegisteredTemporalInputs(draft);
             applyOdsTimestampTargets(draft);
+            normalizeTargetLengths(draft);
             MappingEngine.Plan plan;
             try{plan=MappingEngine.compile(draft);}catch(MappingException error){throw describeTargetTypeMismatch(draft,error);}
+            validateSharedTargetFields(draft,plan);
             Map<String,Map<String,Object>>localConnections=new LinkedHashMap<>();plan.dictionaries().values().forEach(dictionary->localConnections.put(dictionary.datasourceId(),connections.get(dictionary.datasourceId())));ObjectNode localSnapshots=JSON.createObjectNode();bindings.forEach(binding->{String id=binding.path("snapshotId").asText();if(snapshots.has(id))localSnapshots.set(id,snapshots.get(id));});compiled.put(entry.getKey(),new Compiled(plan,localConnections,localSnapshots));contracts.put(entry.getKey(),plan.document().path("schemaContract"));
         }
         return compiled;
+    }
+    /** Old metadata copied timestamp storage widths into character limits. Only text/binary carry lengths. */
+    static void normalizeTargetLengths(ObjectNode draft){
+        Map<String,String> types=new HashMap<>();draft.path("schemaContract").path("target").forEach(field->types.put(field.path("name").asText(),field.path("logicalType").asText()));
+        for(JsonNode rule:draft.path("rules"))normalizeTargetLength(rule,types);
+    }
+    private static void normalizeTargetLength(JsonNode rule,Map<String,String> types){
+        if(rule.path("target") instanceof ObjectNode target){
+            String type=ValueTypes.type(target.path("logicalType").asText(types.getOrDefault(target.path("name").asText(),"ANY")));
+            if(!Set.of("STRING","BINARY","ANY").contains(type))target.remove("length");
+        }
+        for(String branch:List.of("then","else"))if(rule.has(branch))normalizeTargetLength(rule.path(branch),types);
+    }
+    /** Registered database names ignore case, including drafts saved with the former strict default. */
+    static void applyFieldNamePolicy(ObjectNode draft){
+        ObjectNode policies=draft.withObject("/policies");
+        JsonNode contract=draft.path("schemaContract");
+        if(contract.path("sourceRef").isObject()||contract.path("targetRef").isObject()||!policies.hasNonNull("caseSensitive"))
+            policies.put("caseSensitive",false);
+    }
+    static void alignSourceNames(ObjectNode draft){
+        if(draft.path("policies").path("caseSensitive").asBoolean(false))return;
+        Set<String> exact=new HashSet<>();Map<String,List<String>> names=new HashMap<>();
+        for(JsonNode field:draft.path("schemaContract").path("source")){
+            String name=field.path("name").asText();exact.add(name);names.computeIfAbsent(name.toLowerCase(Locale.ROOT),ignored->new ArrayList<>()).add(name);
+        }
+        alignReferences(draft.path("rules"),names,exact,"FIELD","field");
+    }
+    /** Resolve destination spelling from the authorized schema, including references to earlier outputs. */
+    static void alignRegisteredTargetNames(ObjectNode draft){
+        JsonNode contract=draft.path("schemaContract");if(!contract.path("targetRef").isObject())return;
+        Map<String,List<String>> names=new HashMap<>();Set<String> exact=new HashSet<>();
+        for(JsonNode field:contract.path("target")){
+            String name=field.path("name").asText();exact.add(name);names.computeIfAbsent(name.toLowerCase(Locale.ROOT),ignored->new ArrayList<>()).add(name);
+        }
+        for(JsonNode rule:draft.path("rules"))alignTarget(rule,names,exact);
+        alignReferences(draft.path("rules"),names,exact,"TARGET","target");
+    }
+    private static String targetName(String name,Map<String,List<String>> names,Set<String> exact){
+        if(exact.contains(name))return name;
+        var matches=names.getOrDefault(name.toLowerCase(Locale.ROOT),List.of());
+        if(matches.size()>1)throw new MappingException("AMBIGUOUS_FIELD","字段大小写存在歧义："+name);
+        return matches.size()==1?matches.getFirst():name;
+    }
+    private static void alignReferences(JsonNode node,Map<String,List<String>> names,Set<String> exact,String kind,String reference){
+        if(node.isArray()){node.forEach(child->alignReferences(child,names,exact,kind,reference));return;}
+        if(!(node instanceof ObjectNode object))return;
+        // Literal payloads and enum values are data, even when they resemble the rule protocol.
+        if(object.path("kind").asText().equals("LITERAL")||object.path("operator").asText().equals("STATIC_MAP"))return;
+        if(object.path("kind").asText().equals(kind)){
+            String key=object.has("name")?"name":"field";
+            object.put(key,targetName(object.path(key).asText(),names,exact));
+        }
+        if(object.path("expression").isTextual()){
+            var matcher=java.util.regex.Pattern.compile("\\$\\{"+reference+":([^}]+)}").matcher(object.path("expression").asText());
+            object.put("expression",matcher.replaceAll(match->java.util.regex.Matcher.quoteReplacement("${"+reference+":"+targetName(match.group(1),names,exact)+"}")));
+        }
+        object.fields().forEachRemaining(field->{
+            if(!Set.of("parameters","defaultValue","fallback","allowedValues","inlineValues").contains(field.getKey()))
+                alignReferences(field.getValue(),names,exact,kind,reference);
+        });
+    }
+    private static void alignTarget(JsonNode rule,Map<String,List<String>> names,Set<String> exact){
+        if(rule.path("target") instanceof ObjectNode target){
+            String name=target.path("name").asText();
+            target.put("name",targetName(name,names,exact));
+        }
+        for(String branch:List.of("then","else"))if(rule.has(branch))alignTarget(rule.path(branch),names,exact);
+    }
+    /** One shared output must have an unambiguous destination field in every authorized branch. */
+    static void validateSharedTargetFields(ObjectNode draft,MappingEngine.Plan plan){
+        for(JsonNode branch:draft.path("schemaContract").path("targets")){
+            JsonNode fields=branch.path("target").isArray()?branch.path("target"):branch.path("fields");
+            if(!fields.isArray())throw new MappingException("INVALID_SCHEMA","目标分支尚未读取字段结构："+branch.path("label").asText(branch.path("nodeId").asText()));
+            Map<String,List<SchemaContract.Field>> names=new HashMap<>();
+            for(var field:SchemaContract.read(fields))names.computeIfAbsent(field.name().toLowerCase(Locale.ROOT),ignored->new ArrayList<>()).add(field);
+            for(String output:plan.outputFields()){
+                var matches=names.getOrDefault(output.toLowerCase(Locale.ROOT),List.of());
+                if(matches.size()!=1)throw new MappingException(matches.isEmpty()?"TARGET_NOT_FOUND":"AMBIGUOUS_FIELD",
+                        "共享治理目标“"+branch.path("label").asText(branch.path("nodeId").asText())+"”"+(matches.isEmpty()?"缺少输出字段：":"字段大小写有歧义：")+output);
+                var actual=matches.getFirst();var expected=plan.outputContracts().get(output);
+                String label="共享治理目标“"+branch.path("label").asText(branch.path("nodeId").asText())+"”字段 "+output;
+                if(!actual.nullable()&&expected.nullable())throw new MappingException("TARGET_NULLABILITY_MISMATCH",label+"不允许空值，请为共享规则明确非空输出");
+                if(!sharedTypeAccepts(expected,actual))throw new MappingException("TARGET_TYPE_MISMATCH",label+"无法无损接收 "+expected.logicalType()+"("+expected.precision()+","+expected.scale()+")，目标为 "+actual.logicalType()+"("+actual.precision()+","+actual.scale()+")");
+            }
+            Set<String> outputs=new HashSet<>();plan.outputFields().forEach(name->outputs.add(name.toLowerCase(Locale.ROOT)));
+            Set<String> source=new HashSet<>();draft.path("schemaContract").path("source").forEach(field->source.add(field.path("name").asText().toLowerCase(Locale.ROOT)));
+            Set<String> excluded=new HashSet<>();plan.excludes().forEach(name->excluded.add(name.toLowerCase(Locale.ROOT)));
+            for(JsonNode field:fields){String name=field.path("name").asText();
+                if(!field.path("nullable").asBoolean(true)&&!field.path("hasDefault").asBoolean()&&!outputs.contains(name.toLowerCase(Locale.ROOT))
+                        &&!(plan.passthrough()&&source.contains(name.toLowerCase(Locale.ROOT))&&!excluded.contains(name.toLowerCase(Locale.ROOT))))
+                    throw new MappingException("TARGET_REQUIRED","共享治理目标“"+branch.path("label").asText()+"”非空字段缺少赋值："+name);
+            }
+        }
+    }
+    private static boolean sharedTypeAccepts(MappingEngine.OutputType output,SchemaContract.Field target){
+        String source=output.logicalType(),type=target.logicalType();if(type.equals("ANY"))return true;
+        if(type.equals("DECIMAL")){
+            int precision=source.equals("INT")?10:source.equals("LONG")?19:output.precision();
+            int scale=Set.of("INT","LONG").contains(source)?0:output.scale();
+            return Set.of("INT","LONG","DECIMAL").contains(source)&&(target.precision()==0
+                    ||precision>0&&target.scale()>=scale&&target.precision()-target.scale()>=precision-scale);
+        }
+        return source.equals(type)||source.equals("DATE")&&type.equals("DATETIME")
+                ||source.equals("INT")&&Set.of("LONG","DOUBLE").contains(type)
+                ||type.equals("STRING")&&Set.of("DATE","DATETIME","TIME","INSTANT").contains(source);
     }
     /** Old materialization templates called timestamp audit columns DATE. Repair only their
      * untouched clock generators, after the existing batch schema/authorization check above.
@@ -109,7 +220,8 @@ public class UnifiedMappingService {
             JsonNode input=rule.path("input");if(!input.path("kind").asText().equals("EXPRESSION"))continue;
             String expression=input.path("expression").asText();if(expression.length()>4000)continue;
             var match=REGISTERED_TEMPORAL_CAST.matcher(expression.replaceAll("\\s+",""));if(!match.matches())continue;
-            String name=ValueTypes.field(match.group(1)),format=formats.get(name);if(format==null)continue;
+            String name=new SourceFieldNames(formats.keySet(),false).resolve(ValueTypes.field(match.group(1)));
+            String format=formats.get(name);if(format==null)continue;
             ObjectNode object=(ObjectNode)rule;object.putObject("input").put("kind","FIELD").put("name",name);
             ArrayNode steps=JSON.createArrayNode();String prefix=rule.path("ruleId").asText()+"-registered";
             steps.addObject().put("stepId",prefix+"-empty").put("operator","FUNCTION").putObject("args").put("function","blankToNull").putArray("parameters");
@@ -150,10 +262,53 @@ public class UnifiedMappingService {
         return result;
     }
     private DruidDataSource pool(String id,Map<String,Map<String,Object>>connections){
-        Map<String,Object> cfg=connections.get(id);if(cfg==null)throw new MappingException("RESOURCE_FORBIDDEN","字典连接未授权");String url=text(cfg,"jdbcURL","jdbcUrl","url");String user=text(cfg,"username","dbUser"),password=text(cfg,"password","dbPassword");
-        if(url.isBlank())throw new MappingException("DICTIONARY_UNAVAILABLE","已登记字典未配置JDBC连接");String key=MappingEngine.hash(JSON.valueToTree(List.of(id,url,user,password)));
+        Map<String,Object> cfg=connections.get(id);if(cfg==null)throw new MappingException("RESOURCE_FORBIDDEN","字典连接未授权");String url=registeredJdbcUrl(cfg);String user=text(cfg,"username","dbUser"),password=text(cfg,"password","dbPassword");
+        if(url.isBlank())throw new MappingException("DICTIONARY_UNAVAILABLE","已登记字典未配置JDBC连接");
+        String driver=text(cfg,"driverClassName","driverClass","driver_class_name");
+        String hiveMode=text(cfg,"hiveConnectionMode","hive_connection_mode").trim().toLowerCase(Locale.ROOT);
+        Map<String,String> jdbcProperties=com.linewell.dataelement.metautil.jdbc.JdbcDriverPropertyResolver.resolve(cfg);
+        // A changed authentication/client profile must never reuse a prior physical Hive session.
+        String key=MappingEngine.hash(JSON.valueToTree(List.of(id,url,user,password,driver,hiveMode,jdbcProperties,
+                text(cfg,"authMode","auth_mode"),text(cfg,"userPrincipal","principal"),text(cfg,"keytabPath","keytab"),
+                text(cfg,"krb5ConfPath"),text(cfg,"jaasConfPath"),text(cfg,"clientConfigDir"))));
         if(!pools.containsKey(key)&&pools.size()>=32)throw new MappingException("BUDGET_EXCEEDED","字典连接池数量超过32");
-        return pools.computeIfAbsent(key,k->{DruidDataSource ds=new DruidDataSource();ds.setUrl(url);ds.setUsername(user);ds.setPassword(password);String driver=text(cfg,"driverClassName","driverClass","driver_class_name");if(!driver.isBlank())ds.setDriverClassName(driver);ds.setMaxActive(4);ds.setMinIdle(0);ds.setMaxWait(10000);ds.setTestOnBorrow(false);ds.setTestWhileIdle(false);return ds;});
+        return pools.computeIfAbsent(key,k->{
+            DruidDataSource ds=new DruidDataSource();ds.setUrl(url);ds.setUsername(user);ds.setPassword(password);
+            if(hiveMode.equals("open-source")&&(url.startsWith("jdbc:hive2:")||url.startsWith("jdbc:hive:"))) {
+                // Reuse the metadata connector's isolated Hive/Hadoop client, not the same-name MRS class.
+                // Its UGI belongs to that client loader; no application-wide Hadoop authentication is changed.
+                ds.setDriver(com.linewell.dataelement.metautil.explorer.AbstractMetadataExplorer.loadOpenSourceHiveDriver());
+            } else if(!driver.isBlank())ds.setDriverClassName(driver);
+            Properties properties=new Properties();jdbcProperties.forEach(properties::setProperty);ds.setConnectProperties(properties);
+            // Hive's isolated client cold-connects in roughly 30 seconds; retain a bounded first-borrow budget.
+            boolean hive=url.startsWith("jdbc:hive2:")||url.startsWith("jdbc:hive:");
+            ds.setMaxActive(4);ds.setMinIdle(0);ds.setMaxWait(hive?45000:10000);ds.setTestOnBorrow(false);ds.setTestWhileIdle(false);
+            ds.setConnectionErrorRetryAttempts(0);ds.setBreakAfterAcquireFailure(true);ds.setFailFast(true);
+            return ds;
+        });
+    }
+    /** Assemble a host-mode SQL Server registration using the metadata connector's URL rules.
+     * Explicit JDBC URLs and every other product retain their existing behavior. No registry write or source query. */
+    static String registeredJdbcUrl(Map<String,Object> cfg) {
+        String explicit=text(cfg,"jdbcURL","jdbcUrl","url");if(!explicit.isBlank())return explicit;
+        com.linewell.dataelement.metautil.model.enums.DatabaseType type;
+        try{type=com.linewell.dataelement.metautil.model.enums.DatabaseType.fromCode(text(cfg,"dbType","databaseType"));}
+        catch(IllegalArgumentException unknown){return "";}
+        if(type!=com.linewell.dataelement.metautil.model.enums.DatabaseType.SQLSERVER)return "";
+        String host=text(cfg,"host","dbMetaIp","dbIp","hostname"),database=text(cfg,"database","dbMetaDbName","dbName");
+        if(host.isBlank()||database.isBlank())return "";
+        if(!host.matches("[A-Za-z0-9_.:\\[\\]-]+")||database.matches("(?s).*[;{}\\r\\n].*"))
+            throw new MappingException("DICTIONARY_UNAVAILABLE","SQL Server主机或数据库名称不适用于主机模式，请配置明确的JDBC连接地址");
+        var connection=new com.linewell.dataelement.metautil.model.dto.DataSourceConfig();connection.setDatabaseType(type);
+        connection.setHost(host);connection.setDatabase(database);connection.setConnectorProperties(cfg);
+        connection.setExtraParams(text(cfg,"extraParams","extra_params"));
+        String port=text(cfg,"port","dbMetaPort","dbPort");
+        if(!port.isBlank()){
+            try{int number=Integer.parseInt(port);if(number<1||number>65535)throw new NumberFormatException();connection.setPort(number);}
+            catch(NumberFormatException invalid){throw new MappingException("DICTIONARY_UNAVAILABLE","SQL Server登记端口须在1至65535之间");}
+        }
+        try{return connection.buildJdbcUrl();}
+        catch(IllegalArgumentException invalid){throw new MappingException("DICTIONARY_UNAVAILABLE","SQL Server登记连接参数无效，请核对加密设置或明确的JDBC连接地址");}
     }
     java.sql.Connection openRegistered(String id,Map<String,Map<String,Object>>connections)throws java.sql.SQLException{return pool(id,connections).getConnection();}
     private static String text(Map<String,Object>cfg,String...keys){for(String key:keys){Object value=cfg.get(key);if(value!=null&&!value.toString().isBlank())return value.toString();}return "";}

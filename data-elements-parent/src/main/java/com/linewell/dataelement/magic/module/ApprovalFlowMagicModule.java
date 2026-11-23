@@ -1,4 +1,4 @@
-package com.linewell.dataelement.feature.approval.api;
+package com.linewell.dataelement.magic.module;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.linewell.dataelement.model.approval.ApprovalCallbackRequest;
@@ -9,6 +9,7 @@ import com.linewell.dataelement.model.approval.ApprovalStartRequest;
 import com.linewell.dataelement.model.approval.ApprovalTerminationRequest;
 import com.linewell.dataelement.feature.approval.application.ApprovalFlowService;
 import java.util.Map;
+import java.util.function.Function;
 import org.springframework.stereotype.Component;
 import org.ssssssss.magicapi.core.annotation.MagicModule;
 import org.ssssssss.script.annotation.Comment;
@@ -57,7 +58,12 @@ public class ApprovalFlowMagicModule {
 
     @Comment("处理 Warm-Flow 发出的节点完成事件")
     public Object finish(ApprovalCallbackRequest engineEvent) {
-        return service.finshHandle(engineEvent);
+        return service.finish(engineEvent, null);
+    }
+
+    @Comment("在引擎事务中执行已校验的资产审批完成编排")
+    public Object finish(ApprovalCallbackRequest engineEvent, Function<Map<String, Object>, Object> assetCompletion) {
+        return service.finish(engineEvent, assetCompletion);
     }
 
     private <T> T command(Map<String, Object> body, Class<T> type) {

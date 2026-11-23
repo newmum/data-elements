@@ -197,7 +197,7 @@ public class TableSchemaSync {
             throw new BizException(400,"当前同步变更支持 MySQL / MariaDB 普通表，当前数据源请使用原生数据库工具维护结构");
         var props=new Properties(); props.setProperty("user",first(config,"username","user")); props.setProperty("password",first(config,"password"));
         props.setProperty("connectTimeout","10000"); props.setProperty("socketTimeout","130000");
-        return DriverManager.getConnection(url,props);
+        return DriverManager.getConnection(com.linewell.dataelement.metautil.jdbc.MySqlIntegerReadPolicy.url(url),props);
     }
     private static String qualified(Connection connection,String table) throws SQLException {
         String[] parts=table.split("\\.",-1); String catalog=connection.getCatalog();

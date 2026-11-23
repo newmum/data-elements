@@ -21,8 +21,20 @@ public class HaitongTransformRecord extends AbstractProcessor {
     public static final PropertyDescriptor READER=new PropertyDescriptor.Builder().name("record-reader").displayName("Record Reader").identifiesControllerService(RecordReaderFactory.class).required(true).build();
     public static final PropertyDescriptor TYPED_READER=new PropertyDescriptor.Builder().name("typed-record-reader").displayName("Reader for avro.schema Attribute").identifiesControllerService(RecordReaderFactory.class).required(false).build();
     public static final PropertyDescriptor WRITER=new PropertyDescriptor.Builder().name("record-writer").displayName("Record Writer").identifiesControllerService(RecordSetWriterFactory.class).required(true).build();
+    public static final PropertyDescriptor EXACT_JSON_NUMBERS=new PropertyDescriptor.Builder().name("preserve-json-numbers").displayName("Preserve JSON Number Precision")
+            .description("仅用于已声明的顶层JSON记录：从原数字token保留精确小数和整数，委托Reader的非数字值保持。CSV、Avro或未知Reader保持关闭。")
+            .required(true).defaultValue("false").allowableValues("true","false").build();
     public static final PropertyDescriptor DICTIONARIES=new PropertyDescriptor.Builder().name("dictionary-service").displayName("Dictionary Batch Service").identifiesControllerService(HaitongDictionaryService.class).required(false).build();
     public static final PropertyDescriptor PLAN=new PropertyDescriptor.Builder().name("execution-plan").displayName("Execution Plan").required(true).addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
+    public static final PropertyDescriptor JDBC_ALIASES=new PropertyDescriptor.Builder().name("jdbc-field-aliases").displayName("Registered JDBC Field Aliases")
+            .description("平台从登记字段生成的原名到JDBC传输名映射；仅恢复一级名称，不修改字段值。非JDBC输入无需配置。")
+            .required(false).addValidator((subject,input,context)->{
+                try { JdbcRecordAliases.parse(input); return new ValidationResult.Builder().subject(subject).valid(true).build(); }
+                catch (MappingException invalid) { return new ValidationResult.Builder().subject(subject).valid(false).explanation(invalid.getMessage()).build(); }
+            }).build();
+    public static final PropertyDescriptor BINARY_ENCODING=new PropertyDescriptor.Builder().name("binary-output-encoding").displayName("Binary Output Encoding")
+            .description("NATIVE保留Record二进制载体；Hive HDFS文本分支使用BASE64_TEXT，仅改变写入传输格式，目标字段仍为binary。")
+            .required(true).defaultValue("NATIVE").allowableValues("NATIVE","BASE64_TEXT").build();
     public static final PropertyDescriptor HASH=new PropertyDescriptor.Builder().name("plan-hash").description("旧配置兼容，当前摘要由执行计划自动计算，无需手动维护").required(false).dynamic(true).addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
     public static final PropertyDescriptor PLAN_ID=new PropertyDescriptor.Builder().name("plan-id").description("旧配置兼容，发布引用由平台自动记录").required(false).dynamic(true).addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
     public static final PropertyDescriptor CONTEXT_NODE=new PropertyDescriptor.Builder().name("context-node-id").description("旧配置兼容，稳定节点上下文由平台自动记录，手工组件自动使用处理器ID").required(false).dynamic(true).addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
@@ -34,9 +46,11 @@ public class HaitongTransformRecord extends AbstractProcessor {
     public static final Relationship RETRY=new Relationship.Builder().name("retry").description("有界退避后重试原输入").build();
     private static final ObjectMapper JSON=new ObjectMapper().enable(com.fasterxml.jackson.databind.DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS);
     private volatile MappingEngine.Plan plan;
+    private volatile JdbcRecordAliases jdbcAliases = JdbcRecordAliases.NONE;
+    private volatile Set<String> binaryTextFields = Set.of();
     private final java.util.concurrent.Semaphore windows=new java.util.concurrent.Semaphore(2);
     private volatile String nodeContext,planId;
-    @Override public List<PropertyDescriptor> getSupportedPropertyDescriptors(){return List.of(READER,TYPED_READER,WRITER,DICTIONARIES,PLAN,ATTEMPTS,ERROR_LOOP_DELAY);}
+    @Override public List<PropertyDescriptor> getSupportedPropertyDescriptors(){return List.of(READER,TYPED_READER,WRITER,EXACT_JSON_NUMBERS,DICTIONARIES,PLAN,JDBC_ALIASES,BINARY_ENCODING,ATTEMPTS,ERROR_LOOP_DELAY);}
     @Override protected PropertyDescriptor getSupportedDynamicPropertyDescriptor(String name) {
         return switch(name){case "plan-hash"->HASH;case "plan-id"->PLAN_ID;case "context-node-id"->CONTEXT_NODE;case "required-engine-version"->MappingCompatibility.REQUIRED_VERSION;default->null;};
     }
@@ -54,6 +68,10 @@ public class HaitongTransformRecord extends AbstractProcessor {
         if(document instanceof com.fasterxml.jackson.databind.node.ObjectNode object)object.remove("_deployment");
         MappingEngine.Plan compiled=MappingEngine.compile(document);
         if(!compiled.dictionaries().isEmpty()&&!context.getProperty(DICTIONARIES).isSet())throw new MappingException("DICTIONARY_UNAVAILABLE","计划引用字典但未绑定批量服务");
+        jdbcAliases=JdbcRecordAliases.parse(context.getProperty(JDBC_ALIASES).getValue());
+        binaryTextFields="BASE64_TEXT".equals(context.getProperty(BINARY_ENCODING).getValue())
+                ? compiled.outputContracts().entrySet().stream().filter(entry->entry.getValue().logicalType().equals("BINARY"))
+                    .map(Map.Entry::getKey).collect(java.util.stream.Collectors.toUnmodifiableSet()) : Set.of();
         plan=compiled;
     }
     @Override public void onTrigger(ProcessContext context,ProcessSession session){
@@ -81,21 +99,31 @@ public class HaitongTransformRecord extends AbstractProcessor {
             DictionarySpec.Provider dictionaries=context.getProperty(DICTIONARIES).isSet()?context.getProperty(DICTIONARIES).asControllerService(HaitongDictionaryService.class).provider():null;
             FlowFile success=session.create(original),invalid=session.create(original);derived.add(success);derived.add(invalid);long[]counts={0,0,0,0};Map<String,String>writerAttributes=new HashMap<>(),invalidAttributes=new HashMap<>();
             List<FlowFile>dynamicFiles=new ArrayList<>();
-            try(InputStream in=session.read(original);RecordReader reader=MappingErrorRecords.isEnvelope(original.getAttributes(),nodeContext)?new MappingErrorRecords(in,original.getAttributes(),plan):readers.createRecordReader(original.getAttributes(),in,original.getSize(),getLogger());OutputStream out=session.write(success);OutputStream bad=session.write(invalid)){
-                if(plan.document().path("schemaContract").path("source").isArray())SchemaContract.requireInput(plan,inputContract(reader.getSchema(),plan));
-                invalidAttributes.put(MappingErrorRecords.SCHEMA,MappingErrorRecords.schemaText(reader.getSchema()));
-                RecordSchema schema=outputSchema(plan,reader.getSchema());
+            boolean errorEnvelope=MappingErrorRecords.isEnvelope(original.getAttributes(),nodeContext);
+            boolean preserveNumbers=context.getProperty(EXACT_JSON_NUMBERS).asBoolean();
+            boolean exactNumbers=!errorEnvelope&&preserveNumbers;
+            // A session permits one open read per FlowFile. Clone only its content claim,
+            // not its bytes; the private read handle is removed before this session commits.
+            FlowFile exactInput=exactNumbers?session.clone(original):null;if(exactInput!=null)derived.add(exactInput);
+            try(InputStream in=session.read(original);RecordReader reader=errorEnvelope?new MappingErrorRecords(in,original.getAttributes(),plan):readers.createRecordReader(original.getAttributes(),in,original.getSize(),getLogger());
+                    InputStream exactStream=exactInput==null?null:session.read(exactInput);ExactJsonNumbers exact=exactStream==null?null:new ExactJsonNumbers(exactStream);OutputStream out=session.write(success);OutputStream bad=session.write(invalid)){
+                RecordSchema inputSchema=jdbcAliases.restore(reader.getSchema());
+                if(plan.document().path("schemaContract").path("source").isArray())SchemaContract.requireInput(plan,inputContract(inputSchema,plan,preserveNumbers));
+                invalidAttributes.put(MappingErrorRecords.SCHEMA,MappingErrorRecords.schemaText(inputSchema));
+                RecordSchema schema=binaryTransportSchema(outputSchema(plan,inputSchema));
                 DynamicOutput dynamic=plan.outputContracts().values().stream().anyMatch(type->type.logicalType().equals("ANY")||type.logicalType().equals("ARRAY")||type.logicalType().equals("DECIMAL")&&type.precision()==0)?new DynamicOutput(session,original,writers,schema,derived,dynamicFiles):null;
                 try(RecordSetWriter writer=writers.createWriter(getLogger(),schema,out,original.getAttributes());BufferedWriter errors=new BufferedWriter(new OutputStreamWriter(bad,java.nio.charset.StandardCharsets.UTF_8))){
                     writer.beginRecordSet();List<Map<String,Object>>window=new ArrayList<>();List<Long>indices=new ArrayList<>();long bytes=0,memory=0,offset=0;Record record;
-                    while((record=reader.nextRecord())!=null){@SuppressWarnings("unchecked") Map<String,Object>row=(Map<String,Object>)NifiTemporalValues.inputValue(record);var size=RecordBudget.record(row,"输入记录，inputRecordIndex="+offset);
+                    while((record=reader.nextRecord())!=null){@SuppressWarnings("unchecked") Map<String,Object>row=(Map<String,Object>)NifiTemporalValues.inputValue(record);if(exact!=null)exact.restore(row);row=jdbcAliases.restore(row);var size=RecordBudget.record(row,"输入记录，inputRecordIndex="+offset);
                         if(!window.isEmpty()&&(window.size()>=MappingEngine.WINDOW_RECORDS||bytes+size.utf8()>MappingEngine.WINDOW_BYTES||memory+size.memory()>RecordBudget.MEMORY_BYTES)){writeWindow(window,indices,execution,dictionaries,writer,errors,schema,counts,dynamic);window.clear();indices.clear();bytes=0;memory=0;}
                         window.add(row);indices.add(reader instanceof MappingErrorRecords envelope?envelope.originalIndex():offset);offset++;bytes+=size.utf8();memory+=size.memory();
                     }
+                    if(exact!=null)exact.requireEnd();
                     if(!window.isEmpty())writeWindow(window,indices,execution,dictionaries,writer,errors,schema,counts,dynamic);
                     writerAttributes.putAll(writer.finishRecordSet().getAttributes());writerAttributes.put("mime.type",writer.getMimeType());writer.flush();errors.flush();
                 }
             }
+            if(exactInput!=null){session.remove(exactInput);derived.remove(exactInput);}
             writerAttributes.putAll(Map.of("ht.plan.hash",plan.hash(),"ht.engine.version",MappingEngine.VERSION,"record.count",Long.toString(counts[0]),"ht.invalid.count",Long.toString(counts[1]),"ht.window.count",Long.toString(counts[2]),"ht.dictionary.batches",Long.toString(counts[3])));
             if(planId!=null&&!planId.isBlank())writerAttributes.put("ht.plan.id",planId);
             if(dictionaries instanceof DictionarySpec.MeteredProvider metered)writerAttributes.put("ht.dictionary.sql.count",Integer.toString(metered.queryCount()));
@@ -127,7 +155,7 @@ public class HaitongTransformRecord extends AbstractProcessor {
         var result=MappingEngine.executeIndexed(plan,rows,indices,context,dictionaries);
         counts[2]++;counts[3]+=result.dictionaryBatches();
         int rowPosition=0;for(var row:result.rows()){
-            if(row.success()){if(dynamic==null){Map<String,Object>converted=new LinkedHashMap<>();row.output().forEach((key,value)->converted.put(key,NifiTemporalValues.writerValue(value,context.zone())));writer.write(new MapRecord(schema,converted));}counts[0]++;}
+            if(row.success()){if(dynamic==null){Map<String,Object>converted=new LinkedHashMap<>();row.output().forEach((key,value)->converted.put(key,writerValue(key,value,context)));writer.write(new MapRecord(schema,converted));}counts[0]++;}
             else{if(plan.recordMode().equals("FAIL_FLOWFILE"))throw new MappingException("RECORD_INVALID",MappingDiagnostics.summary(row.errors().getFirst()));
                 Map<String,Object>envelope=new LinkedHashMap<>();envelope.put("planHash",plan.hash());envelope.put("inputRecordIndex",row.index());envelope.put("errors",row.errors());
                 // Original values stay in the controlled content queue, never attributes/logs.
@@ -147,11 +175,21 @@ public class HaitongTransformRecord extends AbstractProcessor {
             RecordSchema schema=MappingOutputSchema.resolve(base,types,values);
             FlowFile part=session.create(original);int index=derived.size();derived.add(part);Map<String,String>attributes=new HashMap<>();
             try(OutputStream out=session.write(part);RecordSetWriter writer=writers.createWriter(getLogger(),schema,out,original.getAttributes())){
-                writer.beginRecordSet();for(var row:values){Map<String,Object>converted=new LinkedHashMap<>();row.forEach((key,value)->{Object carrier=NifiTemporalValues.writerValue(value,context.zone());converted.put(key,writer instanceof RawRecordWriter?carrier:NifiTemporalValues.unionSafeValue(carrier));});var record=new MapRecord(schema,converted);if(writer instanceof RawRecordWriter raw)raw.writeRawRecord(record);else writer.write(record);}
+                writer.beginRecordSet();for(var row:values){Map<String,Object>converted=new LinkedHashMap<>();row.forEach((key,value)->{Object carrier=writerValue(key,value,context);converted.put(key,writer instanceof RawRecordWriter?carrier:NifiTemporalValues.unionSafeValue(carrier));});var record=new MapRecord(schema,converted);if(writer instanceof RawRecordWriter raw)raw.writeRawRecord(record);else writer.write(record);}
                 attributes.putAll(writer.finishRecordSet().getAttributes());attributes.put("mime.type",writer.getMimeType());writer.flush();
             }
             attributes.put("record.count",Integer.toString(values.size()));part=session.putAllAttributes(part,attributes);derived.set(index,part);files.add(part);
         }
+    }
+    private Object writerValue(String name,Object value,ExecutionContext context) {
+        return binaryTextFields.contains(name) ? BinaryValues.base64(value) : NifiTemporalValues.writerValue(value,context.zone());
+    }
+    private RecordSchema binaryTransportSchema(RecordSchema schema) {
+        if(binaryTextFields.isEmpty())return schema;
+        List<RecordField> fields=new ArrayList<>();
+        for(RecordField field:schema.getFields())fields.add(binaryTextFields.contains(field.getFieldName())
+                ?new RecordField(field.getFieldName(),RecordFieldType.STRING.getDataType(),field.getDefaultValue(),field.getAliases(),field.isNullable()):field);
+        return MappingAvroSchema.attach(new SimpleRecordSchema(fields));
     }
     private static FlowFile backoff(ProcessContext context,ProcessSession session,FlowFile file,Relationship relationship){
         int attempt=Math.min(30,integer(file.getAttribute(MappingErrorRecords.ATTEMPT))+1);
@@ -173,11 +211,12 @@ public class HaitongTransformRecord extends AbstractProcessor {
         });return new SimpleRecordSchema(new ArrayList<>(fields.values()));
     }
     private static int integer(String value){try{return value==null?0:Math.max(0,Integer.parseInt(value));}catch(Exception ex){return 0;}}
-    private static List<SchemaContract.Field> inputContract(RecordSchema schema,MappingEngine.Plan plan){
+    private static List<SchemaContract.Field> inputContract(RecordSchema schema,MappingEngine.Plan plan,boolean exactNumbers){
         var document=plan.document();var sourceNames=new SourceFieldNames(schema.getFieldNames(),document.path("policies").path("caseSensitive").asBoolean(true));
-        Map<String,String> jdbcDates=new HashMap<>();Set<String> binaryFields=new HashSet<>();
+        Map<String,String> jdbcDates=new HashMap<>();Set<String> binaryFields=new HashSet<>(),decimalFields=new HashSet<>();
         for(var declared:document.path("schemaContract").path("source")) {
             String logical=declared.path("logicalType").asText();
+            if(exactNumbers&&ValueTypes.type(logical).equals("DECIMAL")){String physical=sourceNames.resolve(declared.path("name").asText());if(physical!=null)decimalFields.add(physical);}
             if(ValueTypes.type(logical).equals("BINARY")){String physical=sourceNames.resolve(declared.path("name").asText());if(physical!=null)binaryFields.add(physical);}
             if(declared.path("dateContainsTime").asBoolean()&&declared.path("physicalType").asText().equalsIgnoreCase("DATE")
                     &&Set.of("DATE","DATETIME","INSTANT").contains(logical)){
@@ -199,6 +238,9 @@ public class HaitongTransformRecord extends AbstractProcessor {
             }
             String logical=switch(type.getFieldType().name()){case "BYTE","SHORT","INT"->"INT";case "LONG","BIGINT"->"LONG";case "FLOAT","DOUBLE"->"DOUBLE";case "DECIMAL"->"DECIMAL";case "BOOLEAN"->"BOOLEAN";case "DATE"->"DATE";case "TIME"->"TIME";case "TIMESTAMP"->"DATETIME";case "ARRAY"->"ARRAY";case "STRING","CHAR"->"STRING";default->"ANY";};
             int precision=0,scale=0;if(type instanceof org.apache.nifi.serialization.record.type.DecimalDataType decimal){precision=decimal.getPrecision();scale=decimal.getScale();}
+            // The inferred DOUBLE describes JSON's old carrier, not the registered SQL NUMBER.
+            // The exact codec restores numeric tokens; each value still passes the declared precision/scale checks.
+            if(decimalFields.contains(field.getFieldName())&&Set.of("INT","LONG","DOUBLE","DECIMAL").contains(logical)){logical="DECIMAL";precision=0;scale=0;}
             result.add(new SchemaContract.Field(field.getFieldName(),logical,field.isNullable(),0,precision,scale));
         }return result;
     }

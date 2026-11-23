@@ -1213,7 +1213,7 @@
         "ods_nifi_node_access_options_01"
       ],
       "kind": "api",
-      "baseSha256": "455d700a901b110bf815f014d94b424a66b68b974dca9f27041eb14c0f44a83f",
+      "baseSha256": "976d8896a2afe2d36c7c4af59abc6ba04d9b4489b9797081993034b769d1fee3",
       "metadataId": "ods_nifi_node_access_options_01"
     },
     {
@@ -1331,7 +1331,7 @@
         "ods_data_agg_task_ensure_01"
       ],
       "kind": "api",
-      "baseSha256": "20e8d7bbbc62f16faeb770cb3594e40c9e5254929cf90847a1d56055a4281e17",
+      "baseSha256": "8d53f8ad997d8e9e9cb29a6f2521b0c1964c39f65b524a20d80841a27617da38",
       "metadataId": "ods_data_agg_task_ensure_01"
     },
     {
@@ -1932,7 +1932,7 @@
         "e3320ec899a24426adf5f77e2dab36f9"
       ],
       "kind": null,
-      "baseSha256": "639ae7ac2212829f994a849f41bc409d80fd6d062edb3570cc4907c7017c35c3",
+      "baseSha256": "1a20ca20693e005754cd03227d27f3c6c663875bd0ea66f0889ba449efe1aed8",
       "metadataId": "e3320ec899a24426adf5f77e2dab36f9"
     },
     {
@@ -1952,7 +1952,7 @@
         "f93a8e653ac6413e89660f5d77d45769"
       ],
       "kind": null,
-      "baseSha256": "a9d8e03618e32ae07ba061dd3fe8880145f0c6a08cda268743cb9d00ad85400a",
+      "baseSha256": "328146f8074a3c4a1898a4d340ebc5d14c8e1176c1777c5b98f22cb2460fe9f2",
       "metadataId": "f93a8e653ac6413e89660f5d77d45769"
     },
     {
@@ -4784,7 +4784,7 @@
         "c30f3718868148ce84e65217f49a7720"
       ],
       "kind": null,
-      "baseSha256": "bdc429edaf79b58f86d02d41f47df481099c47eb870eea00c67fabf9a60bdaa3",
+      "baseSha256": "854a9b7fc399f47560862d71272d3711c7545d3ff981b31e15985f8eb572cc41",
       "metadataId": "c30f3718868148ce84e65217f49a7720"
     },
     {
@@ -7599,7 +7599,7 @@
         "12d140ad77734d74804fb7e046d92b75"
       ],
       "kind": "api",
-      "baseSha256": "d297c660646e875d17471bc815b32ed14451ba9b33ef87f258c09802cd8c1754",
+      "baseSha256": "c8ced576784f3d1302cf0469210210b5f059d1290a34850d2561aebdc0dacf1f",
       "metadataId": "6138f2d3794847a78cb00dd1c8c14385"
     },
     {
@@ -8149,7 +8149,7 @@
         "f5c3489a9e6047588644765e3614e724"
       ],
       "kind": "api",
-      "baseSha256": "43b2deca75e83316854667fc4052df001ae954b62a4c600911a8271f2fe851bb",
+      "baseSha256": "1df0f50a04ec7bf06673d7dd37727450a680b8fbb7145cbd32b3ec703df72cd9",
       "metadataId": "nifi_map_schema_post_v1"
     },
     {
@@ -8939,7 +8939,7 @@
         "bd374c528a2941b59c9bd9e7e73bb6e0"
       ],
       "kind": "function",
-      "baseSha256": "1a26dbfd26ce7122607b6da85c7b3ca74805fcb7e5a19af62203fa64011bccea",
+      "baseSha256": "d45d1a731e319a06c021d84fd2da3717e4c9195b8193f337cf43bd5843b0e38b",
       "metadataId": "nifi_one_shot_sources_v1"
     },
     {
@@ -9150,7 +9150,7 @@
       ],
       "kind": "function",
       "metadataId": "nifi_runtime_node_read_v1",
-      "baseSha256": "8e9df46b34e560eaceaf7851dadb91808059e9a85417cd99da3b334ee7779f3d"
+      "baseSha256": "2067538e3cb31683a6b341fc14532637d0bd93a19a9e8fbd2e5f20a2e0810519"
     },
     {
       "path": "function/01.通用函数/79.读取接入模板版本.ms",
@@ -9161,6 +9161,16 @@
       "kind": "function",
       "baseSha256": "fb062a90561bdedee8e76d8611fa37f92371a316bff2c2bfa57c9994b3058a59",
       "metadataId": "069cbc99613b42c0b6805199f45a4d58"
+    },
+    {
+      "path": "function/01.通用函数/80.读取NiFi节点配置状态.ms",
+      "databasePath": "/magic-api/function/01.通用函数/80.读取NiFi节点配置状态.ms",
+      "rowIds": [
+        "26afb06842344b129ee2088e627af689"
+      ],
+      "kind": "function",
+      "metadataId": "nifi_node_configuration_v1",
+      "baseSha256": "478619ac181511a71e71837dd7841ae19c9515ee56a1f0de703a68f3c6ca10af"
     },
     {
       "path": "function/01.通用函数/group.json",

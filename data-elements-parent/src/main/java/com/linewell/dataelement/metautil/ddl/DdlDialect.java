@@ -79,6 +79,9 @@ public final class DdlDialect {
         String pattern = family(type) == Family.ORACLE
                 ? "[A-Za-z][A-Za-z0-9_$#]*" : "[A-Za-z_][A-Za-z0-9_$#]*";
         if (!identifier.matches(pattern)) return true;
+        // Oracle reserves UID as a pseudocolumn even though Druid lexes it as an identifier.
+        // Apply the same decision to DDL, metadata references and compiled JDBC writers.
+        if (family(type) == Family.ORACLE && "UID".equalsIgnoreCase(identifier)) return true;
         var lexer = com.alibaba.druid.sql.parser.SQLParserUtils.createLexer(identifier, parser(type));
         lexer.nextToken();
         return lexer.token() != com.alibaba.druid.sql.parser.Token.IDENTIFIER;

@@ -15,6 +15,29 @@ class DecimalPrecisionTest {
     private static final ExecutionContext CTX=new ExecutionContext(Instant.EPOCH,ZoneOffset.UTC,Locale.ROOT,"decimal-fixture");
     private static final List<String> VALUES=List.of("119.379023855114","25.7223849760167","-119.379023855114","0.000000000000000000123456789","1.23456789012345678901234567890123456789E+30");
 
+    @Test void expressionCastsRetainDimensionsStoredInsideTheParserTypeName() throws Exception {
+        for (String alias : List.of("NUMBER", "NUMERIC", "DECIMAL")) {
+            var document = spec();
+            ((ObjectNode)document.path("rules").get(0)).putObject("input").put("kind", "EXPRESSION")
+                    .put("expression", "CAST(${field:x} AS " + alias + "(3,1))");
+            var plan = MappingEngine.compile(document);
+            var valid = MappingEngine.execute(plan, List.of(Map.of("x", "12.3")), 0, CTX, null).rows().getFirst();
+            assertTrue(valid.success(), valid.errors().toString()); assertEquals(new BigDecimal("12.3"), valid.output().get("y"));
+            for (String invalid : List.of("123.4", "12.34")) {
+                var rejected = MappingEngine.execute(plan, List.of(Map.of("x", invalid)), 0, CTX, null).rows().getFirst();
+                assertFalse(rejected.success()); assertEquals("TYPE_MISMATCH", rejected.errors().getFirst().code());
+            }
+        }
+        var negativeScale = spec();
+        ((ObjectNode)negativeScale.path("rules").get(0)).putObject("input").put("kind", "EXPRESSION")
+                .put("expression", "CAST(${field:x} AS DECIMAL(3,-2))");
+        // The installed SQL expression grammar does not support Oracle's negative
+        // scale syntax. Keep rejecting it instead of dropping the dimensions;
+        // structured CAST arguments retain the existing negative-scale support.
+        assertEquals("EXPRESSION_UNSUPPORTED", assertThrows(MappingException.class,
+                () -> MappingEngine.compile(negativeScale)).code());
+    }
+
     @Test void unqualifiedLegacyDecimalsKeepEveryDigitForTwentyAndOneHundredMixedRows()throws Exception {
         var plan=MappingEngine.compile(JSON.readTree("""
           {"version":"1.0","mappings":[{"from":"x","to":"y","targetType":"DECIMAL"}]}

@@ -15,6 +15,7 @@ const registrationSourceOrder = new Map([
   'source.kafka',
   'source.minio',
   'source.elasticsearch',
+  'source.clickhouse',
   'source.mongodb',
   'source.gbase8a',
   'source.sqlserver',

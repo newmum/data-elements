@@ -11,6 +11,22 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 class NifiPublicationTransportTest {
+    @Test void groupStartCannotRestartAManualBackfillEvenAfterItHasStopped()throws Exception {
+        var client=spy(new NifiClient(mock(NifiNodeRuntimeResolver.class),mapper));
+        var graph=mapper.createObjectNode();var rows=graph.putArray("processors");
+        for(String id:List.of("main","backfill")){
+            var row=rows.addObject().put("id",id);row.putObject("revision").put("version",1);
+            var cfg=row.putObject("component").put("state","STOPPED").putObject("config");
+            if(id.equals("backfill"))cfg.put("comments",NifiClient.MANUAL_BACKFILL_MARKER);
+        }
+        doReturn(graph).when(client).get("/process-groups/group/processors?includeDescendantGroups=true",JsonNode.class);
+        doReturn(mapper.createObjectNode()).when(client).put(eq("/flow/process-groups/group"),any(),eq(JsonNode.class));
+        client.setProcessGroupState("group","RUNNING");
+        var body=org.mockito.ArgumentCaptor.forClass(Object.class);
+        verify(client).put(eq("/flow/process-groups/group"),body.capture(),eq(JsonNode.class));
+        assertThat(((JsonNode)body.getValue()).path("components").has("main")).isTrue();
+        assertThat(((JsonNode)body.getValue()).path("components").has("backfill")).isFalse();
+    }
     final ObjectMapper mapper = new ObjectMapper();
     @ParameterizedTest @ValueSource(ints={20,100})
     void servicesUseTwoBulkReadsAndOneActivationRegardlessOfSize(int count) {
@@ -47,6 +63,8 @@ class NifiPublicationTransportTest {
             var failure=new NifiException("replication failed",500,"WebClientServiceException");
             doThrow(failure).when(client).put(eq("/flow/process-groups/group"),any(),eq(JsonNode.class));
             var graph=mapper.readTree("{\"processors\":[{\"component\":{\"state\":\"RUNNING\"}},{\"component\":{\"state\":\""+(partial?"STOPPED":"RUNNING")+"\"}}]}");
+            ((com.fasterxml.jackson.databind.node.ArrayNode)graph.path("processors")).addObject().putObject("component")
+                    .put("state","STOPPED").putObject("config").put("comments",NifiClient.MANUAL_BACKFILL_MARKER);
             doReturn(graph).when(client).get("/process-groups/group/processors?includeDescendantGroups=true",JsonNode.class);
             if(partial) assertThatThrownBy(()->client.setProcessGroupState("group","RUNNING")).isSameAs(failure);
             else assertThat(client.setProcessGroupState("group","RUNNING").path("confirmedByReadback").asBoolean()).isTrue();

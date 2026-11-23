@@ -26,6 +26,7 @@ import tenantRuntime
 import portableDdl
 import com.linewell.dataelement.metautil.model.enums.DatabaseType
 import com.linewell.dataelement.metautil.ddl.PortableColumnType
+import com.linewell.dataelement.metautil.jdbc.SqlServerIdentityTypes
 
 // POST /ods/target/template 根据表或目录获取建表申请模板。
 // 接口：11.根据表或目录获取建表申请模板
@@ -583,9 +584,13 @@ if (blank(sourceTypeCode)) {
 // The source connector label is optional context for a registered field snapshot.
 // Resolve once outside the field loop, keeping protocol validation at real I/O.
 var sourceDialectCode = null
+var sampledTextWidths = registeredFileSnapshot
 try {
     var sourceDialect = blank(sourceTypeCode) ? null : DatabaseType.fromCode(sourceTypeCode)
-    if (sourceDialect != null) { sourceDialectCode = sourceDialect.code }
+    if (sourceDialect != null) {
+        sourceDialectCode = sourceDialect.code
+        sampledTextWidths = !sourceDialect.isRelational()
+    }
 } catch (unknownSourceDialect) {
     sourceDialectCode = null
 }
@@ -607,6 +612,8 @@ if (columns == null || columns.size() == 0) {
 }
 var snapshotIssueCount = 0
 var incompleteSnapshot = false
+var sourceIdentityColumnCount = 0
+var sampledTextWidthCount = 0
 for (col in (columns == null ? [] : columns)) {
     var columnName = first(col, ['columnName', 'column_name'])
     // 物化仅转换登记快照；来源字段变化由登记流程重新确认，不在这里采集。
@@ -619,6 +626,15 @@ for (col in (columns == null ? [] : columns)) {
     if (blank(typeCode)) { typeCode = knownTypeCode(columnType) }
     if (sourceDialectCode == 'mongodb' && !blank(sourceType || columnType)) {
         typeCode = portableDdl.logicalType(columnType || sourceType, sourceDialectCode)
+    }
+    // ClickHouse 原生整数及 Nullable/LowCardinality 包装按来源值域解释；Int8不能套PG别名。
+    var rawType = blank(columnType) ? sourceType : columnType
+    if (sourceDialectCode == 'clickhouse' && PortableColumnType.kind(rawType, sourceDialectCode).name() != 'UNKNOWN') {
+        typeCode = portableDdl.logicalType(rawType, sourceDialectCode)
+    }
+    // SQL Server旧快照的int identity是整数加自增属性，不是文本类型。
+    if (sourceDialectCode == 'sqlserver' && SqlServerIdentityTypes.hasIdentity(rawType)) {
+        typeCode = portableDdl.logicalType(rawType, sourceDialectCode)
     }
     if (blank(columnName) || blank(typeCode)) {
         var missing = blank(columnName) || (displayOnlyType(sourceType) && displayOnlyType(columnType))
@@ -634,6 +650,12 @@ for (col in (columns == null ? [] : columns)) {
     // Snapshot lengths can be absent while columnType still carries valid arguments.
     if (toInt(sourceLength, 0) <= 0) { sourceLength = typeArgument(columnType, 0) }
     if (toInt(sourceLength, 0) <= 0) { sourceLength = typeArgument(sourceType, 0) }
+    var integralPrecision = PortableColumnType.integralPrecision(rawType, sourceDialectCode)
+    if (integralPrecision > 0) {
+        sourceLength = integralPrecision
+        sourcePrecision = integralPrecision
+        sourceScale = 0
+    }
     if (['uuid', 'uniqueidentifier'].contains(typeCode)) { sourceLength = 36 }
     if (typeCode == 'rowid') { sourceLength = 18 }
     if (typeCode == 'urowid' && toInt(sourceLength, 0) <= 0) { sourceLength = 4000 }
@@ -646,12 +668,29 @@ for (col in (columns == null ? [] : columns)) {
         }
     }
     var targetType = mapDataType(sourceType, columnType, sourceLength, sourceDialectCode)
+    var targetLength = ['text', 'blob', 'float', 'double', 'json'].contains(targetType) ? 0 : normalizeLength(targetType, sourceLength, sourcePrecision)
+    // 文件/消息/文档的裸VARCHAR长度是样本观察值，不代表完整数据的上限。
+    // 显式类型参数、字符/字节容量和SQL声明保持；未知上限0仍交给方言处理为无界文本。
+    var declaredTextWidth = PortableColumnType.kind(rawType, sourceDialectCode).name() == 'CHAR'
+        || typeArgument(rawType, 0) > 0
+        || toInt(first(col, ['characterLength', 'character_length']), 0) > 0
+        || toInt(first(col, ['byteLength', 'byte_length']), 0) > 0
+    if (sampledTextWidths && !declaredTextWidth && ['varchar', 'nvarchar', 'nvarchar2', 'string'].contains(targetType) && targetLength > 0) {
+        sampledTextWidthCount = sampledTextWidthCount + 1
+        if (targetLength < 255) { targetLength = 255 }
+    }
     var registeredField = registeredFormats[text(columnName).trim().toLowerCase()]
     var explicitlyCleared = registeredField != null && isPrimaryKey(registeredField.standardFieldExplicitlyCleared)
     var standardField = explicitlyCleared ? '' : text(first(col, ['dataStandardId', 'data_standard_id'])).trim().toUpperCase()
     if (!explicitlyCleared && blank(standardField) && registeredField != null) {
         standardField = text(registeredField.standardField).trim().toUpperCase()
     }
+    // JDBC元数据与旧登记可分别返回Boolean或数值，来源标志须统一为0/1。
+    var sourceAutoValue = first(col, ['autoIncrement', 'auto_increment'])
+    var sourceAutoMarker = lower(sourceAutoValue)
+    var sourceAutoIncrement = sourceAutoMarker == 'true' ? 1 : (sourceAutoMarker == 'false' ? 0 : toInt(sourceAutoValue, 0))
+    if (sourceDialectCode == 'sqlserver' && SqlServerIdentityTypes.hasIdentity(rawType)) { sourceAutoIncrement = 1 }
+    if (sourceAutoIncrement == 1) { sourceIdentityColumnCount = sourceIdentityColumnCount + 1 }
     tableItems.add({
         sourceColumnId: first(col, ['tid']),
         columnName: columnName,
@@ -666,17 +705,25 @@ for (col in (columns == null ? [] : columns)) {
         standardField: standardField,
         dataType: targetType,
         columnType: targetType,
-        length: ['text', 'blob', 'float', 'double', 'json'].contains(targetType) ? 0 : normalizeLength(targetType, sourceLength, sourcePrecision),
+        length: targetLength,
         precisionLength: toInt(sourcePrecision, 0),
         scale: toInt(sourceScale, 0),
         primaryKey: isPrimaryKey(first(col, ['primaryKey', 'primary_key', 'isPrimaryKey', 'is_primary_key'])) || registeredPrimaryKeys[text(columnName).trim().toLowerCase()] == true ? 1 : 0,
         nullable: normalizeNullable(first(col, ['nullable'])),
         defaultValue: null,
         ordinalPosition: toInt(first(col, ['ordinalPosition', 'ordinal_position']), 0),
-        autoIncrement: toInt(first(col, ['autoIncrement', 'auto_increment']), 0),
+        // 接入复制来源已有ID；来源自增属性仅作血缘，不默认要求目标重新分配ID。
+        sourceAutoIncrement: sourceAutoIncrement,
+        autoIncrement: 0,
         indexed: toInt(first(col, ['indexed']), 0),
         isUnique: toInt(first(col, ['isUnique', 'is_unique']), 0)
     })
+}
+if (sampledTextWidthCount > 0) {
+    snapshotIssues.add('有' + sampledTextWidthCount + '个文本字段的长度来自样本观察，不能作为完整来源的已证明上限；目标模板默认至少255字符并保留更大观察值，请按业务容量确认。未扫描来源或修改登记快照')
+}
+if (sourceIdentityColumnCount > 0) {
+    snapshotIssues.add('来源含' + sourceIdentityColumnCount + '个自增字段，目标默认关闭自增并保留来源已有值；如需生成新ID，请显式配置目标并确认数据库版本支持')
 }
 // 旧快照或新类型仍返回可编辑字段，不阻断抽屉；目标类型由统一转换器处理。
 var templateWarnings = snapshotIssues

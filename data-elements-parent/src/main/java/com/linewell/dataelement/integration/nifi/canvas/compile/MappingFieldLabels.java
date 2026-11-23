@@ -13,9 +13,11 @@ final class MappingFieldLabels {
     private static final ObjectMapper JSON=new ObjectMapper();
     private final Map<String,Pipeline.Node> nodes=new HashMap<>();
     private final Map<String,List<String>> incoming=new HashMap<>(),outgoing=new HashMap<>();
+    private final Map<String,List<String>> successOutgoing=new HashMap<>();
     MappingFieldLabels(Pipeline pipeline) {
         pipeline.dsl().nodes().forEach(node->nodes.put(node.id(),node));
-        if(pipeline.dsl().edges()!=null)pipeline.dsl().edges().forEach(edge->{incoming.computeIfAbsent(edge.target(),key->new ArrayList<>()).add(edge.source());outgoing.computeIfAbsent(edge.source(),key->new ArrayList<>()).add(edge.target());});
+        if(pipeline.dsl().edges()!=null)pipeline.dsl().edges().forEach(edge->{incoming.computeIfAbsent(edge.target(),key->new ArrayList<>()).add(edge.source());outgoing.computeIfAbsent(edge.source(),key->new ArrayList<>()).add(edge.target());
+            if(!Set.of("failure","retry").contains(Objects.toString(edge.outlet(),"").toLowerCase(Locale.ROOT)))successOutgoing.computeIfAbsent(edge.source(),key->new ArrayList<>()).add(edge.target());});
     }
     JsonNode enrich(String node,JsonNode raw) {
         if(!(raw instanceof ObjectNode))return raw;
@@ -25,10 +27,47 @@ final class MappingFieldLabels {
         for(JsonNode rule:spec.path("mappings"))annotate(rule,source,target,millisFields);
         Set<String> binaryFields=directBinaryFields(node);
         for(String collection:List.of("rules","mappings"))for(JsonNode rule:spec.path(collection))binaryInput(rule,binaryFields);
-        if(hasBinary(spec,0))bindBinaryTarget(node,spec);
+        var targets=sharedTargets(node);
+        if(targets.size()>1)bindSharedTargets(targets,spec);
+        else if(hasBinary(spec,0))bindBinaryTarget(node,spec);
         for(String side:List.of("source","target"))for(JsonNode field:spec.path("schemaContract").path(side))
             putComment(field,"comment",lookup(side.equals("source")?source:target,field.path("name").asText()));
         return spec;
+    }
+    /** Discover terminal targets once in memory, crossing transport adapters but never another governance node. */
+    private List<Pipeline.Node> sharedTargets(String node){
+        List<Pipeline.Node> result=new ArrayList<>();Set<String> visited=new HashSet<>();
+        var pending=new ArrayDeque<>(successOutgoing.getOrDefault(node,List.of()));
+        while(!pending.isEmpty()){
+            String id=pending.removeFirst();if(!visited.add(id))continue;
+            var candidate=nodes.get(id);if(candidate==null)continue;
+            if("sink".equals(candidate.category())){if(Set.of("sink.jdbc","sink.hive").contains(candidate.manifestKey()))result.add(candidate);continue;}
+            if(Set.of("transform.field-mapping","transform.field-enrichment","transform.sql","transform.java","transform.python","transform.shell").contains(candidate.manifestKey()))continue;
+            pending.addAll(successOutgoing.getOrDefault(id,List.of()));
+        }
+        result.sort(Comparator.comparing((Pipeline.Node target)->!"sink.jdbc".equals(target.manifestKey())).thenComparing(Pipeline.Node::id));
+        return result;
+    }
+    private static void bindSharedTargets(List<Pipeline.Node> targets,ObjectNode spec){
+        if(targets.size()>16)throw new MappingException("BUDGET_EXCEEDED","共享治理最多关联16个目标");
+        ObjectNode contract=spec.path("schemaContract") instanceof ObjectNode object?object:spec.putObject("schemaContract");
+        Map<String,JsonNode> previous=new HashMap<>();for(JsonNode target:contract.path("targets"))previous.put(target.path("nodeId").asText(),target);
+        var branches=contract.putArray("targets");
+        Set<String> identities=new HashSet<>();
+        for(var target:targets){
+            Map<String,Object> config=target.config()==null?Map.of():target.config();
+            String datasource=first(config,"registeredDatasourceId","selectedDatabaseId","targetDbId","datasourceId","dataSourceId","dbId"),table=first(config,"targetTableId","tableId");
+            if(datasource.isBlank()||table.isBlank())throw new MappingException("SCHEMA_SCOPE_REQUIRED","共享治理目标“"+target.label()+"”须选择已登记的数据源和目标表");
+            String identity=datasource+":"+table;identities.add(identity);
+            var branch=branches.addObject().put("nodeId",target.id()).put("label",target.label());
+            var reference=branch.putObject("reference").put("datasourceId",datasource).put("tableId",table);
+            JsonNode old=previous.get(target.id());
+            if(old!=null&&old.path("reference").equals(reference)&&old.path("fields").isArray())branch.set("fields",old.path("fields").deepCopy());
+        }
+        JsonNode existing=contract.path("targetRef");
+        if(existing.isObject()&&!identities.contains(existing.path("datasourceId").asText()+":"+existing.path("tableId").asText()))
+            throw new MappingException("TARGET_REFERENCE_MISMATCH","字段治理的目标引用已不属于实际连接的目标分支，请重新读取目标结构");
+        if(!existing.isObject())contract.set("targetRef",branches.get(0).path("reference").deepCopy());
     }
     private Set<String> directBinaryFields(String node){
         var parents=incoming.getOrDefault(node,List.of());if(parents.size()!=1)return Set.of();
@@ -79,16 +118,23 @@ final class MappingFieldLabels {
     private static String first(Map<String,Object> values,String...keys){for(String key:keys){Object value=values.get(key);if(value!=null&&!value.toString().isBlank())return value.toString().trim();}return "";}
     private Set<String> jdbcMillisFields(String node) {
         var parents=incoming.getOrDefault(node,List.of());
-        if(parents.size()!=1)return Set.of();
-        var source=nodes.get(parents.getFirst());
-        // A transform may rename or replace values; never infer transport units through it.
-        if(source==null||!source.category().equals("source")||!JdbcTemporalTypes.oracleDateHasTime(source.config()))return Set.of();
-        Set<String> result=new HashSet<>();
-        for(JsonNode field:parse(source.config().get("sourceColumns"))) {
-            String type=field.path("dataType").asText(field.path("columnType").asText(field.path("typeName").asText(field.path("type").asText())));
-            if(ValueTypes.type(type).equals("DATE"))result.add(field.path("columnName").asText(field.path("name").asText()).toLowerCase(Locale.ROOT));
+        if(parents.isEmpty())return Set.of();
+        Set<String> result=null;
+        for(String id:parents){
+            var source=nodes.get(id);
+            // A manual backfill is another direct source, not another wire format. Intersect all inputs.
+            if(source==null||!source.category().equals("source"))return Set.of();
+            Map<String,Object> config=source.config()==null?Map.of():source.config();
+            boolean jdbc=first(config,"jdbcUrl","jdbcURL").startsWith("jdbc:")||JdbcTemporalTypes.oracleDateHasTime(config);
+            if(!jdbc)return Set.of();
+            Set<String> fields=new HashSet<>();
+            for(JsonNode field:parse(source.config().get("sourceColumns"))) {
+                String type=field.path("columnType").asText(field.path("dataType").asText(field.path("typeName").asText(field.path("type").asText())));
+                if(Set.of("DATE","TIME","DATETIME","INSTANT").contains(ValueTypes.type(type)))fields.add(field.path("columnName").asText(field.path("name").asText()).toLowerCase(Locale.ROOT));
+            }
+            if(result==null)result=fields;else result.retainAll(fields);
         }
-        return result;
+        return result==null?Set.of():result;
     }
     private Map<String,String> labels(String start,boolean source) {
         Map<String,String> result=new HashMap<>();Set<String> conflicts=new HashSet<>(),visited=new HashSet<>();

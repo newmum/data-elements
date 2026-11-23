@@ -42,6 +42,7 @@ public class NifiClient {
 
     private static final Logger log = LoggerFactory.getLogger(NifiClient.class);
     private static final String API_PREFIX = "/nifi-api";
+    public static final String MANUAL_BACKFILL_MARKER = "[haitong:manual-backfill]";
     private static final String EXECUTE_SQL_RECORD_TYPE = "org.apache.nifi.processors.standard.ExecuteSQLRecord";
     private static final String USE_AVRO_LOGICAL_TYPES = "Use Avro Logical Types";
     private static final String LINEWELL_DATABASE_RECORD = "LinewellPutDatabaseRecord";
@@ -619,6 +620,9 @@ public class NifiClient {
     }
 
     public NifiEntity createProcessor(String pgId, String type, String name, double x, double y, Map<String, String> properties, String schedulingPeriod, String schedulingStrategy) {
+        return createProcessor(pgId,type,name,x,y,properties,schedulingPeriod,schedulingStrategy,null);
+    }
+    public NifiEntity createProcessor(String pgId, String type, String name, double x, double y, Map<String, String> properties, String schedulingPeriod, String schedulingStrategy,String comments) {
         ObjectNode component = mapper.createObjectNode();
         component.put("type", type);
         if (isLinewellDatabaseRecord(type)) {
@@ -632,6 +636,7 @@ public class NifiClient {
         ObjectNode pos = mapper.createObjectNode().put("x", x).put("y", y);
         component.set("position", pos);
         ObjectNode config = mapper.createObjectNode();
+        if(comments!=null&&!comments.isBlank())config.put("comments",comments);
         if (schedulingPeriod != null) config.put("schedulingPeriod", schedulingPeriod);
         if (schedulingStrategy != null) config.put("schedulingStrategy", schedulingStrategy);
         ObjectNode props = mapper.createObjectNode();
@@ -706,7 +711,9 @@ public class NifiClient {
     public NifiEntity createControllerService(String pgId, String type, String name, Map<String, String> properties) {
         ObjectNode component = mapper.createObjectNode();
         component.put("type", type);
-        if(type.equals("com.linewell.dataelement.nifi.JdbcHaitongDictionaryService"))component.set("bundle",mappingBundle());
+        if(type.equals("com.linewell.dataelement.nifi.JdbcHaitongDictionaryService")
+                ||type.equals("com.linewell.dataelement.nifi.HaitongBinaryRecordReader")
+                ||type.equals("com.linewell.dataelement.nifi.HaitongJdbcRecordReader"))component.set("bundle",mappingBundle());
         component.put("name", name);
         if (properties != null && !properties.isEmpty()) {
             ObjectNode props = mapper.createObjectNode();
@@ -885,6 +892,16 @@ public class NifiClient {
         body.put("id", pgId);
         body.put("state", state);
         body.put("disconnectedNodeAcknowledged", false);
+        if("RUNNING".equals(state)){
+            JsonNode flow=get("/process-groups/"+pgId+"/processors?includeDescendantGroups=true",JsonNode.class);
+            JsonNode processors=flow.path("processors");
+            boolean manual=false;ObjectNode selected=mapper.createObjectNode();
+            for(JsonNode processor:processors){
+                if(isManualBackfill(processor)){manual=true;continue;}
+                if(!"DISABLED".equals(processor.path("component").path("state").asText()))selected.set(processor.path("id").asText(),processor.path("revision"));
+            }
+            if(manual)body.set("components",selected);
+        }
         try {
             return put("/flow/process-groups/" + pgId, body, JsonNode.class);
         } catch (NifiException failure) {
@@ -911,7 +928,7 @@ public class NifiClient {
             JsonNode component = processor.path("component");
             String state = component.path("state").asText();
             active += processor.path("status").path("aggregateSnapshot").path("activeThreadCount").asInt();
-            if ("DISABLED".equals(state)) continue;
+            if ("DISABLED".equals(state)||isManualBackfill(processor)) continue;
             if ("RUNNING".equals(state)) running++;
             else if ("STOPPED".equals(state)) stopped++;
             else invalid++;
@@ -954,12 +971,13 @@ public class NifiClient {
         for (JsonNode processor : processors) {
             String id = processor.path("id").asText();
             JsonNode component = processor.path("component");
+            if(isManualBackfill(processor))continue;
             if (sourceIds.contains(id)) {
                 if (!"STOPPED".equals(component.path("state").asText())) {
                     throw new IllegalStateException("全量来源尚未停止，请等待本轮结束：" + component.path("name").asText());
                 }
                 sources.set(id, processor.path("revision"));
-            } else {
+            } else if (!"DISABLED".equals(component.path("state").asText())) {
                 downstream.set(id, processor.path("revision"));
             }
         }
@@ -1007,6 +1025,7 @@ public class NifiClient {
 
         int resumed = 0;
         for (JsonNode processor : processors) {
+            if(isManualBackfill(processor))continue;
             JsonNode component = processor.path("component");
             String processorId = component.path("id").asText("");
             String state = component.path("state").asText("");
@@ -1026,6 +1045,9 @@ public class NifiClient {
             resumed++;
         }
         return resumed;
+    }
+    public static boolean isManualBackfill(JsonNode entity){
+        return entity.path("component").path("config").path("comments").asText().contains(MANUAL_BACKFILL_MARKER);
     }
 
     private boolean waitForProcessorState(String processorId, String targetState, long timeoutMs) {

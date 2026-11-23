@@ -52,6 +52,32 @@ import org.ssssssss.script.runtime.function.MagicScriptLambdaFunction;
 
 /** Execute the editable script against the actual Magic SQL module, including pagination. */
 class NifiNodeListMagicTest {
+    @Test void nodeOptionsExposeSafeReadinessWithConstantQueriesForTwentyAndHundredRows() throws Exception {
+        var reads = new java.util.ArrayList<Integer>();
+        for (int count : new int[]{20, 100}) {
+            var fixture = new Fixture(count);
+            fixture.jdbc.execute("alter table sym_dict_t add sort_no int default 0");
+            fixture.jdbc.update("update nifi_node_t set enabled=1,base_url='http://anonymous.example',auth_username=null,auth_password=null where tenant_id='police'");
+            fixture.counter.reads = 0;
+            String source = CanonicalMagicSources.byId("ods_nifi_node_access_options_01")
+                    .replaceAll("(?m)^import [^\\r\\n]*\\r?\\n", "");
+            var result = assertInstanceOf(Map.class, MagicScript.create(source, null).execute(new MagicScriptContext(Map.of(
+                    "body", Map.of(), "db", fixture.db, "tenantRuntime", fixture.scope,
+                    "nodeConfiguration", NifiNodeConfigurationMagicTest.function()))));
+            var rows = assertInstanceOf(List.class, result.get("list"));
+            assertEquals(count, rows.size());
+            for (Object value : rows) {
+                var row = assertInstanceOf(Map.class, value);
+                assertEquals(true, row.get("configurationValid"));
+                assertEquals("ANONYMOUS_HTTP", row.get("authenticationMode"));
+                assertFalse(row.containsKey("authPassword"));
+                assertFalse(row.containsKey("authUsername"));
+            }
+            reads.add(fixture.counter.reads);
+        }
+        assertEquals(reads.getFirst(), reads.getLast());
+        System.out.println("NiFi node option readiness 20/100: SQL reads=" + reads);
+    }
     @Test void storedPasswordIsReadOnlyOnExplicitSingleNodeRequestAndNeverInLists() throws Exception {
         var fixture=new Fixture(1);
         var listed=fixture.firstNode();
@@ -343,8 +369,10 @@ class NifiNodeListMagicTest {
         Object executeConfiguration(Map<String,Object> inputs) throws Exception {
             var actual = CanonicalMagicSources.byPath("function/01.通用函数/78.读取NiFi运行节点配置.ms",
                     "nifi_runtime_node_read_v1").replaceAll("(?m)^import (?:tableRead|tenantRuntime)\\R", "");
+            actual = actual.replace("import '@/common/nifinodeconfig' as nodeConfiguration", "");
             var bindings = new LinkedHashMap<String, Object>();
             bindings.putAll(inputs);
+            bindings.put("nodeConfiguration", NifiNodeConfigurationMagicTest.function());
             bindings.put("tenantRuntime", new com.linewell.dataelement.platform.tenant.api.TenantMagicModule(null));
             bindings.put("tableRead", TaskRuntimeMagicFixture.structuredReads(jdbc, sql -> configurationReads++));
             return MagicScript.create(actual, null).execute(new MagicScriptContext(bindings));

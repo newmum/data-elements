@@ -30,6 +30,7 @@ import { probeColumns, probeRegisteredMysqlColumns, probeTables, testConnection,
 import { getApiErrorMessage, hiveMetadataConfigError } from '@/api/response';
 import { fetchDatabases, fetchDatabaseDetail, type ApiPullItem, type DbDictItem, type MaterializeTarget } from '@/api/dataassets';
 import FieldMappingEditor from './FieldMappingEditor';
+import { mappingVersions, type MappingTargetRef } from '../api/fieldMapping';
 import MaterializeTableModal from './MaterializeTableModal';
 import { getNifiOverlayContainer } from './overlayContainer';
 import { registeredDatasourceId, resolveDatasourceId } from '@/api/datasourceIdentity';
@@ -377,7 +378,7 @@ const GROUP_LABELS: Record<string, string> = {
 const FIELD_MAPPING_DEFAULT = JSON.stringify({
   schemaVersion: '2.0',
   executionEngine: 'JAVA_RECORD',
-  policies: {recordErrorMode:'FAIL_FLOWFILE',onMissingSource:'NULL',allowUnmappedPassthrough:false,caseSensitive:true,zoneId:'Asia/Shanghai',locale:'zh-CN'},
+  policies: {recordErrorMode:'FAIL_FLOWFILE',onMissingSource:'NULL',allowUnmappedPassthrough:false,caseSensitive:false,zoneId:'Asia/Shanghai',locale:'zh-CN'},
   rules: [],
 }, null, 2);
 
@@ -546,6 +547,7 @@ export default function ConfigDrawer() {
   const { data: manifests } = useComponentManifests();
   const allNodes = useCanvasStore((s) => s.nodes);
   const allEdges = useCanvasStore((s) => s.edges);
+  const [dbList, setDbList] = useState<DbDictItem[]>([]);
 
   const manifest = useMemo<ComponentManifest | undefined>(
     () => manifests?.find((m) => m.key === node?.manifestKey),
@@ -573,6 +575,19 @@ export default function ConfigDrawer() {
     ? mappingColumnNodes(node.id, allNodes, allEdges) : undefined,
   [allNodes, allEdges, node?.id, manifest?.key]);
 
+  const mappingReferences = useMemo(() => {
+    const sources = (mappingContext?.sources ?? []).flatMap(candidate => {
+      const reference = mappingTableReference(candidate, 'source', dbList, manifests ?? []);
+      return reference ? [{ nodeId: candidate.id, label: candidate.label, reference }] : [];
+    });
+    const targetRefs: MappingTargetRef[] = (mappingContext?.targets ?? []).flatMap(candidate => {
+      const reference = mappingTableReference(candidate, 'target', dbList, manifests ?? []);
+      return reference ? [{ nodeId: candidate.id, label: candidate.label, reference }] : [];
+    });
+    const uniqueSources = sources.filter((source, index) => sources.findIndex(other => JSON.stringify(other.reference) === JSON.stringify(source.reference)) === index);
+    return { sourceRef: uniqueSources[0]?.reference, targetRef: targetRefs[0]?.reference, targetRefs, sources };
+  }, [mappingContext, dbList, manifests]);
+
   /** Keep every physical column, including fields without a database comment. */
   const columnMeta = useMemo(() => {
     if (!mappingContext) return undefined;
@@ -581,44 +596,73 @@ export default function ConfigDrawer() {
       targetLabels: columnLabels(columnsForMapping(mappingContext.target, 'target')),
       sourceSchema: columnsForMapping(mappingContext.source, 'source').map((raw) => { const c = raw as any; return { name: String(c.columnName ?? ''), type: String(c.dataType ?? c.columnType ?? ''), nullable: c.nullable !== false, isPk: c.primaryKey === true }; }).filter(c => c.name),
       targetSchema: columnsForMapping(mappingContext.target, 'target').map((raw) => { const c = raw as any; return { name: String(c.columnName ?? ''), type: String(c.dataType ?? c.columnType ?? ''), nullable: c.nullable !== false, isPk: c.primaryKey === true, hasDefault: c.columnDefault != null }; }).filter(c => c.name),
+      targets: mappingContext.targets.map(target => ({ nodeId: target.id, label: target.label || String(target.config.table ?? target.config.tableName ?? target.id),
+        table: String(target.config.table ?? target.config.tableName ?? target.config.targetTable ?? ''),
+        fields: columnsForMapping(target, 'target').map(raw => { const column = raw as any; return { name: String(column.columnName ?? ''), type: String(column.dataType ?? column.columnType ?? ''), nullable: column.nullable !== false }; }).filter(field => field.name) })),
     };
   }, [mappingContext]);
 
   // Old saved tasks can have a table but no sourceColumns. Opening the mapping
   // editor must load those columns, without requiring a visit to the source node.
-  const mappingProbeKey = JSON.stringify(mappingContext ? missingMappingColumnProbes(mappingContext) : []);
+  const mappingProbeKey = JSON.stringify({ requests: mappingContext ? missingMappingColumnProbes(mappingContext) : [], references: mappingReferences });
   const [mappingProbeState, setMappingProbeState] = useState({ key: '', loading: false, error: '' });
   const [mappingProbeRetry, setMappingProbeRetry] = useState(0);
-  const mappingColumnsLoading = mappingProbeKey !== '[]'
+  const mappingColumnsLoading = !!(mappingContext && missingMappingColumnProbes(mappingContext).length)
     && (mappingProbeState.key !== mappingProbeKey || mappingProbeState.loading);
   useEffect(() => {
-    const requests = JSON.parse(mappingProbeKey) as ReturnType<typeof missingMappingColumnProbes>;
+    const { requests, references } = JSON.parse(mappingProbeKey) as {
+      requests: ReturnType<typeof missingMappingColumnProbes>;
+      references: typeof mappingReferences;
+    };
     if (!requests.length) {
       setMappingProbeState({ key: mappingProbeKey, loading: false, error: '' });
       return;
     }
     let cancelled = false;
     setMappingProbeState({ key: mappingProbeKey, loading: true, error: '' });
-    Promise.allSettled(requests.map((request) => probeColumns(request.manifestKey, request.config, request.table)))
-      .then((results) => {
-        if (cancelled) return;
-        const failures: string[] = [];
-        results.forEach((result, index) => {
-          const request = requests[index];
-          const data = result.status === 'fulfilled' ? result.value : undefined;
-          if (!data?.success || !Object.keys(columnLabels(data.columns)).length) {
-            const reason = result.status === 'rejected' ? getApiErrorMessage(result.reason, '字段探查失败')
-              : data?.error || '未探查到字段';
-            failures.push(`${request.side === 'source' ? '来源表' : '目标表'} ${request.table}：${reason}`);
-            return;
+    void (async () => {
+      const failures: string[] = [], completed = new Set<string>();
+      const applyColumns = (request: typeof requests[number], columns: unknown[]) => {
+        if (cancelled || !Object.keys(columnLabels(columns)).length) return;
+        completed.add(request.nodeId);
+        updateConfig(request.nodeId, request.side === 'source' ? {
+          sourceColumns: columns,
+          sourceColumnsByTable: { ...(request.config.sourceColumnsByTable as Record<string, unknown> ?? {}), [request.table]: columns },
+        } : { targetColumns: columns });
+      };
+      if (references.sourceRef || references.targetRefs.length) {
+        try {
+          // All registered target tables share one authorized, bounded query.
+          const schema = await mappingVersions.schema(references.sourceRef, references.targetRef, false, references.targetRefs);
+          for (const request of requests) {
+            const fields = request.side === 'source' && references.sources.some(source => source.nodeId === request.nodeId && JSON.stringify(source.reference) === JSON.stringify(references.sourceRef))
+              ? schema.source : schema.targets?.find(target => target.nodeId === request.nodeId)?.fields
+                ?? (request.nodeId === references.targetRefs[0]?.nodeId ? schema.target : undefined);
+            if (Array.isArray(fields)) applyColumns(request, fields.map(field => ({
+              columnName: field.name, columnComment: field.comment ?? '', dataType: field.physicalType ?? field.logicalType ?? field.type,
+              nullable: field.nullable, length: field.length, precision: field.precision, scale: field.scale,
+            })));
           }
-          updateConfig(request.nodeId, request.side === 'source' ? {
-            sourceColumns: data.columns,
-            sourceColumnsByTable: { ...(request.config.sourceColumnsByTable as Record<string, unknown> ?? {}), [request.table]: data.columns },
-          } : { targetColumns: data.columns });
-        });
-        setMappingProbeState({ key: mappingProbeKey, loading: false, error: failures.join('；') });
-      });
+        } catch (error) { failures.push(getApiErrorMessage(error, '登记字段读取失败')); }
+      }
+      const missing = requests.filter(request => !completed.has(request.nodeId));
+      const otherSources = missing.filter(request => request.side === 'source' && references.sources.some(source => source.nodeId === request.nodeId));
+      if (otherSources.length) failures.push('多个不同来源的字段需先在来源组件中探查：' + otherSources.map(request => request.table).join('、'));
+      const unregistered = missing.filter(request => request.side === 'source'
+        ? !references.sources.some(source => source.nodeId === request.nodeId)
+        : !references.targetRefs.some(target => target.nodeId === request.nodeId));
+      if (unregistered.length === 1) {
+        const request = unregistered[0];
+        try {
+          const result = await probeColumns(request.manifestKey, request.config, request.table);
+          if (result.success && result.columns?.length) applyColumns(request, result.columns);
+          else failures.push(`${request.table}：${result.error || '未探查到字段'}`);
+        } catch (error) { failures.push(`${request.table}：${getApiErrorMessage(error, '字段探查失败')}`); }
+      } else if (unregistered.length > 1) {
+        failures.push('请先在各来源或目标组件中探查字段：' + unregistered.map(request => request.table).join('、'));
+      }
+      if (!cancelled) setMappingProbeState({ key: mappingProbeKey, loading: false, error: failures.join('；') });
+    })();
     return () => { cancelled = true; };
   }, [mappingProbeKey, mappingProbeRetry, updateConfig]);
 
@@ -780,7 +824,6 @@ export default function ConfigDrawer() {
 
   const [testing, setTesting] = useState(false);
   const [probing, setProbing] = useState(false);
-  const [dbList, setDbList] = useState<DbDictItem[]>([]);
   const [dbLoading, setDbLoading] = useState(false);
   const [dbLoadError, setDbLoadError] = useState('');
   const [tableLoading, setTableLoading] = useState(false);
@@ -1725,9 +1768,7 @@ export default function ConfigDrawer() {
                 <FieldMappingEditor
                   value={node.config[field.key] ?? FIELD_MAPPING_DEFAULT}
                   onChange={(v) => updateConfig(node.id, { [field.key]: v })}
-                  assetContext={{pipelineId:mappingPipelineId,nodeId:node.id,
-                    sourceRef:mappingTableReference(mappingContext?.source, 'source', dbList, manifests ?? []),
-                    targetRef:mappingTableReference(mappingContext?.target, 'target', dbList, manifests ?? [])}}
+                  assetContext={{pipelineId:mappingPipelineId,nodeId:node.id,...mappingReferences}}
                   columnMeta={columnMeta}
                   datasources={dbList.map(item=>({value:String(item.id??item.value),label:item.label}))}
                   columnsLoading={mappingColumnsLoading}

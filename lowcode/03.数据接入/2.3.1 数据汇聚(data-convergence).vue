@@ -153,6 +153,13 @@
                           </div>
                         </template>
                       </div>
+                      <div class="task-link-card__nodes">
+                        <span v-for="task in route.tasks" :key="task.tid || task.id" :title="task.runtimeMessage || ''">
+                          {{ task.taskName || '接入任务' }} · {{ task.nifiNodeName || (task.nifiNodeId ? `节点 ${task.nifiNodeId}` : '节点待绑定') }}
+                          <small v-if="task.nifiNetworkCode">（{{ task.nifiNetworkCode }}）</small>
+                          <small v-if="task.runtimeFresh !== true"> · {{ task.runtimeMessage || '状态待确认' }}</small>
+                        </span>
+                      </div>
                       <div v-if="route.warning" class="task-link-card__warning">{{ route.warning }}</div>
 
                     </article>
@@ -1953,6 +1960,7 @@ onUnmounted(() => {
 .task-link-arrow__line { position: relative; display: block; flex: 1 1 0; min-width: 6px; height: 1px; background: currentColor; }
 .task-link-arrow__line--end::after { position: absolute; top: -2px; right: 1px; width: 5px; height: 5px; border-top: 1px solid currentColor; border-right: 1px solid currentColor; transform: rotate(45deg); content: ''; }
 .task-link-card__warning { margin-top: 8px; color: var(--el-color-warning); font-size: 12px; }
+.task-link-card__nodes { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 8px; color: var(--el-text-color-secondary); font-size: 12px; }
 .task-links-wrap--compact .task-targets { flex-basis: 180px; }
 
 .source-select-empty {

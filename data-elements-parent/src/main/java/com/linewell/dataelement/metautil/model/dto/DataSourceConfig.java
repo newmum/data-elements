@@ -259,7 +259,15 @@ public class DataSourceConfig {
                 if (extraParams != null && !extraParams.isEmpty()) {
                     url.append(extraParams.startsWith(";") ? extraParams : ";" + extraParams.replace("&", ";"));
                 } else {
-                    url.append(";encrypt=false;trustServerCertificate=true;loginTimeout=30;socketTimeout=60000");
+                    String encrypt = option(null, "encrypt");
+                    String trust = option(null, "trustServerCertificate");
+                    if (encrypt != null && !java.util.Set.of("true", "false", "strict").contains(encrypt.toLowerCase(java.util.Locale.ROOT)))
+                        throw new IllegalArgumentException("SQL Server encrypt须为true、false或strict");
+                    if (trust != null && !java.util.Set.of("true", "false").contains(trust.toLowerCase(java.util.Locale.ROOT)))
+                        throw new IllegalArgumentException("SQL Server trustServerCertificate须为true或false");
+                    url.append(";encrypt=").append(encrypt == null ? "false" : encrypt)
+                            .append(";trustServerCertificate=").append(trust == null ? "true" : trust)
+                            .append(";loginTimeout=30;socketTimeout=60000");
                 }
                 break;
 

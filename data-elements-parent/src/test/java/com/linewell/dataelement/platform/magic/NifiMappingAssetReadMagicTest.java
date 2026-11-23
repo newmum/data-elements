@@ -8,19 +8,22 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 import static org.mockito.ArgumentMatchers.eq;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.linewell.dataelement.feature.dataaccess.domain.RegisteredJdbcEndpoint;
 import com.linewell.dataelement.feature.dataaccess.infrastructure.jdbc.RegisteredJdbcDataSourceResolver;
+import com.linewell.dataelement.integration.nifi.canvas.compile.DateTableFetchPolicy;
 import com.linewell.dataelement.integration.nifi.canvas.lifecycle.NifiMutationAspect;
 import com.linewell.dataelement.integration.nifi.canvas.mapping.FieldMappingService;
 import com.linewell.dataelement.integration.nifi.canvas.mapping.MappingProjectionService;
 import com.linewell.dataelement.integration.nifi.canvas.mapping.MappingUpgradeService;
-import com.linewell.dataelement.integration.nifi.canvas.mapping.PublishedMappingLifecycleService;
+import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient;
 import com.linewell.dataelement.integration.nifi.canvas.pipeline.NifiNodeMapping;
 import com.linewell.dataelement.integration.nifi.canvas.pipeline.Pipeline;
 import com.linewell.dataelement.integration.nifi.canvas.pipeline.PipelineRepository;
@@ -57,10 +60,12 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.mock.http.MockHttpInputMessage;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 import org.ssssssss.magicapi.core.config.MagicConfiguration;
@@ -271,6 +276,33 @@ class NifiMappingAssetReadMagicTest {
         verify(fixture.schemas, times(1)).physicalBatch(bound);
     }
 
+    @ParameterizedTest @ValueSource(ints={20,100})
+    void sharedSchemaReadsAllTargetsTogetherAndRejectsAnyUnauthorizedBranch(int size)throws Throwable {
+        var fixture=new Fixture();var fields=JSON.createArrayNode();
+        for(int i=0;i<size;i++)fields.addObject().put("name","field_"+i).put("logicalType","STRING");
+        var input=JSON.createObjectNode().put("verifyPhysical",true);
+        var primary=input.putObject("targetRef").put("datasourceId","oracle-db").put("tableId","oracle-table");
+        var targets=input.putArray("targetRefs");
+        targets.addObject().put("nodeId","ob").put("label","OB目标").set("reference",primary.deepCopy());
+        var hive=targets.addObject().put("nodeId","hive").put("label","Hive目标").putObject("reference").put("datasourceId","hive-db").put("tableId","hive-table");
+        var references=Map.<String,JsonNode>of("target",primary,"target:0",primary,"target:1",hive);
+        var ob=new RegisteredMappingSchemaService.Resolved("oracle-db","oracle-table","validation","out",fields,Map.of());
+        var hv=new RegisteredMappingSchemaService.Resolved("hive-db","hive-table","validation","out",fields,Map.of());
+        var bound=Map.of("target",ob,"target:0",ob,"target:1",hv);
+        when(fixture.schemas.resolve(references)).thenReturn(bound);
+        when(fixture.schemas.physicalBatch(bound)).thenReturn(Map.of("target",fields,"target:0",fields,"target:1",fields));
+        var result=pageBody(fixture.run("schema",Map.of(),Map.of("body",input)));
+        assertThat(result.path("targets").size()).isEqualTo(2);
+        assertThat(result.at("/targets/1/fields").size()).isEqualTo(size);
+        assertThat(result.at("/targets/1/reference/tableId").asText()).isEqualTo("hive-table");
+        verify(fixture.schemas).resolve(references);verify(fixture.schemas).physicalBatch(bound);
+        doThrow(new MappingException("RESOURCE_FORBIDDEN","denied")).when(fixture.schemas).resolve(references);
+        assertError(fixture.run("schema",Map.of(),Map.of("body",input)),"RESOURCE_FORBIDDEN");
+        verify(fixture.schemas,times(1)).physicalBatch(bound);
+        ((com.fasterxml.jackson.databind.node.ObjectNode)targets.get(1)).put("nodeId","ob");
+        assertError(fixture.run("schema",Map.of(),Map.of("body",input)),"INVALID_SCHEMA");
+    }
+
     @ParameterizedTest
     @ValueSource(ints = {20, 100})
     void sampleMasksAllValuesAndMakesOneRegisteredSampleAndOnePreview(int size) throws Throwable {
@@ -390,30 +422,42 @@ class NifiMappingAssetReadMagicTest {
     @ValueSource(ints = {20, 100})
     void publishedStartBatchesReferencesAndReauthorizesEveryImmutablePlanBeforeNativeReads(int size) throws Throwable {
         var fixture = new Fixture();
-        fixture.nativeCanvas();
+        fixture.nativePublishedGraph(size);
         var document = JSON.createObjectNode().put("schemaVersion", "2.0").put("marker", "original");
         for (int index = 0; index < size; index++) {
             String id = "plan-" + index;
-            fixture.plan(id, "tenant-a", "canvas", "node-" + index, document.toString());
-            fixture.jdbc.update("INSERT INTO data_access_mapping_publication_t VALUES ('tenant-a','canvas',?,?)", "node-" + index, id);
+            fixture.publishedPlan(id, "node-" + index, document);
         }
         fixture.plan("outside", "tenant-b", "canvas", "foreign-node", document.toString());
         fixture.plan("wrong-canvas", "tenant-a", "outside", "node", document.toString());
         fixture.jdbc.update("INSERT INTO data_access_mapping_publication_t VALUES ('tenant-b','canvas','foreign-node','outside'),"
                 + "('tenant-a','outside','unrelated','wrong-canvas')");
         var request = JSON.createObjectNode().put("pipelineId", "canvas").put("expectedUpdatedAt", 5);
-        when(fixture.nativeLifecycle.start(any(), any(), eq("tenant-a"))).thenReturn(Map.of("draftPublished", false));
+        String savedDraft = fixture.savedDraft();
         try (var tenant = TenantContext.use("tenant-a")) {
             var valid = fixture.run("published", Map.of(), Map.of("body", request));
-            assertThat(page(valid)).containsEntry("draftPublished", false);
+            assertThat(page(valid)).containsEntry("draftPublished", false).containsEntry("mode", "PUBLISHED_NATIVE_GRAPH")
+                    .containsEntry("oneShotSourceCount", 1);
             assertThat(fixture.queries).hasSize(4).allMatch(sql -> sql.contains("tenant_id"));
             verify(fixture.mapping).compileBatch(org.mockito.ArgumentMatchers.argThat(plans ->
                     plans.size() == size && document.equals(plans.get("plan-0"))));
-            verify(fixture.nativeLifecycle).start(any(), org.mockito.ArgumentMatchers.argThat(plans -> plans.size() == size), eq("tenant-a"));
-            org.mockito.Mockito.clearInvocations(fixture.nativeLifecycle, fixture.mapping);
+            verify(fixture.nifi).getProcessGroup("group");
+            verify(fixture.nifi).get("/flow/process-groups/group", JsonNode.class);
+            verify(fixture.nifi).put(eq("/flow/process-groups/group"),
+                    org.mockito.ArgumentMatchers.argThat((JsonNode command) -> command.path("state").asText().equals("RUNNING")
+                            && command.path("components").size() == size
+                            && !command.path("components").has("source")), eq(JsonNode.class));
+            verify(fixture.nifi).put(eq("/processors/source/run-status"),
+                    org.mockito.ArgumentMatchers.argThat((JsonNode command) -> command.path("state").asText().equals("RUN_ONCE")
+                            && command.path("revision").path("version").asInt() == 1), eq(JsonNode.class));
+            verifyNoMoreInteractions(fixture.nifi);
+            assertThat(fixture.runtimeStatus()).isEqualTo("RUNNING");
+            assertThat(fixture.savedDraft()).isEqualTo(savedDraft);
+            request.put("expectedUpdatedAt", fixture.runtimeVersion());
+            org.mockito.Mockito.clearInvocations(fixture.nifi, fixture.mapping);
             doThrow(new MappingException("RESOURCE_FORBIDDEN", "revoked")).when(fixture.mapping).compileBatch(any());
             assertError(fixture.run("published", Map.of(), Map.of("body", request)), "RESOURCE_FORBIDDEN");
-            verifyNoInteractions(fixture.nativeLifecycle);
+            verifyNoInteractions(fixture.nifi);
             org.mockito.Mockito.clearInvocations(fixture.mapping);
             for (String invalid : List.of("outside", "wrong-canvas", "missing")) {
                 fixture.jdbc.update("UPDATE data_access_mapping_publication_t SET plan_id=? WHERE tenant_id='tenant-a' AND node_id='node-0'", invalid);
@@ -423,7 +467,93 @@ class NifiMappingAssetReadMagicTest {
             fixture.jdbc.update("UPDATE data_access_mapping_publication_t SET plan_id='plan-0' WHERE tenant_id='tenant-a' AND node_id='node-0'");
             fixture.jdbc.update("INSERT INTO data_access_mapping_publication_t VALUES ('tenant-a','canvas','node-0','plan-1')");
             assertError(fixture.run("published", Map.of(), Map.of("body", request)), size == 100 ? "BUDGET_EXCEEDED" : "RESOURCE_CORRUPTED");
-            verifyNoInteractions(fixture.mapping, fixture.nativeLifecycle);
+            verifyNoInteractions(fixture.mapping, fixture.nifi);
+        }
+    }
+
+    @Test
+    void publishedStartChecksTheEmbeddedReferenceInTheSingleChildScope() throws Throwable {
+        var fixture = new Fixture();
+        var root = fixture.nativePublishedGraph(1);
+        fixture.publishedPlan("plan-0", "node-0", JSON.createObjectNode());
+        var processors = (ArrayNode) root.path("processors");
+        var transform = processors.remove(1);
+        var properties = (ObjectNode) transform.path("component").path("config").path("properties");
+        properties.remove("plan-id");
+        properties.put("execution-plan", "{\"_deployment\":{\"planId\":\"plan-0\"}}");
+        ((ArrayNode) root.path("processGroups")).addObject().put("id", "child");
+        var child = JSON.createObjectNode();
+        child.putArray("processGroups");
+        child.putArray("connections");
+        child.putArray("processors").add(transform);
+        fixture.stubFlow("child", child);
+        var request = JSON.createObjectNode().put("pipelineId", "canvas").put("expectedUpdatedAt", 5);
+        try (var tenant = TenantContext.use("tenant-a")) {
+            assertThat(page(fixture.run("published", Map.of(), Map.of("body", request)))).containsEntry("draftPublished", false);
+            verify(fixture.nifi).get("/flow/process-groups/group", JsonNode.class);
+            verify(fixture.nifi).get("/flow/process-groups/child", JsonNode.class);
+            verify(fixture.nifi).put(eq("/flow/process-groups/child"), any(), eq(JsonNode.class));
+            verify(fixture.nifi).put(eq("/processors/source/run-status"), any(), eq(JsonNode.class));
+            request.put("expectedUpdatedAt", fixture.runtimeVersion());
+            org.mockito.Mockito.clearInvocations(fixture.nifi);
+            properties.put("execution-plan", "{\"_deployment\":{\"planId\":\"foreign\"}}");
+            assertError(fixture.run("published", Map.of(), Map.of("body", request)), "PLAN_VERSION_CONFLICT");
+            verify(fixture.nifi, never()).put(any(), any(), any());
+        }
+    }
+
+    @Test
+    void publishedStartDeniesAnUnownedGraphMissingSourceOrUnknownSuccessBranchBeforeWriting() throws Throwable {
+        var fixture = new Fixture();
+        var root = fixture.nativePublishedGraph(1);
+        fixture.publishedPlan("plan-0", "node-0", JSON.createObjectNode());
+        var request = JSON.createObjectNode().put("pipelineId", "canvas").put("expectedUpdatedAt", 5);
+        try (var tenant = TenantContext.use("tenant-a")) {
+            fixture.stubGroupOwner("tenant-b");
+            assertError(fixture.run("published", Map.of(), Map.of("body", request)), "RESOURCE_FORBIDDEN");
+            verify(fixture.nifi, never()).get(any(), any());
+            fixture.stubGroupOwner("tenant-a");
+            var processors = (ArrayNode) root.path("processors");
+            var source = processors.remove(0);
+            assertError(fixture.run("published", Map.of(), Map.of("body", request)), "RUNTIME_UNAVAILABLE");
+            processors.insert(0, source);
+            ((ArrayNode) root.path("connections")).add(JSON.readTree("""
+                    {"id":"untracked","component":{"source":{"id":"source"},"destination":{"id":"candidate"},
+                    "selectedRelationships":["success"]}}
+                    """));
+            assertError(fixture.run("published", Map.of(), Map.of("body", request)), "MAPPING_UPGRADE_RECOVERY_REQUIRED");
+            verify(fixture.nifi, never()).put(any(), any(), any());
+            assertThat(fixture.runtimeVersion()).isEqualTo(5L);
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void publishedStartCompensatesAfterNativeWriteFailure(boolean stopConfirmed) throws Throwable {
+        var fixture = new Fixture();
+        fixture.nativePublishedGraph(1);
+        fixture.publishedPlan("plan-0", "node-0", JSON.createObjectNode());
+        var savedDraft = fixture.savedDraft();
+        var request = JSON.createObjectNode().put("pipelineId", "canvas").put("expectedUpdatedAt", 5);
+        doThrow(new IllegalStateException("validation start failed")).when(fixture.nifi)
+                .put(eq("/processors/source/run-status"), any(), eq(JsonNode.class));
+        if (!stopConfirmed) {
+            doThrow(new IllegalStateException("validation stop unconfirmed")).when(fixture.nifi)
+                    .waitForAllProcessorsStopped("group", 30_000L);
+        }
+        try (var tenant = TenantContext.use("tenant-a")) {
+            assertError(fixture.run("published", Map.of(), Map.of("body", request)),
+                    stopConfirmed ? "PUBLISHED_START_FAILED" : "MAPPING_UPGRADE_RECOVERY_REQUIRED");
+        }
+        verify(fixture.nifi).put(eq("/flow/process-groups/group"), any(), eq(JsonNode.class));
+        verify(fixture.nifi).setProcessGroupState("group", "STOPPED");
+        verify(fixture.nifi).waitForAllProcessorsStopped("group", 30_000L);
+        assertThat(fixture.savedDraft()).isEqualTo(savedDraft);
+        assertThat(fixture.runtimeStatus()).isEqualTo("STOPPED");
+        if (stopConfirmed) {
+            assertThat(fixture.runtimeVersion()).isGreaterThan(5L);
+        } else {
+            assertThat(fixture.runtimeVersion()).isEqualTo(5L);
         }
     }
 
@@ -665,7 +795,7 @@ class NifiMappingAssetReadMagicTest {
         final RegisteredJdbcDataSourceResolver endpoints = mock(RegisteredJdbcDataSourceResolver.class);
         final MappingProjectionService projections = mock(MappingProjectionService.class);
         final MappingUpgradeService nativeUpgrade = mock(MappingUpgradeService.class);
-        final PublishedMappingLifecycleService nativeLifecycle = mock(PublishedMappingLifecycleService.class);
+        final NifiClient nifi = mock(NifiClient.class);
         final AtomicBoolean lockAvailable = new AtomicBoolean(true);
         final Map<String, Object> globals = new LinkedHashMap<>();
         final Map<String, MagicScript> routes = new LinkedHashMap<>();
@@ -693,6 +823,8 @@ class NifiMappingAssetReadMagicTest {
                     UNIQUE (tenant_id, resource_kind, resource_key, version_no));
                     """);
             globals.put("tableRead", TaskRuntimeMagicFixture.structuredReads(jdbc, queries::add));
+            globals.put("tableWrite", new StructuredTableWriteMagicModule(jdbc));
+            globals.put("transactions", new TransactionTemplate(new DataSourceTransactionManager(jdbc.getDataSource())));
             var sources = new MagicDynamicDataSource();
             sources.setDefault(jdbc.getDataSource());
             var db = new SQLModule(sources);
@@ -715,7 +847,7 @@ class NifiMappingAssetReadMagicTest {
             globals.put("sources", endpoints);
             globals.put("projections", projections);
             globals.put("nativeUpgrade", nativeUpgrade);
-            globals.put("nativeLifecycle", nativeLifecycle);
+            globals.put("nifi", nifi);
             var lockDataSource = mock(javax.sql.DataSource.class);
             var lockConnection = mock(java.sql.Connection.class);
             var metadata = mock(java.sql.DatabaseMetaData.class);
@@ -731,6 +863,8 @@ class NifiMappingAssetReadMagicTest {
             globals.put("mutation", new NifiMutationAspect(lockDataSource));
             function("nifiDecodeCanvas", "43.海通解码保存画布.ms", "e06d4eb123494419e67f70f2fc03bceb", "row");
             function("nifiFindCanvas", "48.海通读取租户画布.ms", "nifi_pipeline_find_v1", "flowId", "tenantId");
+            function("nifiWriteRuntime", "52.海通更新画布运行记录.ms", "nifi_canvas_runtime_write_v1",
+                    "pipelineId", "tenantId", "changes");
             function("nifiPipelineReadHttp", "29.海通流程只读接口响应.ms", "nifi_pipeline_read_http_v1", "action");
             function("nifiLifecycleBody", "55.海通读取生命周期请求体.ms", "nifi_lifecycle_body_v1",
                     "input", "type", "oldType", "requiredSignature");
@@ -769,6 +903,70 @@ class NifiMappingAssetReadMagicTest {
             jdbc.update("INSERT INTO nifi_pipeline_t (id,tenant_id,updated_at,status,is_del,dsl_json,nifi_process_group_id,node_mapping_json)"
                             + " VALUES ('canvas','tenant-a',5,'STOPPED',0,?,'group',?)",
                     JSON.writeValueAsString(pipeline.dsl()), JSON.writeValueAsString(pipeline.nodeMapping()));
+        }
+
+        ObjectNode nativePublishedGraph(int size) throws Throwable {
+            nativeCanvas();
+            var primary = new LinkedHashMap<String, String>();
+            var origins = new LinkedHashMap<String, String>();
+            primary.put("source", "source");
+            origins.put("source", "source");
+            var flow = JSON.createObjectNode();
+            flow.putArray("processGroups");
+            flow.putArray("connections").add(JSON.readTree("""
+                    {"id":"connection","component":{"source":{"id":"source"},"destination":{"id":"processor-0"},
+                    "selectedRelationships":["success"]}}
+                    """));
+            var processors = flow.putArray("processors");
+            var source = processors.addObject().put("id", "source");
+            source.putObject("revision").put("version", 1);
+            source.putObject("component").put("type", DateTableFetchPolicy.TYPE).put("state", "STOPPED");
+            for (int index = 0; index < size; index++) {
+                String processorId = "processor-" + index;
+                String nodeId = "node-" + index;
+                primary.put(nodeId, processorId);
+                origins.put(processorId, nodeId);
+                var processor = processors.addObject().put("id", processorId);
+                processor.putObject("revision").put("version", 2);
+                processor.putObject("component").put("type", "validation.TransformRecord").put("state", "STOPPED")
+                        .putObject("config").putObject("properties").put("plan-id", "plan-" + index);
+            }
+            var mapping = new NifiNodeMapping(primary, origins,
+                    Map.of("edge", new NifiNodeMapping.EdgeEndpoint("source", "processor-0", "connection")));
+            jdbc.update("UPDATE nifi_pipeline_t SET node_mapping_json=? WHERE tenant_id='tenant-a' AND id='canvas'",
+                    JSON.writeValueAsString(mapping));
+            stubGroupOwner("tenant-a");
+            stubFlow("group", flow);
+            return flow;
+        }
+
+        void stubGroupOwner(String tenant) {
+            var response = JSON.createObjectNode();
+            response.putObject("component").put("comments", "data-elements:v1:" + tenant + ":pipeline:canvas");
+            when(nifi.getProcessGroup("group")).thenReturn(response);
+        }
+
+        void stubFlow(String id, ObjectNode flow) {
+            var response = JSON.createObjectNode();
+            response.putObject("processGroupFlow").set("flow", flow);
+            when(nifi.get("/flow/process-groups/" + id, JsonNode.class)).thenReturn(response);
+        }
+
+        void publishedPlan(String id, String node, JsonNode content) throws Throwable {
+            plan(id, "tenant-a", "canvas", node, content.toString());
+            jdbc.update("INSERT INTO data_access_mapping_publication_t VALUES ('tenant-a','canvas',?,?)", node, id);
+        }
+
+        String savedDraft() {
+            return jdbc.queryForObject("SELECT dsl_json FROM nifi_pipeline_t WHERE tenant_id='tenant-a' AND id='canvas'", String.class);
+        }
+
+        String runtimeStatus() {
+            return jdbc.queryForObject("SELECT status FROM nifi_pipeline_t WHERE tenant_id='tenant-a' AND id='canvas'", String.class);
+        }
+
+        long runtimeVersion() {
+            return jdbc.queryForObject("SELECT updated_at FROM nifi_pipeline_t WHERE tenant_id='tenant-a' AND id='canvas'", Long.class);
         }
 
         Pipeline sampleCanvas() {
@@ -834,8 +1032,8 @@ class NifiMappingAssetReadMagicTest {
             String source = CanonicalMagicSources.byPath(path, id);
             MagicScript.create(source, null).compile();
             source = source.replaceAll("(?m)^import '@/common/(\\w+)' as (\\w+)$", "var $2 = $1");
-            source = source.replaceAll("(?m)^import (db|tableRead|tenantRuntime|request)$", "");
-            source = source.replaceAll("(?m)^import (\\S+\\.)?\\w+ as (mapper|mapping|schemas|pipelines|projections|mutation|nativeLifecycle|nativeUpgrade|sources)$", "");
+            source = source.replaceAll("(?m)^import (db|tableRead|tableWrite|tenantRuntime|request)$", "");
+            source = source.replaceAll("(?m)^import (\\S+\\.)?\\w+ as (mapper|mapping|schemas|pipelines|projections|mutation|nativeUpgrade|nifi|transactions|sources)$", "");
             return MagicScript.create(source, null);
         }
     }

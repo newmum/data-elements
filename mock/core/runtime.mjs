@@ -310,6 +310,7 @@ export class ChengtianMockRuntime {
           mysql: "MySQL",
           postgresql: "PostgreSQL",
           oracle: "Oracle",
+          clickhouse: "ClickHouse",
           kingbase8: "Kingbase",
           dameng: "Dameng",
         }[row.dbType] || row.dbType,

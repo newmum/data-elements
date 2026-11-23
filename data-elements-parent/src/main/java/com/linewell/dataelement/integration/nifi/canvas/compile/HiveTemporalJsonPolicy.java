@@ -38,13 +38,21 @@ final class HiveTemporalJsonPolicy {
                 .forEach(node->{ordinaryTargets.add(node.id());ordinaryQueue.add(node.id());});
         while(!ordinaryQueue.isEmpty())for(String parent:incoming.getOrDefault(ordinaryQueue.removeFirst(),List.of()))
             if(ordinaryTargets.add(parent))ordinaryQueue.add(parent);
+        // Only explicit branch formatters replace the legacy upstream time writer.
+        Set<String> formatted=new HashSet<>(),legacy=new HashSet<>();
+        for(var sink:published.dsl().nodes())if(HiveSinkPublicationPolicy.isHiveSink(sink)){
+            Set<String> upstream=Boolean.parseBoolean(Objects.toString(sink.config()==null?null:sink.config().get("hiveTimestampFormat"),"false"))?formatted:legacy;
+            var parents=new ArrayDeque<String>();if(upstream.add(sink.id()))parents.add(sink.id());
+            while(!parents.isEmpty())for(String parent:incoming.getOrDefault(parents.removeFirst(),List.of()))if(upstream.add(parent))parents.add(parent);
+        }
+        formatted.retainAll(ordinaryTargets);formatted.removeAll(legacy);result.removeAll(formatted);
         var queue=new ArrayDeque<String>();Set<String> visited=new HashSet<>();
         published.dsl().nodes().stream().filter(node->node.manifestKey().startsWith("source.")&&isHive(node.manifestKey(),node.config()))
                 .forEach(node->{queue.add(node.id());visited.add(node.id());});
         while(!queue.isEmpty()) {
             String id=queue.removeFirst();var node=nodes.get(id);
             if(node!=null&&(!"sink".equals(node.category())||HiveSinkPublicationPolicy.isHiveSink(node))
-                    &&("source".equals(node.category())||!ordinaryTargets.contains(id)))result.add(id);
+                    &&!formatted.contains(id)&&("source".equals(node.category())||!ordinaryTargets.contains(id)))result.add(id);
             for(String target:outgoing.getOrDefault(id,List.of()))if(visited.add(target))queue.add(target);
         }
         return Set.copyOf(result);

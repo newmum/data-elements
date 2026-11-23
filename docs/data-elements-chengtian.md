@@ -231,6 +231,16 @@ http://localhost:3000/
 
 ### 部署建议
 
+自备MySQL、Redis和Elasticsearch的公安MySQL部署，使用 `python tools/package-police-external-overlay.py --output <覆盖补丁.zip>` 生成只含脚本及配置示例的覆盖包，应用于已交付的Linux x86_64 MySQL R3目录。先覆盖后执行新版 `bash stop.sh`，再复制 `config/external-services.json.example` 为受限的 `config/external-services.json`，分别填写控制库、公安业务库、Redis及HTTP ES节点的连接；`bash check.sh` 只验证格式、原密钥和TCP可达性，`bash start.sh` / `bash stop.sh` 只管理backend和web。原 `config/application.yml`、网页端口、网关配置、前后端文件和数据保持原文件；连接通过进程环境覆盖旧本机地址，沿用原IDAAS密钥，不重新初始化管理员。启动器不安装或启停中间件，不执行SQL、初始化或迁移外部数据库；已有数据应先由管理员备份迁移，禁止全量导入已有业务库。旧脚本已经启动的中间件须由管理员确认后单独停用，旧二进制和数据不会被覆盖包自动删除。R3自定义ES客户端只支持HTTP主机:端口，HTTPS及IPv6地址在配置检查时明确拒绝；仅脚本补丁不宣称扩展后端协议支持。覆盖包不含JAR、前端、业务初始化数据或中间件发行件，不能脱离原完整目录单独运行。
+
+公安单租户MySQL完整交付使用 `tools/package-police-mysql.py`，从当前根Magic、重新编译的低代码、前端构建和后端代码快照生成。包内提供MySQL 8.0.46、JDK21、Valkey、Caddy、Elasticsearch 7.17.29、完整控制库与公安结构、菜单字典、动态表单、公开配置和公安组织树。匹配CentOS7的MySQL原生二进制及依赖由 `--mysql-vendor` 显式指定，不能复用要求更高glibc的发行件。首次 `bash start.sh` 在独立数据目录初始化并启动，`bash stop.sh` 停止，`bash status.sh` 查询；端口在 `config/ports.json`，管理员初始密码保存在受限的 `data/local/admin-login.txt`。运行需要Python3.6或更新版本，密码算法由包内JDK执行；运行凭据在目标机器首次启动时生成。初始化保留逐脚本摘要，完整结构只用于新实例。独立ES仅监听本机19210/19310，启动器先等待搜索服务可用，再由后端准备公安资产和申请索引；租户RUNTIME同时初始化逻辑索引名，首次登录探测导航、组织和应用系统查询，失败即终止启动。业务数据和索引不从共享开发环境复制。单机包仅导入本包提供的导航，不导入开发测试页面以及指向旧内网的资产全景、统一认证、后端编辑器等外部服务链接；这些服务应在独立部署并确认访问地址后显式配置。root执行启动器时创建本目录专用服务用户，避免ES以root运行。打包产物和真实运行验证保存在忽略的 `logs/police-mysql-release/`，本机私有登录信息与公开部署包分别保存。
+
+14源数据管理演示入口统一为 `https://14.103.233.56/wanxiang/`，Nginx将该子路径转发到本机 `127.0.0.1:18291`，由独立目录 `/opt/police_mysql_demo/platform` 提供前端和后端，后端端口为 `18288`。18291仅本机监听。systemd入口为 `police-demo-mysql.service`，已设为开机启动。原共享 `data-element.service` 和旧达梦站点 `police-demo-source.service` 已停用并禁用；旧 `/opt/data-element.jar`、同类历史JAR和已替换的前端目录经授权删除。`/haitong/`、`/nifi-canvas/`、`/police-dm/` 转到统一入口，原8088代理入口已退役。旧数据库数据保留，后续部署不能根据历史文档重新启用已退役的后端。
+
+麒麟ARM64连接已有达梦8的完整包使用 `tools/package-police-dm8.py --base <已确认的公安MySQL完整包.zip> --arm-vendor <ARM运行依赖目录> --search-vendor <官方ARM版ES归档> --output <交付包.zip>` 生成。基包固定已确认的前后端及公开初始化资源，不读取其他窗口正在修改的运行版本。达梦业务结构复用 `db/baseline_beijing_gd/init.sql` 的原生定义，控制结构由受检的DDL适配器生成，包含表、约束、索引、注释、视图和触发器；长脚本、低代码及表单通过校验过的TSV和参数化JDBC字符流导入。生成器核对JDK、缓存、网关及ES发行件内的ARM ELF标识，启动器还会在执行原生程序前检查关键文件。`--prepare-only` 可只准备结构和数据供隔离达梦验证。
+
+该包无需Nacos，不安装或管理外部达梦服务。部署者复制 `config/database.json.example` 为受限的 `config/database.json`，填写达梦URL和两个同名独立账号/schema，默认 `baseline`、`baseline_ga`；设置 `createUsers=true` 并提供DBA凭据时，只创建缺少的账号，已有账号不改密、不重授权。连接检查要求UTF-8、大小写不敏感、32KB页和内存生效的 `COMPATIBLE_MODE=4`，不会修改实例参数或重启数据库。`bash start.sh` 首次验证两个schema为空后导入完整初始化内容，再启动包内ARM JDK、Valkey、ES和Caddy；同目录后续启动核对目标指纹并只检查连接，禁止重复全量导入。初始化中断保留数据与标记，要求核查而非自动清库。`bash stop.sh` 只停止本包进程。独立租户管理和菜单管理入口不在默认菜单中，权限管理内的菜单维护功能、相关Magic和组件仍完整保留。
+
 同一域名下部署彼此独立的实例时，可在构建时设置 `VITE_APP_STORAGE_PREFIX`，例如 `police-dm`，使该实例的登录令牌与界面偏好使用独立的浏览器存储键。子路径部署可将 `VITE_APP_BASE_API` 设为 `./prod-api`、将 `VITE_APP_NIFI_API` 设为 `./prod-api/nifi/api`，并由该站点的网关转发同一子路径下的接口。
 
 公安单租户达梦部署的初始化数据包含当前公安门户公开配置、`orgRootId`、既有资源数据范围配置和完整有效组织树。源配置从当前绑定的公安库读取，控制库只读取 `GLOBAL` 门户配置，再以公安公开品牌字段生成登录前的全局品牌缺省值，仅导出已审阅的公开品牌字段和上述两个租户内部配置项。使用 `python tools/export-police-defaults.py --tenant-database <当前公安库名>` 导出到 `tools/police-deployment/db/`，脚本核对当前租户绑定、配置键、内嵌 Logo 与组织父子关系。连接信息留在仓库外。NiFi、SSO、对象存储等环境连接继续在目标环境配置。
@@ -504,6 +514,8 @@ ES 资产投影从当前澄天主表及白名单属性重新生成，按每批 2
 维护验证使用 `tools/tests/service-registration-ui.test.mjs`、`tools/tests/service-list.test.mjs` 与 Maven 的 `ProxyDatasourceServiceMagicTest`。列表每页 20、100 条均为一次分页请求。普通部门列表 5 条租户 SQL，按参数数排序 4 条。分组树 2 条，普通详情 4 条。列表和详情指定来源时增加一次父数据源校验，返回有数据的页面或详情时另执行一次控制库脚本计数。角色计算的固定开销单独计算。定向回归覆盖来源与服务两层授权、同部门不同登记人、软删除、跨租户、伪造部门及超过一页的参数排序。普通服务更新 20、100 个参数均为 2 次前置读取，代理服务更新另核验父源。
 
 ## 节点配置
+
+接入申请的节点选项由 `POST /ods/node/options` 一次返回当前租户的已启用节点及公开配置状态：`configurationValid`、`configurationMessage`、`configurationIssues`、`authenticationMode`，不返回用户名、密码或token。HTTP地址且用户名、密码同时留空时使用免认证；其余节点须填写完整的NiFi用户名和密码。地址、编码及认证配置缺失时，提示节点名称、地址、ID和具体缺失项。节点被用户选择后不因失效、网络不符或清空而悄悄替换为默认节点；默认项仅用于首次初始化。申请页选择时显示错误，提交前再次检查；物化建表和任务创建接口在任何DDL、登记及任务写入前按当前租户批量复核节点。所选节点保存到物化治理配置及任务的 `runtimeNodeId`，各节点不共享认证凭据，已有部署仍保持其绑定且不自动迁移。
 
 后台管理的“节点配置”统一使用 `#/node-config`。原 `#/register/nifi-node-config` 和 `#/register/node-config` 保留跳转，菜单权限与低代码组件标识 `nifi-node-config` 不变。
 

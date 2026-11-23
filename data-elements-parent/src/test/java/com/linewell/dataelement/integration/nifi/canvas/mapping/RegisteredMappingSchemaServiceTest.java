@@ -22,6 +22,138 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 class RegisteredMappingSchemaServiceTest {
+    @Test void twentyAndHundredSamplesUseStandardTemporalGettersAndNeverGuessUnitsForNumberColumns()throws Exception {
+        for(int count:List.of(20,100)){
+            Fixture f=new Fixture(1);
+            f.columns=new ArrayList<>(List.of(sampleColumn("event_time","TIMESTAMP"),sampleColumn("date_only","DATE"),
+                    sampleColumn("local_time","TIME"),sampleColumn("numeric_time","NUMBER")));
+            // A semantic registration label must not turn a physical NUMBER into a JDBC timestamp.
+            f.columns.get(3).put("data_standard_id","DATETIME");
+            when(f.metadata.getIdentifierQuoteString()).thenReturn("\"");
+            ResultSet result=mock(ResultSet.class);ResultSetMetaData metadata=mock(ResultSetMetaData.class);
+            when(f.statement.executeQuery()).thenReturn(result);when(result.getMetaData()).thenReturn(metadata);
+            when(metadata.getColumnType(1)).thenReturn(Types.TIMESTAMP);when(metadata.getColumnType(2)).thenReturn(Types.DATE);
+            when(metadata.getColumnType(3)).thenReturn(Types.TIME);when(metadata.getColumnType(4)).thenReturn(Types.NUMERIC);
+            AtomicInteger cursor=new AtomicInteger(-1);when(result.next()).thenAnswer(ignored->cursor.incrementAndGet()<count);
+            List<Timestamp> timestamps=List.of(Timestamp.valueOf("2026-11-23 10:20:30.123456789"),
+                    Timestamp.valueOf("1970-01-01 00:00:01"),Timestamp.valueOf("1969-12-31 23:59:59"));
+            List<java.sql.Date> dates=List.of(java.sql.Date.valueOf("2026-11-23"),java.sql.Date.valueOf("1949-10-01"));
+            Time time=Time.valueOf("10:20:30");
+            when(result.getTimestamp(1)).thenAnswer(ignored->timestamps.get(cursor.get()%timestamps.size()));
+            when(result.getDate(2)).thenAnswer(ignored->cursor.get()%3==2?null:dates.get(cursor.get()%dates.size()));
+            when(result.getTime(3)).thenReturn(time);
+            when(result.getObject(4)).thenAnswer(ignored->java.math.BigDecimal.valueOf(cursor.get()%3-1));
+            // Some JDBC drivers return vendor wrappers whose toString looks like a timestamp.
+            // They deliberately are not java.sql temporal values or CharSequence instances.
+            Object vendorWrapper=new Object(){@Override public String toString(){return "2026-11-23 10:20:30.123456789";}};
+            when(result.getObject(1)).thenReturn(vendorWrapper);when(result.getObject(2)).thenReturn(vendorWrapper);
+            when(result.getObject(3)).thenReturn(vendorWrapper);
+            List<Map<String,Object>> sampled;
+            try(var tenant=TenantContext.use("tenant-A")){
+                var registered=f.service.resolve(f.references).get("ref-0");
+                sampled=f.service.sample(registered,count);
+            }
+            assertEquals(count,sampled.size());
+            for(int index=0;index<count;index++){
+                var row=sampled.get(index);
+                assertSame(timestamps.get(index%timestamps.size()),row.get("event_time"));
+                assertEquals(index%3==2?null:dates.get(index%dates.size()),row.get("date_only"));
+                assertSame(time,row.get("local_time"));
+                assertInstanceOf(java.math.BigDecimal.class,row.get("numeric_time"));
+                assertEquals(java.math.BigDecimal.valueOf(index%3-1),row.get("numeric_time"));
+                var error=assertThrows(MappingException.class,()->com.linewell.dataelement.mapping.core.TemporalParser.auto(
+                        row.get("numeric_time"),"DATETIME",java.time.ZoneId.of("Asia/Shanghai")));
+                assertEquals("DATE_UNIT_REQUIRED",error.code());
+            }
+            verify(f.engine,times(1)).openRegistered(eq("db"),anyMap());
+            verify(f.physical,times(1)).getMetaData();verify(f.physical,times(1)).prepareStatement(anyString());
+            verify(f.statement,times(1)).executeQuery();verify(f.statement).setMaxRows(count);
+            verify(result,times(1)).getMetaData();
+            for(int column=1;column<=4;column++)verify(metadata,times(1)).getColumnType(column);
+            verify(result,times(count)).getTimestamp(1);verify(result,times(count)).getDate(2);verify(result,times(count)).getTime(3);
+            verify(result,never()).getObject(1);verify(result,never()).getObject(2);verify(result,never()).getObject(3);
+            verify(result,times(count)).getObject(4);verify(result,never()).getTimestamp(4);verify(result,never()).getDate(4);verify(result,never()).getTime(4);
+            verify(f.sources,times(1)).resolveBatch(eq("tenant-A"),eq(Set.of("db")),anyString());
+            verify(f.jdbc,times(2)).queryForList(anyString(),any(Object[].class));
+        }
+    }
+    private static Map<String,Object> sampleColumn(String name,String type){var column=new HashMap<>(column("table-0",name));column.put("data_type",type);return column;}
+
+    @Test void jdbcMetadataAcceptsOptionalIdentityAliasesWithoutDatabaseSpecificQueries()throws Exception {
+        for(String label:List.of("IS_AUTO_INCREMENT","IS_AUTOINCREMENT","")){
+            Fixture f=new Fixture(1);f.config=Map.of("db",Map.of("dbType","HIVE","defaultSchema","business"));
+            when(f.metadata.getDatabaseProductName()).thenReturn("Apache Hive");
+            var row=new HashMap<String,Object>(jdbcColumn("catalog","business","table_0","id"));
+            if(!label.isBlank())row.put(label,"YES");
+            var columns=rows(List.of(row));var resultMetadata=mock(ResultSetMetaData.class);
+            when(columns.getMetaData()).thenReturn(resultMetadata);when(resultMetadata.getColumnCount()).thenReturn(label.isBlank()?0:1);
+            when(resultMetadata.getColumnLabel(1)).thenReturn(label);
+            if(!label.equals("IS_AUTOINCREMENT"))doThrow(new SQLException("Unknown metadata label")).when(columns).getString("IS_AUTOINCREMENT");
+            when(f.metadata.getColumns(any(),any(),any(),any())).thenReturn(columns);
+            try(var tenant=TenantContext.use("tenant-A")){
+                var result=f.service.physicalBatch(f.service.resolve(f.references));
+                assertEquals(!label.isBlank(),result.get("ref-0").get(0).path("hasDefault").asBoolean());
+            }
+            verify(columns,times(1)).getMetaData();verify(f.metadata,times(1)).getColumns(any(),any(),any(),any());
+            verify(f.jdbc,times(2)).queryForList(anyString(),any(Object[].class));
+        }
+    }
+    @Test void userChosenMappingIdsCannotHideAnotherContractsUnauthorizedReference()throws Exception {
+        Fixture f=new Fixture(2);Map<String,JsonNode> contracts=new LinkedHashMap<>();
+        var main=JSON.createObjectNode();main.set("targetRef",f.references.get("ref-0"));
+        main.putArray("targets").addObject().put("nodeId","hive").set("reference",f.references.get("ref-1"));
+        contracts.put("mapping",main);
+        var foreign=JSON.createObjectNode();foreign.putObject("sourceRef").put("datasourceId","db").put("tableId","foreign-table");
+        contracts.put("mapping / target / hive",foreign);
+        try(var tenant=TenantContext.use("tenant-A")){
+            assertEquals("RESOURCE_FORBIDDEN",assertThrows(MappingException.class,()->f.service.checkRegisteredContracts(contracts)).code());
+        }
+        verify(f.engine,never()).openRegistered(anyString(),anyMap());
+    }
+    @Test void sharedTargetsAuthorizeEveryReferenceInOneBatchAtTwentyAndHundred()throws Exception {
+        for(int count:List.of(20,100)){
+            Fixture f=new Fixture(count);Map<String,JsonNode> contracts=new LinkedHashMap<>();
+            for(int i=0;i<count;i+=2){
+                var contract=JSON.createObjectNode();var targets=contract.putArray("targets");
+                for(int j=i;j<i+2;j++)targets.addObject().put("nodeId","sink-"+j).set("reference",f.references.get("ref-"+j));
+                contracts.put("mapping-"+i,contract);
+            }
+            try(var tenant=TenantContext.use("tenant-A")){f.service.checkRegisteredContracts(contracts);}
+            verify(f.jdbc,times(2)).queryForList(anyString(),any(Object[].class));
+            verify(f.sources).resolveBatch(eq("tenant-A"),eq(Set.of("db")),anyString());
+            for(JsonNode contract:contracts.values())for(JsonNode target:contract.path("targets"))assertEquals("id",target.path("target").get(0).path("name").asText());
+            Fixture denied=new Fixture(count);denied.tables.removeLast();
+            try(var tenant=TenantContext.use("tenant-A")){
+                assertEquals("RESOURCE_FORBIDDEN",assertThrows(MappingException.class,()->denied.service.checkRegisteredContracts(contracts)).code());
+            }
+            verify(denied.engine,never()).openRegistered(anyString(),anyMap());
+        }
+    }
+    @Test void sqlServerIdentitySnapshotsAndLiveMetadataHaveTheSameIntegerContractAtTwentyAndHundred()throws Exception {
+        for(int count:List.of(20,100)){
+            Fixture f=new Fixture(count);f.config=Map.of("db",Map.of("dbType","SQLSERVER","defaultSchema","dbo"));
+            when(f.metadata.getDatabaseProductName()).thenReturn("Microsoft SQL Server");
+            f.columns=f.columns.stream().map(row->{var copy=new HashMap<String,Object>(row);copy.put("data_type","int identity");return (Map<String,Object>)copy;}).toList();
+            var physical=new ArrayList<Map<String,Object>>();
+            for(int index=0;index<count;index++){
+                var row=new HashMap<String,Object>(jdbcColumn("catalog","dbo","table_"+index,"id"));
+                row.put("TYPE_NAME","int identity");row.put("COLUMN_SIZE",10);row.put("IS_AUTOINCREMENT","YES");physical.add(row);
+            }
+            when(f.metadata.getColumns(any(),any(),any(),any())).thenAnswer(call->rows(physical));
+            try(var tenant=TenantContext.use("tenant-A")){
+                var registered=f.service.resolve(f.references);var actual=f.service.physicalBatch(registered);
+                assertEquals(count,registered.size());assertEquals(count,actual.size());
+                for(var key:f.references.keySet()){
+                    assertEquals("INT",registered.get(key).fields().get(0).path("logicalType").asText());
+                    assertEquals("INT",actual.get(key).get(0).path("logicalType").asText());
+                    assertEquals("int identity",actual.get(key).get(0).path("physicalType").asText());
+                    assertTrue(actual.get(key).get(0).path("hasDefault").asBoolean());
+                }
+            }
+            verify(f.jdbc,times(2)).queryForList(anyString(),any(Object[].class));verify(f.sources).resolveBatch(eq("tenant-A"),eq(Set.of("db")),anyString());
+            verify(f.engine).openRegistered(eq("db"),anyMap());verify(f.metadata).getColumns(eq("catalog"),eq("dbo"),eq("%"),eq("%"));
+        }
+    }
     private static final ObjectMapper JSON=new ObjectMapper();
     @Test void probeSchemaAliasesAndEmptyValuesCannotBlockMapping()throws Exception {
         for(String key:List.of("schema","currentSchema"))for(Object empty:Arrays.asList(null,"","  ")) {

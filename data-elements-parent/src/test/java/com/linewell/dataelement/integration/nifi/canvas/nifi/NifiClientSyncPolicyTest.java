@@ -49,6 +49,13 @@ class NifiClientSyncPolicyTest {
             processor.putObject("revision").put("version", 0);
             processor.putObject("component").put("state", "STOPPED").put("name", "p" + i);
         }
+        var backfill=processors.addObject().put("id","validation-backfill");
+        backfill.putObject("revision").put("version",0);
+        backfill.putObject("component").put("state","DISABLED").put("name","备用补数");
+        var completedBackfill=processors.addObject().put("id","validation-completed-backfill");
+        completedBackfill.putObject("revision").put("version",0);
+        completedBackfill.putObject("component").put("state","STOPPED").put("name","已运行补数")
+                .putObject("config").put("comments",NifiClient.MANUAL_BACKFILL_MARKER);
         doReturn(flow).when(client).get("/flow/process-groups/group", JsonNode.class);
         doReturn(idleStatus()).when(client).getProcessGroupStatus("group");
         doReturn(mapper.createObjectNode()).when(client).put(eq("/flow/process-groups/group"), any(), eq(JsonNode.class));
@@ -67,6 +74,8 @@ class NifiClientSyncPolicyTest {
         assertThat(downstream.path("state").asText()).isEqualTo("RUNNING");
         assertThat(downstream.path("components").size()).isEqualTo(size - 1);
         assertThat(downstream.path("components").has("p0")).isFalse();
+        assertThat(downstream.path("components").has("validation-backfill")).isFalse();
+        assertThat(downstream.path("components").has("validation-completed-backfill")).isFalse();
         verify(client).put(eq(runtimeNode), eq("/processors/p0/run-status"), bodies.capture(), eq(NifiEntity.class));
         JsonNode source = (JsonNode) bodies.getAllValues().getLast();
         assertThat(source.path("state").asText()).isEqualTo("RUN_ONCE");

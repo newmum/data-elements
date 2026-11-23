@@ -446,8 +446,8 @@ public class FieldMappingService {
             errors.add(new MappingIssue("mappings", null, "mappings 必须是数组", "ERROR", "INVALID_MAPPINGS", List.of()));
             return;
         }
-        Map<String, FieldMeta> sourceMap = indexFields(sources, spec.path("passthroughCaseSensitive").asBoolean(true));
-        Map<String, FieldMeta> targetMap = indexFields(targets, spec.path("passthroughCaseSensitive").asBoolean(true));
+        Map<String, FieldMeta> sourceMap = indexFields(sources, spec.path("passthroughCaseSensitive").asBoolean(false));
+        Map<String, FieldMeta> targetMap = indexFields(targets, spec.path("passthroughCaseSensitive").asBoolean(false));
         Map<String, Integer> targetCounts = new LinkedHashMap<>();
         Set<String> mappedTargets = new LinkedHashSet<>();
         for (int i = 0; i < mappingsNode.size(); i++) {
@@ -472,14 +472,14 @@ public class FieldMappingService {
             }
             targetCounts.merge(to, 1, Integer::sum);
             mappedTargets.add(to);
-            if (!targetMap.isEmpty() && !targetMap.containsKey(keyForPath(to, spec.path("passthroughCaseSensitive").asBoolean(true)))) {
+            if (!targetMap.isEmpty() && !targetMap.containsKey(keyForPath(to, spec.path("passthroughCaseSensitive").asBoolean(false)))) {
                 errors.add(new MappingIssue(path + ".to", to, "目标字段 '" + to.substring(1) + "' 不存在于目标 schema", "ERROR", "TARGET_FIELD_NOT_FOUND", suggestions(to, targets)));
             }
-            validateSourceRefs(mapping, path, sourceMap, spec.path("passthroughCaseSensitive").asBoolean(true), sources, errors);
+            validateSourceRefs(mapping, path, sourceMap, spec.path("passthroughCaseSensitive").asBoolean(false), sources, errors);
             validateMappingInput(mapping, path, errors);
-            validateExpressionRefs(mapping, path, sourceMap, mappedTargets, spec.path("passthroughCaseSensitive").asBoolean(true), sources, errors);
+            validateExpressionRefs(mapping, path, sourceMap, mappedTargets, spec.path("passthroughCaseSensitive").asBoolean(false), sources, errors);
             validateTransform(mapping, path, errors);
-            warnTypeMismatch(mapping, path, sourceMap, targetMap, spec.path("passthroughCaseSensitive").asBoolean(true), warnings);
+            warnTypeMismatch(mapping, path, sourceMap, targetMap, spec.path("passthroughCaseSensitive").asBoolean(false), warnings);
         }
         targetCounts.forEach((to, count) -> {
             if (count >= 2) {
@@ -743,7 +743,7 @@ public class FieldMappingService {
         ObjectNode spec = MAPPER.createObjectNode();
         spec.put("version", "1.0");
         spec.put("passthroughUnmapped", false);
-        spec.put("passthroughCaseSensitive", true);
+        spec.put("passthroughCaseSensitive", false);
         spec.put("onMissingSource", "NULL");
         spec.put("onTypeMismatch", "CAST");
         spec.put("defaultLocale", "zh-CN");

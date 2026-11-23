@@ -40,6 +40,68 @@ import org.ssssssss.script.runtime.ExitValue;
 
 /** Executes the canonical ensure API against H2 to guard its multi-target read path. */
 class DataAggTaskEnsureBatchMagicTest {
+    @Test void generatedAuditRulesRetainTheActualTargetSpellingForHiveStyleLowercaseFields() throws Exception {
+        var f=Fixture.forCreation(1);
+        f.jdbc.execute("alter table db_table_column_t add data_type varchar(64)");
+        f.jdbc.update("update db_table_column_t set data_type='varchar'");
+        for(String name:List.of("ods_uuid","ods_rksj","ods_gxsj"))f.jdbc.update(
+                "insert into db_table_column_t(tid,tenant_id,table_id,column_name,ordinal_position,is_del,data_type) values(?,'police','target-0',?,2,0,?)",
+                "validation-"+name,name,name.equals("ods_uuid")?"varchar":"timestamp");
+        assertInstanceOf(Map.class,f.run());
+        var nodes=cn.hutool.json.JSONUtil.parseObj(f.jdbc.queryForObject("select dsl_json from nifi_pipeline_t",String.class)).getJSONArray("nodes");
+        var mapping=nodes.stream().map(cn.hutool.json.JSONUtil::parseObj).filter(n->"transform.field-enrichment".equals(n.getStr("manifestKey")))
+                .findFirst().orElseThrow().getJSONObject("config").getStr("mappings");
+        var json=new com.fasterxml.jackson.databind.ObjectMapper();var spec=(com.fasterxml.jackson.databind.node.ObjectNode)json.readTree(mapping);
+        var target=spec.putObject("schemaContract").putArray("target");
+        target.addObject().put("name","person_id").put("logicalType","STRING");
+        target.addObject().put("name","ods_uuid").put("logicalType","STRING");
+        target.addObject().put("name","ods_rksj").put("logicalType","DATETIME");
+        target.addObject().put("name","ods_gxsj").put("logicalType","DATETIME");
+        var plan=com.linewell.dataelement.mapping.core.MappingEngine.compile(spec);
+        assertTrue(plan.outputFields().containsAll(List.of("person_id","ods_uuid","ods_rksj","ods_gxsj")));
+    }
+    @Test void sourcePhysicalIntegerContractUsesLiteralFieldReferencesAndKeepsOrdinaryBooleanDecimalRules() throws Exception {
+        for(boolean numericName:List.of(false,true)) {
+            var f=Fixture.forCreation(1);f.jdbc.execute("alter table db_table_column_t add data_type varchar(64)");f.jdbc.execute("alter table db_table_column_t add column_type varchar(64)");
+            f.jdbc.update("update db_table_column_t set data_type=?,column_type=? where table_id='source-1'",numericName?"tinyint":"boolean",numericName?"tinyint(1)":"boolean");
+            f.jdbc.update("update db_table_column_t set data_type='number',column_type='NUMBER(5)' where table_id='target-0'");
+            if(numericName)f.jdbc.update("update db_table_column_t set column_name='1231313'");
+            assertInstanceOf(Map.class,f.run());
+            var nodes=cn.hutool.json.JSONUtil.parseObj(f.jdbc.queryForObject("select dsl_json from nifi_pipeline_t",String.class)).getJSONArray("nodes");
+            var text=nodes.stream().map(cn.hutool.json.JSONUtil::parseObj).filter(n->"transform.field-enrichment".equals(n.getStr("manifestKey"))).findFirst().orElseThrow().getJSONObject("config").getStr("mappings");
+            var spec=new com.fasterxml.jackson.databind.ObjectMapper().readTree(text);String key=numericName?"1231313":"person_id";
+            var rule=spec.path("mappings").get(0);
+            if(numericName)assertEquals("CAST(${field:1231313} AS INTEGER)",rule.path("expression").asText());else assertFalse(rule.hasNonNull("expression"));
+            var plan=com.linewell.dataelement.mapping.core.MappingEngine.compile(spec);
+            var result=com.linewell.dataelement.mapping.core.MappingEngine.execute(plan,List.of(Map.of(key,true)),0,new com.linewell.dataelement.mapping.core.ExecutionContext(java.time.Instant.EPOCH,java.time.ZoneId.of("UTC"),Locale.ROOT,"validation-physical-tinyint"),null);
+            assertEquals(numericName,result.rows().getFirst().success());
+            if(numericName)assertEquals(java.math.BigDecimal.ONE,result.rows().getFirst().output().get(key));
+        }
+    }
+    @ParameterizedTest @ValueSource(strings={"tinyint(1)","tinyint(1) unsigned"})
+    void declaredMysqlTinyintsGenerateAnIntegerContractForLegacyBooleansAndNativeNumericRange(String physical) throws Exception {
+        var reads=new ArrayList<Integer>();
+        for(int count:List.of(20,100)) {
+            var f=Fixture.forCreation(count);
+            f.jdbc.execute("alter table db_table_column_t add data_type varchar(64)");f.jdbc.execute("alter table db_table_column_t add column_type varchar(64)");
+            f.jdbc.update("update db_table_column_t set data_type='tinyint',column_type=? where table_id='source-1'",physical);
+            f.jdbc.update("update db_table_column_t set data_type='number',column_type='NUMBER(5)' where table_id like 'target-%'");
+            assertInstanceOf(Map.class,f.run());reads.add(f.readCount());
+            var saved=f.jdbc.queryForObject("select dsl_json from nifi_pipeline_t limit 1",String.class);
+            var mapping=cn.hutool.json.JSONUtil.parseObj(saved).getJSONArray("nodes").stream().map(cn.hutool.json.JSONUtil::parseObj)
+                    .filter(n->n.getStr("manifestKey").equals("transform.field-enrichment")).findFirst().orElseThrow().getJSONObject("config").getStr("mappings");
+            var json=new com.fasterxml.jackson.databind.ObjectMapper();var spec=json.readTree(mapping);var rule=spec.path("mappings").get(0);
+            assertEquals("CAST(${field:person_id} AS INTEGER)",rule.path("expression").asText());assertEquals("NUMBER(5)",rule.path("targetType").asText());
+            var values=new Object[]{true,false,null,0,1,2,physical.contains("unsigned")?128:-128,physical.contains("unsigned")?255:127};
+            var rows=new ArrayList<Map<String,Object>>();for(int i=0;i<count;i++){var row=new LinkedHashMap<String,Object>();row.put("person_id",values[i%values.length]);rows.add(row);}
+            var plan=com.linewell.dataelement.mapping.core.MappingEngine.compile(spec);
+            var result=com.linewell.dataelement.mapping.core.MappingEngine.execute(plan,rows,0,new com.linewell.dataelement.mapping.core.ExecutionContext(java.time.Instant.EPOCH,java.time.ZoneId.of("Asia/Shanghai"),Locale.CHINA,"validation-tinyint"),null);
+            assertTrue(result.rows().stream().allMatch(com.linewell.dataelement.mapping.core.MappingEngine.Row::success));
+            for(int i=0;i<count;i++){Object source=values[i%values.length];Object expected=source==null?null:new java.math.BigDecimal(source instanceof Boolean b?(b?"1":"0"):source.toString());assertEquals(expected,result.rows().get(i).output().get("person_id"));}
+            var wrong=com.linewell.dataelement.mapping.core.MappingEngine.execute(plan,List.of(Map.of("person_id","true")),0,new com.linewell.dataelement.mapping.core.ExecutionContext(java.time.Instant.EPOCH,java.time.ZoneId.of("UTC"),Locale.ROOT,"validation-invalid-boolean"),null);assertFalse(wrong.rows().getFirst().success());
+        }
+        assertEquals(reads.get(0),reads.get(1),"20/100 target generation must not introduce per-target metadata reads");
+    }
     private static final String SOURCE_ID = "ods_data_agg_task_ensure_01";
 
     @ParameterizedTest @ValueSource(strings={"CLOB","STRING","JSON","JSONB"})
@@ -171,8 +233,8 @@ class DataAggTaskEnsureBatchMagicTest {
         var reads = new ArrayList<Integer>();
         for (int count : List.of(20, 100)) {
             var fixture = Fixture.forCreation(count);
-            fixture.jdbc.execute("create table nifi_node_t(tid varchar(64),tenant_id varchar(32),is_del int,enabled int)");
-            fixture.jdbc.update("insert into nifi_node_t values('secondary','police',0,1),('foreign','other-tenant',0,1)");
+            fixture.jdbc.execute("create table nifi_node_t(tid varchar(64),tenant_id varchar(32),is_del int,enabled int,node_name varchar(64),node_code varchar(64),base_url varchar(255),auth_username varchar(64),auth_password varchar(64))");
+            fixture.jdbc.update("insert into nifi_node_t(tid,tenant_id,is_del,enabled,node_name,node_code,base_url) values('secondary','police',0,1,'分节点','secondary','http://secondary.example'),('foreign','other-tenant',0,1,'其他租户节点','foreign','http://foreign.example')");
             fixture.jdbc.update("update db_table_t set field_governance_config=? where tid like 'target-%'",
                     "{\"nifiNodeId\":\"secondary\"}");
             fixture.jdbc.update("update db_table_t set field_governance_config=? where tid='target-0'",
@@ -181,6 +243,11 @@ class DataAggTaskEnsureBatchMagicTest {
             assertEquals(0, fixture.jdbc.queryForObject("select count(*) from nifi_pipeline_t", Integer.class));
             fixture.jdbc.update("update db_table_t set field_governance_config=? where tid='target-0'",
                     "{\"nifiNodeId\":\"secondary\"}");
+            fixture.jdbc.update("update nifi_node_t set base_url='https://secondary.example:8443',auth_username='validation-user' where tid='secondary'");
+            var incomplete = assertInstanceOf(ExitValue.class, fixture.run());
+            assertTrue(incomplete.getValues()[1].toString().contains("缺少NiFi密码"));
+            assertEquals(0, fixture.jdbc.queryForObject("select count(*) from nifi_pipeline_t", Integer.class));
+            fixture.jdbc.update("update nifi_node_t set auth_password='validation-password' where tid='secondary'");
             assertInstanceOf(Map.class, fixture.run());
             reads.add(fixture.counter.queries);
             assertEquals(count, fixture.jdbc.queryForObject(
@@ -1426,9 +1493,11 @@ class DataAggTaskEnsureBatchMagicTest {
             String script = CanonicalMagicSources.byId(SOURCE_ID)
                     .replaceAll("(?m)^import (jsons|metadataAsset|targetTableSchema|tenantRuntime|dataScope|tableRead|tableWrite|com\\.linewell\\.dataelement\\.metautil\\.structured\\.StructuredSourceProbeService as structuredFileProbe)\\r?\\n", "")
                     .replace("import '@/common/accesstemplate' as resolveAccessTemplate", "");
+            script = script.replace("import '@/common/nifinodeconfig' as nodeConfiguration", "");
             Map<String, Object> inputs = new LinkedHashMap<>();
             inputs.put("db", db);
             inputs.put("body", body);
+            inputs.put("nodeConfiguration", NifiNodeConfigurationMagicTest.function());
             inputs.put("tenantRuntime", scope);
             inputs.put("dataScope", scope);
             inputs.put("jsons", new JsonModule());

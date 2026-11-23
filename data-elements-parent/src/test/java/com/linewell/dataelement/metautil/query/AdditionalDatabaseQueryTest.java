@@ -1,6 +1,7 @@
 package com.linewell.dataelement.metautil.query;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
 import com.linewell.dataelement.metautil.model.dto.*;
 import com.linewell.dataelement.metautil.model.enums.DatabaseType;
 import com.linewell.dataelement.metautil.query.impl.*;
@@ -26,11 +27,32 @@ class AdditionalDatabaseQueryTest {
             }
         }
         AtomicInteger sql=new AtomicInteger();
+        AtomicInteger sessionSql=new AtomicInteger();
         java.util.function.Supplier<Connection> connections=()->{
             try {
                 Connection real=DriverManager.getConnection(url);
+                var settings=new java.util.HashMap<String,String>();
+                settings.put("hive.compute.query.using.stats","true"); settings.put("hive.query.results.cache.enabled","true");
                 return (Connection)Proxy.newProxyInstance(getClass().getClassLoader(),new Class[]{Connection.class},(proxy,method,args)->{
                     if(method.getName().equals("prepareStatement"))sql.incrementAndGet();
+                    if(type==DatabaseType.HIVE && method.getName().equals("createStatement")) {
+                        var statement=mock(java.sql.Statement.class);
+                        when(statement.executeQuery(startsWith("SET "))).thenAnswer(call->{
+                            sessionSql.incrementAndGet(); var rows=mock(java.sql.ResultSet.class);
+                            when(rows.next()).thenReturn(true,false);
+                            String key=call.<String>getArgument(0).substring(4);
+                            when(rows.getString(1)).thenReturn(key+"="+settings.get(key)); return rows;
+                        });
+                        when(statement.execute(startsWith("SET "))).thenAnswer(call->{
+                            sessionSql.incrementAndGet(); String[] parts=call.<String>getArgument(0).substring(4).split("=",2);
+                            settings.put(parts[0],parts[1]); return false;
+                        });
+                        return statement;
+                    }
+                    if(type==DatabaseType.HIVE && method.getName().equals("close")) {
+                        assertEquals("true",settings.get("hive.compute.query.using.stats"));
+                        assertEquals("true",settings.get("hive.query.results.cache.enabled"));
+                    }
                     try{return method.invoke(real,args);}catch(java.lang.reflect.InvocationTargetException error){throw error.getCause();}
                 });
             } catch(Exception error){throw new IllegalStateException(error);}
@@ -49,9 +71,10 @@ class AdditionalDatabaseQueryTest {
         var sort=new PageQuerySort();sort.setField("id");sort.setDirection("ASC");request.setSorts(List.of(sort));
         Integer firstCount=null;
         for(int size:new int[]{20,100}) {
-            sql.set(0);request.setPageSize(size);PageQueryResult result=executor.queryPage(request);
+            sql.set(0);sessionSql.set(0);request.setPageSize(size);PageQueryResult result=executor.queryPage(request);
             assertEquals(120L,result.getTotal());assertEquals(size,result.getRows().size());
             assertTrue(sql.get()>=2 && sql.get()<=3,"仅允许字段兜底、总数及当前页查询");
+            assertEquals(type==DatabaseType.HIVE?6:0,sessionSql.get(),"会话开销固定，其他方言无额外SQL");
             if(firstCount==null)firstCount=sql.get();else assertEquals(firstCount.intValue(),sql.get(),"20/100行查询数必须保持一致");
         }
         request.setPageSize(20);request.setPageNo(2);var second=executor.queryPage(request);

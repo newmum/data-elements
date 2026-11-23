@@ -22,6 +22,33 @@ import org.ssssssss.magicapi.core.annotation.MagicModule;
 @Component
 @MagicModule("canvasTableDdl")
 public class CanvasTableDdl {
+    /** Check an explicitly requested identity against the actual execution connection, before any DDL. */
+    public static void validateIdentityVersion(String ddl, DataSourceConfig config, java.sql.Connection connection)
+            throws SQLException {
+        if (config.getEffectiveDatabaseType() != DatabaseType.ORACLE
+                || !java.util.regex.Pattern.compile("\\bIDENTITY\\b", java.util.regex.Pattern.CASE_INSENSITIVE).matcher(ddl).find()) return;
+        // Druid 1.2.20's Oracle AST rejects BY DEFAULT IDENTITY. Detect only the feature
+        // in the token stream; quoted names, comments and string values cannot supply it.
+        var lexer = com.alibaba.druid.sql.parser.SQLParserUtils.createLexer(ddl, DbType.oracle);
+        var syntax = new java.util.StringJoiner(" ");
+        for (lexer.nextToken(); lexer.token() != com.alibaba.druid.sql.parser.Token.EOF; lexer.nextToken()) {
+            String token = lexer.token().name();
+            if (token.contains("COMMENT") || token.equals("HINT")) continue;
+            String word = lexer.token() == com.alibaba.druid.sql.parser.Token.IDENTIFIER
+                    ? lexer.stringVal().toUpperCase(Locale.ROOT) : token;
+            syntax.add(java.util.Set.of("GENERATED", "ALWAYS", "BY", "DEFAULT", "ON", "NULL", "AS", "IDENTITY")
+                    .contains(word) ? word : "_");
+        }
+        if (!java.util.regex.Pattern.compile("\\bGENERATED (?:ALWAYS|BY DEFAULT(?: ON NULL)?) AS IDENTITY\\b")
+                .matcher(syntax.toString()).find()) return;
+        int major = connection.getMetaData().getDatabaseMajorVersion();
+        if (major < 12) {
+            throw new IllegalArgumentException("当前Oracle" + (major > 0 ? " " + major : "版本未知")
+                    + "不支持或无法确认IDENTITY自增列；接入来源已有ID时请关闭目标自增并保留来源值，"
+                    + "显式生成新ID须使用已确认支持的数据库版本，不会自动创建序列或改写来源ID");
+        }
+    }
+
     /** Materialization executes the user's SQL verbatim; only the selected connection supplies metadata scope. */
     public Map<String, Object> submitted(String ddl, String tableName, DataSourceConfig config) {
         if (ddl == null || ddl.isBlank()) throw new IllegalArgumentException("请填写建表语句");

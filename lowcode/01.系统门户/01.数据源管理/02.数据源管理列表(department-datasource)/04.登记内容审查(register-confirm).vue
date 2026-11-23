@@ -1429,6 +1429,7 @@ const dataSourceTypeIconMap = {
   api: "api",
   kafka: "kafka",
   elasticsearch: "elasticsearch",
+  clickhouse: "clickhouse",
   other: "database-network",
 };
 const normalizeDataSourceType = (value) => {
@@ -1449,6 +1450,8 @@ const normalizeDataSourceType = (value) => {
     es: "elasticsearch",
     elastic: "elasticsearch",
     elasticsearch: "elasticsearch",
+    ch: "clickhouse",
+    mrsclickhouse: "clickhouse",
   };
   return aliases[normalized] || normalized || "other";
 };

@@ -41,7 +41,7 @@ function fixture(count,{autoWatch=false,watchCards=false,reply=()=>full(),replyC
     return reply(body);
   };
   const context=vm.createContext({state,computed,watch,nextTick,setTimeout,clearTimeout,console:{error:()=>{}},SOURCE_PAGE_SIZES:[24,48,100],
-    treeData:{value:[{value:''}]},sourceListTop:{value:null},normalizeItem:x=>x,applyDefaultTreeState:()=>{},$common:{post,postSilently:post}});
+    treeData:{value:[{value:''}]},sourceListTop:{value:null},normalizeItem:x=>x,rebuildTree:()=>{},applyDefaultTreeState:()=>{},$common:{post,postSilently:post}});
   vm.runInContext(executable,context);
   if(autoWatch)vm.runInContext('globalThis.stopStatisticsWatch='+script.slice(statisticsWatch.start,statisticsWatch.end),context);
   if(watchCards)vm.runInContext('globalThis.stopCardsWatch='+script.slice(cardsWatch.start,cardsWatch.end),context);
@@ -170,4 +170,16 @@ test('Raw receive markers already grouped as push do not create an extra zero-co
   assert.equal(option(f,'mode:receive').color,'#079669');
   assert.equal(f.datasourceTypeOptions.value.filter(x=>x.label==='数据推送方式').length,1);
   assert.equal(option(f,'oracle').count,0,'Configured zero-count database choices remain visible');
+});
+
+// A fresh installation has organizations but no assets. Only ALL sees zero-count branches.
+for (const size of [20, 100]) test(`${size} empty organizations remain visible for ALL without extra requests`, () => {
+  const names = new Set(['getTreeNodeCount', 'filterZeroNodes']);
+  const declarations = ast.program.body.filter(n => n.type === 'VariableDeclaration' && n.declarations.some(d => names.has(d.id?.name)));
+  const state = { dataScope: 'ALL' };
+  const context = vm.createContext({ state, normalizeNumber: Number, countMap: { value: { org: {} } }, treeStatistics: { value: { total: 0 } } });
+  vm.runInContext(declarations.map(n => script.slice(n.start, n.end)).join('\n') + '\nglobalThis.filterNodes = filterZeroNodes;', context);
+  const nodes = Array.from({ length: size }, (_, i) => ({ value: `validation-org-${i}`, children: [] }));
+  assert.equal(context.filterNodes(nodes).length, size);
+  for (const scope of ['ORG', 'OWNER', '']) { state.dataScope = scope; assert.equal(context.filterNodes(nodes).length, 0); }
 });

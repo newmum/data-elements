@@ -143,6 +143,7 @@ class ExistingTargetMaterializationMagicTest {
             inputs.put("db",base.db); inputs.put("body",body); inputs.put("fixture",this);
             inputs.put("tenantRuntime",base.scope); inputs.put("dataScope",base.scope); inputs.put("jsons",new JsonModule());
             inputs.put("metadataAsset",this); inputs.put("esCommonService",this);
+            inputs.put("nodeConfiguration", NifiNodeConfigurationMagicTest.function());
             inputs.put("redissonClient",locks);
             inputs.put("platformJdbc",jdbc);
             base.resetCounter();

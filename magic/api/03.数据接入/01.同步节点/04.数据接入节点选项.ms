@@ -15,6 +15,7 @@
   "script": null
 }
 ================================
+import '@/common/nifinodeconfig' as nodeConfiguration
 import tenantRuntime
 
 // POST /ods/node/options 数据接入节点选项。
@@ -88,19 +89,22 @@ for (row in (rows == null ? [] : rows)) {
         networkName = legacyNetwork == '' ? networkCode : legacyNetwork
     }
     var baseUrl = text(row.baseUrl == null ? row.base_url : row.baseUrl).trim().replaceAll('/+$', '')
-    if (nodeCode == '' || nodeName == '' || baseUrl == '') {
-        continue
-    }
+    // 已启用但配置不完整的节点仍展示状态，避免页面悄悄换到另一节点。
+    var configuration = nodeConfiguration(row)
     list.add({
         value: nodeCode,
-        label: networkName + ' · ' + nodeName,
+        label: networkName + ' · ' + (nodeName == '' ? text(row.tid) : nodeName),
         nodeId: text(row.tid),
         tid: text(row.tid),
         nodeCode: nodeCode,
         nodeName: nodeName,
         networkCode: networkCode,
         networkName: networkName,
-        baseUrl: baseUrl,
+        baseUrl: configuration.baseUrl,
+        configurationValid: configuration.configurationValid,
+        configurationMessage: configuration.configurationMessage,
+        configurationIssues: configuration.configurationIssues,
+        authenticationMode: configuration.authenticationMode,
         isDefault: row.isDefault == null ? row.is_default : row.isDefault
     })
 }

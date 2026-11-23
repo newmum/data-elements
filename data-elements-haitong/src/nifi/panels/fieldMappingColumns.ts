@@ -2,6 +2,7 @@ import type { CanvasEdge, CanvasNode } from '../types/dsl';
 import type { ComponentManifest } from '../types/manifest';
 import type { MappingTableRef } from '../api/fieldMapping';
 import { resolveDatasourceId } from '../api/datasourceIdentity.ts';
+import { isHiveSink } from '../utils/hiveSinkPolicy.ts';
 
 /**
  * 仅数据库组件读取物理表契约；文件/API/Kafka 的登记数据集及探查字段不能当作 JDBC 表。
@@ -38,11 +39,41 @@ export function columnLabels(columns: unknown): Record<string, string> {
 }
 
 export function mappingColumnNodes(id: string, nodes: Record<string, CanvasNode>, edges: Record<string, CanvasEdge>) {
-  const incoming = Object.values(edges).find((edge) => edge.target === id);
-  const outgoing = Object.values(edges).find((edge) => edge.source === id);
+  // Success branches may contain transport adapters (timestamps, merging, etc.).
+  // Stop at another governance node: its output has a separate rule contract.
+  const forwards = new Map<string, string[]>(), backwards = new Map<string, string[]>();
+  for (const edge of Object.values(edges)) {
+    if (edge.source === edge.target || ['failure', 'retry', 'invalid'].includes(String(edge.outlet ?? '').toLowerCase())) continue;
+    forwards.set(edge.source, [...forwards.get(edge.source) ?? [], edge.target]);
+    backwards.set(edge.target, [...backwards.get(edge.target) ?? [], edge.source]);
+  }
+  function boundaries(side: 'source' | 'target') {
+    const graph = side === 'source' ? backwards : forwards;
+    const pending = [...graph.get(id) ?? []], visited = new Set<string>([id]), found: CanvasNode[] = [];
+    for (let index = 0; index < pending.length; index++) {
+      const key = pending[index];
+      if (visited.has(key)) continue;
+      visited.add(key);
+      const candidate = nodes[key];
+      if (!candidate) continue;
+      const governance = ['transform.field-mapping', 'transform.field-enrichment'].includes(candidate.manifestKey);
+      const changesSchema = ['transform.sql', 'transform.java', 'transform.python', 'transform.shell'].includes(candidate.manifestKey);
+      if (side === 'target' && changesSchema) continue;
+      if (candidate.category === (side === 'source' ? 'source' : 'sink')
+        || side === 'source' && (governance || changesSchema || columnsForMapping(candidate, 'source').length > 0)) {
+        found.push(candidate);
+        continue;
+      }
+      if (!governance) pending.push(...graph.get(key) ?? []);
+    }
+    return found;
+  }
+  const sources = boundaries('source');
+  // Keep a stable logical output based on the JDBC target; Hive formatting is a
+  // branch transport concern, never a reason to change the shared rule types.
+  const targets = boundaries('target').sort((left, right) => Number(isHiveSink(left)) - Number(isHiveSink(right)) || left.id.localeCompare(right.id));
   return {
-    source: incoming ? nodes[incoming.source] : undefined,
-    target: outgoing ? nodes[outgoing.target] : undefined,
+    source: sources[0], target: targets[0], sources, targets,
   };
 }
 
@@ -61,13 +92,15 @@ export function columnsForMapping(node: CanvasNode | undefined, side: 'source' |
   return [];
 }
 
-export function missingMappingColumnProbes(context: ReturnType<typeof mappingColumnNodes>) {
+export function missingMappingColumnProbes(context: { source?: CanvasNode; target?: CanvasNode; sources?: CanvasNode[]; targets?: CanvasNode[] }) {
   return (['source', 'target'] as const).flatMap((side) => {
-    const node = context[side];
-    if (!node || node.category !== (side === 'source' ? 'source' : 'sink')) return [];
-    if (Object.keys(columnLabels(columnsForMapping(node, side))).length) return [];
-    const table = String(node.config.table ?? node.config.tableName ?? node.config.targetTable ?? '').trim();
-    if (!table) return [];
-    return [{ nodeId: node.id, manifestKey: node.manifestKey, config: node.config, table, side }];
+    const candidates = side === 'source' ? context.sources : context.targets;
+    return (candidates ?? (context[side] ? [context[side]!] : [])).flatMap(node => {
+      if (node.category !== (side === 'source' ? 'source' : 'sink')) return [];
+      if (Object.keys(columnLabels(columnsForMapping(node, side))).length) return [];
+      const table = String(node.config.table ?? node.config.tableName ?? node.config.targetTable ?? '').trim();
+      if (!table) return [];
+      return [{ nodeId: node.id, manifestKey: node.manifestKey, config: node.config, table, side }];
+    });
   });
 }

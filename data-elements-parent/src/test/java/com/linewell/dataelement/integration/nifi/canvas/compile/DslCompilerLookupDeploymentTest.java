@@ -71,6 +71,7 @@ class DslCompilerLookupDeploymentTest {
     @ValueSource(ints = {20, 100})
     void sameConnectionLookupsStayInOneNativeQueryAndConnection(int mappings) throws Exception {
         var fixture = compile("POSTGRESQL", "POSTGRESQL", mappings);
+        assertThat(fixture.lookupConnection()).doesNotContainKeys("Password", "Database User");
         assertThat(fixture.sql().split(" LEFT JOIN ")).hasSize(mappings + 1);
         assertThat(fixture.sql()).doesNotContain("FROM DUAL");
         // All lookups in one datasource share one ExecuteSQLRecord and one

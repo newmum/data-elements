@@ -1,0 +1,130 @@
+server:
+  address: 127.0.0.1
+  port: ${POLICE_BACKEND_PORT}
+spring:
+  application:
+    name: data-element
+  main:
+    allow-circular-references: true
+  datasource:
+    type: com.alibaba.druid.pool.DruidDataSource
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://127.0.0.1:${POLICE_MYSQL_PORT}/baseline?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    username: police
+    password: ${POLICE_DB_PASSWORD}
+    druid:
+      initial-size: 1
+      max-active: 24
+      validation-query: SELECT 1
+  redis:
+    host: 127.0.0.1
+    port: ${POLICE_REDIS_PORT}
+    database: 0
+    password: ${POLICE_REDIS_PASSWORD}
+  kafka:
+    listener:
+      auto-startup: false
+  servlet:
+    multipart:
+      max-file-size: 100MB
+      max-request-size: 100MB
+magic-api:
+  web: /api/web
+  show-sql: false
+  sql-column-case: camel
+  auto-import-module: db,IdGenerator,jsons,httpx,kafka,flowEs,flowRedis,flowDataSource,flowRuntime
+  db-sync:
+    enabled: false
+    table-name: api_file_t
+  resource:
+    type: database
+    tableName: api_file_t
+  backup:
+    enable: true
+    table-name: api_backup_t
+  page:
+    page: current
+    size: size
+    default-page: 1
+    default-size: 10
+  response-code:
+    success: 200
+    invalid: 400
+    exception: 500
+  crud:
+    logic-delete-column: is_del
+    logic-delete-value: 1
+  response: '{ code: code, message: message, data }'
+sa-token:
+  token-name: token
+  timeout: 86400
+  is-share: false
+  is-log: false
+  is-read-cookie: false
+  is-write-cookie: false
+  is-read-header: true
+warm-flow:
+  ui: false
+  data-source-type: mysql
+  logic_delete: false
+nifi:
+  monitor-enabled: false
+  provenance-sync-enabled: false
+  pipeline-migration:
+    enabled: false
+elasticsearch:
+  host: 127.0.0.1:${POLICE_SEARCH_PORT}
+  auth: false
+spring.elasticsearch.uris: http://127.0.0.1:${POLICE_SEARCH_PORT}
+es:
+  prefix: police_
+  tenant:
+    enabled: true
+    default-tenant-uses-legacy-index: false
+  init:
+    enabled: true
+    indices: [dataassets, dataassets_apply_form]
+    keyword-string-indices: [dataassets, dataassets_apply_form]
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  health:
+    elasticsearch:
+      enabled: false
+upload:
+  dir: ./data/upload
+storage:
+  root-dir: ./data
+  error-root-dir: ./logs
+data-element:
+  magic:
+    resource-reload-path: /sym/node-config/magic-resource/refresh
+  tenant:
+    enabled: true
+    compatibility-auto-bind: false
+    default-tenant-id: '2084109831682699264'
+    database:
+      enabled: true
+      default-data-source-key: police
+      tenant-bindings:
+        '2084109831682699264': police
+      data-sources:
+        police:
+          driver-class-name: com.mysql.cj.jdbc.Driver
+          url: jdbc:mysql://127.0.0.1:${POLICE_MYSQL_PORT}/baseline_ga?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+          username: police
+          password: ${POLICE_DB_PASSWORD}
+  audit:
+    files-path: ./logs/log-files
+    spool-path: ./logs/audit-spool
+    fingerprint-key-file: ./data/audit-fingerprint.key
+idaas:
+  protocol:
+    jwk-file: ./data/keys/protocol-signing.jwk
+  transport:
+    allow-local-http: true
+logging:
+  file:
+    name: ./logs/backend.log

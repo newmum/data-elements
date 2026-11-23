@@ -3064,7 +3064,7 @@ Magic 接口和低代码只从根 `magic/`、`lowcode/` 的当前可维护源逐
 
 | 本地文件 | 来源 | 原始资源 |
 | --- | --- | --- |
-| `clickhouse.png` | dbeaver | [原始资源](https://raw.githubusercontent.com/dbeaver/dbeaver/71cee3a752a7f5b967a39cec50d9b971a2ba43a6/plugins/org.jkiss.dbeaver.ext.clickhouse/icons/clickhouse_icon_big@2x.png) |
+| `clickhouse.svg` | ClickHouse 官方文档 | [原始 SVG](https://raw.githubusercontent.com/ClickHouse/clickhouse-docs/main/static/img/clickhouse-logo-mark.svg)、[官方使用说明](https://clickhouse.design/brand/logo-usage)；沿用官方浅色背景的黑色柱形标志，保持几何和比例，将响应主题的样式改为局部显式填色，避免污染页面中的其他 SVG。澄天与海通保存相同矢量资源。 |
 | `db2.svg` | dbeaver | [原始资源](https://raw.githubusercontent.com/dbeaver/dbeaver/71cee3a752a7f5b967a39cec50d9b971a2ba43a6/plugins/org.jkiss.dbeaver.ext.db2/icons/db2_icon_big.svg) |
 | `doris.svg` | dbeaver | [原始资源](https://raw.githubusercontent.com/dbeaver/dbeaver/71cee3a752a7f5b967a39cec50d9b971a2ba43a6/plugins/org.jkiss.dbeaver.ext.doris/icons/doris_icon_big.svg) |
 | `elasticsearch.png` | dbeaver | [原始资源](https://raw.githubusercontent.com/dbeaver/dbeaver/71cee3a752a7f5b967a39cec50d9b971a2ba43a6/plugins/org.jkiss.dbeaver.ext.generic/icons/elasticsearch_icon_big@2x.png) |
@@ -3082,6 +3082,8 @@ Magic 接口和低代码只从根 `magic/`、`lowcode/` 的当前可维护源逐
 | `minio.svg` | Simple Icons CC0; 添加品牌色 | [原始资源](https://raw.githubusercontent.com/simple-icons/simple-icons/98820a4dc8c363ca72fa2c0d294ea4a0a9bba75d/icons/minio.svg) |
 | `hetu.svg` | Simple Icons CC0; 添加品牌色 | [原始资源](https://raw.githubusercontent.com/simple-icons/simple-icons/98820a4dc8c363ca72fa2c0d294ea4a0a9bba75d/icons/huawei.svg) |
 
+ClickHouse, the ClickHouse logo, and related marks are trademarks or registered trademarks of ClickHouse, Inc. or its affiliates.
+
 ### 继承原工程的图标
 
 `dameng.svg`、`gaussdb.svg`、`gbase8a.svg`、`hive.svg`、`kingbase8.svg`、`mysql.svg`、`oceanbasemysql.svg`、`oracle.svg`、`postgresql.svg` 为原工程已有的品牌造型，本次直接复用；原工程未记录其下载地址及作者，不能声称这些文件由本次从官网下载。
@@ -3096,6 +3098,18 @@ MongoDB 使用万象原有的绿色叶片标识 `mongodb.svg`，Vertica 使用�
 - 新增数据源时同时补充本地图标及来源，在浅色、深色和支持的最低浏览器版本检查清晰度。不要在运行时引用在线 CDN。
 
 ## 接入模板管理
+
+「OB Oracle 与 Hive 并行接入」与「Oracle 与开源 Hive 并行接入」采用一次字段治理后分写两端的结构。共享治理按成功连线发现全部目标，穿过传输适配节点，遇到下一治理节点时停止；优先 JDBC 目标作为逻辑输出参考，目标探查切换不改变共享规则。`POST /nifi/map/schema` 可传最多16个 `targetRefs`，一次批量验证全部登记数据源及表权限，返回各分支的 `targets` 字段结构；发布时按实际连线重新核验全部目标。20/100字段及100个不同表引用下，登记字段读取保持两次批量SQL，不逐字段或逐目标补查。多个未登记节点缺字段时由用户主动探查，不在打开面板时自动逐节点请求。
+
+字段治理新建规则默认忽略字段名大小写；绑定登记表后，旧草稿中原先默认的严格大小写策略也在编译和预览时适配，不直接改写已保存的任务。源字段、表达式、条件分支和前序输出引用统一解析，目标输出采用已授权物理字段的实际拼写。自动推荐对英文同名字段不区分大小写，并保留两端原名；同表出现仅大小写不同的多列时不猜选。Oracle→Hive 与 Hive→Oracle 的登记契约、预览和 19 位 ID 已验证；两套并行模板共用此编译入口，OB Oracle 和华为 Hive 的现场认证与实库写入仍需现场验收。已部署的 NiFi 计划不会因后端换包自动变更，需要通过受控字段节点升级或发布生成新计划，保留来源水位和队列。
+
+接入任务与任务监控从当前行业一次取得全部已启用 NiFi 节点配置，按节点分别缓存、采集根状态树并汇总。每个任务按部署绑定的 `runtimeNodeId` 取状态，只有无历史绑定的旧任务使用默认节点；明确绑定但停用、删除或不可达的节点显示待确认，不能回退到另一节点。部分节点离线不会遮蔽健康节点状态，任务链路展示所属节点及网络；监控页可按网络、节点筛选。20/100 行共享每节点一次根状态读取，SQL 数保持固定；权限仍按当前租户、角色和有效资产批量校验。本机已同时读取三个实际节点状态，未配置认证的节点保持不可用。本能力是多个独立 NiFi 实例监测，不代表 NiFi 集群容错验收。发布须同时核对状态模块、采集服务与节点解析器的运行字节码，避免只更新 Magic 或页面而仍运行旧单节点实现。
+
+Hive HDFS 写入可开启 `hiveTimestampFormat`，仅在该分支、合并小文件之前格式化已登记的时间字段，关闭数字自动识别；共享来源和治理保留普通记录载体，避免把 Hive 的文本日期格式传播到 JDBC 目标。分支的时间格式化、合并和CSV转换共用任务内精确数值Reader，保留长整数与高精度小数。模板的 JDBC 目标有业务匹配键时启用 `insertThenMerge`：INSERT失败转MERGE、retry留在原处理器，合并失败保留待处理；无匹配键时仅INSERT。该方式适合新增为主的接入，更新较多时可关闭此开关并直接采用MERGE，减少失败尝试。更新沿用目标写入组件的 ODS 审计字段保护，不承诺跨库分布式事务。Hive为追加写入，重放范围可能产生重复，需按业务键核对。
+
+关系型主来源配置 `manualBackfill=true` 时，编译器只在NiFi原生画布派生备用补数组件，与主来源共用已授权登记资产并直接连接同一个字段治理。海通画布仅显示主来源、一个治理和两个目标，不显示补数节点及连线。备用组件初始范围 `1=0` 且部署状态为DISABLED；普通启动不启用它，也不参与主任务的周期/清表策略。进入「详情」打开NiFi原生画布，设置明确补数WHERE范围或查询后单次运行，完成后恢复禁用；它不继承增量高水位，不会因水位越过历史时间而漏掉补数范围。非关系型来源不派生该可选组件，旧模板的显式 `source:backfill` 配置仍可读取。BINARY输出同时写JDBC与Hive时仍要求分支编码明确，不能以取消编码校验换取单节点部署。
+
+Oracle与开源Hive的实际合成样本验证覆盖正常全量后增量3行双写、原水位以下单ID补数：Oracle保持3行并更新金额，Hive追加为4行；19位ID、6位小数、NULL、1970年前后业务时间及日期字段均核对正确，首轮两端UUID相同。补数后Oracle保留原UUID及入库时间，Hive保留初始记录并追加更新事件。Oracle系统审计字段沿用数据库`SYSDATE`，应独立核对数据库系统时钟，不能将其与业务时间混为同一验证项。验收对象停止后保留主水位，备用入口恢复禁用且无独立高水位。证据保存在忽略的`logs/parallel-shared-mapping/`；OB和华为Hive的现场认证、Hadoop配置与实库写入仍按生产目标另行验证。
 
 海通「任务开发 → 模板管理」按当前行业展示模板，默认隐藏停用版本。点击名称或「查看」进入「流程图」与「流程定义」。流程图由当前模板的节点、位置、连线自动生成，支持缩放、平移和查看组件配置；也可在模板草稿中上传500KB以内的PNG/JPEG流程截图作为预览。流程定义复用海通现有CodeMirror JSON编辑器，支持语法高亮、行号和折叠；导入的原始NiFi文件在同页作为参考定义查看，不再以两张含义不同的流程图并列展示。
 
