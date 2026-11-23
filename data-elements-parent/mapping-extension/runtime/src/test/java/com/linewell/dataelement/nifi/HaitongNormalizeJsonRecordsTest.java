@@ -21,6 +21,30 @@ class HaitongNormalizeJsonRecordsTest {
     static StructuredJsonRecords.Shape shape(String... records)throws Exception {
         var shape=new StructuredJsonRecords.Shape();for(String record:records)shape.accept(StructuredJsonRecords.normalize(JSON.readTree(record)));return shape;
     }
+
+    @Test void workbookStyleOnlyRowsAreDroppedAndZeroFalseAndOriginalValuesSurvive() throws Exception {
+        var shape = new StructuredJsonRecords.Shape();
+        shape.accept(StructuredJsonRecords.record(Map.of("column_1", "sample")));
+        String input = """
+                [{},{"column_1":null},{"column_1":" \t\u3000"},{"column_1":0},
+                 {"column_1":false},{"column_1":" value "}]
+                """.replace("\t", "\\t");
+        var workbook = runner(shape);
+        workbook.setProperty(HaitongNormalizeJsonRecords.SHAPE, ((ObjectNode)shape.json()).put("skipBlankRecords",true).toString());
+        workbook.enqueue(input);
+        workbook.run();
+        workbook.assertTransferCount(HaitongNormalizeJsonRecords.SUCCESS, 1);
+        workbook.assertTransferCount(HaitongNormalizeJsonRecords.FAILURE, 0);
+        var output = workbook.getFlowFilesForRelationship(HaitongNormalizeJsonRecords.SUCCESS).getFirst();
+        assertEquals("3", output.getAttribute("ht.source.blank.rows.skipped"));
+        assertEquals(JSON.readTree("[{\"column_1\":0},{\"column_1\":false},{\"column_1\":\" value \"}]"), JSON.readTree(output.toByteArray()));
+
+        var legacy = runner(shape);
+        legacy.enqueue(input);
+        legacy.run();
+        legacy.assertTransferCount(HaitongNormalizeJsonRecords.SUCCESS, 1);
+        assertEquals(6, readCount(legacy.getFlowFilesForRelationship(HaitongNormalizeJsonRecords.SUCCESS).getFirst()));
+    }
     @Test void nestedPathsArraysAndNullSurviveActualJsonReader()throws Exception {
         String input=""" 
                 {"@timestamp":"2026-11-21T12:34:56Z","@metadata":{"beat":"filebeat"},"agent":{"id":"a"},"tags":["one","二"],"empty":null}

@@ -3,8 +3,11 @@ package com.linewell.dataelement.platform.magic;
 import com.linewell.dataelement.utils.StructuredValues;
 
 import static org.junit.jupiter.api.Assertions.*;
+import com.linewell.dataelement.metautil.ddl.PortableDdlConverter;
+import com.linewell.dataelement.metautil.model.enums.DatabaseType;
 import com.linewell.dataelement.platform.magic.module.JsonModule;
 import java.util.*;
+import java.util.stream.StreamSupport;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.ssssssss.script.*;
@@ -12,6 +15,45 @@ import org.ssssssss.script.runtime.ExitValue;
 
 /** Replays materialization after task deletion: retained physical table, missing registration. */
 class ExistingTargetMaterializationMagicTest {
+    @Test
+    void oracleAliasPersistsAuthorizedLineageAndJobMapsThePhysicalName() throws Exception {
+        String logical = "data_resource_management_unit_code";
+        String physical = new PortableDdlConverter().targetColumnAliases(List.of(logical), DatabaseType.ORACLE).get(logical);
+        var fixture = new Fixture(1);
+        fixture.jdbc.update("update db_datasource_t set db_type='oracle' where tid='retained-db'");
+        fixture.jdbc.update("update db_table_column_t set column_name=? where tid='source-col-0'", logical);
+        var field = new LinkedHashMap<String, Object>(Map.of("columnName", physical, "sourceColumnName", logical,
+                "sourceColumnId", "source-col-from-other-table", "dataType", "varchar", "length", 32));
+        fixture.submittedItems = List.of(field);
+        assertInstanceOf(ExitValue.class, fixture.run(false));
+        assertEquals(0, fixture.physicalCalls);
+
+        field.put("sourceColumnId", "source-col-0");
+        var result = assertInstanceOf(Map.class, fixture.run(false));
+        String targetId = result.get("targetTableId").toString();
+        assertEquals("source-col-0", fixture.jdbc.queryForObject("""
+                select source_table_column_id from db_table_column_t where table_id=? and column_name=?
+                """, String.class, targetId, physical));
+        var flow = assertInstanceOf(Map.class, fixture.base.run(Map.of("tableId", "source-1", "targetTableIds", List.of(targetId))));
+        assertEquals(1, flow.get("createdCount"));
+        assertEquals(List.of(physical), fixture.jdbc.queryForList("""
+                select target_field from data_access_field_mapping where source_field=? and is_del=0
+                """, String.class, logical));
+        String draft = fixture.jdbc.queryForObject("""
+                select p.dsl_json from nifi_pipeline_t p join data_access_agg_task_t t on t.pipeline_id=p.id
+                where t.target_table_id=?
+                """, String.class, targetId);
+        var json = new com.fasterxml.jackson.databind.ObjectMapper();
+        var nodes = json.readTree(draft).path("nodes");
+        var governance = StreamSupport.stream(nodes.spliterator(), false)
+                .filter(node -> "transform.field-enrichment".equals(node.path("manifestKey").asText()))
+                .findFirst().orElseThrow();
+        var spec = governance.path("config").path("mappings");
+        var mappings = (spec.isTextual() ? json.readTree(spec.asText()) : spec).path("mappings");
+        assertTrue(StreamSupport.stream(mappings.spliterator(), false).anyMatch(mapping ->
+                ("/" + logical).equals(mapping.path("from").asText()) && ("/" + physical).equals(mapping.path("to").asText())));
+    }
+
     @Test
     void legacySelectedCatalogRetainsAuthoritativeCounterWithoutSourceRelation() throws Exception {
         Fixture fixture = new Fixture(1);
@@ -108,6 +150,7 @@ class ExistingTargetMaterializationMagicTest {
         final int fields;
         int physicalCalls;
         String selectedCatalogId;
+        List<Map<String, Object>> submittedItems;
         final List<Long> catalogCounters = new ArrayList<>();
         Fixture(int count) {
             fields=count;
@@ -133,16 +176,19 @@ class ExistingTargetMaterializationMagicTest {
         Object run(boolean probe,boolean dryRun) throws Exception {
             List<Map<String,Object>> items=new ArrayList<>();
             for(int i=0;i<fields;i++) items.add(new LinkedHashMap<>(Map.of("columnName","field_"+i,"dataType","varchar","columnType","varchar(32)","length",32,"nullable",1)));
+            if (submittedItems != null) items = submittedItems;
             Map<String,Object> body=new LinkedHashMap<>(Map.of("tid","source-1","propList",new LinkedHashMap<>(Map.of("dbId","retained-db","tableName","ods_retained","tableNameCn","保留物理表")),"tableItems",items,"ddl","CREATE TABLE ods_retained(id STRING)","reuseExistingTable",true));
             if(probe) body.put("validateReuseOnly",true);
             if(dryRun) body.put("dryRun",true);
             if(selectedCatalogId != null) body.put("tid", selectedCatalogId);
-            String script=CanonicalMagicSources.byId("e3320ec899a24426adf5f77e2dab36f9").replaceAll("(?m)^import (?!cn\\.hutool\\.)[^\\r\\n]*\\r?\\n","");
+            String script=CanonicalMagicSources.byId("e3320ec899a24426adf5f77e2dab36f9")
+                    .replaceAll("(?m)^import (?!cn\\.hutool\\.|com\\.linewell\\.dataelement\\.metautil\\.model\\.enums\\.DatabaseType)[^\\r\\n]*\\r?\\n","");
             script="var createTable=()=> fixture.physical(body)\nvar date_format=value=>value+''\n"+script;
             Map<String,Object> inputs=new LinkedHashMap<>();
             inputs.put("db",base.db); inputs.put("body",body); inputs.put("fixture",this);
             inputs.put("tenantRuntime",base.scope); inputs.put("dataScope",base.scope); inputs.put("jsons",new JsonModule());
             inputs.put("metadataAsset",this); inputs.put("esCommonService",this);
+            inputs.put("portableDdl",new PortableDdlConverter());
             inputs.put("nodeConfiguration", NifiNodeConfigurationMagicTest.function());
             inputs.put("redissonClient",locks);
             inputs.put("platformJdbc",jdbc);

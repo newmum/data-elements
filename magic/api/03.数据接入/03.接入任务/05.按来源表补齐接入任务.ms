@@ -941,14 +941,12 @@ var temporalMappingsOf = (sourceColumns, governanceConfig) => {
     }
     return result
 }
-var mappingDsl = (sourceColumns, targetColumns, sourceTable, lookupSources, transformBindings, sourceLookupConfig, temporalMappings, preserveSystemFields, atomicFileBatch) => {
-    var sourceNames = {}
+var mappingDsl = (sourceColumns, targetColumns, sourceTable, lookupSources, transformBindings, sourceLookupConfig, temporalMappings, preserveSystemFields, atomicFileBatch, sourceForTargetColumn) => {
     var sourceDataTypes = {}
     var sourceNativeIntegers = {}
     var mysqlSource = sourceLookupConfig != null && text(sourceLookupConfig.dbType).trim().toLowerCase() == 'mysql'
     var relations = preserveSystemFields ? {} : dictionaryRelations(sourceTable)
     for (c in (sourceColumns == null ? [] : sourceColumns)) {
-        sourceNames[text(colName(c)).toLowerCase()] = colName(c)
         sourceDataTypes[text(colName(c)).toLowerCase()] = first(c, ['dataType', 'data_type', 'columnType', 'column_type'])
         // MySQL的(1)是显示宽度，来源仍有完整整数域；兼容旧驱动已读取的Boolean载体。
         // 按登记物理类型生成现有INT转换，不扩大其它Boolean到NUMBER的规则。
@@ -974,6 +972,7 @@ var mappingDsl = (sourceColumns, targetColumns, sourceTable, lookupSources, tran
         var binding = bindingsByTarget[text(name).toLowerCase()]
         var sourceName = binding == null ? '' : text(binding.sourceField).trim()
         var relation = blank(sourceName) ? null : relations[sourceName.toLowerCase()]
+        var directSource = sourceForTargetColumn(c)
         if (systemMapping != null) {
             mappings.add(systemMapping)
         } else if (relation != null && relation.relationKind == 'MANDATORY_STANDARD' && safeIdentifier(name)) {
@@ -1019,8 +1018,8 @@ var mappingDsl = (sourceColumns, targetColumns, sourceTable, lookupSources, tran
                     dataSource: dictionarySource.config
                 }
             })
-        } else if (!blank(name) && sourceNames[text(name).toLowerCase()] != null) {
-            var sourceName = sourceNames[text(name).toLowerCase()]
+        } else if (!blank(name) && directSource != null) {
+            var sourceName = colName(directSource)
             var temporalExpression = temporalMappings[text(sourceName).toLowerCase()]
             if (!blank(temporalExpression)) {
                 mappings.add({ from: '/' + sourceName, to: '/' + name, expression: temporalExpression })
@@ -2127,7 +2126,25 @@ sourceManifestKey = firstHop ? originalSourceManifestKey : normalizeSourceKey(so
 sourceTemporalMappings = firstHop ? originalSourceTemporalMappings : {}
 sourceDictionaryRelations = firstHop ? originalDictionaryRelations : {}
 sourceColumnMap = {}
-for (sourceColumn in sourceColumns) { sourceColumnMap[text(colName(sourceColumn)).toLowerCase()] = sourceColumn }
+var sourceColumnById = {}
+var sourceColumnByOrigin = {}
+var ambiguousOriginIds = {}
+for (sourceColumn in sourceColumns) {
+    sourceColumnMap[text(colName(sourceColumn)).toLowerCase()] = sourceColumn
+    sourceColumnById[text(sourceColumn.tid)] = sourceColumn
+    var originId = text(first(sourceColumn, ['sourceTableColumnId', 'source_table_column_id']))
+    if (!firstHop && !blank(originId)) {
+        if (sourceColumnByOrigin[originId] != null) { ambiguousOriginIds[originId] = true }
+        sourceColumnByOrigin[originId] = sourceColumn
+    }
+}
+// 目标物理列可能因数据库限制改名，逐列关联只使用本跳已加载的来源字段。
+var sourceForTargetColumn = (targetColumn) => {
+    var sourceColumnId = text(first(targetColumn, ['sourceTableColumnId', 'source_table_column_id']))
+    var matched = sourceColumnMap[text(colName(targetColumn)).toLowerCase()] || sourceColumnById[sourceColumnId]
+    if (matched != null || ambiguousOriginIds[sourceColumnId] == true) { return matched }
+    return sourceColumnByOrigin[sourceColumnId]
+}
 sourceNodeConfig = originalSourceNodeConfig
 if (!firstHop) {
     var downstreamTimestamp = registeredTimestampColumn(sourceTable, sourceColumns)
@@ -2227,18 +2244,7 @@ var primarySourceKeys = []
 var primaryTargetKeys = []
 for (targetColumn in (targetColumns == null ? [] : targetColumns)) {
     var targetName = text(colName(targetColumn))
-    var sourceColumn = sourceColumnMap[targetName.toLowerCase()]
-    if (sourceColumn == null) {
-        var sourceColumnId = text(first(targetColumn, ['sourceTableColumnId', 'source_table_column_id']))
-        if (!blank(sourceColumnId)) {
-            for (candidateSource in (sourceColumns == null ? [] : sourceColumns)) {
-                if (text(candidateSource.tid) == sourceColumnId) {
-                    sourceColumn = candidateSource
-                    break
-                }
-            }
-        }
-    }
+    var sourceColumn = sourceForTargetColumn(targetColumn)
     if (sourceColumn != null && (firstHop ? isStableBusinessKey(sourceColumn) : declaredKey(sourceColumn))
         && (firstHop ? isStableBusinessKey(targetColumn) : declaredKey(targetColumn))) {
         primarySourceKeys.add(colName(sourceColumn))
@@ -2282,7 +2288,7 @@ var dslNodes = [
             executionMode: 'AUTO',
             mappings: mappingDsl(sourceColumns, targetColumns, sourceTable, dictionaryLookupSources,
                 targetFieldBindings, { datasourceId: sourceDbId, dbType: sourceDbType }, sourceTemporalMappings, !firstHop,
-                firstHop && pushFileSource != null && accessMode != 'upload')
+                firstHop && pushFileSource != null && accessMode != 'upload', sourceForTargetColumn)
         }
     }
 ]
@@ -2301,7 +2307,7 @@ for (targetIndex, targetCandidate in [targetTable]) {
     var candidateTargetKeys = []
     for (candidateTargetColumn in (candidateTargetColumns == null ? [] : candidateTargetColumns)) {
         var candidateTargetName = text(colName(candidateTargetColumn))
-        var matchingSourceColumn = sourceColumnMap[candidateTargetName.toLowerCase()]
+        var matchingSourceColumn = sourceForTargetColumn(candidateTargetColumn)
         // 写入幂等性由目标表的业务主键/唯一键决定。来源表的登记元数据
         // 可能尚未标记 primaryKey（例如历史探查数据），但只要该目标键已有
         // 对应的来源字段映射，就可以安全地作为 UPSERT 键，不能退回 INSERT。
@@ -2426,7 +2432,7 @@ for (targetIndex, targetCandidate in [targetTable]) {
             candidateSinkConfig.partitionInputField = partitionGovernance.partitionPlan.field
             for (partitionTargetColumn in (downstreamRawHive && candidateTargetColumns != null ? candidateTargetColumns : [])) {
                 if (text(colName(partitionTargetColumn)).toLowerCase() != text(partitionGovernance.partitionPlan.field).toLowerCase()) { continue }
-                var matchedPartitionSource = sourceColumnMap[text(colName(partitionTargetColumn)).toLowerCase()]
+                var matchedPartitionSource = sourceForTargetColumn(partitionTargetColumn)
                 if (matchedPartitionSource != null) { candidateSinkConfig.partitionInputField = colName(matchedPartitionSource) }
             }
         }
@@ -2623,14 +2629,7 @@ var appendFieldMappings = () => {
                 continue
             }
         }
-        var sourceColumn = sourceColumnMap[targetName.toLowerCase()]
-        if (sourceColumn == null && targetColumn.sourceTableColumnId != null) {
-            for (candidateSource in (sourceColumns == null ? [] : sourceColumns)) {
-                if (text(candidateSource.tid) == text(targetColumn.sourceTableColumnId)) {
-                    sourceColumn = candidateSource
-                }
-            }
-        }
+        var sourceColumn = sourceForTargetColumn(targetColumn)
         if (sourceColumn == null) {
             continue
         }

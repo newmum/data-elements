@@ -9,6 +9,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.linewell.dataelement.mapping.core.StructuredJsonRecords;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -63,6 +64,33 @@ class StructuredSourceProbeServiceTest {
                 org.mockito.ArgumentMatchers.eq(false));
         assertThrows(IllegalArgumentException.class,
                 () -> resolving.resolveMinioObjectLocator(Map.of("dbType", "minio"), "outside_registered_scope"));
+    }
+
+    @Test
+    void workbookAliasesPreservePopulatedBlankAndDuplicateHeaderColumns() throws Exception {
+        byte[] bytes;
+        try (var workbook = new org.apache.poi.xssf.usermodel.XSSFWorkbook();
+             var output = new java.io.ByteArrayOutputStream()) {
+            var sheet = workbook.createSheet("Monthly detail");
+            var header = sheet.createRow(0);
+            header.createCell(0).setCellValue("metric");
+            header.createCell(3).setCellValue("amount");
+            header.createCell(4).setCellValue("amount");
+            var data = sheet.createRow(1);
+            var values = List.of("records", "approved", "held", "two", "three");
+            for (int i = 0; i < values.size(); i++) {
+                data.createCell(i).setCellValue(values.get(i));
+            }
+            workbook.write(output);
+            bytes = output.toByteArray();
+        }
+        var table = service.parseRemoteFileSampleForTest("Monthly.xlsx", bytes.length, bytes).getTables().getFirst();
+        var shape = new StructuredJsonRecords.Contract(new ObjectMapper().valueToTree(table.getRecordShape()));
+        assertThat(shape.skipBlankRecords()).isTrue();
+        assertThat(shape.normalize(Map.of("metric", "records", "column_1", "approved", "column_2", "held",
+                "amount", "two", "amount_1", "three")).values()).isEqualTo(table.getRows().getFirst());
+        assertThat(table.getRows().getFirst()).containsExactlyInAnyOrderEntriesOf(
+                Map.of("metric", "records", "column", "approved", "column_2", "held", "amount", "two", "amount_2", "three"));
     }
 
     @Test

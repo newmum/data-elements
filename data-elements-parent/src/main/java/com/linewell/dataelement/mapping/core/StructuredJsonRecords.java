@@ -156,6 +156,7 @@ public final class StructuredJsonRecords {
         private final Map<List<String>,String> reverse=new HashMap<>();
         private final Map<String,Set<String>> kinds=new HashMap<>();
         private final String mode;
+        private final boolean skipBlankRecords;
         private final Set<String> formats=new HashSet<>();
         private final JsonNode document;
         public Contract(JsonNode source) {
@@ -163,6 +164,10 @@ public final class StructuredJsonRecords {
                 throw failure("SOURCE_SHAPE_REQUIRED","来源字段缺少有效的原始路径快照，请重新采集字段");
             mode=source.path("mode").asText("JSON");
             if(!Set.of("JSON","RECORD").contains(mode))throw failure("INVALID_SOURCE_SHAPE","来源记录模式无效");
+            if (source.has("skipBlankRecords") && (!source.path("skipBlankRecords").isBoolean() || !mode.equals("RECORD"))) {
+                throw failure("INVALID_SOURCE_SHAPE", "仅平面记录支持已登记的空行过滤");
+            }
+            skipBlankRecords = source.path("skipBlankRecords").asBoolean(false);
             Set<String> aliases=new HashSet<>();
             source.path("fieldPaths").fields().forEachRemaining(field->{
                 String name=field.getKey();JsonNode path=field.getValue();
@@ -186,6 +191,7 @@ public final class StructuredJsonRecords {
             document=source.deepCopy();
         }
         public String mode(){return mode;}
+        public boolean skipBlankRecords() { return skipBlankRecords; }
         public Set<String> formats(){return Set.copyOf(formats);}
         public String hash(){return MappingEngine.hash(document);}
         public String fieldName(String raw){return reverse.getOrDefault(List.of(raw),alias(raw));}

@@ -38,6 +38,58 @@ import org.ssssssss.script.runtime.ExitValue;
 
 /** Runs the canonical DDL API's batch branch with a real tenant metadata query. */
 class BatchCreateTableDdlMagicTest {
+    @Test
+    void oracleAliasesKeepFieldLineageKeysAndPartitionWithOneQueryAtTwentyAndHundredFields() throws Exception {
+        String logical = "data_resource_management_unit_code";
+        String unique = "data_organization_classification_one";
+        for (int count : List.of(20, 100)) {
+            var fixture = new Fixture(2);
+            fixture.jdbc.update("update db_datasource_t set db_type='oracle' where tid='db-0'");
+            fixture.jdbc.update("update db_datasource_t set db_type='hive' where tid='db-1'");
+            fixture.ddlGenerator.expectedColumns = count;
+            var fields = new ArrayList<Map<String, Object>>();
+            fields.add(Map.of("columnName", logical, "dataType", "int", "primaryKey", 1,
+                    "sourceColumnId", "source-key", "columnComment", "资源管理单位"));
+            fields.add(Map.of("columnName", unique, "dataType", "varchar", "length", 32));
+            for (int index = fields.size(); index < count; index++) {
+                fields.add(Map.of("columnName", "field_" + index, "dataType", "int"));
+            }
+            for (int index = 0; index < fixture.targets.size(); index++) {
+                var target = new LinkedHashMap<>(fixture.targets.get(index));
+                target.put("tableItems", fields);
+                if (index == 0) {
+                    target.put("partitionPlan", Map.of("enabled", true, "strategy", "LIST", "field", logical,
+                            "partitions", List.of(Map.of("name", "p_fz", "values", List.of(350100)))));
+                    target.put("sourceConstraints", List.of(Map.of("type", "U", "columns", List.of(unique))));
+                }
+                fixture.targets.set(index, target);
+            }
+
+            var response = assertInstanceOf(Map.class, fixture.run());
+            var results = StructuredValues.objectRows(response.get("results"));
+            var oracle = results.getFirst();
+            var oracleFields = StructuredValues.objectRows(oracle.get("tableItems"));
+            var oracleKey = oracleFields.getFirst();
+            String physical = oracleKey.get("columnName").toString();
+            String uniquePhysical = oracleFields.get(1).get("columnName").toString();
+            assertTrue(physical.matches("C_[0-9A-F]{28}"), physical);
+            assertEquals(logical, oracleKey.get("sourceColumnName"));
+            assertEquals("source-key", oracleKey.get("sourceColumnId"));
+            assertEquals(physical, assertInstanceOf(Map.class, oracle.get("partitionPlan")).get("field"));
+            String ddl = oracle.get("ddl").toString();
+            assertTrue(ddl.contains("PRIMARY KEY (" + physical + ")"), ddl);
+            assertTrue(ddl.contains("UNIQUE (" + uniquePhysical + ")"), ddl);
+            assertFalse(ddl.contains(logical), ddl);
+            assertEquals(logical, StructuredValues.objectRows(results.getLast().get("tableItems")).getFirst().get("columnName"));
+            assertEquals(1, fixture.counter.reads);
+            assertEquals(0, fixture.counter.writes);
+
+            fixture.jdbc.update("update db_datasource_t set tenant_id='other' where tid='db-0'");
+            assertInstanceOf(ExitValue.class, fixture.run());
+            assertEquals(2, fixture.ddlGenerator.calls);
+        }
+    }
+
     @org.junit.jupiter.params.ParameterizedTest
     @org.junit.jupiter.params.provider.ValueSource(strings={"datetime","date"})
     void elasticNativeDateDoesNotOverrideTheSelectedTimePrecision(String selected) throws Exception {

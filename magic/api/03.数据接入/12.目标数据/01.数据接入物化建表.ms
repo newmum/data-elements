@@ -39,6 +39,8 @@ import '@post:/dst/db/ddl' as getCreateTableDDL
 import java.util.List
 import '@post:/dst/db/create' as createTable
 import '@/common/accesstemplate' as resolveAccessTemplate
+import portableDdl
+import com.linewell.dataelement.metautil.model.enums.DatabaseType
 
 // POST /ods/target/create 数据接入物化建表。
 // POST /ods/target/create：复用现有物理建表与登记逻辑；批量入口先完整验证，再顺序执行。
@@ -462,15 +464,16 @@ var dictionaryRelations = (sourceTable) => {
     }
     return result
 }
-var appendDictionaryTranslationColumns = (items, relations) => {
+var appendDictionaryTranslationColumns = (items, relations, oracle) => {
+    var logicalName = item => text((oracle ? item.sourceColumnName : null) || item.columnName).trim()
     var names = {}
     for (item in items) {
-        names[text(item.columnName).toLowerCase()] = true
+        names[logicalName(item).toLowerCase()] = true
     }
     var result = []
     for (item in items) {
         result.add(item)
-        var sourceName = text(item.columnName).trim()
+        var sourceName = logicalName(item)
         var relation = relations[sourceName.toLowerCase()]
         var translationName = sourceName + '_cn'
         if (relation != null && names[translationName.toLowerCase()] == null) {
@@ -753,7 +756,9 @@ var runMaterialization = () => {
     loadGovernanceForTableIds(dictionaryIds)
     var relations = dictionaryRelations(sourceTable)
     var sourceColumnMap = {}
-    for (column in sourceColumns) { sourceColumnMap[text(column.columnName).toLowerCase()] = column }
+    for (column in sourceColumns) {
+        sourceColumnMap[text(column.columnName).toLowerCase()] = column
+    }
 
     // ODS 目标按配置分域的顺序执行。先批量读取绑定，再验证每个目标的准入条件。
     var dataSourceTypeRoot = db.table('sym_dict_t').where().eq('tenant_id', tenantId)
@@ -795,7 +800,38 @@ var runMaterialization = () => {
                 && plan.propList.tableName.toLowerCase() == text(first(sourceTable, ['tableName', 'table_name'])).trim().toLowerCase()) {
             exit 409, '不能将来源表自身复用为物化目标表'
         }
-        plan.tableItems = ensureOdsSystemColumns(appendDictionaryTranslationColumns(plan.tableItems, relations), target.dbType)
+        plan.tableItems = ensureOdsSystemColumns(appendDictionaryTranslationColumns(plan.tableItems, relations, normalizedType == 'oracle'), target.dbType)
+        plan.aliasSourceByField = {}
+        if (normalizedType == 'oracle') {
+            // 批量预览返回物理短名。复算短名并核验来源字段，原样执行手工提交的DDL。
+            var logicalNames = plan.tableItems.map(item => text(item.sourceColumnName || item.columnName))
+            var aliases = portableDdl.targetColumnAliases(logicalNames, DatabaseType.ORACLE)
+            for (index, item in plan.tableItems) {
+                var logical = logicalNames[index]
+                var physical = aliases.get(logical)
+                var fromPreview = !blank(item.sourceColumnName) && logical != text(item.columnName)
+                if (fromPreview && (physical == null || !physical.equalsIgnoreCase(text(item.columnName)))) {
+                    exit 400, 'Oracle目标物理字段与预览不一致，请重新生成建表语句：' + logical
+                }
+                if (physical == null || (!fromPreview && !blank(plan.ddl))) { continue }
+                var source = sourceColumnMap[logical.toLowerCase()]
+                if (fromPreview && !blank(item.sourceColumnId)
+                        && (source == null || text(source.tid) != text(item.sourceColumnId))) {
+                    exit 400, 'Oracle目标字段的来源标识无效，请重新获取字段：' + logical
+                }
+                item.columnName = physical
+                item.quotedIdentifier = false
+                if (source != null) {
+                    item.sourceColumnName = source.columnName
+                    item.sourceColumnId = text(source.tid)
+                    plan.aliasSourceByField[physical.toLowerCase()] = source
+                }
+            }
+            if (blank(plan.ddl) && plan.partitionPlan instanceof Map) {
+                var partitionAlias = aliases.get(plan.partitionPlan.field)
+                if (partitionAlias != null) { plan.partitionPlan.field = partitionAlias }
+            }
+        }
         var names = {}
         for (index, item in plan.tableItems) {
             if (blank(item.columnName)) { exit 400, '第' + (index + 1) + '个字段名称不能为空' }
@@ -1076,7 +1112,8 @@ var runMaterialization = () => {
         }
         // sourceColumns 已在授权后一次读取，字段保存不再次查询来源。
         for (index, item in tableItems) {
-            var sourceColumn = sourceColumnMap[text(item.columnName).toLowerCase()]
+            var lowerName = text(item.columnName).toLowerCase()
+            var sourceColumn = plan.aliasSourceByField[lowerName] || sourceColumnMap[lowerName]
             if (sourceColumn == null && !blank(item.dictionarySourceField)) {
                 sourceColumn = sourceColumnMap[text(item.dictionarySourceField).toLowerCase()]
             }

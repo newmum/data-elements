@@ -24,6 +24,14 @@ public class HaitongTransformRecord extends AbstractProcessor {
     public static final PropertyDescriptor EXACT_JSON_NUMBERS=new PropertyDescriptor.Builder().name("preserve-json-numbers").displayName("Preserve JSON Number Precision")
             .description("仅用于已声明的顶层JSON记录：从原数字token保留精确小数和整数，委托Reader的非数字值保持。CSV、Avro或未知Reader保持关闭。")
             .required(true).defaultValue("false").allowableValues("true","false").build();
+    public static final PropertyDescriptor TIMESTAMP_INPUT=new PropertyDescriptor.Builder().name("timestamp-input-contract")
+            .displayName("Timestamp Input Contract")
+            .description("AUTO保留未声明来源的旧Timestamp格式化契约；ABSOLUTE_INSTANT仅用于明确保证Timestamp为绝对时间的Reader，如实际JDBC或Avro时间戳。")
+            .required(true).defaultValue("AUTO").allowableValues("AUTO","ABSOLUTE_INSTANT").build();
+    public static final PropertyDescriptor TIMESTAMP_TEXT=new PropertyDescriptor.Builder().name("format-historical-timestamp-text")
+            .displayName("Format Historical Timestamp Text")
+            .description("仅为已配置Timestamp Format的文本Writer启用。日期格式化按真实时间线换算，数值和二进制Writer沿用原载体。")
+            .required(true).defaultValue("false").allowableValues("true","false").build();
     public static final PropertyDescriptor DICTIONARIES=new PropertyDescriptor.Builder().name("dictionary-service").displayName("Dictionary Batch Service").identifiesControllerService(HaitongDictionaryService.class).required(false).build();
     public static final PropertyDescriptor PLAN=new PropertyDescriptor.Builder().name("execution-plan").displayName("Execution Plan").required(true).addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
     public static final PropertyDescriptor JDBC_ALIASES=new PropertyDescriptor.Builder().name("jdbc-field-aliases").displayName("Registered JDBC Field Aliases")
@@ -48,9 +56,11 @@ public class HaitongTransformRecord extends AbstractProcessor {
     private volatile MappingEngine.Plan plan;
     private volatile JdbcRecordAliases jdbcAliases = JdbcRecordAliases.NONE;
     private volatile Set<String> binaryTextFields = Set.of();
+    private volatile boolean absoluteTimestampInput;
+    private volatile boolean formatHistoricalTimestampText;
     private final java.util.concurrent.Semaphore windows=new java.util.concurrent.Semaphore(2);
     private volatile String nodeContext,planId;
-    @Override public List<PropertyDescriptor> getSupportedPropertyDescriptors(){return List.of(READER,TYPED_READER,WRITER,EXACT_JSON_NUMBERS,DICTIONARIES,PLAN,JDBC_ALIASES,BINARY_ENCODING,ATTEMPTS,ERROR_LOOP_DELAY);}
+    @Override public List<PropertyDescriptor> getSupportedPropertyDescriptors(){return List.of(READER,TYPED_READER,WRITER,EXACT_JSON_NUMBERS,TIMESTAMP_INPUT,TIMESTAMP_TEXT,DICTIONARIES,PLAN,JDBC_ALIASES,BINARY_ENCODING,ATTEMPTS,ERROR_LOOP_DELAY);}
     @Override protected PropertyDescriptor getSupportedDynamicPropertyDescriptor(String name) {
         return switch(name){case "plan-hash"->HASH;case "plan-id"->PLAN_ID;case "context-node-id"->CONTEXT_NODE;case "required-engine-version"->MappingCompatibility.REQUIRED_VERSION;default->null;};
     }
@@ -69,6 +79,8 @@ public class HaitongTransformRecord extends AbstractProcessor {
         MappingEngine.Plan compiled=MappingEngine.compile(document);
         if(!compiled.dictionaries().isEmpty()&&!context.getProperty(DICTIONARIES).isSet())throw new MappingException("DICTIONARY_UNAVAILABLE","计划引用字典但未绑定批量服务");
         jdbcAliases=JdbcRecordAliases.parse(context.getProperty(JDBC_ALIASES).getValue());
+        absoluteTimestampInput="ABSOLUTE_INSTANT".equals(context.getProperty(TIMESTAMP_INPUT).getValue());
+        formatHistoricalTimestampText=context.getProperty(TIMESTAMP_TEXT).asBoolean();
         binaryTextFields="BASE64_TEXT".equals(context.getProperty(BINARY_ENCODING).getValue())
                 ? compiled.outputContracts().entrySet().stream().filter(entry->entry.getValue().logicalType().equals("BINARY"))
                     .map(Map.Entry::getKey).collect(java.util.stream.Collectors.toUnmodifiableSet()) : Set.of();
@@ -154,35 +166,57 @@ public class HaitongTransformRecord extends AbstractProcessor {
     private void writeWindow(List<Map<String,Object>>rows,List<Long>indices,ExecutionContext context,DictionarySpec.Provider dictionaries,RecordSetWriter writer,BufferedWriter errors,RecordSchema schema,long[]counts,DynamicOutput dynamic)throws Exception{
         var result=MappingEngine.executeIndexed(plan,rows,indices,context,dictionaries);
         counts[2]++;counts[3]+=result.dictionaryBatches();
-        int rowPosition=0;for(var row:result.rows()){
-            if(row.success()){if(dynamic==null){Map<String,Object>converted=new LinkedHashMap<>();row.output().forEach((key,value)->converted.put(key,writerValue(key,value,context)));writer.write(new MapRecord(schema,converted));}counts[0]++;}
-            else{if(plan.recordMode().equals("FAIL_FLOWFILE"))throw new MappingException("RECORD_INVALID",MappingDiagnostics.summary(row.errors().getFirst()));
+        List<OutputRow> dynamicRows=dynamic==null?List.of():new ArrayList<>();
+        int rowPosition=0;
+        for(var row:result.rows()){
+            var input=rows.get(rowPosition++);
+            if(row.success()){
+                boolean instantText=formatHistoricalTimestampText
+                        && (absoluteTimestampInput||!NifiTemporalValues.hasUnclassifiedTimestamp(input));
+                var output=new OutputRow(row.output(),instantText);
+                if(dynamic==null)writer.write(new MapRecord(schema,outputValues(output,context,false)));
+                else dynamicRows.add(output);
+                counts[0]++;
+            }else{if(plan.recordMode().equals("FAIL_FLOWFILE"))throw new MappingException("RECORD_INVALID",MappingDiagnostics.summary(row.errors().getFirst()));
                 Map<String,Object>envelope=new LinkedHashMap<>();envelope.put("planHash",plan.hash());envelope.put("inputRecordIndex",row.index());envelope.put("errors",row.errors());
                 // Original values stay in the controlled content queue, never attributes/logs.
-                MappingErrorRecords.snapshot(envelope,rows.get(rowPosition));errors.write(JSON.writeValueAsString(envelope));errors.newLine();counts[1]++;
+                MappingErrorRecords.snapshot(envelope,input);errors.write(JSON.writeValueAsString(envelope));errors.newLine();counts[1]++;
             }
-            rowPosition++;
         }
-        if(dynamic!=null)dynamic.write(result.rows(),context);
+        if(!dynamicRows.isEmpty())dynamic.write(dynamicRows,context);
     }
+
+    private record OutputRow(Map<String,Object> values,boolean instantText) {}
+
     private final class DynamicOutput {
         private final ProcessSession session;private final FlowFile original;private final RecordSetWriterFactory writers;private final RecordSchema base;
         private final List<FlowFile>derived,files;
         DynamicOutput(ProcessSession session,FlowFile original,RecordSetWriterFactory writers,RecordSchema base,List<FlowFile>derived,List<FlowFile>files){this.session=session;this.original=original;this.writers=writers;this.base=base;this.derived=derived;this.files=files;}
-        void write(List<MappingEngine.Row>rows,ExecutionContext context)throws Exception {
-            List<Map<String,Object>>values=rows.stream().filter(MappingEngine.Row::success).map(MappingEngine.Row::output).toList();if(values.isEmpty())return;
+        void write(List<OutputRow>rows,ExecutionContext context)throws Exception {
+            List<Map<String,Object>>values=rows.stream().map(OutputRow::values).toList();
             Map<String,String>types=new HashMap<>(plan.outputTypes());plan.outputContracts().forEach((name,contract)->{if(contract.logicalType().equals("DECIMAL")&&contract.precision()==0)types.put(name,"DECIMAL_AUTO");});
             RecordSchema schema=MappingOutputSchema.resolve(base,types,values);
             FlowFile part=session.create(original);int index=derived.size();derived.add(part);Map<String,String>attributes=new HashMap<>();
             try(OutputStream out=session.write(part);RecordSetWriter writer=writers.createWriter(getLogger(),schema,out,original.getAttributes())){
-                writer.beginRecordSet();for(var row:values){Map<String,Object>converted=new LinkedHashMap<>();row.forEach((key,value)->{Object carrier=writerValue(key,value,context);converted.put(key,writer instanceof RawRecordWriter?carrier:NifiTemporalValues.unionSafeValue(carrier));});var record=new MapRecord(schema,converted);if(writer instanceof RawRecordWriter raw)raw.writeRawRecord(record);else writer.write(record);}
+                writer.beginRecordSet();
+                RawRecordWriter raw=writer instanceof RawRecordWriter rawWriter?rawWriter:null;
+                for(var row:rows){
+                    var record=new MapRecord(schema,outputValues(row,context,raw==null));
+                    if(raw!=null)raw.writeRawRecord(record);else writer.write(record);
+                }
                 attributes.putAll(writer.finishRecordSet().getAttributes());attributes.put("mime.type",writer.getMimeType());writer.flush();
             }
             attributes.put("record.count",Integer.toString(values.size()));part=session.putAllAttributes(part,attributes);derived.set(index,part);files.add(part);
         }
     }
-    private Object writerValue(String name,Object value,ExecutionContext context) {
-        return binaryTextFields.contains(name) ? BinaryValues.base64(value) : NifiTemporalValues.writerValue(value,context.zone());
+    private Map<String,Object> outputValues(OutputRow row,ExecutionContext context,boolean unionSafe) {
+        var converted=new LinkedHashMap<String,Object>();
+        row.values().forEach((key,value)->{
+            Object carrier=binaryTextFields.contains(key)?BinaryValues.base64(value)
+                    :NifiTemporalValues.writerValue(value,context.zone(),row.instantText());
+            converted.put(key,unionSafe?NifiTemporalValues.unionSafeValue(carrier):carrier);
+        });
+        return converted;
     }
     private RecordSchema binaryTransportSchema(RecordSchema schema) {
         if(binaryTextFields.isEmpty())return schema;

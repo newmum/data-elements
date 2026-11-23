@@ -93,7 +93,11 @@ class GlobalJsonRecordServicesTest {
     @org.junit.jupiter.params.ParameterizedTest
     @org.junit.jupiter.params.provider.ValueSource(ints={20,100})
     void mixedBranchesResolveBothWritersWithOneNiFiRead(int count) {
-        when(nifi.listControllerServices("root")).thenReturn(HiveServiceFixtures.codecs());
+        var services = HiveServiceFixtures.codecs().stream().<com.fasterxml.jackson.databind.JsonNode>map(row -> row.deepCopy()).toList();
+        services.stream().filter(row -> "global-hive-json-writer".equals(row.path("component").path("id").asText()))
+                .forEach(row -> ((com.fasterxml.jackson.databind.node.ObjectNode) row.path("component"))
+                        .putObject("properties").put("Timestamp Format", "yyyy-MM-dd HH:mm:ss.SSS"));
+        when(nifi.listControllerServices("root")).thenReturn(services);
         var nodes=new ArrayList<Pipeline.Node>();var edges=new ArrayList<Pipeline.Edge>();
         for(int index=0;index<count;index++) {
             nodes.add(source("m"+index,"source.mysql",Map.of()));
@@ -106,6 +110,8 @@ class GlobalJsonRecordServicesTest {
             assertThat(result.writerForNode("m"+index)).isEqualTo("global-json-writer");
             assertThat(result.writerForNode("h"+index)).isEqualTo("global-hive-json-writer");
             assertThat(result.writerForNode("map"+index)).isEqualTo("global-hive-json-writer");
+            assertThat(result.formatsTimestampsForNode("map"+index)).isTrue();
+            assertThat(result.formatsTimestampsForNode("m"+index)).isFalse();
         }
         verify(nifi,times(1)).listControllerServices("root");
         verify(nifi,times(1)).get("/flow/process-groups/root",com.fasterxml.jackson.databind.JsonNode.class);

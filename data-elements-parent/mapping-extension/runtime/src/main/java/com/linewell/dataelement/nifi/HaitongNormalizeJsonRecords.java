@@ -37,10 +37,10 @@ public class HaitongNormalizeJsonRecords extends AbstractProcessor {
         List<FlowFile> outputs=new ArrayList<>();
         boolean envelope="1".equals(original.getAttribute(MappingErrorRecords.ENVELOPE));
         try {
+            OutputWindow window=new OutputWindow(session,original,outputs,envelope);
             String avro=renameSchema(original.getAttribute("avro.schema"),true);
             String stored=renameSchema(original.getAttribute(MappingErrorRecords.SCHEMA),false);
             try(InputStream input=session.read(original)) {
-                OutputWindow window=new OutputWindow(session,original,outputs,envelope);
                 if(contract.formats().contains("TEXT")) {
                     byte[] bytes=input.readNBytes((int)RecordBudget.RECORD_BYTES+1);
                     if(bytes.length>RecordBudget.RECORD_BYTES)throw budget();
@@ -48,17 +48,17 @@ public class HaitongNormalizeJsonRecords extends AbstractProcessor {
                     if(contract.formats().contains("JSON"))try {parsed=JSON.reader().with(DeserializationFeature.FAIL_ON_TRAILING_TOKENS).readTree(bytes);}
                     catch(JsonProcessingException invalidJson){/* The registered topic explicitly permits raw text too. */}
                     if(parsed==null)window.add(contract.require(StructuredJsonRecords.text(new String(bytes,StandardCharsets.UTF_8))).values());
-                    else if(parsed.isArray())for(JsonNode item:parsed)window.add(normalize(item,false));
-                    else window.add(normalize(parsed,false));
+                    else if(parsed.isArray())for(JsonNode item:parsed)addRecord(window,item,false);
+                    else addRecord(window,parsed,false);
                 } else try(JsonParser parser=JSON.getFactory().createParser(input)) {
                     JsonToken token;
                     while((token=parser.nextToken())!=null) {
                         if(token==JsonToken.START_ARRAY&&!envelope) {
                             while(parser.nextToken()!=JsonToken.END_ARRAY) {
                                 if(parser.currentToken()==null)throw new IOException("Incomplete JSON array");
-                                window.add(normalize(readNode(parser,new Budget(),0),false));
+                                addRecord(window,readNode(parser,new Budget(),0),false);
                             }
-                        } else window.add(normalize(readNode(parser,new Budget(),0),envelope));
+                        } else addRecord(window,readNode(parser,new Budget(),0),envelope);
                     }
                 }
                 window.flush();
@@ -66,6 +66,10 @@ public class HaitongNormalizeJsonRecords extends AbstractProcessor {
             for(int i=0;i<outputs.size();i++) {
                 FlowFile part=outputs.get(i);
                 part=session.putAttribute(part,"ht.source.shape.hash",contract.hash());outputs.set(i,part);
+                if (contract.skipBlankRecords() && !envelope) {
+                    part = session.putAttribute(part, "ht.source.blank.rows.skipped", Long.toString(window.skippedBlankRows));
+                    outputs.set(i, part);
+                }
                 if(avro==null){part=session.removeAttribute(part,"avro.schema");}else part=session.putAttribute(part,"avro.schema",avro);
                 outputs.set(i,part);
                 if(stored==null)part=session.removeAttribute(part,MappingErrorRecords.SCHEMA);else part=session.putAttribute(part,MappingErrorRecords.SCHEMA,stored);
@@ -80,6 +84,22 @@ public class HaitongNormalizeJsonRecords extends AbstractProcessor {
             session.transfer(session.penalize(original),FAILURE);context.yield();
             getLogger().warn("来源字段规范化失败，错误码{}，异常类型{}",code,error.getClass().getName());
         }
+    }
+    private void addRecord(OutputWindow window, JsonNode value, boolean envelope) throws IOException {
+        if (!envelope && contract.skipBlankRecords() && value.isObject()) {
+            boolean populated = false;
+            for (JsonNode cell : value) {
+                if (!cell.isNull() && (!cell.isTextual() || !cell.textValue().isBlank())) {
+                    populated = true;
+                    break;
+                }
+            }
+            if (!populated) {
+                window.skippedBlankRows++;
+                return;
+            }
+        }
+        window.add(normalize(value, envelope));
     }
     private Object normalize(JsonNode value,boolean envelope) {
         if(envelope) {
@@ -147,7 +167,7 @@ public class HaitongNormalizeJsonRecords extends AbstractProcessor {
     private static MappingException budget(){return new MappingException("BUDGET_EXCEEDED","来源记录超过内存或嵌套预算，保留原始输入");}
     private static final class OutputWindow {
         final ProcessSession session;final FlowFile original;final List<FlowFile> outputs;final boolean envelope;
-        final List<Object> values=new ArrayList<>();long bytes;
+        final List<Object> values=new ArrayList<>();long bytes;long skippedBlankRows;
         OutputWindow(ProcessSession session,FlowFile original,List<FlowFile> outputs,boolean envelope){this.session=session;this.original=original;this.outputs=outputs;this.envelope=envelope;}
         void add(Object value)throws IOException {
             String encoded=StructuredJsonRecords.jsonText(value);long size=encoded.getBytes(StandardCharsets.UTF_8).length;

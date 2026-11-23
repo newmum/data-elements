@@ -18,6 +18,26 @@ import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 class PortableDdlConverterTest {
+    @Test
+    void oracleTargetAliasesUseTheByteLimitAndAvoidExistingNames() {
+        var converter = new PortableDdlConverter();
+        String fits = "a".repeat(30);
+        String longAscii = "a".repeat(31);
+        String longUnicode = "字段".repeat(6);
+        String firstAlias = converter.targetColumnAliases(List.of(longAscii), DatabaseType.ORACLE).get(longAscii);
+        String reserved = "\"" + firstAlias.toLowerCase(java.util.Locale.ROOT) + "\"";
+        var names = List.of(fits, longAscii, longUnicode, reserved);
+
+        var aliases = converter.targetColumnAliases(names, DatabaseType.ORACLE);
+
+        assertEquals(aliases, converter.targetColumnAliases(names.reversed(), DatabaseType.ORACLE));
+        assertThat(aliases.keySet()).containsExactlyInAnyOrder(longAscii, longUnicode);
+        assertThat(aliases.values()).doesNotHaveDuplicates().allMatch(name -> name.matches("C_[0-9A-F]{28}"));
+        assertNotEquals(firstAlias, aliases.get(longAscii));
+        assertTrue(converter.targetColumnAliases(names, DatabaseType.HIVE).isEmpty());
+        assertTrue(converter.targetColumnAliases(names, DatabaseType.OCEANBASE_ORACLE).isEmpty());
+    }
+
     @ParameterizedTest
     @CsvSource({"Int8,3,SMALLINT,int", "UInt8,3,SMALLINT,int", "Int16,5,SMALLINT,int", "UInt16,5,INTEGER,int",
         "Int32,10,INTEGER,int", "UInt32,10,BIGINT,bigint", "Int64,19,BIGINT,bigint", "UInt64,20,DECIMAL(20;0),decimal",

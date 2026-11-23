@@ -41,7 +41,7 @@ public final class HaitongJdbcRecordReader extends SchemaRegistryService impleme
 
     @Override protected List<PropertyDescriptor> getSupportedPropertyDescriptors(){
         var properties=new ArrayList<>(super.getSupportedPropertyDescriptors());
-        properties.addAll(List.of(NUMBERS,BINARY,AbstractJsonRowRecordReader.MAX_STRING_LENGTH,AbstractJsonRowRecordReader.ALLOW_COMMENTS,
+        properties.addAll(List.of(NUMBERS,BINARY,AbstractJsonRowRecordReader.MAX_STRING_LENGTH,JsonWireOptions.ALLOW_COMMENTS,
                 DateTimeUtils.DATE_FORMAT,DateTimeUtils.TIME_FORMAT,DateTimeUtils.TIMESTAMP_FORMAT));return properties;
     }
     @Override protected List<AllowableValue> getSchemaAccessStrategyValues(){return List.of(INFER_SCHEMA);}
@@ -55,7 +55,7 @@ public final class HaitongJdbcRecordReader extends SchemaRegistryService impleme
         timestampFormat=context.getProperty(DateTimeUtils.TIMESTAMP_FORMAT).getValue();
         int max=context.getProperty(AbstractJsonRowRecordReader.MAX_STRING_LENGTH).asDataSize(DataUnit.B).intValue();
         var factory=JsonFactory.builder().streamReadConstraints(StreamReadConstraints.builder().maxStringLength(max).maxNumberLength(1000).build()).build();
-        factory.configure(JsonParser.Feature.ALLOW_COMMENTS,context.getProperty(AbstractJsonRowRecordReader.ALLOW_COMMENTS).asBoolean());
+        factory.configure(JsonParser.Feature.ALLOW_COMMENTS,context.getProperty(JsonWireOptions.ALLOW_COMMENTS).asBoolean());
         var mapper=new ObjectMapper(factory).enable(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS);
         parserFactory=input->mapper.getFactory().createParser(input);
     }

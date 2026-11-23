@@ -93,5 +93,11 @@ record GlobalJsonRecordServices(String rootId, List<JsonNode> services, Map<Stri
         if(id==null)throw new IllegalStateException("节点所需全局 Writer 尚未解析："+name);
         return id;
     }
+    boolean formatsTimestampsForNode(String nodeId) {
+        String writerId = writerForNode(nodeId);
+        return services.stream()
+                .filter(service -> writerId.equals(service.path("component").path("id").asText(service.path("id").asText())))
+                .anyMatch(service -> !service.path("component").path("properties").path("Timestamp Format").asText("").isBlank());
+    }
     Set<String> ids() { var result=new LinkedHashSet<>(writerIds.values());result.add(readerId);return Set.copyOf(result); }
 }

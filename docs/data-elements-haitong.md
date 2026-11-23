@@ -1883,7 +1883,7 @@ LIVE_BATCH在两次执行间被外部修改时不能强求旧结果，测试需�
 | `POST /nifi/map/schema` | sourceRef/targetRef、allowAdditionalSourceFields | 实际物理结构、摘要及规范登记引用 |
 | `POST /nifi/map/sample` | spec、sourceRef、limit=1..100 | 脱敏 sampleRows/resultRows、行状态与统计 |
 | `GET /nifi/plan/keep` | 无业务 ID | KEEP_ALL，不自动删除历史 |
-| `POST /nifi/maprun/upgrade` | pipelineId/nodeId、expectedUpdatedAt/expectedPlanHash、start | 仅字段节点替换及按原状态恢复，不发布其他草稿 |
+| `POST /nifi/maprun/upgrade` | pipelineId/nodeId、expectedUpdatedAt、mode；字段治理传 expectedPlanHash；来源原位升级先传 dryRun，再传 expectedFingerprint | 更新选定治理节点或来源组件。来源原位升级保持停止 |
 | `POST /nifi/maprun/start` | pipelineId、expectedUpdatedAt | 重验已发布计划和原生图后显式启动，draftPublished=false，一次性来源RUN_ONCE |
 
 计划和模板分页不是逐行正文补查；批量编译和资源解析应先收集 ID，再批量读取并逐 ID 校验。返回的版本/资源 ID 必须属于当前授权输入范围，任何跨租户或无权 ID 都不能靠丢弃条目掩盖。Schema 的物理驱动读取应和控制元数据查询分别计数，不能省略授权读取以证明查询次数固定。
@@ -2368,6 +2368,8 @@ NiFi 的 `Null String` 原始属性应填写 `\\N`，即两个反斜杠后接 N�
 画布的 JDBC 写入节点已填写单主机、单数据库的 MySQL（含 MySQL 协议兼容库）、MariaDB、PostgreSQL、KingbaseES、HighGo 或 Vertica URL 时，可以直接打开「物化建表」。弹窗显示 URL 指定的目标库。执行时从最终 `CREATE TABLE` 或 MongoDB 创建命令提取名称，成功后刷新并回填对应的表或集合。画布的建表请求只允许创建选定库中的一张表及该表注释，登记库连接从当前租户解析。直连预览发送 `canvasJdbc` 的 URL 和方言提示，执行才提交该节点的账号密码。MongoDB 探查返回的 BSON ObjectId 生成 MySQL 建表语句时使用 `CHAR(24)`，保留主键约束。数据接入的批量物化继续按显式目标表名执行。澄天与风驰的 Mock 未接入这两个画布物化端点。
 
 MongoDB 目标节点填写主机和数据库后，可以从「集合」下拉打开「物化建表」。预览使用 `canvasMongo.database` 生成创建集合的 JSON 指令。可从来源表的主键生成唯一索引，也可直接创建空集合。执行时使用同一节点的端口、账号、认证库和 TLS 配置，成功后回填集合名并刷新列表。
+
+MongoDB 目标使用 `HaitongMongoRecordReader` 将嵌套 JSON 对象交给 `PutMongoRecord`。数组中每个对象保留实际出现的键和原有 JSON 值类型，显式 `null` 保留，缺省键保持缺省。根字段继续按所选 JSON 时间格式和类型推断读取。多个 MongoDB 目标在同一流程组共用一个 Reader，按原有业务键执行批量 UPSERT，无业务键时执行批量插入。新发布需要安装对应 NiFi 版本的字段治理扩展 1.1.40。历史流程通过保留来源水位的受控升级切换 Reader。
 
 由数据中台物化创建并绑定了接入节点的任务，在指定节点创建流程组、核验组件及读取驱动位置。拥有当前行业ALL数据范围的用户点击画布「详情」后，通过同源`/nifi-ui`、`/nifi-api`打开该节点的只读原生流程；服务端签发十分钟HttpOnly/SameSite会话并复用已配置的NiFi认证，地址中不含凭据。会话绑定当前平台登录、行业及任务节点，退出或切换行业后失效。代理只允许当前流程及已读取的子流程、组件，拒绝写操作和其他流程；原生编辑继续使用NiFi自身账号。受限角色通过海通画布查看详情。未记录节点的历史画布在同一受控协议下解析默认节点。
 
@@ -3120,6 +3122,18 @@ MongoDB 使用万象原有的绿色叶片标识 `mongodb.svg`，Vertica 使用�
 
 
 Hive HDFS 写入可开启 `hiveTimestampFormat`，仅在该分支、合并小文件之前格式化已登记的时间字段，关闭数字自动识别；共享来源和治理保留普通记录载体，避免把 Hive 的文本日期格式传播到 JDBC 目标。分支的时间格式化、合并和CSV转换共用任务内精确数值Reader，保留长整数与高精度小数。模板的 JDBC 目标有业务匹配键时启用 `insertThenMerge`：INSERT失败转MERGE、retry留在原处理器，合并失败保留待处理；无匹配键时仅INSERT。该方式适合新增为主的接入，更新较多时可关闭此开关并直接采用MERGE，减少失败尝试。更新沿用目标写入组件的 ODS 审计字段保护，不承诺跨库分布式事务。Hive为追加写入，重放范围可能产生重复，需按业务键核对。
+
+字段治理仅为已配置 `Timestamp Format` 的 JSON Writer 启用历史时间文本适配。未预转为 SQL Timestamp 的来源文本按规则时区解析，输出使用 NiFi 运行时区的历史规则，并保留绝对时间和纳秒载体。已使用旧 Reader 转为 SQL Timestamp 的输入默认沿用原有读取契约。Reader 明确提供 JDBC 或 Avro 的绝对时间时可声明 `ABSOLUTE_INSTANT`。无时间文本格式的 JSON Writer 及二进制 Writer 沿用原数值和类型处理。
+
+已登记 MySQL 来源可通过 `POST /nifi/maprun/upgrade` 的 `mysql-read-pool` 模式升级整数读取连接。提交当前画布版本和来源节点 ID，先以 `dryRun=true` 核对目标及取得 `fingerprint`，再用同一画布版本和 `expectedFingerprint` 确认。流程必须停止且所有连接的队列记录数与字节数为零。服务按当前租户和角色校验已登记来源、实际原生表和连接；在本流程组新建整数读取池，只切换该来源读取组件的引用。共享池、其他流程、全部组件 ID、连线以及完整本地与集群状态沿用原配置。升级成功后保持停止。
+
+`source-normalization` 模式按同一预检协议升级已登记的 MinIO 单对象来源。每条已核对的直接治理支路插入登记字段规范化，原连接 ID 和队列配置沿用，规范化失败记录保留在该支路的失败队列。治理组件原位升级到当前扩展版本，并从已保存规则归档及激活正式计划。来源组件及其完整本地和集群水位保留，画布运行边界同步更新。
+
+远程工作簿采集按原始列位置保存 Excel Reader 的实际字段路径。空表头使用 Reader 生成的列名，重复表头使用 Reader 的顺序后缀。登记字段名及字段 ID 保持原规则，预览和接入按同一列位置取值。原始标题与 Reader 自动命名产生路径冲突时，采集明确返回冲突。
+
+工作簿采集和接入跳过整行无值的样式记录，数值零、布尔 false 和其他有值单元格继续参与治理。已部署的 MinIO 工作簿重新采集登记快照后可通过 `workbook-record-policy` 模式原位更新规范化节点。该模式核对原字段路径并保留 ListS3 的组件 ID、水位及全部原连线，升级后流程保持停止。
+
+`exact-value-readers` 模式按同一预检协议升级直接进入字段治理的已登记 JDBC 来源。以实际目标字段类型确定精确数值和 BLOB Reader，JDBC 投影及写入端共用本流程组的精确 Reader。Oracle BLOB 分支采用节点上的厂商类型连接池，Hive 文本分支保留精确数值与 Base64 传输。组件 ID、连线、旧共享服务及完整来源水位保留。
 
 关系型主来源配置 `manualBackfill=true` 时，编译器只在NiFi原生画布派生备用补数组件，与主来源共用已授权登记资产并直接连接同一个字段治理。海通画布仅显示主来源、一个治理和两个目标，不显示补数节点及连线。备用组件初始范围 `1=0` 且部署状态为DISABLED；普通启动不启用它，也不参与主任务的周期/清表策略。进入「详情」打开NiFi原生画布，设置明确补数WHERE范围或查询后单次运行，完成后恢复禁用；它不继承增量高水位，不会因水位越过历史时间而漏掉补数范围。非关系型来源不派生该可选组件，旧模板的显式 `source:backfill` 配置仍可读取。BINARY输出同时写JDBC与Hive时仍要求分支编码明确，不能以取消编码校验换取单节点部署。
 

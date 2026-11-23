@@ -67,6 +67,55 @@ if (body?.importSourceDdl == true || body?.convertSourceDdl == true) {
 
 var textOf = (value) => value == null ? null : value + ''
 
+// Oracle接入物化按物理短名生成DDL与注释，来源字段仍以登记标识和原名称关联。
+var applyTargetColumnAliases = (columns, targetType) => {
+    var aliases = portableDdl.targetColumnAliases(columns.map(column => column.columnName), targetType)
+    for (column in columns) {
+        var alias = aliases.get(column.columnName)
+        if (alias != null) {
+            column.setColumnName(alias)
+            column.setQuotedIdentifier(false)
+        }
+    }
+    return aliases
+}
+var targetConstraints = (constraints, aliases) => {
+    if (aliases.isEmpty() || !(constraints instanceof List)) { return constraints }
+    return constraints.map(constraint => {
+        if (!(constraint instanceof Map) || !(constraint.columns instanceof List)) { return constraint }
+        var physical = {}
+        physical.putAll(constraint)
+        physical.columns = constraint.columns.map(name => aliases.get(name) || name)
+        return physical
+    })
+}
+var targetPartition = (partition, aliases) => {
+    var alias = partition instanceof Map ? aliases.get(partition.field) : null
+    if (alias == null) { return partition }
+    var physical = {}
+    physical.putAll(partition)
+    physical.field = alias
+    return physical
+}
+var targetPreviewFields = (original, converted, aliases) => {
+    if (aliases.isEmpty()) { return converted }
+    var sourcesByAlias = {}
+    for (item in original) {
+        var name = item.columnName || item.name
+        var alias = aliases.get(name)
+        if (alias != null) { sourcesByAlias[alias] = item }
+    }
+    return converted.map(column => {
+        var logical = sourcesByAlias[column.columnName]
+        if (logical == null) { return column }
+        var physical = {}
+        physical.putAll(logical)
+        physical.putAll(column)
+        physical.sourceColumnName = logical.columnName || logical.name
+        return physical
+    })
+}
+
 // 日历分区的 Hive 兜底是显式分区值。保持 RANGE 上界和提交计划一致，来源继承模式沿用原值。
 var normalizeDdlPartition = (request, columns, targetType) => {
     var plan = tablePartitions.normalize(request, columns, targetType)
@@ -430,19 +479,24 @@ if (body?.batchGenerate == true) {
                     partitionPlan:{enabled:false}, partitionSupported:false})
                 continue
             }
+            var aliases = applyTargetColumnAliases(batchColumns, batchConfig.getEffectiveDatabaseType())
             var converted = portableDdl.prepare(batchColumns, batchConfig)
             var ddl = metadataExplorerService.generateCreateTableDdl(batchConfig,
                 requestedTableName, converted.columns, submittedProps.tableNameCn)
-            var partitionPlan = normalizeDdlPartition(submittedTarget.partitionPlan, converted.columns, targetType)
-            var constraintPreview = tablePartitions.enrichConstraints(ddl, submittedTarget.sourceConstraints, batchConfig, partitionPlan)
+            var partitionPlan = normalizeDdlPartition(targetPartition(submittedTarget.partitionPlan, aliases), converted.columns, targetType)
+            var constraintPreview = tablePartitions.enrichConstraints(ddl, targetConstraints(submittedTarget.sourceConstraints, aliases), batchConfig, partitionPlan)
             ddl = constraintPreview.ddl
             var previewWarnings = []
             previewWarnings.addAll(converted.warnings)
             previewWarnings.addAll(constraintPreview.warnings)
+            for (logical in aliases.keySet()) {
+                previewWarnings.add({field:logical,message:'Oracle目标字段使用物理名 ' + aliases.get(logical) + '，保留来源字段关联',requiresEdit:false})
+            }
             ddl = tablePartitions.apply(ddl, partitionPlan, batchConfig)
             // 仅处理自动生成的DDL；手工提交语句不进入这些生成规则。
             generated.add({dbId: submittedDbId, requestedTableName: requestedTableName,
-                tableName: requestedTableName, ddl: ddl, warnings: previewWarnings, tableItems: converted.tableItems,
+                tableName: requestedTableName, ddl: ddl, warnings: previewWarnings,
+                tableItems: targetPreviewFields(submittedItems, converted.tableItems, aliases),
                 partitionPlan:partitionPlan, partitionSupported:tablePartitions.supported(targetType)})
         } catch (e) {
             exit 400, '目标数据源“' + targetDisplayName + '”未能生成建表语句：' + ddlFailureTip(e, true)

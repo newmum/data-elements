@@ -7,6 +7,9 @@ import com.alibaba.druid.sql.ast.statement.*;
 import com.linewell.dataelement.metautil.model.dto.ColumnInfo;
 import com.linewell.dataelement.metautil.model.dto.DataSourceConfig;
 import com.linewell.dataelement.metautil.model.enums.DatabaseType;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.*;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Component;
@@ -16,9 +19,56 @@ import org.ssssssss.magicapi.core.annotation.MagicModule;
 @Component
 @MagicModule("portableDdl")
 public class PortableDdlConverter {
+    private static final int ORACLE_PORTABLE_IDENTIFIER_BYTES = 30;
     private static final Set<PortableColumnType.Kind> NUMERIC_TYPES = Set.of(
             PortableColumnType.Kind.SMALLINT, PortableColumnType.Kind.INTEGER, PortableColumnType.Kind.BIGINT,
             PortableColumnType.Kind.DECIMAL, PortableColumnType.Kind.FLOAT, PortableColumnType.Kind.DOUBLE);
+
+    /** Physical aliases for Oracle materialization, including installations with the 30-byte identifier limit. */
+    public Map<String, String> targetColumnAliases(List<String> logicalNames, DatabaseType databaseType) {
+        if (databaseType != DatabaseType.ORACLE) return Collections.emptyMap();
+        Set<String> reserved = new HashSet<>();
+        for (String name : logicalNames) {
+            if (name != null) reserved.add(oracleIdentifierKey(name));
+        }
+        Map<String, String> aliases = new LinkedHashMap<>();
+        logicalNames.stream().filter(Objects::nonNull).distinct().sorted()
+                .filter(name -> oracleIdentifierBytes(name) > ORACLE_PORTABLE_IDENTIFIER_BYTES)
+                .forEach(name -> {
+                    int salt = 0;
+                    String candidate;
+                    do {
+                        candidate = "C_" + identifierDigest(name, salt++).substring(0, ORACLE_PORTABLE_IDENTIFIER_BYTES - 2);
+                    } while (!reserved.add(candidate));
+                    aliases.put(name, candidate);
+                });
+        return aliases;
+    }
+
+    private static int oracleIdentifierBytes(String name) {
+        return unquotedName(name).getBytes(StandardCharsets.UTF_8).length;
+    }
+
+    private static String oracleIdentifierKey(String name) {
+        return unquotedName(name).toUpperCase(Locale.ROOT);
+    }
+
+    private static String unquotedName(String name) {
+        if (name.length() > 1 && name.startsWith("\"") && name.endsWith("\"")) {
+            return name.substring(1, name.length() - 1).replace("\"\"", "\"");
+        }
+        return name;
+    }
+
+    private static String identifierDigest(String name, int salt) {
+        try {
+            byte[] bytes = (name + '\0' + salt).getBytes(StandardCharsets.UTF_8);
+            return HexFormat.of().withUpperCase().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
+        } catch (NoSuchAlgorithmException impossible) {
+            throw new IllegalStateException(impossible);
+        }
+    }
+
     public Map<String,Object> read(String ddl, String sourceCode) {
         DatabaseType source = DatabaseType.fromCode(sourceCode);
         var statements = PortableSqlParser.parse(ddl, source);

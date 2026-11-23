@@ -20,6 +20,9 @@ import com.linewell.dataelement.feature.dataaccess.domain.RegisteredJdbcEndpoint
 import com.linewell.dataelement.feature.dataaccess.infrastructure.jdbc.RegisteredJdbcDataSourceResolver;
 import com.linewell.dataelement.integration.nifi.canvas.compile.DateTableFetchPolicy;
 import com.linewell.dataelement.integration.nifi.canvas.lifecycle.NifiMutationAspect;
+import com.linewell.dataelement.integration.nifi.canvas.mapping.LegacyTransportUpgradeService;
+import com.linewell.dataelement.integration.nifi.canvas.mapping.LegacySourceShapeUpgradeService;
+import com.linewell.dataelement.integration.nifi.canvas.mapping.LegacyExactValueUpgradeService;
 import com.linewell.dataelement.integration.nifi.canvas.mapping.FieldMappingService;
 import com.linewell.dataelement.integration.nifi.canvas.mapping.MappingProjectionService;
 import com.linewell.dataelement.integration.nifi.canvas.mapping.MappingUpgradeService;
@@ -638,6 +641,58 @@ class NifiMappingAssetReadMagicTest {
     }
 
     @Test
+    void mysqlTransportUpgradeReusesTenantScopeAndRequiresTheCurrentDraftVersion() throws Throwable {
+        var fixture = new Fixture();
+        fixture.nativeCanvas();
+        var request = JSON.createObjectNode().put("pipelineId", "canvas").put("nodeId", "source")
+                .put("expectedUpdatedAt", 5).put("mode", "mysql-read-pool").put("dryRun", true)
+                .put("tenantId", "foreign-tenant").put("expectedFingerprint", "existing-preview");
+        when(fixture.transportUpgrade.upgradeMySqlReadPool(any(), eq("tenant-a"), eq("source"), eq(true), eq("existing-preview")))
+                .thenReturn(Map.of("dryRun", true, "started", false));
+        try (var tenant = TenantContext.use("tenant-a")) {
+            assertThat(page(fixture.run("upgrade", Map.of(), Map.of("body", request)))).containsEntry("dryRun", true);
+            request.put("start", true);
+            assertError(fixture.run("upgrade", Map.of(), Map.of("body", request)), "MIGRATION_UNAVAILABLE");
+            request.put("start", false).put("expectedUpdatedAt", 4);
+            assertError(fixture.run("upgrade", Map.of(), Map.of("body", request)), "DRAFT_VERSION_CONFLICT");
+        }
+        verify(fixture.transportUpgrade).upgradeMySqlReadPool(any(), eq("tenant-a"), eq("source"), eq(true), eq("existing-preview"));
+        verifyNoInteractions(fixture.nativeUpgrade);
+    }
+
+    @Test
+    void legacyTransportModesUseTrustedTenantAndNeverStartTheSource() throws Throwable {
+        var fixture = new Fixture();
+        fixture.nativeCanvas();
+        var request = JSON.createObjectNode().put("pipelineId", "canvas").put("nodeId", "source")
+                .put("expectedUpdatedAt", 5).put("mode", "source-normalization").put("dryRun", true)
+                .put("tenantId", "other").put("expectedFingerprint", "preview");
+        when(fixture.shapeUpgrade.upgrade(any(), eq("tenant-a"), eq("source"), eq(true), eq("preview")))
+                .thenReturn(Map.of("dryRun", true, "started", false));
+        when(fixture.exactUpgrade.upgrade(any(), eq("tenant-a"), eq("source"), eq(true), eq("preview")))
+                .thenReturn(Map.of("dryRun", true, "started", false));
+        when(fixture.shapeUpgrade.upgradeWorkbookRows(any(), eq("tenant-a"), eq("source"), eq(true), eq("preview")))
+                .thenReturn(Map.of("dryRun", true, "started", false));
+        try (var tenant = TenantContext.use("tenant-a")) {
+            assertThat(page(fixture.run("upgrade", Map.of(), Map.of("body", request)))).containsEntry("dryRun", true);
+            request.put("start", true);
+            assertError(fixture.run("upgrade", Map.of(), Map.of("body", request)), "MIGRATION_UNAVAILABLE");
+            request.put("start", false).put("mode", "exact-value-readers");
+            assertThat(page(fixture.run("upgrade", Map.of(), Map.of("body", request)))).containsEntry("dryRun", true);
+            request.put("start", true);
+            assertError(fixture.run("upgrade", Map.of(), Map.of("body", request)), "MIGRATION_UNAVAILABLE");
+            request.put("start", false).put("mode", "workbook-record-policy");
+            assertThat(page(fixture.run("upgrade", Map.of(), Map.of("body", request)))).containsEntry("dryRun", true);
+            request.put("start", true);
+            assertError(fixture.run("upgrade", Map.of(), Map.of("body", request)), "MIGRATION_UNAVAILABLE");
+        }
+        verify(fixture.shapeUpgrade).upgrade(any(), eq("tenant-a"), eq("source"), eq(true), eq("preview"));
+        verify(fixture.exactUpgrade).upgrade(any(), eq("tenant-a"), eq("source"), eq(true), eq("preview"));
+        verify(fixture.shapeUpgrade).upgradeWorkbookRows(any(), eq("tenant-a"), eq("source"), eq(true), eq("preview"));
+        verifyNoInteractions(fixture.nativeUpgrade, fixture.transportUpgrade);
+    }
+
+    @Test
     void upgradePreparesTheSavedRulesAndRejectsMismatchedPlanBeforeReplacement() throws Throwable {
         var fixture = new Fixture();
         fixture.nativeCanvas();
@@ -795,6 +850,9 @@ class NifiMappingAssetReadMagicTest {
         final RegisteredJdbcDataSourceResolver endpoints = mock(RegisteredJdbcDataSourceResolver.class);
         final MappingProjectionService projections = mock(MappingProjectionService.class);
         final MappingUpgradeService nativeUpgrade = mock(MappingUpgradeService.class);
+        final LegacyTransportUpgradeService transportUpgrade = mock(LegacyTransportUpgradeService.class);
+        final LegacySourceShapeUpgradeService shapeUpgrade = mock(LegacySourceShapeUpgradeService.class);
+        final LegacyExactValueUpgradeService exactUpgrade = mock(LegacyExactValueUpgradeService.class);
         final NifiClient nifi = mock(NifiClient.class);
         final AtomicBoolean lockAvailable = new AtomicBoolean(true);
         final Map<String, Object> globals = new LinkedHashMap<>();
@@ -847,6 +905,9 @@ class NifiMappingAssetReadMagicTest {
             globals.put("sources", endpoints);
             globals.put("projections", projections);
             globals.put("nativeUpgrade", nativeUpgrade);
+            globals.put("transportUpgrade", transportUpgrade);
+            globals.put("shapeUpgrade", shapeUpgrade);
+            globals.put("exactUpgrade", exactUpgrade);
             globals.put("nifi", nifi);
             var lockDataSource = mock(javax.sql.DataSource.class);
             var lockConnection = mock(java.sql.Connection.class);
@@ -1033,7 +1094,7 @@ class NifiMappingAssetReadMagicTest {
             MagicScript.create(source, null).compile();
             source = source.replaceAll("(?m)^import '@/common/(\\w+)' as (\\w+)$", "var $2 = $1");
             source = source.replaceAll("(?m)^import (db|tableRead|tableWrite|tenantRuntime|request)$", "");
-            source = source.replaceAll("(?m)^import (\\S+\\.)?\\w+ as (mapper|mapping|schemas|pipelines|projections|mutation|nativeUpgrade|nifi|transactions|sources)$", "");
+            source = source.replaceAll("(?m)^import (\\S+\\.)?\\w+ as (mapper|mapping|schemas|pipelines|projections|mutation|nativeUpgrade|transportUpgrade|shapeUpgrade|exactUpgrade|nifi|transactions|sources)$", "");
             return MagicScript.create(source, null);
         }
     }

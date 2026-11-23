@@ -713,7 +713,8 @@ public class NifiClient {
         component.put("type", type);
         if(type.equals("com.linewell.dataelement.nifi.JdbcHaitongDictionaryService")
                 ||type.equals("com.linewell.dataelement.nifi.HaitongBinaryRecordReader")
-                ||type.equals("com.linewell.dataelement.nifi.HaitongJdbcRecordReader"))component.set("bundle",mappingBundle());
+                ||type.equals("com.linewell.dataelement.nifi.HaitongJdbcRecordReader")
+                ||type.equals("com.linewell.dataelement.nifi.HaitongMongoRecordReader"))component.set("bundle",mappingBundle());
         component.put("name", name);
         if (properties != null && !properties.isEmpty()) {
             ObjectNode props = mapper.createObjectNode();
@@ -1210,13 +1211,20 @@ public class NifiClient {
 
     /** One batch snapshot covers the whole candidate; no per-processor reads. */
     public void requireValidGeneratedProcessGroup(String pgId) {
+        requireValidProcessors(pgId, java.util.Set.of());
+    }
+
+    public void requireValidProcessors(String pgId, java.util.Set<String> selected) {
         long deadline = System.currentTimeMillis() + 10_000L;
         while (true) {
             JsonNode processors = get("/process-groups/" + pgId + "/processors?includeDescendantGroups=true", JsonNode.class).path("processors");
             if (!processors.isArray() || processors.isEmpty()) throw new IllegalStateException("候选流程未生成完整处理器链路");
             java.util.List<String> invalid = new java.util.ArrayList<>();
+            java.util.Set<String> remaining = new java.util.HashSet<>(selected);
             boolean validating = false;
             for (JsonNode entity : processors) {
+                String id = entity.path("id").asText();
+                if (!selected.isEmpty() && !remaining.remove(id)) continue;
                 JsonNode component = entity.path("component");
                 String status = component.path("validationStatus").asText();
                 if ("VALIDATING".equals(status)) { validating = true; continue; }
@@ -1225,6 +1233,7 @@ public class NifiClient {
                 component.path("validationErrors").forEach(error -> details.add(error.asText()));
                 invalid.add(component.path("name").asText() + "：" + (details.isEmpty() ? "原生组件尚未通过校验（" + status + "）" : String.join("；", details)));
             }
+            if (!remaining.isEmpty()) throw new IllegalStateException("候选流程缺少待校验处理器");
             if (!invalid.isEmpty()) throw new IllegalStateException("候选流程校验失败，未替换旧流程：" + String.join("；", invalid));
             if (!validating) return;
             if (System.currentTimeMillis() >= deadline) throw new IllegalStateException("候选流程仍在校验中，未替换旧流程，请稍后重试");

@@ -100,7 +100,16 @@ public class MappingVersionStore {
         if(!rows.isEmpty())jdbc.batchUpdate(sql("INSERT INTO `data_access_mapping_publication_t` (`tid`,`tenant_id`,`pipeline_id`,`node_id`,`plan_id`,`process_group_id`,`published_time`) VALUES (?,?,?,?,?,?,?)"),rows);
     }
     @Transactional public void activateNode(Pipeline pipeline,String node,String plan,String group){
-        var rows=jdbc.query(sql("SELECT `node_id`,`plan_id` FROM `data_access_mapping_publication_t` WHERE `tenant_id`=? AND `pipeline_id`=?"),(rs,i)->row(rs),TenantContext.requireTenantId(),pipeline.id());if(rows.size()>100)throw new MappingException("BUDGET_EXCEEDED","已有发布引用超过100个节点");Map<String,String> plans=new LinkedHashMap<>();rows.forEach(item->plans.put(String.valueOf(item.get("node_id")),String.valueOf(item.get("plan_id"))));plans.put(node,plan);activate(pipeline,plans,group);
+        activateNodes(pipeline, Map.of(node, plan), group);
+    }
+    @Transactional public void activateNodes(Pipeline pipeline, Map<String, String> replacements, String group) {
+        var rows = boundedRows("SELECT `node_id`,`plan_id` FROM `data_access_mapping_publication_t` WHERE `tenant_id`=? AND `pipeline_id`=?",
+                List.of(TenantContext.requireTenantId(), pipeline.id()), 100);
+        if (rows.size() > 100) throw new MappingException("BUDGET_EXCEEDED", "已有发布引用超过100个节点");
+        Map<String, String> plans = new LinkedHashMap<>();
+        rows.forEach(row -> plans.put(String.valueOf(row.get("node_id")), String.valueOf(row.get("plan_id"))));
+        plans.putAll(replacements);
+        activate(pipeline, plans, group);
     }
 
     public Map<String,JsonNode> resources(Collection<String> ids,String kind){

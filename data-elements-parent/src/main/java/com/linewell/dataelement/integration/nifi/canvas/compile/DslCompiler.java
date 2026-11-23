@@ -145,6 +145,14 @@ public class DslCompiler {
         return result;
     }
 
+    public JsonNode registeredSourceShape(Pipeline pipeline, String sourceNodeId) {
+        JsonNode shape = registeredSourceShapes(pipeline).get(sourceNodeId);
+        if (shape == null) {
+            throw new MappingException("SOURCE_SHAPE_REQUIRED", "原位升级需要已登记的来源字段路径");
+        }
+        return shape;
+    }
+
     public void preflightMapping(Pipeline pipeline){
         Map<String,JsonNode> specs=javaMappingSpecifications(HiveSinkPublicationPolicy.forPublication(pipeline));
         if(!specs.isEmpty()){if(unifiedMappingService==null)throw new IllegalStateException("统一字段规则服务未配置");unifiedMappingService.compileBatch(specs);nifi.requireMappingExtension();}
@@ -626,6 +634,16 @@ public class DslCompiler {
         if(pipeline.dsl().edges()!=null)for(var edge:pipeline.dsl().edges())if(javaMappingPlans.containsKey(edge.source())&&compiled.containsKey(edge.target())){
             compiled.get(edge.target()).csIds.put("jsonReader", globalJson.readerId());
         }
+        // MongoDB needs a document reader so missing embedded keys remain distinct from explicit nulls.
+        String mongoReaderId = null;
+        for (var node : pipeline.dsl().nodes()) {
+            if (!"sink.mongodb".equals(manifestByNode.get(node.id()).key())) continue;
+            if (mongoReaderId == null) {
+                mongoReaderId = nifi.createControllerService(pgId, "com.linewell.dataelement.nifi.HaitongMongoRecordReader",
+                        "MongoDB 嵌套文档 Reader", globalJson.jdbcReaderFormatProperties()).id();
+            }
+            compiled.get(node.id()).csIds.put("jsonReader", mongoReaderId);
+        }
         // Final JDBC readers and INSERT projections share the same exact physical-type boundary.
         // Other fields retain the selected public JSON codec's inference and time settings.
         for (var node : pipeline.dsl().nodes()) {
@@ -782,7 +800,7 @@ public class DslCompiler {
             }
 
             if (isFieldMappingTransform(m)) {
-                if(javaMappingPlans.containsKey(n.id())){buildJavaMapping(pgId,n,nc,javaMappingPlans.get(n.id()),sharedCs,planVersionIds.get(n.id()),pipeline.id()+":"+n.id(),jdbcAliasesForInput(pipeline,n.id()),hiveBinaryTextOutput(pipeline,n.id(),javaMappingPlans.get(n.id())),globalJson.preservesJsonNumbers());continue;}
+                if(javaMappingPlans.containsKey(n.id())){buildJavaMapping(pgId,n,nc,javaMappingPlans.get(n.id()),sharedCs,planVersionIds.get(n.id()),pipeline.id()+":"+n.id(),jdbcAliasesForInput(pipeline,n.id()),hiveBinaryTextOutput(pipeline,n.id(),javaMappingPlans.get(n.id())),globalJson);continue;}
                 FieldMappingService.CompiledMapping plan = fieldMappingPlans.get(n.id());
                 if (plan != null && !plan.lookups().isEmpty()) {
                     buildFieldMappingLookupChain(pgId, pipeline, n, spec, nc, nodeLayout, plan,
@@ -1689,7 +1707,7 @@ public class DslCompiler {
         return targetColumnMetadata(cfg).stream().anyMatch(column -> isTemporalColumn(column.type()));
     }
 
-    private void buildJavaMapping(String pgId,Pipeline.Node node,NodeCompilation compiled,UnifiedMappingService.Compiled plan,Map<String,String>shared,String planId,String contextNodeId,Map<String,String> jdbcAliases,boolean binaryAsText,boolean exactJsonNumbers){
+    private void buildJavaMapping(String pgId,Pipeline.Node node,NodeCompilation compiled,UnifiedMappingService.Compiled plan,Map<String,String>shared,String planId,String contextNodeId,Map<String,String> jdbcAliases,boolean binaryAsText,GlobalJsonRecordServices jsonServices){
         ObjectNode execution=plan.plan().document().deepCopy();
         ObjectNode deployment=execution.putObject("_deployment").put("contextNodeId",contextNodeId);
         if(planId!=null)deployment.put("planId",planId);
@@ -1698,7 +1716,8 @@ public class DslCompiler {
         properties.put("typed-record-reader",compiled.csIds.get("typed-json-reader"));
         if(!jdbcAliases.isEmpty())properties.put("jdbc-field-aliases",MAPPER.valueToTree(jdbcAliases).toString());
         if(binaryAsText)properties.put("binary-output-encoding","BASE64_TEXT");
-        if(exactJsonNumbers)properties.put("preserve-json-numbers","true");
+        if(jsonServices.preservesJsonNumbers())properties.put("preserve-json-numbers","true");
+        if(jsonServices.formatsTimestampsForNode(node.id()))properties.put("format-historical-timestamp-text","true");
         NifiEntity processor=nifi.createProcessor(pgId,"com.linewell.dataelement.nifi.HaitongTransformRecord",node.label(),node.x(),node.y(),properties,"0 sec","TIMER_DRIVEN");compiled.processorIds.put("map",processor.id());compiled.inletProcessorId=processor.id();compiled.outlets.put("default",new Outlet(processor.id(),"success"));
         // Preserve original failed input for backoff/replay; isolate invalid record envelopes.
         nifi.createConnection(pgId,processor.id(),"PROCESSOR",processor.id(),"PROCESSOR",List.of("failure","retry"));
@@ -1720,7 +1739,7 @@ public class DslCompiler {
         for(var connection:prepared.connections().entrySet()){NifiEntity service=nifi.createControllerService(group,"org.apache.nifi.dbcp.DBCPConnectionPool",node.label()+"/升级字典连接",buildSourceDbcpProperties(connection.getValue()));compiled.csIds.put("dict:"+connection.getKey(),service.id());created.add(service);}
         for(NifiEntity service:created){enableCreatedService(service);nifi.waitForControllerServiceEnabled(service.id(),30_000L);}
         if(!prepared.plan().dictionaries().isEmpty()){Map<String,String>properties=new LinkedHashMap<>();prepared.connections().keySet().forEach(id->properties.put(id,compiled.csIds.get("dict:"+id)));properties.put("authorized-definitions",prepared.plan().document().path("dictionaryBindings").toString());properties.put("snapshot-payloads",prepared.snapshots().toString());NifiEntity service=nifi.createControllerService(group,"com.linewell.dataelement.nifi.JdbcHaitongDictionaryService",node.label()+"/升级批量字典",properties);compiled.csIds.put("dictionary-batch",service.id());enableCreatedService(service);}
-        buildJavaMapping(group,node,compiled,prepared,Map.of("jsonReader",globalJson.readerId()),ids.get(node.id()),pipeline.id()+":"+node.id(),jdbcAliasesForInput(pipeline,node.id()),hiveBinaryTextOutput(pipeline,node.id(),prepared),globalJson.preservesJsonNumbers());return new MappingReplacement(compiled,ids.get(node.id()));
+        buildJavaMapping(group,node,compiled,prepared,Map.of("jsonReader",globalJson.readerId()),ids.get(node.id()),pipeline.id()+":"+node.id(),jdbcAliasesForInput(pipeline,node.id()),hiveBinaryTextOutput(pipeline,node.id(),prepared),globalJson);return new MappingReplacement(compiled,ids.get(node.id()));
     }
     private boolean hiveBinaryTextOutput(Pipeline pipeline,String nodeId,UnifiedMappingService.Compiled plan){
         if(plan.plan().outputContracts().values().stream().noneMatch(type->type.logicalType().equals("BINARY")))return false;
@@ -3774,6 +3793,31 @@ public class DslCompiler {
             }
         }
         return null;
+    }
+
+    public Map<String, String> registeredMySqlReadPool(Map<String, Object> connection) {
+        if (!"mysql".equalsIgnoreCase(configText(connection, "dbType"))) {
+            throw new MappingException("RESOURCE_FORBIDDEN", "来源登记不是 MySQL");
+        }
+        return buildSourceDbcpProperties(connection);
+    }
+
+    public Map<String, String> registeredJdbcTransportPool(Map<String, Object> connection, JsonNode physicalColumns) {
+        Map<String, Object> config = new LinkedHashMap<>(connection);
+        config.remove("driverLocations");
+        config.remove("nifiDriverLocations");
+        if (physicalColumns != null) {
+            if (!"ORACLE".equalsIgnoreCase(configText(config, "dbType"))) {
+                throw new MappingException("RESOURCE_FORBIDDEN", "已登记目标不是 Oracle");
+            }
+            List<Map<String, String>> targetColumns = new ArrayList<>();
+            for (JsonNode column : physicalColumns) {
+                targetColumns.add(Map.of("columnName", column.path("name").asText(),
+                        "columnType", column.path("physicalType").asText()));
+            }
+            config.put("targetColumns", targetColumns);
+        }
+        return buildSourceDbcpProperties(config);
     }
 
     private Map<String, String> buildSourceDbcpProperties(Map<String, Object> sourceCfg) {

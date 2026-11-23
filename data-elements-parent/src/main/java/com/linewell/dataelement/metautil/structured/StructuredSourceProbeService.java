@@ -1357,9 +1357,19 @@ public class StructuredSourceProbeService {
                 Row header = sheet.getRow(sheet.getFirstRowNum());
                 if (header == null) continue;
                 List<String> headers = new ArrayList<>();
-                List<String> rawHeaders=new ArrayList<>();
+                List<String> readerHeaders = new ArrayList<>();
+                Map<String, Integer> readerHeaderCounts = new LinkedHashMap<>();
+                Set<String> boundReaderHeaders = new HashSet<>();
                 for (int i = 0; i < header.getLastCellNum(); i++) {
-                    String raw=formatter.formatCellValue(header.getCell(i));rawHeaders.add(raw);
+                    String raw = formatter.formatCellValue(header.getCell(i));
+                    // Match NiFi ExcelReader's starting-row field names while preserving registered aliases.
+                    String readerHeader = raw.isEmpty() ? "column_" + i : raw;
+                    int occurrence = readerHeaderCounts.merge(readerHeader, 1, Integer::sum);
+                    String readerField = occurrence == 1 ? readerHeader : readerHeader + "_" + (occurrence - 1);
+                    if (!boundReaderHeaders.add(readerField)) {
+                        throw new IllegalArgumentException("工作表列标题与 Excel Reader 自动命名冲突，无法唯一关联原始列");
+                    }
+                    readerHeaders.add(readerField);
                     String name = cleanColumnName(raw);
                     headers.add(blank(name) ? "column_" + (i + 1) : uniqueColumn(name, headers));
                 }
@@ -1383,7 +1393,9 @@ public class StructuredSourceProbeService {
                 table.setFilePath(file.path);
                 table.setExcelSheetName(sheet.getSheetName());
                 table.setFileRecordFormat(extension(file.name));
-                table.setRecordShape(headerShape(headers,rawHeaders));
+                Map<String, Object> shape = headerShape(headers, readerHeaders);
+                shape.put("skipBlankRecords", true);
+                table.setRecordShape(shape);
                 result.getTables().add(table);
             }
         }
