@@ -251,6 +251,45 @@ class AccessTemplateMagicTest {
         }
     }
 
+    @Test void selectionPageHydratesAuthorizedTargetsAndPinnedDefaultWithFourQueriesAtTwentyAndHundredRows() throws Exception {
+        var fixture=new Fixture();
+        for(int index=0;index<108;index++)fixture.insert("published-"+index,"ga","PUBLISHED");
+        fixture.insert("foreign","ct","PUBLISHED");
+        fixture.jdbc.update("UPDATE nifi_access_template_t SET default_tenant_id=tenant_id WHERE tid='published-0'");
+        fixture.jdbc.execute("""
+                CREATE TABLE db_datasource_t(tid varchar(32),tenant_id varchar(32),db_name varchar(64),db_type varchar(32),
+                  is_del int,show_connect int,created_by varchar(32),org_id varchar(32))
+                """);
+        fixture.jdbc.execute("INSERT INTO db_datasource_t VALUES ('oracle','ga','ga-oracle','oceanbaseoracle',0,1,'owner','org'),('hive','ga','ga-hive','hive',0,1,'owner','org'),('hive','ct','forbidden-foreign','hive',0,1,'owner','org')");
+        when(fixture.scope.visibleDataSourcesFor(eq(PERMISSION),any())).thenAnswer(call->call.getArgument(1));
+        try(var ignored=TenantContext.use("ga")){
+            for(int size:List.of(20,100)){
+                fixture.reads.set(0);
+                var result=(Map<?,?>)fixture.run(LIST,Map.of("body",Map.of("pageSize",size,"includeTargets",true,"tenantId","ct")));
+                assertThat(fixture.reads.get()).isEqualTo(4);
+                assertThat((List<?>)result.get("list")).hasSize(size);
+                for(var value:(List<?>)result.get("list")){
+                    var item=(Map<?,?>)value;
+                    assertThat(item.get("selectionReady")).isEqualTo(true);
+                    assertThat(item.get("available")).isEqualTo(true);
+                    assertThat((List<?>)item.get("targets")).hasSize(2);
+                    assertThat(item.toString()).doesNotContain("forbidden-foreign");
+                }
+                var pinned=(Map<?,?>)result.get("defaultTemplate");
+                assertThat(pinned.get("tid")).isEqualTo("published-0");
+                assertThat((List<?>)pinned.get("targets")).hasSize(2);
+            }
+            when(fixture.scope.visibleDataSourcesFor(eq(PERMISSION),any())).thenAnswer(call->
+                call.<List<Map<String,Object>>>getArgument(1).stream().filter(row->row.get("tid").equals("oracle")).toList());
+            var denied=(Map<?,?>)fixture.run(LIST,Map.of("body",Map.of("includeTargets",true)));
+            for(var value:(List<?>)denied.get("list")){
+                var item=(Map<?,?>)value;assertThat(item.get("available")).isEqualTo(false);
+                assertThat((List<?>)item.get("targets")).isEmpty();
+                assertThat(item.toString()).doesNotContain("ga-hive","forbidden-foreign");
+            }
+        }
+    }
+
     @Test void listReadsPublishedTemplatesAndDefaultInTheTenantWithThreeQueriesAtBothPageSizes() throws Exception {
         var fixture = new Fixture();
         for (int index = 0; index < 108; index++) fixture.insert("published-" + index, "ga", "PUBLISHED");

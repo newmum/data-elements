@@ -18,6 +18,41 @@ class JdbcFieldIdentityTest {
     private static final ObjectMapper JSON=new ObjectMapper().enable(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS);
     private static final String WIRE="_ht_0000000000000001";
 
+    @Test void sparseJsonNeverCopiesADeclaredSiblingIntoAnAbsentFieldThroughEitherWriter() throws Exception {
+        var spec=JSON.createObjectNode().put("schemaVersion","2.0");
+        spec.putObject("policies").put("onMissingSource","NULL");
+        var fields=spec.putObject("schemaContract").putArray("source");
+        var rules=spec.putArray("rules");
+        for(String name:List.of("openKflx","open_kflx")) {
+            fields.addObject().put("name",name).put("logicalType","ANY").put("nullable",true);
+            var rule=rules.addObject().put("ruleId",name).put("sourceOptional",true);
+            rule.putObject("input").put("kind","FIELD").put("name",name).put("logicalType","ANY");
+            rule.putObject("target").put("name",name).put("logicalType","STRING").put("nullable",true);
+            rule.putArray("steps");
+        }
+        for(boolean hasSchema:List.of(true,false)) {
+        var candidate=spec.deepCopy();if(!hasSchema) candidate.remove("schemaContract");
+        var plan=MappingEngine.compile(candidate);
+        for(int count:List.of(20,100)) for(String format:List.of("json","csv")) {
+            var rows=new ArrayList<Map<String,Object>>();
+            for(int i=0;i<count;i++) rows.add(Map.of("open_kflx",List.of("validation-"+i)));
+            var mapping=runner(plan,format);mapping.enqueue(JSON.writeValueAsBytes(rows));mapping.run();
+            mapping.assertTransferCount(HaitongTransformRecord.FAILURE,0);mapping.assertTransferCount(HaitongTransformRecord.INVALID,0);
+            mapping.assertTransferCount(HaitongTransformRecord.SUCCESS,1);
+            var output=mapping.getFlowFilesForRelationship(HaitongTransformRecord.SUCCESS).getFirst();
+            assertEquals("0",output.getAttribute("ht.dictionary.batches"));
+            if(format.equals("json")) {
+                var values=JSON.readTree(output.toByteArray());assertEquals(count,values.size());
+                for(int i=0;i<count;i++) {assertTrue(values.get(i).path("openKflx").isNull());assertEquals(JSON.writeValueAsString(rows.get(i).get("open_kflx")),values.get(i).path("open_kflx").asText());}
+            } else {
+                var lines=new String(output.toByteArray(),java.nio.charset.StandardCharsets.UTF_8).split("\n");assertEquals(count,lines.length);
+                for(int i=0;i<count;i++) assertTrue(lines[i].startsWith("\\N\u0001"));
+            }
+            mapping.shutdown();
+        }
+        }
+    }
+
     @Test void nativeJdbcNumericColumnRestoresItsLiteralIdentityBeforeRulesAndBothWriters() throws Exception {
         for(int count:List.of(20,100)) {
             String url="jdbc:h2:mem:validation_numeric_"+UUID.randomUUID().toString().replace("-","")+";MODE=Oracle;DB_CLOSE_DELAY=-1";

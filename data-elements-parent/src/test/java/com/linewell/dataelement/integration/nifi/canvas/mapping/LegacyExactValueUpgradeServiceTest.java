@@ -134,6 +134,153 @@ class LegacyExactValueUpgradeServiceTest {
         }
     }
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(ints={20,100})
+    void timestampPreviewUsesFixedCatalogReadsAndKeepsEverySourceWatermark(int fields) {
+        timestampFixture(fields);
+        var original = nifi.get(FLOW,JsonNode.class).deepCopy();
+        clearInvocations(nifi);
+        try (var ignored=TenantContext.use("tenant")) {
+            var result=upgrade.upgradeTimestampCodecs(draft,"tenant","source",true,"");
+            assertEquals(2,result.get("changedProcessors"));
+            assertEquals("precise",result.get("writerId"));
+            assertEquals(false,result.get("started"));
+            verify(schemas).resolve(anyMap()); verify(schemas).physicalBatch(anyMap());
+            verify(nifi,times(2)).get(FLOW+"/controller-services?includeAncestorGroups=true&includeDescendantGroups=false",JsonNode.class);
+            verify(nifi).listControllerServices("root");
+            verify(nifi,never()).put(anyString(),any(),eq(JsonNode.class));
+            assertEquals(original,nifi.get(FLOW,JsonNode.class));
+            verifyNoInteractions(versions);
+        }
+    }
+
+    @Test void timestampUpgradeRejectsForeignTenantBeforeReadingNativeGraph() {
+        try (var ignored=TenantContext.use("tenant")) {
+            assertEquals("RESOURCE_FORBIDDEN",assertThrows(MappingException.class,
+                    ()->upgrade.upgradeTimestampCodecs(draft,"other","source",true,"")).code());
+            verifyNoInteractions(nifi,schemas,versions);
+        }
+    }
+
+    @Test void timestampUpgradeRejectsStaleFingerprintWithoutChangingReferences() {
+        timestampFixture(2);
+        try (var ignored=TenantContext.use("tenant")) {
+            assertEquals("DRAFT_VERSION_CONFLICT",assertThrows(MappingException.class,
+                    ()->upgrade.upgradeTimestampCodecs(draft,"tenant","source",false,"stale")).code());
+            verify(nifi,never()).put(anyString(),any(),eq(JsonNode.class));
+            verifyNoInteractions(versions);
+        }
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.CsvSource({"false,false","false,true","true,false","true,true"})
+    void timestampUpgradeChangesOnlyCodecReferencesAndRollsBackIfValidationFails(boolean timeReader,boolean validationFails) {
+        timestampFixture(2);
+        if(timeReader)timestampTargetFixture();
+        ObjectNode live=(ObjectNode)nifi.get(FLOW,JsonNode.class);
+        when(nifi.get(FLOW,JsonNode.class)).thenAnswer(call->live.deepCopy());
+        when(nifi.get(matches("^/processors/[^/]+$"),eq(JsonNode.class))).thenAnswer(call->{
+            String id=call.<String>getArgument(0).substring("/processors/".length());
+            for(JsonNode processor:live.path("processGroupFlow").path("flow").path("processors"))if(id.equals(processor.path("id").asText()))return processor.deepCopy();
+            throw new AssertionError("Unknown processor");
+        });
+        var catalog=nifi.get(FLOW+"/controller-services?includeAncestorGroups=true&includeDescendantGroups=false",JsonNode.class);
+        if(timeReader){
+            when(nifi.createControllerService(eq("group"),eq("com.linewell.dataelement.nifi.HaitongJdbcRecordReader"),anyString(),anyMap())).thenAnswer(call->{
+                Map<String,String> properties=call.getArgument(3);
+                assertEquals("[\"at\"]",properties.get("timestamp-fields"));
+                var service=controller("timestamp-reader","com.linewell.dataelement.nifi.HaitongJdbcRecordReader",properties);
+                ((ObjectNode)service.path("component")).put("id","timestamp-reader").put("parentGroupId","group").put("state","DISABLED")
+                        .set("bundle",JSON.createObjectNode().put("group","com.linewell.dataelement").put("artifact","haitong-mapping-nar").put("version",MappingEngine.engineVersion()));
+                ((com.fasterxml.jackson.databind.node.ArrayNode)catalog.path("controllerServices")).add(service);
+                return new com.linewell.dataelement.model.nifi.NifiEntity(null,Map.of("id","timestamp-reader"),null,null);
+            });
+            doAnswer(call->{for(JsonNode service:catalog.path("controllerServices"))if("timestamp-reader".equals(service.path("id").asText()))((ObjectNode)service.path("component")).put("state","ENABLED");return null;})
+                    .when(nifi).enableControllerServices(eq("group"),anySet(),anySet(),eq(30_000L));
+            doAnswer(call->{for(JsonNode service:catalog.path("controllerServices"))if("timestamp-reader".equals(service.path("id").asText()))((ObjectNode)service.path("component")).put("state","DISABLED");return null;})
+                    .when(nifi).setControllerServiceRunStatus(eq("timestamp-reader"),eq("DISABLED"));
+            when(nifi.waitForControllerServiceState(eq("timestamp-reader"),eq("DISABLED"),anyLong())).thenReturn(true);
+            doAnswer(call->{var rows=(com.fasterxml.jackson.databind.node.ArrayNode)catalog.path("controllerServices");for(int i=0;i<rows.size();i++)if("timestamp-reader".equals(rows.get(i).path("id").asText())){rows.remove(i);break;}return null;})
+                    .when(nifi).delete(startsWith("/controller-services/timestamp-reader?version="));
+            when(nifi.listControllerServices("group")).thenAnswer(call->{var rows=new java.util.ArrayList<JsonNode>();catalog.path("controllerServices").forEach(rows::add);return rows;});
+        }
+        when(nifi.get(startsWith("/controller-services/"),eq(JsonNode.class))).thenAnswer(call->{
+            String id=call.<String>getArgument(0).substring("/controller-services/".length());
+            for(JsonNode service:catalog.path("controllerServices"))if(id.equals(service.path("id").asText()))return service.deepCopy();
+            throw new AssertionError("Unknown service");
+        });
+        when(nifi.put(startsWith("/processors/"),any(),eq(JsonNode.class))).thenAnswer(call->{
+            String id=call.<String>getArgument(0).substring("/processors/".length());JsonNode body=call.getArgument(1);
+            for(JsonNode processor:live.path("processGroupFlow").path("flow").path("processors"))if(id.equals(processor.path("id").asText())) {
+                ((ObjectNode)processor.path("component").path("config").path("properties")).setAll((ObjectNode)body.path("component").path("config").path("properties"));
+                ((ObjectNode)processor.path("revision")).put("version",processor.path("revision").path("version").asLong()+1);return processor.deepCopy();
+            }
+            throw new AssertionError("Unknown processor");
+        });
+        if(validationFails)doThrow(new IllegalStateException("validation unavailable")).when(nifi).requireValidProcessors(eq("group"),anySet());
+        try(var ignored=TenantContext.use("tenant")) {
+            var preview=upgrade.upgradeTimestampCodecs(draft,"tenant","source",true,"");
+            if(validationFails){
+                assertEquals("TRANSPORT_UPGRADE_FAILED",assertThrows(MappingException.class,
+                        ()->upgrade.upgradeTimestampCodecs(draft,"tenant","source",false,preview.get("fingerprint").toString())).code());
+                assertEquals(false,upgrade.upgradeTimestampCodecs(draft,"tenant","source",true,"").get("alreadyApplied"));
+                verify(nifi,times(timeReader?6:4)).put(startsWith("/processors/"),any(),eq(JsonNode.class));
+                verifyNoInteractions(versions);return;
+            }
+            var applied=upgrade.upgradeTimestampCodecs(draft,"tenant","source",false,preview.get("fingerprint").toString());
+            assertEquals(true,applied.get("applied"));
+            assertEquals(true,upgrade.upgradeTimestampCodecs(draft,"tenant","source",true,"").get("alreadyApplied"));
+            verify(nifi,times(timeReader?3:2)).put(startsWith("/processors/"),any(),eq(JsonNode.class));
+            verifyNoInteractions(versions);
+        }
+    }
+
+    private void timestampTargetFixture(){
+        try{
+            var registered=schemas.resolve(Map.of());
+            ((com.fasterxml.jackson.databind.node.ArrayNode)registered.get("target").fields()).addObject().put("name","AT").put("physicalType","TIMESTAMP(9)");
+            ObjectNode document=JSON.valueToTree(draft);
+            ObjectNode spec=(ObjectNode)JSON.readTree(draft.dsl().nodes().get(1).config().get("mappings").toString());
+            ((com.fasterxml.jackson.databind.node.ArrayNode)spec.path("rules")).add(rule("at","DATETIME"));
+            ((ObjectNode)document.path("dsl").path("nodes").get(1).path("config")).put("mappings",spec.toString());
+            draft=JSON.treeToValue(document,Pipeline.class);
+            when(mapping.compileBatch(anyMap())).thenReturn(Map.of("governor",new UnifiedMappingService.Compiled(MappingEngine.compile(spec),Map.of())));
+            var graph=nifi.get(FLOW,JsonNode.class).path("processGroupFlow").path("flow");
+            for(JsonNode processor:graph.path("processors"))if("mapping".equals(processor.path("id").asText())){
+                var active=MappingEngine.compile(spec).document().deepCopy();active.putObject("_deployment").put("planId","active-time-plan");
+                ((ObjectNode)processor.path("component").path("config").path("properties")).put("execution-plan",active.toString());
+            }
+            clearInvocations(schemas,mapping);
+        }catch(Exception error){throw new AssertionError(error);}
+    }
+
+    private void timestampFixture(int fields) {
+        var original=schemas.resolve(Map.of());
+        var sourceFields=JSON.createArrayNode();
+        for(int i=0;i<fields;i++)sourceFields.addObject().put("name","time_"+i).put("physicalType","TIMESTAMP(9)").put("logicalType","DATETIME");
+        var source=new RegisteredMappingSchemaService.Resolved("src","st","public","source_table",sourceFields,Map.of("src",sourceConnection));
+        when(schemas.resolve(anyMap())).thenReturn(Map.of("source",source,"target",original.get("target")));
+        var codec=controller("precise","org.apache.nifi.json.JsonRecordSetWriter",Map.of("Schema Access Strategy","inherit-record-schema",
+                "Timestamp Format",com.linewell.dataelement.integration.nifi.canvas.compile.JdbcTimestampJsonPolicy.TIMESTAMP_FORMAT));
+        ((ObjectNode)codec.path("component")).put("id","precise").put("name",com.linewell.dataelement.integration.nifi.canvas.compile.JdbcTimestampJsonPolicy.WRITER_NAME);
+        when(nifi.get("/flow/process-groups/root",JsonNode.class)).thenReturn(JSON.createObjectNode().set("processGroupFlow",JSON.createObjectNode().put("id","root")));
+        when(nifi.listControllerServices("root")).thenReturn(List.of(codec));
+        var catalog=(ObjectNode)nifi.get(FLOW+"/controller-services?includeAncestorGroups=true&includeDescendantGroups=false",JsonNode.class);
+        ((com.fasterxml.jackson.databind.node.ArrayNode)catalog.path("controllerServices")).add(codec);
+        var graph=nifi.get(FLOW,JsonNode.class).path("processGroupFlow").path("flow");
+        for(JsonNode processor:graph.path("processors"))if(processor.path("id").asText().equals("query"))
+            ((ObjectNode)processor.path("component").path("config").path("properties")).put("Record Writer","json-writer");
+        for(JsonNode processor:graph.path("processors"))if(processor.path("id").asText().equals("mapping")) {
+            try {
+                JsonNode raw=JSON.readTree(draft.dsl().nodes().get(1).config().get("mappings").toString());
+                var active=MappingEngine.compile(raw).document().deepCopy();active.putObject("_deployment").put("planId","active-plan");
+                ((ObjectNode)processor.path("component").path("config").path("properties")).put("execution-plan",active.toString())
+                        .put("format-historical-timestamp-text","false");
+            }catch(Exception error){throw new AssertionError(error);}
+        }
+        clearInvocations(schemas);
+    }
+
     private static ObjectNode rule(String field, String type) {
         var rule = JSON.createObjectNode();
         rule.putObject("input").put("kind", "FIELD").put("name", field);

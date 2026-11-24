@@ -226,7 +226,7 @@ export function tableRows(table) {
       name: `${table.baseTableComment || table.tableComment} ${String(index + 1).padStart(3, "0")}`,
       status: index % 3 === 0 ? "inactive" : "active",
       amount: index % 11 === 0 ? null : (index + 1) * 12.5,
-      created_at: `2026-11-${String((index % 7) + 1).padStart(2, "0")} 09:30:00`,
+      created_at: `2026-11-${String((index % 7) + 1).padStart(2, "0")} 09:30:00${index % 3 === 0 ? ".986" : ""}`,
     }),
   ).filter((row) => table.objectType !== "VIEW" || row.status === "active");
 }

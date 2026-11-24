@@ -19,6 +19,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeEach;
@@ -158,8 +159,8 @@ class DslCompilerSharedParallelTemplateTest {
         assertThat(result.nodes()).containsOnlyKeys("source","mapping","jdbc","hive");
         assertThat(processors.stream().filter(p->p.type().endsWith(".HaitongTransformRecord"))).hasSize(1);
         var replay=processor("source/备用补数/fetch");
-        assertThat(replay.properties()).containsEntry("Additional WHERE Clause","1=0")
-                .doesNotContainKeys("Maximum-value Columns","Custom Query");
+        assertThat(replay.properties()).containsEntry("Additional WHERE Clause","ID > 0")
+                .containsEntry("Maximum-value Columns","UPDATE_TIME").doesNotContainKey("Custom Query");
         assertThat(result.nodes().get("source").processorIds).containsEntry("manual-backfill-fetch",replay.id());
         assertThat(result.nodes().get("source").processorIds.values().iterator().next()).isEqualTo(processor("source/fetch").id());
         verify(nifi).executeOnPrimaryNode(replay.id());
@@ -179,15 +180,31 @@ class DslCompilerSharedParallelTemplateTest {
                 .containsEntry("auto-detect-timestamp-fields","false").containsEntry("date-format","yyyy-MM-dd HH:mm:ss");
         assertThat(result.nodes().get("hive").inletProcessorId).isEqualTo(timestamp.id());
         verify(nifi).createConnection("pg",timestamp.id(),"PROCESSOR",processor("Hive目标/merge-records").id(),"PROCESSOR",List.of("success"));
-        assertThat(processor("Oracle目标/normalize").properties().get("success")).doesNotContain("ODS_RKSJ").contains("ODS_UUID");
+        assertThat(insert.properties()).doesNotContainKey("__haitong.linewell.insert-values");
+        assertThat(merge.properties()).doesNotContainKeys("__haitong.linewell.insert-values","__haitong.linewell.update-values")
+                .containsEntry("__haitong.linewell.exclude-update","ODS_UUID,ODS_RKSJ");
+        assertThat(processors).noneMatch(processor->processor.name().equals("Oracle目标/normalize"));
+        for(var call:mockingDetails(nifi).getInvocations()){
+            String method=call.getMethod().getName();
+            if(!Set.of("createConnection","createBufferedConnection").contains(method))continue;
+            Object[] args=call.getArguments();
+            String from=(String)args[1],to=(String)args[method.equals("createConnection")?3:2];
+            String destinationType=(String)args[method.equals("createConnection")?4:3];
+            @SuppressWarnings("unchecked") var relationships=(List<String>)args[args.length-1];
+            if(destinationType.equals("FUNNEL"))assertThat(relationships).containsOnly("invalid");
+            if(relationships.contains("failure")||relationships.contains("retry")){
+                boolean insertFallback=from.equals(insert.id())&&to.equals(merge.id())&&relationships.equals(List.of("failure"));
+                if(!insertFallback)assertThat(to).isEqualTo(from);
+            }
+        }
     }
 
-    @Test void manualReplayIsDisabledPrimaryOnlyWithoutWatermarkAndKeepsItsPredicate() {
+    @Test void manualReplayIsDisabledPrimaryOnlyWithItsOwnWatermarkAndKeepsItsPredicate() {
         var replay=source("backfill",Map.of("backfillSource",true,"incrementalColumn","UPDATE_TIME","customWherePredicate","ID >= 20 AND ID < 100","batchSize",1000,"maxRowsPerRun",5000));
         compiler.compile(flow(List.of(replay,jdbc(Map.of())),List.of(edge("replay-target","backfill","jdbc"))));
         var fetch=processor("backfill/fetch");
         assertThat(fetch.type()).endsWith(".QueryDatabaseTableRecord");
-        assertThat(fetch.properties()).doesNotContainKey("Maximum-value Columns").containsEntry("Additional WHERE Clause","ID >= 20 AND ID < 100")
+        assertThat(fetch.properties()).containsEntry("Maximum-value Columns","UPDATE_TIME").containsEntry("Additional WHERE Clause","ID >= 20 AND ID < 100")
                 .containsEntry("Initial Load Strategy","Start at Beginning").containsEntry("Max Rows Per FlowFile","1000").containsEntry("Fetch Size","5000");
         verify(nifi).executeOnPrimaryNode(fetch.id());
         verify(nifi).createProcessor(eq("pg"),anyString(),eq("backfill/fetch"),anyDouble(),anyDouble(),anyMap(),eq("1 min"),eq("TIMER_DRIVEN"),eq(NifiClient.MANUAL_BACKFILL_MARKER));
@@ -203,6 +220,48 @@ class DslCompilerSharedParallelTemplateTest {
         assertThat(processors).hasSize(2);
     }
 
+    @Test void nativeReplayInheritsTheSelectedWatermarkAndHasNoSyntheticFalsePredicate() {
+        var source=source("source",Map.of("manualBackfill",true,"incrementalColumn","UPDATE_TIME","tieBreakerColumn","ID"));
+        compiler.compile(flow(List.of(source,jdbc(Map.of())),List.of(edge("source-target","source","jdbc"))));
+        assertThat(processor("source/备用补数/fetch").properties()).containsEntry("Maximum-value Columns","UPDATE_TIME,ID")
+                .doesNotContainKeys("Additional WHERE Clause","Custom Query");
+        assertThat(services.stream().filter(service->service.type().endsWith(".DBCPConnectionPool")))
+                .allSatisfy(service->assertThat(service.properties()).containsEntry("Max Total Connections","50")
+                        .containsEntry("Max Wait Time","30 sec"));
+    }
+
+    @ParameterizedTest @ValueSource(strings={"manualBackfill","backfillSource"})
+    void missingBackfillWatermarkIsRejectedBeforeCreatingAnything(String setting) {
+        assertThatThrownBy(()->compiler.compile(flow(List.of(source("source",Map.of(setting,true))),List.of())))
+                .hasMessageContaining("增量字段");
+        verify(nifi,never()).createProcessGroup(anyString(),anyString(),anyDouble(),anyDouble());
+        verify(nifi,never()).createControllerService(anyString(),anyString(),anyString(),anyMap());
+    }
+
+    @Test void partlyGovernedAuditTimesKeepOnlyTheMissingDatabaseFallback() {
+        var mapping=new Pipeline.Node("mapping","transform.field-enrichment","字段治理","transform",500,0,Map.of("mappings",plan.document()));
+        var target=jdbc(Map.of("insertThenMerge",true,"targetColumns",List.of(
+                Map.of("columnName","ID","dataType","VARCHAR2","primaryKey",true),
+                Map.of("columnName","ODS_UUID","dataType","VARCHAR2"),
+                Map.of("columnName","ods_rksj","dataType","TIMESTAMP"),
+                Map.of("columnName","ODS_GXSJ","dataType","TIMESTAMP"))));
+        compiler.compile(flow(List.of(source("source",Map.of()),mapping,target),
+                List.of(edge("sm","source","mapping"),edge("mj","mapping","jdbc"))));
+        assertThat(processor("Oracle目标/insert").properties()).containsEntry("__haitong.linewell.insert-values","ODS_GXSJ=SYSDATE");
+        assertThat(processor("Oracle目标/put").properties()).containsEntry("__haitong.linewell.update-values","ODS_GXSJ=SYSDATE")
+                .containsEntry("__haitong.linewell.exclude-update","ODS_UUID,ods_rksj");
+        // ODS_GXSJ is absent from this plan; ODS_RKSJ must still reach the writer unchanged.
+        assertThat(processors.stream().filter(processor->processor.name().equals("Oracle目标/normalize")))
+                .allSatisfy(processor->assertThat(processor.properties().get("success")).contains("ods_rksj"));
+    }
+
+    @Test void ungovernedInputsCannotForgeTheRuntimeAuditOwnership() {
+        var target=jdbc(Map.of("_runtimeGovernedAuditFields",List.of("ODS_RKSJ","ODS_GXSJ")));
+        compiler.compile(flow(List.of(source("source",Map.of()),target),List.of(edge("source-target","source","jdbc"))));
+        assertThat(processor("Oracle目标/put").properties()).containsEntry("__haitong.linewell.insert-values","ODS_RKSJ=SYSDATE")
+                .containsEntry("__haitong.linewell.exclude-update","ODS_UUID,ODS_RKSJ");
+    }
+
     @Test void allBackfillMarkersAreValidatedBeforeAnySourceIsDisabled() {
         when(nifi.get("/flow/process-groups/pg",JsonNode.class)).thenAnswer(call->{
             var snapshot=processorSnapshot();
@@ -211,8 +270,8 @@ class DslCompilerSharedParallelTemplateTest {
                 if(second.id().equals(entity.path("id").asText()))((com.fasterxml.jackson.databind.node.ObjectNode)entity.path("component").path("config")).put("comments","");
             return snapshot;
         });
-        var first=source("first",Map.of("backfillSource",true,"customWherePredicate","ID >= 20 AND ID < 40"));
-        var second=source("second",Map.of("backfillSource",true,"customWherePredicate","ID >= 40 AND ID < 100"));
+        var first=source("first",Map.of("backfillSource",true,"incrementalColumn","UPDATE_TIME","customWherePredicate","ID >= 20 AND ID < 40"));
+        var second=source("second",Map.of("backfillSource",true,"incrementalColumn","UPDATE_TIME","customWherePredicate","ID >= 40 AND ID < 100"));
         assertThatThrownBy(()->compiler.compile(flow(List.of(first,second,jdbc(Map.of())),List.of(
                 edge("first-target","first","jdbc"),edge("second-target","second","jdbc")))))
                 .hasMessageContaining("补数入口状态或标记不完整");
@@ -222,14 +281,14 @@ class DslCompilerSharedParallelTemplateTest {
     }
 
     @Test void invalidReplayQueryIsRejectedBeforeAnyGroupIsCreated() {
-        assertThatThrownBy(()->compiler.compile(flow(List.of(source("backfill",Map.of("backfillSource",true,"customQuery","DELETE FROM EVENT_LOG"))),List.of())))
+        assertThatThrownBy(()->compiler.compile(flow(List.of(source("backfill",Map.of("backfillSource",true,"incrementalColumn","UPDATE_TIME","customQuery","DELETE FROM EVENT_LOG"))),List.of())))
                 .hasMessageContaining("SELECT");
         verify(nifi,never()).createProcessGroup(anyString(),anyString(),anyDouble(),anyDouble());
     }
 
     @Test void nativeReplayDoesNotDuplicateAnExplicitReplayForTheSameRegisteredSource() {
-        var main=source("source",Map.of("manualBackfill",true));
-        var explicit=source("backfill",Map.of("backfillSource",true,"customWherePredicate","ID >= 20 AND ID < 100"));
+        var main=source("source",Map.of("manualBackfill",true,"incrementalColumn","UPDATE_TIME"));
+        var explicit=source("backfill",Map.of("backfillSource",true,"incrementalColumn","UPDATE_TIME","customWherePredicate","ID >= 20 AND ID < 100"));
         var result=compiler.compile(flow(List.of(main,explicit,jdbc(Map.of())),List.of(edge("main-target","source","jdbc"),edge("replay-target","backfill","jdbc"))));
         assertThat(processors.stream().filter(p->p.type().endsWith(".QueryDatabaseTableRecord"))).hasSize(1);
         assertThat(result.nodes().get("source").processorIds).doesNotContainKey("manual-backfill-fetch");
@@ -244,7 +303,7 @@ class DslCompilerSharedParallelTemplateTest {
 
     @Test void missingNativeReplayProcessorIsRejectedBeforeCreatingAGroup() {
         when(nifi.findProcessorType("org.apache.nifi.processors.standard.QueryDatabaseTableRecord")).thenReturn(Optional.empty());
-        assertThatThrownBy(()->compiler.compile(flow(List.of(source("source",Map.of("manualBackfill",true))),List.of())))
+        assertThatThrownBy(()->compiler.compile(flow(List.of(source("source",Map.of("manualBackfill",true,"incrementalColumn","UPDATE_TIME"))),List.of())))
                 .hasMessageContaining("QueryDatabaseTableRecord");
         verify(nifi,never()).createProcessGroup(anyString(),anyString(),anyDouble(),anyDouble());
     }
@@ -430,6 +489,31 @@ class DslCompilerSharedParallelTemplateTest {
         when(nifi.findProcessorType(TIMESTAMP_TYPE)).thenReturn(Optional.empty());
         assertThatThrownBy(()->compiler.compile(flow(List.of(hive(Map.of("hiveTimestampFormat",true))),List.of()))).hasMessageContaining("TimestampFormatProcessor");
         verify(nifi,never()).createProcessGroup(anyString(),anyString(),anyDouble(),anyDouble());
+    }
+
+    @Test void jdbcFullFractionTextReachesHiveWithoutTheLegacySecondsFormatter() {
+        var origin=source("source",Map.of("sourceColumns",List.of(Map.of("columnName","event_time","dataType","TIMESTAMP(9)"))));
+        var target=hive(Map.of("hiveTimestampFormat",true,"targetColumns",List.of(Map.of("columnName","event_time","dataType","TIMESTAMP"))));
+        compiler.compile(flow(List.of(origin,target),List.of(edge("delivery","source","hive"))));
+        assertThat(processors).noneMatch(processor->processor.name().endsWith("/timestamp-format"));
+        assertThat(processor("source/execute").properties()).containsEntry("Record Writer","global-timestamp9");
+        assertThat(processor("Hive目标/merge-records").properties()).containsEntry("Record Writer","global-timestamp9");
+        assertThat(processor("Hive目标/convert").properties()).containsEntry("Record Reader","global-json-reader");
+    }
+
+    @Test void fullTimestampReaderIsBoundOnlyAtFinalLinewellWritersAndDraftServiceIdsAreIgnored() {
+        var columns=List.of(Map.of("columnName","ID","dataType","VARCHAR2","primaryKey",true),Map.of("columnName","EVENT_TIME","dataType","TIMESTAMP(9)"),
+                Map.of("columnName","ODS_RKSJ","dataType","TIMESTAMP"),Map.of("columnName","ODS_GXSJ","dataType","TIMESTAMP"));
+        var origin=source("source",Map.of("sourceColumns",columns));
+        var target=jdbc(Map.of("insertThenMerge",true,"targetColumns",columns,"_runtimeJdbcTimestampReader","untrusted-service"));
+        var result=compiler.compile(flow(List.of(origin,target),List.of(edge("delivery","source","jdbc"))));
+        String reader=result.nodes().get("jdbc").csIds.get("jdbc-timestamp-reader");assertThat(reader).isNotBlank().isNotEqualTo("untrusted-service");
+        assertThat(service(reader).properties()).containsEntry("timestamp-fields","[\"EVENT_TIME\",\"ODS_RKSJ\",\"ODS_GXSJ\"]").containsEntry("number-fields","[]");
+        assertThat(processor("Oracle目标/insert").properties()).containsEntry("put-db-record-record-reader",reader);
+        assertThat(processor("Oracle目标/put").properties()).containsEntry("put-db-record-record-reader",reader);
+        assertThat(processor("Oracle目标/normalize").properties()).containsEntry("Record Reader","global-json-reader");
+        verify(nifi,times(1)).get("/flow/controller-service-types",JsonNode.class);
+        assertThat(target.config()).containsEntry("_runtimeJdbcTimestampReader","untrusted-service");
     }
 
     @Test void configuredMergeAgeIsAppliedWithoutChangingExistingDefaultSizes() {

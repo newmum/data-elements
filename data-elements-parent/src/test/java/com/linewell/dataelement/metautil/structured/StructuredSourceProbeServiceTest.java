@@ -409,6 +409,22 @@ class StructuredSourceProbeServiceTest {
     }
 
     @Test
+    void nonNullSamplesNeverInventRequiredFieldsForTheRemainingFile() throws Exception {
+        for(int count:List.of(20,100)) {
+            StringBuilder content=new StringBuilder("code,name\n");
+            for(int row=0;row<count;row++) content.append(row<count-1?"validation-"+row:"").append(",name-").append(row).append('\n');
+            byte[] bytes=content.toString().getBytes(StandardCharsets.UTF_8);
+            var table=service.parseRemoteFileSampleForTest("optional.csv",bytes.length,bytes).getTables().getFirst();
+            assertThat(table.getRows()).hasSize(10).allSatisfy(row -> assertThat(row.get("code")).isNotNull());
+            assertThat(table.getColumns()).hasSize(2).allSatisfy(column -> {
+                assertThat(column.getNullable()).isTrue();
+                assertThat(column.getPrimaryKey()).isFalse();
+            });
+            assertThat(table.getColumns()).extracting("columnName").containsExactly("code","name");
+        }
+    }
+
+    @Test
     void acceptsExpected426Then226WhenStoppingAnFtpSampleEarly() throws Exception {
         FTPClient client = mock(FTPClient.class);
         when(client.abort()).thenReturn(false);
@@ -439,6 +455,43 @@ class StructuredSourceProbeServiceTest {
         assertThat(StructuredSourceProbeService.kafkaTopics("dict,orders,dict")).containsExactly("dict", "orders");
         assertThatThrownBy(() -> StructuredSourceProbeService.kafkaTopics("orders.*")).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> StructuredSourceProbeService.kafkaTopics(" ")).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void kafkaReadsOneRegisteredPhysicalTopicRegardlessOfSiblingCount() {
+        String topic = "Business.Events";
+        var table = new com.linewell.dataelement.metautil.model.dto.TableInfo();
+        table.setTableName("business_events");
+        table.setRowCount(1L);
+        var data = new StructuredTableData();
+        data.setTable(table);
+        data.setRows(List.of(Map.of("id", 1)));
+        var probe = new StructuredProbeResult();
+        probe.getTables().add(data);
+        for (int count : List.of(20, 100)) {
+            var resolving = spy(service);
+            String configured = java.util.stream.IntStream.range(1, count)
+                    .mapToObj(index -> "Sibling." + index)
+                    .collect(java.util.stream.Collectors.joining(",", topic + ",", ""));
+            var source = Map.<String, Object>of("dbType", "kafka", "topic", configured);
+            var selected = Map.<String, Object>of("dbType", "kafka", "topic", configured, "kafkaTopic", topic);
+            doReturn(probe).when(resolving).probe(selected, false);
+
+            assertThat(resolving.sampleData(source, "business_events", 20).getData()).hasSize(1);
+            verify(resolving).probe(selected, false);
+            assertThat(source).doesNotContainKey("kafkaTopic");
+        }
+    }
+
+    @Test
+    void kafkaRejectsUnconfiguredOrAmbiguousTableBeforeProbing() {
+        var resolving = spy(service);
+        var source = Map.<String, Object>of("dbType", "kafka", "kafkaTopic", "Business.Events,business-events");
+        assertThatThrownBy(() -> resolving.getTableInfo(source, "business_events"))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("无法唯一匹配");
+        assertThatThrownBy(() -> resolving.getColumns(source, "foreign"))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("无法唯一匹配");
+        verify(resolving, never()).probe(any(), org.mockito.ArgumentMatchers.anyBoolean());
     }
 
     @Test

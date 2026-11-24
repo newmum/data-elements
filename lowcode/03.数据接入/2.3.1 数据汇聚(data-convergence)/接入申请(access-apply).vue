@@ -863,6 +863,9 @@ type AccessTemplateOption = {
   tid: string;
   name: string;
   version: number;
+  selectionReady?: boolean;
+  available?: boolean;
+  targets?: any[];
   spec: { topology: string; targets: string[]; targetDatasourceIds?: string[]; sourceType?: string; engine?: string; hasFlow?: boolean; flow?: unknown };
 };
 const accessTemplateId = ref('');
@@ -886,30 +889,36 @@ const accessTemplatesTotal = ref(0);
 let accessTemplatesKeyword = '';
 let accessTemplatesRequest = 0;
 const templateLabel = (item: AccessTemplateOption) => item.name;
-const loadAccessTemplates = async (pageNum = 1) => {
+const fetchAccessTemplates = (pageNum = 1) => $common.post('/nifi/canvas/templates', {
+  pageNum, pageSize: 20, keyword: accessTemplatesKeyword, includeTargets: true,
+}, { _hiddenErrorMsg: true });
+const templateDisabled = (item: AccessTemplateOption) => item.available === false || !compatibleAccessTemplate(item);
+const loadAccessTemplates = async (pageNum = 1, preloaded?: PromiseSettledResult<any>) => {
   const request = ++accessTemplatesRequest;
   accessTemplatesLoading.value = true;
   accessTemplatesError.value = '';
   try {
-    const response = await $common.post('/nifi/canvas/templates', {
-      pageNum, pageSize: 20, keyword: accessTemplatesKeyword,
-    }, { _hiddenErrorMsg: true });
+    if (preloaded?.status === 'rejected') throw preloaded.reason;
+    const response = preloaded?.status === 'fulfilled' ? preloaded.value : await fetchAccessTemplates(pageNum);
     if (request !== accessTemplatesRequest) return;
     const page = response?.data || response;
     if (!Array.isArray(page?.list)) throw new Error('接入模板列表返回不完整');
-    accessTemplates.value = page.list;
+    accessTemplates.value = [...page.list];
+    if (page.defaultTemplate && !page.list.some((item: AccessTemplateOption) => item.tid === page.defaultTemplate.tid)) {
+      accessTemplates.value.push(page.defaultTemplate);
+    }
     accessTemplatesTotal.value = Number(page.total || 0);
     accessTemplatesPage.value = pageNum;
-    const options = page.list.map((item: AccessTemplateOption) => ({label: templateLabel(item), value: item.tid, disabled: !compatibleAccessTemplate(item)}));
+    const options = accessTemplates.value.map((item: AccessTemplateOption) => ({label: templateLabel(item), value: item.tid, disabled: templateDisabled(item)}));
     if (selectedAccessTemplate.value && !page.list.some((item: AccessTemplateOption) => item.tid === selectedAccessTemplate.value?.tid)) {
       options.push({label: templateLabel(selectedAccessTemplate.value), value: selectedAccessTemplate.value.tid});
     }
     jsonFormRef.value?.updateFieldOptions?.('accessTemplateSelection', options);
     if (!accessTemplateId.value && page.defaultVersionId) {
       let chosen = String(page.defaultVersionId);
-      const preferred = page.list.find((item: AccessTemplateOption) => item.tid === chosen);
-      if (needsCommittedFile() && (!preferred || !compatibleAccessTemplate(preferred))) {
-        const chain = page.list.find((item: AccessTemplateOption) => item.spec.targets.length === 1 && item.spec.targets[0] === 'OCEANBASE_ORACLE');
+      const preferred = accessTemplates.value.find((item: AccessTemplateOption) => item.tid === chosen);
+      if (needsCommittedFile() && (!preferred || templateDisabled(preferred))) {
+        const chain = accessTemplates.value.find((item: AccessTemplateOption) => !templateDisabled(item) && item.spec.targets.length === 1 && item.spec.targets[0] === 'OCEANBASE_ORACLE');
         if (chain) {
           chosen = chain.tid;
           accessTemplatesNotice.value = '推送文件须先在关系库提交后确认，已自动选用“' + chain.name + '”。';
@@ -926,9 +935,13 @@ const loadAccessTemplates = async (pageNum = 1) => {
     if (request === accessTemplatesRequest) accessTemplatesLoading.value = false;
   }
 };
+let templateSearchTimer: ReturnType<typeof setTimeout> | undefined;
 const searchAccessTemplates = (keyword: string) => {
+  if (!open.value) return;
+  if (keyword === accessTemplatesKeyword && (accessTemplatesLoading.value || accessTemplatesPage.value === 1 && accessTemplates.value.length)) return;
+  if (templateSearchTimer) clearTimeout(templateSearchTimer);
   accessTemplatesKeyword = keyword;
-  void loadAccessTemplates();
+  templateSearchTimer = setTimeout(() => { void loadAccessTemplates(); }, 180);
 };
 const openAccessTemplates = (visible: boolean) => {
   if (visible) searchAccessTemplates('');
@@ -947,9 +960,11 @@ const chooseAccessTemplate = async (requestedId: string) => {
   syncTargetDatasourceSelection([]);
   if (!id) return;
   try {
-    const response = await $common.post('/nifi/canvas/templatedetail', {tid: id}, { _hiddenErrorMsg: true });
+    const candidate = accessTemplates.value.find(item => item.tid === id && item.selectionReady);
+    const response = candidate || await $common.post('/nifi/canvas/templatedetail', {tid: id}, { _hiddenErrorMsg: true });
     if (run !== templateSelectionRun || !open.value) return;
     const item = response?.data || response;
+    if (item?.available === false) throw new Error('模板绑定的目标库不可用或超出当前权限，请在模板管理中核对');
     if (item?.spec && !compatibleAccessTemplate(item)) throw new Error('推送落地文件需先写入关系库，请选择串行接入或关系库单目标模板');
     if (!item?.tid || !Array.isArray(item.targets) || !Array.isArray(item.spec?.targetDatasourceIds)
       || item.targets.length !== item.spec.targets.length || !item.targets.length) {
@@ -969,8 +984,9 @@ const chooseAccessTemplate = async (requestedId: string) => {
     selectedAccessTemplate.value = item;
     if (!accessTemplates.value.some(value => value.tid === item.tid)) accessTemplates.value.push(item);
     jsonFormRef.value?.updateFieldOptions?.('accessTemplateSelection',
-      accessTemplates.value.map(value => ({label: value.name, value: value.tid, disabled: !compatibleAccessTemplate(value)})));
+      accessTemplates.value.map(value => ({label: value.name, value: value.tid, disabled: templateDisabled(value)})));
     const values = ids.map((key: string) => paths[key]);
+    formData.value = { ...formData.value, accessTemplateSelection: id, dbId: values };
     jsonFormRef.value?.setValue({accessTemplateSelection: id, dbId: values});
     syncTargetDatasourceSelection(values);
   } catch (error: any) {
@@ -1587,6 +1603,11 @@ const sourceAccessModeLabel = (value: any) => {
 
 const init = async () => {
   const runId = ++initRun;
+  accessTemplatesRequest++;
+  templateSelectionRun++;
+  if (templateSearchTimer) clearTimeout(templateSearchTimer);
+  accessTemplatesKeyword = '';
+  accessTemplates.value = [];
   hivePartitionResults.value = [];
   hivePartitionBatchReviewPending.value = false;
   partitionPlans.value = {};
@@ -1624,8 +1645,8 @@ const init = async () => {
   try {
     const addUrl = "/ods/target/template";
     const viewUrl = "/ods/target/detail";
-    // 三个请求互不依赖；收到全部结果后再设置表单默认目标库和接入节点。
-    const [datasourceResult, nodeResult, sourceResult] = await Promise.allSettled([
+    // 模板候选与来源、节点并行读取，选项已包含本页批量授权的目标信息。
+    const [datasourceResult, nodeResult, sourceResult, templatesResult] = await Promise.allSettled([
       trackLoad("datasource", $common.post("/ods/target/options", {
         taskCategory: props.taskCategory || "ingestion",
       }), runId),
@@ -1633,6 +1654,7 @@ const init = async () => {
       trackLoad("source", $common.post(props.type === "add" ? addUrl : viewUrl, {
         tid: sourceTableId,
       }, { _hiddenErrorMsg: true }, 120 * 1000), runId),
+      props.type === 'add' ? fetchAccessTemplates() : Promise.resolve(null),
     ]);
     if (!isCurrentInit(runId)) return false;
     if (datasourceResult.status === "rejected") throw datasourceResult.reason;
@@ -1719,7 +1741,7 @@ const init = async () => {
     if (!isCurrentInit(runId)) return false;
     jsonFormRef.value?.setValue(formData.value);
     syncTargetDatasourceSelection(propList.dbId);
-    if (props.type === 'add') void loadAccessTemplates();
+    if (props.type === 'add') void loadAccessTemplates(1, templatesResult);
     // 设置表格数据(字段列表)。即使字段为空也明确清空上一张来源表的数据，
     // 避免复用抽屉时残留旧内容；非空时由 loadTemplateTableItems 等待 Grid
     // 就绪后再写入，避免首次打开偶发的空表竞态。
@@ -2542,6 +2564,7 @@ onMounted(() => {
 watch(() => props.modelValue, (visible, previous) => {
   if (visible && !previous && props.id) init();
   if (!visible && previous) {
+    if (templateSearchTimer) clearTimeout(templateSearchTimer);
     cancelPendingInit();
     accessTemplatesRequest++;
     accessTemplatesLoading.value = false;
@@ -2552,6 +2575,11 @@ watch(() => props.modelValue, (visible, previous) => {
   }
 });
 onBeforeUnmount(cancelPendingInit);
+onBeforeUnmount(() => {
+  if (templateSearchTimer) clearTimeout(templateSearchTimer);
+  accessTemplatesRequest++;
+  templateSelectionRun++;
+});
 onBeforeUnmount(stopMaterializationProgress);
 watch([open, ddlMode, activeDdlKey], ([visible, isDdl]) => {
   stopDdlEditorSizing();

@@ -78,7 +78,7 @@ test("接入模板下拉按行业、发布状态和名称分页", async () => {
   const result = (await request(runtime, path, { keyword: "并行", pageSize: 20 })).body.data;
   const { tenantId: ignored, defaultTenantId: ignoredDefault, ...expected } = published;
   assert.deepEqual(result, { list: [{ ...expected, isDefault: true, spec: { hasFlow: false, hasNative: false } }],
-    total: 1, pageNum: 1, pageSize: 20, defaultVersionId: published.tid });
+      total: 1, pageNum: 1, pageSize: 20, defaultVersionId: published.tid, defaultTemplate: null });
   assert.equal((await request(runtime, path, { keyword: "其他" })).body.data.total, 0);
   assert.equal((await request(runtime, path, { keyword: "其他" })).body.data.defaultVersionId, published.tid);
   assert.equal((await request(runtime, "/nifi/canvas/templatedetail", { tid: published.tid })).body.data.name, published.name);
@@ -93,6 +93,23 @@ test("接入模板下拉按行业、发布状态和名称分页", async () => {
   runtime.database.accessTemplates.find(row => row.tid === published.tid).spec.targetDatasourceIds.push(other.tid);
   runtime.persist(runtime.database);
   assert.equal((await request(runtime, "/nifi/canvas/templatedetail", { tid: published.tid })).body.code, 403);
+    runtime.database.accessTemplates = Array.from({length:108},(_,index)=>({...published,
+      tid:"validation-template-"+String(index).padStart(3,"0"),defaultTenantId:index===0?tenantId:null,
+      spec:{targets:["MYSQL"],targetDatasourceIds:[own.tid]}}));
+    runtime.persist(runtime.database);
+    for (const pageSize of [20,100]) {
+      const page=(await request(runtime,path,{pageSize,includeTargets:true,tenantId:"different-tenant"})).body.data;
+      assert.equal(page.list.length,pageSize);
+      assert.equal(page.defaultTemplate.tid,"validation-template-000");
+      for (const item of [...page.list,page.defaultTemplate]) {
+        assert.equal(item.selectionReady,true);assert.equal(item.available,true);
+        assert.deepEqual(item.targets.map(row=>row.tid),[own.tid]);
+      }
+    }
+    runtime.database.accessTemplates[0].spec.targetDatasourceIds=[other.tid];
+    runtime.persist(runtime.database);
+    const denied=(await request(runtime,path,{includeTargets:true})).body.data.defaultTemplate;
+    assert.equal(denied.available,false);assert.deepEqual(denied.targets,[]);
 });
 
 test("并行模板详情保留四节点、原生补数开关及分支策略且不模拟执行", async () => {
@@ -782,7 +799,7 @@ test("两套工作区回读同一份持久场景，不缓存另一份数据源",
   assert.equal((await request(peer,"/dst/db/srcdetail",{tid})).body.data.dbName,"共享数据源名称");
 });
 
-test("20/100 行表预览各一次请求，结构与预览共用字段，视图来自同一基础表", async () => {
+test("20/100 行表预览各一次请求并保留日期时间小数，结构与预览共用字段，视图来自同一基础表", async () => {
   const {runtime}=setup();const source=runtime.database.sources[0];
   const table=runtime.database.tables.find(row=>row.datasourceId===source.tid&&row.objectType==="TABLE");
   const fields=(await request(runtime,"/dst/db/fields",{}, {tid:table.tid},"GET")).body.data;
@@ -793,12 +810,15 @@ test("20/100 行表预览各一次请求，结构与预览共用字段，视图�
     assert.equal(response.body.data.rows.length,size);
     assert.deepEqual(response.body.data.columns,fields.map(row=>row.columnName));
     assert.equal(response.body.data.total,table.recordCount);
+    assert.match(response.body.data.rows[0].created_at,/\.986$/);
+    assert.equal(response.body.data.rows[0].created_at,tableRows(table)[0].created_at);
   }
   const view=runtime.database.tables.find(row=>row.datasourceId===source.tid&&row.objectType==="VIEW");
   const viewData=(await request(runtime,"/dst/db/preview",{tableId:view.tid,pageSize:100})).body.data;
   assert.deepEqual(viewData.rows,tableRows(table).filter(row=>row.status==="active"));
   const sample=(await request(runtime,"/dst/db/sample",{dbId:source.tid,tableName:table.tableName,sampleSize:10})).body.data;
   assert.equal(sample.rows.length,10);
+  assert.equal(sample.rows[0].created_at,tableRows(table)[0].created_at);
 });
 
 test("字段与预览按每个表关联的数据源校验租户和角色范围", async () => {

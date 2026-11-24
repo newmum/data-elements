@@ -30,6 +30,10 @@ public final class BatchSchedulePolicy {
     }
 
     public static Map<String, Object> markDefault(Map<String, Object> config) {
+        return markStaggered(config);
+    }
+
+    public static Map<String, Object> markImmediate(Map<String, Object> config) {
         Map<String, Object> copy = new LinkedHashMap<>(config == null ? Map.of() : config);
         copy.put("batchSchedulePolicy", IMMEDIATE);
         copy.put("schedulingStrategy", "TIMER_DRIVEN");
@@ -53,7 +57,7 @@ public final class BatchSchedulePolicy {
     public static Map<String, Object> defaultConfig(String tenantId, String pipelineId, String nodeId,
                                                    String key, Map<String, Object> config) {
         if (!isBatchSource(key) || "CUSTOM".equals(text(config, "batchSchedulePolicy"))) return config;
-        return automatic(config) ? assign(tenantId, pipelineId, nodeId, config) : markDefault(config);
+        return immediate(config) ? markImmediate(config) : assign(tenantId, pipelineId, nodeId, config);
     }
 
     private static Map<String, Object> assign(String tenantId, String pipelineId, String nodeId,
@@ -85,7 +89,7 @@ public final class BatchSchedulePolicy {
             if (!isBatchSource(node.manifestKey()) || !"source".equals(node.category())) return node;
             Map<String, Object> config = node.config() == null ? Map.of() : node.config();
             if (immediate(config)) {
-                Map<String, Object> daily = markDefault(config);
+                Map<String, Object> daily = markImmediate(config);
                 if (daily.equals(config)) return node;
                 changed[0] = true;
                 return new Pipeline.Node(node.id(), node.manifestKey(), node.label(), node.category(), node.x(), node.y(), daily);
@@ -97,7 +101,7 @@ public final class BatchSchedulePolicy {
             if (!newDefault && !pending) return node;
             changed[0] = true;
             return new Pipeline.Node(node.id(), node.manifestKey(), node.label(), node.category(), node.x(), node.y(),
-                    automatic(config) ? assign(tenantId, pipelineId, node.id(), config) : markDefault(config));
+                    assign(tenantId, pipelineId, node.id(), config));
         }).toList();
         return changed[0] ? new Pipeline.Dsl(dsl.version(), nodes, dsl.edges()) : dsl;
     }

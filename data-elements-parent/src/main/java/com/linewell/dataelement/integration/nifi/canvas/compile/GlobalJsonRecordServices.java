@@ -11,9 +11,9 @@ import com.linewell.dataelement.integration.nifi.canvas.pipeline.Pipeline;
 import com.linewell.dataelement.integration.nifi.canvas.pipeline.HiveSinkPublicationPolicy;
 
 /** Read the selected NiFi node's root scope once; never create or alter public codecs. */
-record GlobalJsonRecordServices(String rootId, List<JsonNode> services, Map<String,String> writerIds, String readerId, Set<String> hiveNodes) {
+record GlobalJsonRecordServices(String rootId, List<JsonNode> services, Map<String,String> writerIds, String readerId, Set<String> hiveNodes, Set<String> timestampNodes) {
     static GlobalJsonRecordServices resolve(NifiClient nifi) {
-        return resolve(nifi, Set.of(HiveTemporalJsonPolicy.DEFAULT_WRITER_NAME), Set.of());
+        return resolve(nifi, Set.of(HiveTemporalJsonPolicy.DEFAULT_WRITER_NAME), Set.of(), Set.of());
     }
     static GlobalJsonRecordServices resolve(NifiClient nifi, Pipeline pipeline) {
         return resolve(nifi, pipeline, false);
@@ -22,14 +22,15 @@ record GlobalJsonRecordServices(String rootId, List<JsonNode> services, Map<Stri
     static GlobalJsonRecordServices resolve(NifiClient nifi, Pipeline pipeline, boolean needsSqlTimeWriter) {
         Pipeline published=HiveSinkPublicationPolicy.forPublication(pipeline);
         Set<String> hive=HiveTemporalJsonPolicy.hiveWriterNodes(published);
+        Set<String> timestamps=JdbcTimestampJsonPolicy.writerNodes(published);
         Set<String> required=new LinkedHashSet<>();
         if(published!=null&&published.dsl()!=null&&published.dsl().nodes()!=null)
-            published.dsl().nodes().forEach(node->required.add(hive.contains(node.id())?HiveTemporalJsonPolicy.WRITER_NAME:HiveTemporalJsonPolicy.DEFAULT_WRITER_NAME));
+            published.dsl().nodes().forEach(node->required.add(timestamps.contains(node.id())?JdbcTimestampJsonPolicy.WRITER_NAME:hive.contains(node.id())?HiveTemporalJsonPolicy.WRITER_NAME:HiveTemporalJsonPolicy.DEFAULT_WRITER_NAME));
         if(required.isEmpty())required.add(HiveTemporalJsonPolicy.DEFAULT_WRITER_NAME);
         if (needsSqlTimeWriter) required.add(HiveTemporalJsonPolicy.WRITER_NAME);
-        return resolve(nifi,required,hive);
+        return resolve(nifi,required,hive,timestamps);
     }
-    private static GlobalJsonRecordServices resolve(NifiClient nifi,Set<String> required,Set<String> hiveNodes) {
+    private static GlobalJsonRecordServices resolve(NifiClient nifi,Set<String> required,Set<String> hiveNodes,Set<String> timestampNodes) {
         // The configured canvas root may be a tenant/application subgroup.
         // Public services belong to the actual NiFi Flow root instead.
         JsonNode root = nifi.get("/flow/process-groups/root",JsonNode.class);
@@ -39,8 +40,13 @@ record GlobalJsonRecordServices(String rootId, List<JsonNode> services, Map<Stri
         services = services == null ? List.of() : List.copyOf(services);
         Map<String,String> writers=new LinkedHashMap<>();
         for(String name:required)writers.put(name,require(services,rootId,name,"org.apache.nifi.json.JsonRecordSetWriter"));
+        if (writers.containsKey(JdbcTimestampJsonPolicy.WRITER_NAME)) {
+            String id = writers.get(JdbcTimestampJsonPolicy.WRITER_NAME);
+            JdbcTimestampJsonPolicy.requireFormat(services.stream().filter(service -> id.equals(service.path("component").path("id").asText(service.path("id").asText())))
+                    .findFirst().orElseThrow());
+        }
         String reader = require(services, rootId, HiveTemporalJsonPolicy.READER_NAME, "org.apache.nifi.json.JsonTreeReader");
-        return new GlobalJsonRecordServices(rootId, services, Map.copyOf(writers), reader, hiveNodes);
+        return new GlobalJsonRecordServices(rootId, services, Map.copyOf(writers), reader, hiveNodes, timestampNodes);
     }
 
     static String require(List<JsonNode> services, String rootId, String name, String type) {
@@ -66,7 +72,7 @@ record GlobalJsonRecordServices(String rootId, List<JsonNode> services, Map<Stri
         return entry.getKey();
     }
 
-    String writerId() { return writerIds.getOrDefault(HiveTemporalJsonPolicy.DEFAULT_WRITER_NAME,writerIds.get(HiveTemporalJsonPolicy.WRITER_NAME)); }
+    String writerId() { return writerIds.getOrDefault(HiveTemporalJsonPolicy.DEFAULT_WRITER_NAME,writerIds.getOrDefault(HiveTemporalJsonPolicy.WRITER_NAME,writerIds.get(JdbcTimestampJsonPolicy.WRITER_NAME))); }
     boolean preservesJsonNumbers() {
         for (JsonNode service : services) {
             JsonNode component=service.path("component");
@@ -88,7 +94,7 @@ record GlobalJsonRecordServices(String rootId, List<JsonNode> services, Map<Stri
         }throw new IllegalStateException("公共JSON Reader配置已不可核验");
     }
     String writerForNode(String nodeId) {
-        String name=hiveNodes.contains(nodeId)?HiveTemporalJsonPolicy.WRITER_NAME:HiveTemporalJsonPolicy.DEFAULT_WRITER_NAME;
+        String name=timestampNodes.contains(nodeId)?JdbcTimestampJsonPolicy.WRITER_NAME:hiveNodes.contains(nodeId)?HiveTemporalJsonPolicy.WRITER_NAME:HiveTemporalJsonPolicy.DEFAULT_WRITER_NAME;
         String id=writerIds.get(name);
         if(id==null)throw new IllegalStateException("节点所需全局 Writer 尚未解析："+name);
         return id;

@@ -6,6 +6,17 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class LinewellAuditPropertiesTest {
+    @Test void governedTimesHaveOneOwnerButMergeStillPreservesTheOriginalCreationIdentity(){
+        var values=LinewellAuditProperties.defaults(List.of("ID","ODS_UUID","ODS_RKSJ","ODS_GXSJ"),
+                Map.of("dbType","OCEANBASE_ORACLE","_runtimeGovernedAuditFields",List.of("ods_rksj","ODS_GXSJ")));
+        assertFalse(values.containsKey(LinewellAuditProperties.PREFIX+"insert-values"));
+        assertFalse(values.containsKey(LinewellAuditProperties.PREFIX+"update-values"));
+        assertEquals("ODS_UUID,ODS_RKSJ",values.get(LinewellAuditProperties.PREFIX+"exclude-update"));
+        var partial=LinewellAuditProperties.defaults(List.of("ODS_RKSJ","ODS_GXSJ"),
+                Map.of("dbType","ORACLE","_runtimeGovernedAuditFields",List.of("ODS_RKSJ")));
+        assertEquals("ODS_GXSJ=SYSDATE",partial.get(LinewellAuditProperties.PREFIX+"insert-values"));
+        assertEquals("ODS_GXSJ=SYSDATE",partial.get(LinewellAuditProperties.PREFIX+"update-values"));
+    }
     @Test void databaseClockDefaultsUseRealDescriptorKeysAndKeepCreationTimeOutOfUpdates()throws Exception {
         var intents=LinewellAuditProperties.defaults(List.of("ID","ODS_UUID","ODS_RKSJ","ODS_GXSJ"),Map.of("dbType","OCEANBASE_ORACLE"));
         var descriptors=new ObjectMapper().readTree("""

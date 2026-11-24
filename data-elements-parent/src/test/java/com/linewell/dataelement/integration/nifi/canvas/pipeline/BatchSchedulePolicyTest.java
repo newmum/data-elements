@@ -42,18 +42,18 @@ class BatchSchedulePolicyTest {
         var pending=dsl(node("old","source.mysql",BatchSchedulePolicy.markDefault(Map.of())));
         assertThat(BatchSchedulePolicy.normalize(pending,legacy,"tenant","p").nodes().getFirst().config().get("schedulingPeriod")).isNotEqualTo("");
     }
-    @Test void newDefaultsAndExplicitSwitchUseImmediateDailyAndClearTheOldClock() {
+    @Test void newDefaultsUseStaggeringWhileExplicitImmediateStillClearsTheOldClock() {
         var oldClock=BatchSchedulePolicy.defaultConfig("tenant","p","s","source.sftp",BatchSchedulePolicy.markStaggered(Map.of()));
-        var selected=BatchSchedulePolicy.markDefault(oldClock);
+        var selected=BatchSchedulePolicy.markImmediate(oldClock);
         assertThat(selected).containsEntry("batchSchedulePolicy",BatchSchedulePolicy.IMMEDIATE)
             .containsEntry("schedulingStrategy","TIMER_DRIVEN").containsEntry("schedulingPeriod","1 day")
             .doesNotContainKeys("batchScheduleTime","batchScheduleZone");
         var saved=BatchSchedulePolicy.normalize(dsl(node("s","source.sftp",selected)),dsl(node("s","source.sftp",oldClock)),"tenant","p");
         assertThat(BatchSchedulePolicy.normalize(saved,saved,"tenant","p")).isSameAs(saved);
         assertThat(BatchSchedulePolicy.normalize(dsl(node("new","source.mysql",Map.of())),null,"tenant","new-flow")
-            .nodes().getFirst().config()).containsEntry("schedulingPeriod","1 day").containsEntry("batchSchedulePolicy",BatchSchedulePolicy.IMMEDIATE);
+            .nodes().getFirst().config()).containsEntry("schedulingStrategy","CRON_DRIVEN").containsEntry("batchSchedulePolicy",BatchSchedulePolicy.AUTOMATIC);
         assertThat(BatchSchedulePolicy.defaultConfig("tenant","new-flow","s","source.sftp",Map.of("schedulingPeriod","60 sec")))
-            .containsEntry("schedulingPeriod","1 day").containsEntry("schedulingStrategy","TIMER_DRIVEN");
+            .containsEntry("batchSchedulePolicy",BatchSchedulePolicy.AUTOMATIC).containsEntry("schedulingStrategy","CRON_DRIVEN");
     }
     @Test void twentyAndHundredSourceGraphsUseSameConstantRepositoryReadsAndTrustedTenant() {
         for(int count:List.of(20,100)) {
@@ -62,8 +62,8 @@ class BatchSchedulePolicyTest {
             var input=new Pipeline("validation","validation",null,null,null,new Pipeline.Dsl(1,nodes,List.of()),null,null,null,null,null,null,null);
             try(var tenant=TenantContext.use("tenant-a")) {
                 var saved=repository.save(input);
-                assertThat(saved.dsl().nodes()).allSatisfy(n->assertThat(n.config()).containsEntry("schedulingPeriod","1 day")
-                    .containsEntry("batchSchedulePolicy",BatchSchedulePolicy.IMMEDIATE));
+                assertThat(saved.dsl().nodes()).allSatisfy(n->assertThat(n.config()).containsEntry("schedulingStrategy","CRON_DRIVEN")
+                    .containsEntry("batchSchedulePolicy",BatchSchedulePolicy.AUTOMATIC));
                 verify(mapper,times(2)).selectById("validation");verify(mapper).insert(any(com.linewell.dataelement.feature.dataaccess.infrastructure.persistence.entity.NifiPipelineT.class));
                 verifyNoMoreInteractions(mapper);
             }

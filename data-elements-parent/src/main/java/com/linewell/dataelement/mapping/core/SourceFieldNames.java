@@ -6,12 +6,18 @@ import java.util.*;
 public final class SourceFieldNames {
     private final Set<String> names;
     private final boolean caseSensitive;
+    private final Set<String> declared;
     private final Map<String,String> cache = new HashMap<>();
     private Map<String,List<String>> folded, conventional;
 
     public SourceFieldNames(Collection<String> names, boolean caseSensitive) {
+        this(names, caseSensitive, Set.of());
+    }
+
+    public SourceFieldNames(Collection<String> names, boolean caseSensitive, Set<String> declared) {
         this.names = names instanceof Set<String> set ? set : new LinkedHashSet<>(names);
         this.caseSensitive = caseSensitive;
+        this.declared = declared;
     }
 
     public String resolve(String name) {
@@ -36,6 +42,9 @@ public final class SourceFieldNames {
             }
             result = unique(candidates);
         }
+        // A separately declared field owns its values even when a naming variant is absent.
+        // Keep the missing value for the plan's existing optional/missing-source policy.
+        if (result != null && declared.contains(result) && !result.equals(name)) result = null;
         cache.put(name, result);
         return result;
     }

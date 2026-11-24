@@ -5,7 +5,7 @@ import ConfigFieldLabel from './ConfigFieldLabel';
 import ConfigSections from './ConfigSections';
 import { syncModes, syncSettings, syncSettingsPatch, syncSettingsError } from '../utils/syncSettings';
 import { incrementalFieldVisible } from '../utils/incrementalFields';
-import { DAILY_IMMEDIATE, DAILY_STAGGERED, automaticSchedule, dailyScheduleDefaults, staggeredScheduleDefaults, isBatchSource, scheduleFieldVisible } from '../utils/batchSchedule';
+import { DAILY_IMMEDIATE, DAILY_STAGGERED, automaticSchedule, immediateScheduleDefaults, staggeredScheduleDefaults, isBatchSource, scheduleFieldVisible } from '../utils/batchSchedule';
 import { governanceNodeLabel } from '../utils/fieldGovernancePresentation';
 import { hiveHdfsMergeUnavailable, isHiveSink } from '../utils/hiveSinkPolicy';
 import {
@@ -712,7 +712,7 @@ export default function ConfigDrawer() {
     if (manifest?.category === 'source' && isBatchSource(manifest.key) && fields.some(f => f.key === 'schedulingPeriod')) {
       fields.unshift({ key: 'batchSchedulePolicy', label: '执行方式', type: 'select', group: 'schedule',
         help: '立即执行：启动后立即执行，之后每隔 1 天调度。自动错峰：首次保存时分配执行时间，之后编辑、重启和重新部署沿用同一时刻。',
-        options: [{ label: '每天一次（立即执行）', value: DAILY_IMMEDIATE }, { label: '每天一次（自动错峰）', value: DAILY_STAGGERED }, { label: '自定义调度', value: 'CUSTOM' }] });
+        options: [{ label: '每天一次（自动错峰）', value: DAILY_STAGGERED }, { label: '每天一次（立即执行）', value: DAILY_IMMEDIATE }, { label: '自定义调度', value: 'CUSTOM' }] });
     }
     if (manifest?.category !== 'source' || !manifest.compile?.processors?.some(p => p.type.endsWith('.GenerateTableFetch') || p.type.endsWith('.GenerateDateTableFetch'))) return fields;
     return [
@@ -1495,7 +1495,7 @@ export default function ConfigDrawer() {
     if (field.key === 'batchSchedulePolicy') {
       return <Space direction="vertical" style={{ width: '100%' }}>
         <Select style={{ width: '100%' }} value={node.config.batchSchedulePolicy === DAILY_IMMEDIATE ? DAILY_IMMEDIATE : automaticSchedule(node.config) ? DAILY_STAGGERED : 'CUSTOM'} options={field.options} disabled={disabled}
-          onChange={v => updateConfig(node.id, v === DAILY_IMMEDIATE ? dailyScheduleDefaults(node.config) : v === DAILY_STAGGERED ? staggeredScheduleDefaults(node.config)
+          onChange={v => updateConfig(node.id, v === DAILY_IMMEDIATE ? immediateScheduleDefaults(node.config) : v === DAILY_STAGGERED ? staggeredScheduleDefaults(node.config)
             : { batchSchedulePolicy: 'CUSTOM', schedulingPeriod: node.config.schedulingPeriod || '0 0 0 * * ?' })} />
         {automaticSchedule(node.config) && <div role="status">
           {node.config.batchScheduleTime ? `每天 ${String(node.config.batchScheduleTime)}（北京时间）` : '执行时间待分配'}

@@ -37,6 +37,21 @@ import org.ssssssss.script.runtime.ExitValue;
 
 /** The template must stay local-first, bounded and scoped to the current role. */
 class MaterializationTemplateMagicTest {
+    @Test
+    void elasticsearchArrayUsesLogicalJsonAndPreservesItsSourceFieldAndNativeDeclaration() throws Exception {
+        var fixture = new Fixture(1);
+        fixture.jdbc.update("update db_datasource_t set db_type='elasticsearch' where tid='source-db'");
+        fixture.jdbc.update("update db_table_column_t set data_type='JSON',column_type='keyword',primary_key=0,nullable=1 where tid='col-1'");
+        var response = assertInstanceOf(Map.class, fixture.run(false));
+        var field = (Map<?, ?>) ((List<?>) response.get("tableItems")).getFirst();
+        assertEquals("json", field.get("dataType"));
+        assertEquals("keyword", field.get("sourceColumnType"));
+        assertEquals("col-1", field.get("sourceColumnId"));
+        assertEquals(0, fixture.explorer.calls);
+        assertEquals(0, fixture.connectionConfigCalls);
+        assertEquals("keyword", fixture.jdbc.queryForObject("select column_type from db_table_column_t where tid='col-1'", String.class));
+    }
+
     @ParameterizedTest @ValueSource(booleans={true,false})
     void normalizedSqlServerColumnKeepsBooleanIdentityFlagsAsNumericLineage(boolean identity)throws Exception {
         var fixture=new Fixture(1);fixture.jdbc.execute("alter table db_table_column_t add auto_increment boolean");

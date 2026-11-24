@@ -19,7 +19,7 @@ class NifiDailyScheduleTest {
         var compiler=new DslCompiler(client,mock(ManifestRegistry.class),null,null);
         for(int count:List.of(20,100)) {
             var nodes=java.util.stream.IntStream.range(0,count).mapToObj(i->new Pipeline.Node("s"+i,"source.sftp","来源","source",0,0,
-                    BatchSchedulePolicy.markDefault(Map.of()))).toList();
+                    BatchSchedulePolicy.markImmediate(Map.of()))).toList();
             compiler.preflightSchedules(new Pipeline("p","validation",null,null,null,new Pipeline.Dsl(1,nodes,List.of()),null,null,null,null,null,null,null));
         }
         verifyNoInteractions(client);

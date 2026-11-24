@@ -17,6 +17,50 @@ import static org.mockito.Mockito.*;
 
 class HaitongTransformRecordTest {
     private static final ObjectMapper JSON=new ObjectMapper();
+    @Test void emptyRecordBatchesDoNotValidateMissingSchemaGenerateRowsOrLoopWarnings()throws Exception {
+        for(boolean exact:List.of(false,true))for(int count:List.of(20,100)){
+            var runner=emptyAwareJsonRunner(exact);
+            for(int index=0;index<count;index++)runner.enqueue(index%2==0?"[]":"",
+                    Map.of("ht.error.code","SCHEMA_DRIFT","record.count","0"));
+            runner.run(count);runner.assertQueueEmpty();
+            for(var relationship:List.of(HaitongTransformRecord.SUCCESS,HaitongTransformRecord.INVALID,HaitongTransformRecord.FAILURE,HaitongTransformRecord.RETRY))
+                runner.assertTransferCount(relationship,0);
+            assertEquals(count,runner.getCounterValue("Empty input batches"));
+            assertTrue(runner.getLogger().getWarnMessages().isEmpty());assertTrue(runner.getLogger().getErrorMessages().isEmpty());
+            runner.shutdown();
+        }
+    }
+    @Test void malformedOrNonemptyMissingFieldRecordsAreRetainedAndAZeroCountAttributeCannotDiscardRealRows()throws Exception {
+        for(boolean exact:List.of(false,true)){
+            for(String input:List.of("[{}]","[")){
+                var runner=emptyAwareJsonRunner(exact);runner.enqueue(input);runner.run();
+                runner.assertTransferCount(HaitongTransformRecord.FAILURE,1);
+                runner.getFlowFilesForRelationship(HaitongTransformRecord.FAILURE).getFirst().assertContentEquals(input);
+                assertNotEquals(1L,runner.getCounterValue("Empty input batches"));runner.shutdown();
+            }
+            var runner=emptyAwareJsonRunner(exact);
+            runner.enqueue("[{\"ID\":\"kept\",\"OPTIONAL\":null}]",Map.of("record.count","0"));runner.run();
+            runner.assertTransferCount(HaitongTransformRecord.SUCCESS,1);
+            assertEquals("kept",JSON.readTree(runner.getFlowFilesForRelationship(HaitongTransformRecord.SUCCESS).getFirst().toByteArray()).get(0).path("ID").asText());
+            runner.assertTransferCount(HaitongTransformRecord.FAILURE,0);runner.shutdown();
+        }
+    }
+    private static TestRunner emptyAwareJsonRunner(boolean exact)throws Exception {
+        var spec=JSON.readTree("""
+          {"version":"1.0","onMissingSource":"FAIL","recordErrorMode":"ROUTE_INVALID",
+           "mappings":[{"from":"/ID","to":"/ID","targetType":"STRING"},
+             {"to":"/ODS_RKSJ","expression":"LOCALTIMESTAMP","targetType":"DATETIME"}],
+           "schemaContract":{"source":[{"name":"ID","logicalType":"STRING","nullable":false}]}}
+          """);
+        var plan=MappingEngine.compile(spec);var runner=TestRunners.newTestRunner(HaitongTransformRecord.class);
+        var reader=new org.apache.nifi.json.JsonTreeReader();runner.addControllerService("reader",reader);
+        runner.setProperty(reader,"Schema Access Strategy","infer-schema");runner.enableControllerService(reader);
+        var writer=new org.apache.nifi.json.JsonRecordSetWriter();runner.addControllerService("writer",writer);
+        runner.setProperty(writer,"Schema Access Strategy","inherit-record-schema");runner.enableControllerService(writer);
+        runner.setProperty(HaitongTransformRecord.READER,"reader");runner.setProperty(HaitongTransformRecord.WRITER,"writer");
+        runner.setProperty(HaitongTransformRecord.PLAN,plan.document().toString());
+        runner.setProperty(HaitongTransformRecord.EXACT_JSON_NUMBERS,Boolean.toString(exact));return runner;
+    }
     @Test void nativeJsonBooleansWriteExactSingleDigitDecimalNumbersAndRetainInvalidText() throws Exception {
         for (String mode : List.of("target", "expression", "function")) for (int count : List.of(20, 100)) {
             var spec = JSON.createObjectNode().put("version", "1.0").put("recordErrorMode", "ROUTE_INVALID");

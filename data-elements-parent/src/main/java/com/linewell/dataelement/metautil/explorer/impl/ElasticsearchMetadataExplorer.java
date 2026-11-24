@@ -181,6 +181,9 @@ public class ElasticsearchMetadataExplorer implements MetadataExplorer, DataQuer
                     .build();
             HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
             int status = response.statusCode();
+            if (status == 403 && path.equals("/_msearch")) {
+                return MAPPER.createObjectNode().put("status", 403);
+            }
             if (status < 200 || status >= 300) {
                 throw new IllegalStateException("Elasticsearch查询失败，HTTP " + status);
             }
@@ -387,14 +390,81 @@ public class ElasticsearchMetadataExplorer implements MetadataExplorer, DataQuer
         }
         if (!batch.isEmpty()) batches.add(batch);
         var mappings = MAPPER.createObjectNode();
+        Map<String, List<String>> documentFields = new LinkedHashMap<>();
+        Map<String, java.util.Set<String>> structuredDocumentFields = new LinkedHashMap<>();
         for (List<String> current : batches) {
             JsonNode response = json(config, "/" + String.join(",", current.stream().map(this::encodePath).toList()) + "/_mapping");
             response.fields().forEachRemaining(entry -> mappings.set(entry.getKey(), entry.getValue()));
+            StringBuilder queries = new StringBuilder();
+            for (String name : current) {
+                queries.append(MAPPER.createObjectNode().put("index", name)).append('\n');
+                queries.append("{\"size\":20,\"sort\":[\"_doc\"]}\n");
+            }
+            JsonNode probe = postJson(config, "/_msearch", queries.toString());
+            if (probe.path("status").asInt() == 403) {
+                for (String name : current) {
+                    documentFields.put(name, List.of());
+                    structuredDocumentFields.put(name, java.util.Set.of());
+                }
+                continue;
+            }
+            JsonNode samples = probe.path("responses");
+            if (!samples.isArray() || samples.size() != current.size()) {
+                throw new IllegalStateException("Elasticsearch字段探查未返回完整批量结果");
+            }
+            for (int i = 0; i < current.size(); i++) {
+                JsonNode sample = samples.get(i);
+                if (sample.path("status").asInt() == 403) {
+                    documentFields.put(current.get(i), List.of());
+                    structuredDocumentFields.put(current.get(i), java.util.Set.of());
+                    continue;
+                }
+                JsonNode hits = sample.path("hits").path("hits");
+                if (sample.has("error") || sample.path("_shards").path("failed").asInt() > 0 || !hits.isArray()) {
+                    throw new IllegalStateException("Elasticsearch字段探查失败：" + current.get(i));
+                }
+                var namesInDocuments = new java.util.LinkedHashSet<String>();
+                var jsonFields = new java.util.HashSet<String>();
+                for (JsonNode hit : hits) {
+                    Map<String, Object> fields = new LinkedHashMap<>();
+                    flattenSource(hit.path("_source"), "", fields);
+                    namesInDocuments.addAll(fields.keySet());
+                    fields.forEach((field, value) -> {
+                        if (value instanceof List<?> || value instanceof Map<?, ?>) jsonFields.add(field);
+                    });
+                }
+                documentFields.put(current.get(i), new ArrayList<>(namesInDocuments));
+                structuredDocumentFields.put(current.get(i), jsonFields);
+            }
         }
         for (String name : names) {
             JsonNode indexNode = mappings.path(name);
             if (indexNode.isMissingNode()) throw new IllegalStateException("未读取到索引mapping：" + name);
-            result.put(name.toLowerCase(Locale.ROOT), columns(mappingProperties(indexNode.path("mappings"))));
+            List<ColumnInfo> discovered = columns(mappingProperties(indexNode.path("mappings")));
+            var mappedNames = new java.util.HashSet<String>();
+            for (ColumnInfo column : discovered) {
+                mappedNames.add(column.getColumnName());
+                // An ES keyword/date/numeric mapping also permits multi-valued document fields.
+                // Keep its native declaration in columnType and expose the lossless logical JSON type.
+                if (structuredDocumentFields.get(name).contains(column.getColumnName())) {
+                    column.setDataType("JSON");
+                }
+            }
+            // Empty arrays/objects can exist in _source without ever creating an indexed mapping.
+            // Preserve these observed JSON values without changing any explicit mapping's type.
+            for (String field : documentFields.get(name)) {
+                if (mappedNames.contains(field)) continue;
+                ColumnInfo column = new ColumnInfo();
+                column.setColumnName(field);
+                column.setColumnComment(field);
+                column.setDataType("JSON");
+                column.setColumnType("JSON");
+                column.setNullable(true);
+                column.setPrimaryKey(false);
+                column.setOrdinalPosition(discovered.size() + 1);
+                discovered.add(column);
+            }
+            result.put(name.toLowerCase(Locale.ROOT), discovered);
         }
         return result;
     }
@@ -545,7 +615,7 @@ public class ElasticsearchMetadataExplorer implements MetadataExplorer, DataQuer
             Map.Entry<String, JsonNode> entry = fields.next();
             String name = prefix.isBlank() ? entry.getKey() : prefix + "." + entry.getKey();
             JsonNode value = entry.getValue();
-            if (value.isObject()) {
+            if (value.isObject() && !value.isEmpty()) {
                 flattenSource(value, name, row);
             } else {
                 row.put(name, MAPPER.convertValue(value, Object.class));

@@ -30,6 +30,11 @@ class ElasticsearchMetadataExplorerTest {
     private int aliasStatus;
     private boolean malformedAliasResponse;
     private boolean conflictingLegacyTypes;
+    private boolean includeUnmappedDocumentFields;
+    private boolean includeMappedArray;
+    private int multiSearchStatus;
+    private boolean forbiddenDocumentSample;
+    private final List<List<String>> sampledIndexBatches = new ArrayList<>();
     private final ElasticsearchMetadataExplorer explorer = new ElasticsearchMetadataExplorer();
 
     @BeforeEach void start() throws Exception {
@@ -44,7 +49,7 @@ class ElasticsearchMetadataExplorerTest {
                 exchange.close();
                 return;
             }
-            int status = path.startsWith("/_cat/indices") ? catStatus : aliasRequest ? aliasStatus : 0;
+            int status = path.equals("/_msearch") ? multiSearchStatus : path.startsWith("/_cat/indices") ? catStatus : aliasRequest ? aliasStatus : 0;
             if (status != 0) {
                 String action = aliasRequest ? "indices:admin/aliases/get" : "indices:monitor/stats";
                 byte[] bytes = json.writeValueAsBytes(Map.of("error", Map.of("type", "security_exception",
@@ -81,6 +86,26 @@ class ElasticsearchMetadataExplorerTest {
                     mappings.put(index, Map.of("mappings", mapping));
                 }
                 response=mappings;
+            } else if (path.equals("/_msearch")) {
+                var lines = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8).split("\n");
+                var indices = new ArrayList<String>();
+                var responses = new ArrayList<Map<String, Object>>();
+                for (int i = 0; i < lines.length; i += 2) {
+                    indices.add(json.readTree(lines[i]).path("index").asText());
+                    assertThat(json.readTree(lines[i + 1]).path("size").asInt()).isEqualTo(20);
+                    var source = new LinkedHashMap<String, Object>();
+                    source.put("name", includeMappedArray ? List.of("甲", "乙") : "字段探查");
+                    if (includeUnmappedDocumentFields) {
+                        source.put("applyUsers", List.of());
+                        source.put("emptyObject", Map.of());
+                        source.put("unknownValue", null);
+                    }
+                    responses.add(forbiddenDocumentSample
+                            ? Map.of("status", 403, "error", Map.of("type", "security_exception"))
+                            : Map.of("hits", Map.of("hits", List.of(Map.of("_source", source)))));
+                }
+                sampledIndexBatches.add(indices);
+                response = Map.of("responses", responses);
             } else if (path.endsWith("/_search")) {
                 search=json.readTree(exchange.getRequestBody());
                 var hits=new ArrayList<Map<String,Object>>();
@@ -112,11 +137,11 @@ class ElasticsearchMetadataExplorerTest {
         JsonNode canvasColumns = json.valueToTree(response.get("columns"));
         JsonNode registeredColumns = json.valueToTree(explorer.getColumns(config, "visible-001"));
         assertThat(canvasColumns).isEqualTo(registeredColumns);
-        assertThat(paths).containsExactly("/visible-001/_mapping", "/visible-001/_mapping");
+        assertThat(paths).containsExactly("/visible-001/_mapping", "/_msearch", "/visible-001/_mapping", "/_msearch");
         assertThat(auth.getFirst()).isEqualTo("Basic " + Base64.getEncoder().encodeToString("reader:fixture".getBytes(StandardCharsets.UTF_8)));
         assertThatThrownBy(() -> canvas.columns("source.elasticsearch", canvasConfig, "foreign-index"))
                 .hasMessageContaining("索引不在当前连接范围内");
-        assertThat(paths).hasSize(2);
+        assertThat(paths).hasSize(4);
     }
 
     @ParameterizedTest @ValueSource(ints={6,8})
@@ -141,7 +166,7 @@ class ElasticsearchMetadataExplorerTest {
             paths.clear();
             var page=explorer.getTablesPage(config,1,size,null);
             assertThat(page.getRows()).hasSize(size).allSatisfy(row -> assertThat(row.getColumnCount()).isEqualTo(6));
-            assertThat(paths).hasSize(2);
+            assertThat(paths).hasSize(3);
         }
         paths.clear();
         assertThatThrownBy(()->explorer.getColumnsByTables(config,List.of("visible-001","foreign-index"))).hasMessageContaining("范围");
@@ -176,9 +201,10 @@ class ElasticsearchMetadataExplorerTest {
         var page = explorer.getTablesPage(config, 2, size, null);
         assertThat(page.getTotal()).isEqualTo(650);
         assertThat(page.getRows()).hasSize(size).allSatisfy(row -> assertThat(row.getColumnCount()).isEqualTo(6));
-        assertThat(paths).hasSize(3);
-        assertThat(paths.getLast()).contains(String.format("visible-%03d",size)).doesNotContain("visible-000");
-        assertThat(paths.getLast().split(",")).hasSize(size);
+        assertThat(paths).hasSize(4);
+        assertThat(paths.get(2)).contains(String.format("visible-%03d",size)).doesNotContain("visible-000");
+        assertThat(paths.get(2).split(",")).hasSize(size);
+        assertThat(sampledIndexBatches.getLast()).hasSize(size).allMatch(name -> name.startsWith("visible-"));
     }
 
     @Test void forbiddenMetadataRemainsAnErrorRatherThanAnEmptySuccessfulCollection() {
@@ -186,6 +212,20 @@ class ElasticsearchMetadataExplorerTest {
         aliasStatus = 403;
         assertThatThrownBy(()->explorer.getTables(config)).hasMessageContaining("HTTP 403").hasMessageContaining("view_index_metadata");
         assertThat(paths).containsExactly("/_cat/indices/visible-*", "/visible-*/_alias");
+    }
+
+    @ParameterizedTest @ValueSource(booleans={true,false})
+    void mappingOnlyAccountsKeepDeclaredFieldsWithoutDocumentReadPermission(boolean httpForbidden) {
+        multiSearchStatus = httpForbidden ? 403 : 0;
+        forbiddenDocumentSample = !httpForbidden;
+        includeUnmappedDocumentFields = true;
+        var columns = explorer.getColumns(config, "visible-001");
+        assertThat(columns).hasSize(6).noneMatch(column -> column.getColumnName().equals("applyUsers"));
+        assertThat(paths).containsExactly("/visible-001/_mapping", "/_msearch");
+        paths.clear();
+        assertThatThrownBy(() -> explorer.getColumnsByTables(config, List.of("visible-001", "foreign-index")))
+                .hasMessageContaining("范围");
+        assertThat(paths).isEmpty();
     }
 
     @Test void authenticationFailureIsNotRetriedAndInvalidMetadataFails() {
@@ -207,9 +247,39 @@ class ElasticsearchMetadataExplorerTest {
         var page=explorer.getTablesPage(config,2,size,null);
         assertThat(page.getTotal()).isEqualTo(650);
         assertThat(page.getRows()).hasSize(size).allSatisfy(row->assertThat(row.getColumnCount()).isEqualTo(6));
-        assertThat(paths).hasSize(2);
+        assertThat(paths).hasSize(3);
         assertThat(paths.get(1)).contains(String.format("visible-%03d",size)).doesNotContain("visible-000");
         assertThat(paths.get(1).split(",")).hasSize(size);
+        assertThat(sampledIndexBatches).hasSize(1);
+        assertThat(sampledIndexBatches.getFirst()).hasSize(size)
+                .doesNotContain("foreign-index", "visible-secret", ".internal");
+    }
+
+    @Test
+    void documentFieldsAbsentFromMappingsRetainEmptyJsonValuesAndDeclaredTypes() {
+        includeUnmappedDocumentFields = true;
+        var columns = explorer.getColumns(config, "visible-001");
+        assertThat(columns).hasSize(9);
+        assertThat(columns).filteredOn(column -> column.getColumnName().equals("name"))
+                .singleElement().satisfies(column -> assertThat(column.getDataType()).isEqualTo("text"));
+        assertThat(columns).filteredOn(column -> Set.of("applyUsers", "emptyObject", "unknownValue").contains(column.getColumnName()))
+                .hasSize(3).allSatisfy(column -> {
+                    assertThat(column.getDataType()).isEqualTo("JSON");
+                    assertThat(column.getNullable()).isTrue();
+                    assertThat(column.getPrimaryKey()).isFalse();
+                });
+        assertThat(paths).containsExactly("/visible-001/_mapping", "/_msearch");
+    }
+
+    @Test
+    void aMappedTextArrayUsesLogicalJsonWhileRetainingItsIndexedNativeType() {
+        includeMappedArray = true;
+        assertThat(explorer.getColumns(config, "visible-001"))
+                .filteredOn(column -> column.getColumnName().equals("name"))
+                .singleElement().satisfies(column -> {
+                    assertThat(column.getDataType()).isEqualTo("JSON");
+                    assertThat(column.getColumnType()).isEqualTo("text");
+                });
     }
 
     @Test void fullCollectionDoesNotStopAfterFiveHundredIndices() {

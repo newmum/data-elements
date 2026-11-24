@@ -188,6 +188,10 @@ public class StructuredSourceProbeService {
         return findTable(source, tableName).getColumns();
     }
 
+    public TableInfo getTableInfo(Map<String, Object> source, String tableName) {
+        return findTable(source, tableName).getTable();
+    }
+
     /** Resolves the selected logical table to its real object key, independent of an editable comment. */
     public Map<String,Object> resolveMinioObjectLocator(Map<String,Object> source, String tableName) {
         if (!"minio".equals(sourceType(source))) throw new IllegalArgumentException("Expected a MinIO source");
@@ -446,9 +450,21 @@ public class StructuredSourceProbeService {
         if (blank(tableName)) {
             throw new IllegalArgumentException("tableName cannot be empty");
         }
-        Map<String,Object> selected=source;
-        if(Set.of("ftp","minio").contains(sourceType(source))&&!source.containsKey("_registeredTableName")) {
-            selected=new LinkedHashMap<>(source);selected.put("_registeredTableName",tableName);
+        Map<String, Object> selected = source;
+        String type = sourceType(source);
+        if ("kafka".equals(type)) {
+            String configured = required(source, "Kafka topic cannot be empty", "kafkaTopic", "topic");
+            List<String> matching = kafkaTopics(configured).stream()
+                    .filter(topic -> safeName(topic).equalsIgnoreCase(tableName))
+                    .toList();
+            if (matching.size() != 1) {
+                throw new IllegalArgumentException("当前登记表无法唯一匹配配置中的 Kafka 主题");
+            }
+            selected = new LinkedHashMap<>(source);
+            selected.put("kafkaTopic", matching.getFirst());
+        } else if (Set.of("ftp", "minio").contains(type) && !source.containsKey("_registeredTableName")) {
+            selected = new LinkedHashMap<>(source);
+            selected.put("_registeredTableName", tableName);
         }
         return probe(selected, false).getTables().stream()
                 .filter(item -> tableName.equalsIgnoreCase(item.getTable().getTableName()))
@@ -1654,7 +1670,9 @@ public class StructuredSourceProbeService {
             column.setDataType(type);
             column.setColumnType(type);
             column.setLength(maxLength(values));
-            column.setNullable(rows.stream().anyMatch(row -> row.get(name) == null || String.valueOf(row.get(name)).isBlank()));
+            // A bounded document/file sample cannot establish a required-field constraint.
+            // Declared SQL and explicit schema constraints are handled by their own adapters.
+            column.setNullable(true);
             column.setPrimaryKey(false);
             column.setAutoIncrement(false);
             column.setUnique(false);

@@ -380,7 +380,8 @@ class NifiPipelineWriteMagicTest {
         var first = canvas(endpoint("02.流程设计/05.保存流程.ms", "660b71dbe633aaa4bd79dd68e0baad70", loaded.id(),
                 Map.of("expectedUpdatedAt", new String[]{loaded.updatedAt().toString()}), Map.of("name", "Hive", "dsl", dsl)));
         assertThat(first.dsl().nodes()).extracting(Pipeline.Node::id).containsExactly("s", "h");
-        assertThat(first.dsl().nodes().getFirst().config()).containsEntry("schedulingPeriod", "1 day");
+        assertThat(first.dsl().nodes().getFirst().config()).containsEntry("batchSchedulePolicy", "DAILY_STAGGERED")
+                .containsEntry("schedulingStrategy", "CRON_DRIVEN").containsKey("batchScheduleTime");
         assertThat(first.dsl().nodes().getLast()).isEqualTo(hive);
         assertThat(first.dsl().edges()).containsExactly(new Pipeline.Edge("mh-hive-raw-0", "s", "h", "default"));
         assertThat(first.description()).isEqualTo("已保存说明");

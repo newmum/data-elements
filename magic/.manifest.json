@@ -1952,7 +1952,7 @@
         "f93a8e653ac6413e89660f5d77d45769"
       ],
       "kind": null,
-      "baseSha256": "328146f8074a3c4a1898a4d340ebc5d14c8e1176c1777c5b98f22cb2460fe9f2",
+      "baseSha256": "497f2378cc7e75ad6193a09fab70fc9c18031967d3bf7008f87c91211059fd40",
       "metadataId": "f93a8e653ac6413e89660f5d77d45769"
     },
     {
@@ -7589,7 +7589,7 @@
         "ab983b1eaf85488ebd9e9a71e577bf1b"
       ],
       "kind": "api",
-      "baseSha256": "8089838f65d1c0e0f0cf4a613b363dd01f5c8aec35050da95644ad6dba7edf6a",
+      "baseSha256": "0d182d7eced4c0ae3a965857cc241b91688ad6f6516654caf45b93cd441c230c",
       "metadataId": "50319b91bfff4fe3b19f24db5aa7c8a4"
     },
     {
@@ -8248,7 +8248,7 @@
         "2015a9d9959f4bf580721b834650c6cf"
       ],
       "kind": "api",
-      "baseSha256": "8d375fc8aa7d5c9b547158ec134af8b1b83ee6c208b74cf20b897b9750f1298c",
+      "baseSha256": "4867330dd5824f7bcd2ed96982c46fe56c940bd1f1c326045bc7f9896fcd5acb",
       "metadataId": "nifi_map_upgrade_post_v1"
     },
     {

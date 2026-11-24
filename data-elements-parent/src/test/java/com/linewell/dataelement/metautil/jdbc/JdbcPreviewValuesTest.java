@@ -17,6 +17,23 @@ import org.junit.jupiter.api.Test;
 
 class JdbcPreviewValuesTest {
     @Test
+    void mysqlDateTimeFractionsStayInTheJdbcTextCarrierForTwentyAndHundredFields() throws Exception {
+        for(int count:new int[]{20,100}) {
+            ResultSet result=mock(ResultSet.class);
+            for(int column=1;column<=count;column++) {
+                when(result.getString(column)).thenReturn("2024-01-02 03:04:05.986123");
+                assertTrue(JdbcPreviewValues.isLocalTimestamp(DatabaseType.MYSQL,"DATETIME"));
+                assertTrue(JdbcPreviewValues.isLocalTimestamp(DatabaseType.MARIADB,"datetime(6)"));
+                assertEquals("2024-01-02 03:04:05.986123",JdbcPreviewValues.read(result,column,true));
+                verify(result).getString(column);
+            }
+            verifyNoMoreInteractions(result);
+        }
+        assertFalse(JdbcPreviewValues.isLocalTimestamp(DatabaseType.MYSQL,"DATE"));
+        assertFalse(JdbcPreviewValues.isLocalTimestamp(DatabaseType.MARIADB,"TIMESTAMP(6)"));
+        assertFalse(JdbcPreviewValues.isLocalTimestamp(DatabaseType.MYSQL,null));
+    }
+    @Test
     void readsHistoricalLocalTimeAndFractionDirectlyFromJdbc() throws Exception {
         ResultSet result = mock(ResultSet.class);
         when(result.getString(1)).thenReturn("1990-08-01 00:00:00.0");

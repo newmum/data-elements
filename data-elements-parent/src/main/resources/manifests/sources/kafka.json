@@ -8,9 +8,17 @@
     { "key": "bootstrapServers", "label": "Bootstrap Servers", "type": "text", "required": true, "placeholder": "h1:9092,h2:9092" },
     { "key": "topic", "label": "Topic", "type": "text", "required": true },
     { "key": "groupId", "label": "Consumer Group", "type": "text", "default": "haitong-nifi" },
+    { "key": "kafkaServiceType", "label": "Kafka 客户端", "type": "select", "default": "org.apache.nifi.kafka.service.Kafka3ConnectionService", "options": [
+      { "label": "NiFi 原生客户端", "value": "org.apache.nifi.kafka.service.Kafka3ConnectionService" },
+      { "label": "旧实例兼容客户端", "value": "com.linewell.dataelement.nifi.HaitongLegacyKafkaConnectionService" }
+    ], "help": "Kafka 0.10 等旧实例选择兼容客户端，并配置 read_uncommitted。须先安装匹配 NiFi 版本的 haitong-kafka-legacy-nar。", "group": "advanced" },
     { "key": "messageFormat", "label": "消息格式", "type": "select", "default": "JSON", "options": [{ "label": "结构化 JSON", "value": "JSON" }] },
     { "key": "schemaRequired", "label": "要求结构化消息", "type": "boolean", "default": true },
     { "key": "maxPollRecords", "label": "单次拉取条数", "type": "number", "default": 500 },
+    { "key": "isolationLevel", "label": "消费隔离级别", "type": "select", "default": "read_committed", "options": [
+      { "label": "仅读取已提交事务", "value": "read_committed" },
+      { "label": "读取全部消息（含旧版本 Kafka）", "value": "read_uncommitted" }
+    ], "help": "Kafka 0.10 等不支持事务隔离的旧实例须显式选择读取全部消息。支持事务的实例按业务要求选择隔离级别。", "group": "advanced" },
     { "key": "securityProtocol", "label": "安全协议", "type": "select", "default": "PLAINTEXT", "options": [
       { "label": "PLAINTEXT", "value": "PLAINTEXT" },
       { "label": "SSL", "value": "SSL" },
@@ -32,8 +40,9 @@
     { "key": "schedulingPeriod", "label": "调度周期", "type": "duration", "default": "0 sec", "group": "schedule" }
   ],
   "compile": {
-    "controllerServices": [{ "localId": "kafka", "type": "org.apache.nifi.kafka.service.Kafka3ConnectionService", "properties": {
+    "controllerServices": [{ "localId": "kafka", "type": "${config.kafkaServiceType}", "properties": {
       "bootstrap.servers": "${config.bootstrapServers}",
+      "isolation.level": "${config.isolationLevel}",
       "security.protocol": "${config.securityProtocol}",
       "sasl.mechanism": "${config.saslMechanism}",
       "sasl.username": "${config.saslUsername}",

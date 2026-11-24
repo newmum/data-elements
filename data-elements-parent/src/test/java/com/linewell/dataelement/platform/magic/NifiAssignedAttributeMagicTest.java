@@ -12,6 +12,7 @@ import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient;
 import com.linewell.dataelement.integration.nifi.canvas.pipeline.NifiNodeMapping;
 import com.linewell.dataelement.integration.nifi.canvas.pipeline.Pipeline;
 import com.linewell.dataelement.integration.nifi.canvas.pipeline.PipelineStatus;
+import com.linewell.dataelement.integration.nifi.canvas.runtime.TaskRuntimeStatusService;
 import com.linewell.dataelement.platform.tenant.domain.TenantContext;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -29,6 +30,7 @@ class NifiAssignedAttributeMagicTest {
     void previewAndSaveUseEachTaskAssignedNodeAndReleaseIt(int count) throws Exception {
         var nifi = mock(NifiClient.class);
         var scope = mock(NifiClient.RuntimeScope.class);
+        var runtimeStatus = mock(TaskRuntimeStatusService.class);
         var json = new ObjectMapper();
         var processors = json.createObjectNode();
         processors.putArray("processors");
@@ -37,10 +39,12 @@ class NifiAssignedAttributeMagicTest {
                 new Pipeline.Dsl(1, List.of(), List.of()), "selected-group", PipelineStatus.STOPPED,
                 "hash", 1L, null, mapping, 0L);
         when(nifi.bindAssignedNode("secondary")).thenReturn(scope);
+        when(runtimeStatus.resolveLegacyOwner(pipeline)).thenReturn("secondary");
         when(nifi.get("/process-groups/selected-group/processors?includeDescendantGroups=true", JsonNode.class))
                 .thenReturn(processors);
         var bindings = new LinkedHashMap<String, Object>();
         bindings.put("nifi", nifi);
+        bindings.put("runtimeStatus", runtimeStatus);
         bindings.put("NifiAttributeSync", NifiAttributeSync.class);
         bindings.put("TenantContext", TenantContext.class);
         bindings.put("ResponseEntity", ResponseEntity.class);
@@ -72,6 +76,7 @@ class NifiAssignedAttributeMagicTest {
         order.verify(scope).close();
         verify(nifi, never()).bindRuntimeNode();
         verify(nifi, times(2)).get(any(String.class), eq(JsonNode.class));
+        verify(runtimeStatus, times(2)).resolveLegacyOwner(pipeline);
     }
 
     private Object run(String id, Map<String, Object> bindings) throws Exception {

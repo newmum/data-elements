@@ -415,6 +415,8 @@ var knownTypeCode = (value) => {
     return ''
 }
 var mapDataType = (sourceType, columnType, lengthValue, sourceDbType) => {
+    // ES 索引的 keyword 等原生类型可以承载数组，文档结构按登记的 JSON 逻辑类型物化。
+    if (lower(sourceDbType) == 'elasticsearch' && lower(sourceType) == 'json') { return 'json' }
     return portableDdl.logicalType(blank(columnType) ? sourceType : columnType, sourceDbType)
 }
 var typeArgument = (value, position) => {

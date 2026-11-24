@@ -23,9 +23,9 @@ public class KafkaTopicMetadataExplorer extends AbstractMetadataExplorer {
         return probe.getTablesPage(source(config), 1, 100, null).getRows();
     }
     @Override public TableInfo getTableInfo(DataSourceConfig config, String name) {
-        TableInfo table = getTables(config).stream().filter(item -> item.getTableName().equals(name))
-                .findFirst().orElseThrow(() -> new IllegalArgumentException("Kafka topic not in configured scope"));
-        table.setColumns(getColumns(config, name)); table.setIndexes(List.of()); return table;
+        TableInfo table = probe.getTableInfo(source(config), name);
+        table.setIndexes(List.of());
+        return table;
     }
     @Override public List<ColumnInfo> getColumns(DataSourceConfig config, String name) { return probe.getColumns(source(config), name); }
     @Override public SampleDataResult sampleData(SampleRequest request) {

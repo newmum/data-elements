@@ -1,19 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { DAILY_IMMEDIATE, automaticSchedule, dailyScheduleDefaults, staggeredScheduleDefaults, isBatchSource, scheduleFieldVisible } from '../utils/batchSchedule.ts';
+import { DAILY_IMMEDIATE, DAILY_STAGGERED, automaticSchedule, dailyScheduleDefaults, immediateScheduleDefaults, staggeredScheduleDefaults, isBatchSource, scheduleFieldVisible } from '../utils/batchSchedule.ts';
 
-test('new batch nodes default to immediate execution with a one-day timer and Kafka is excluded', () => {
+test('new batch nodes default to daily staggering and Kafka is excluded', () => {
   for (const key of ['source.mysql', 'source.ftp', 'source.sftp', 'source.minio', 'source.api']) assert.equal(isBatchSource(key), true);
   assert.equal(isBatchSource('source.kafka'), false);
   assert.equal(isBatchSource('sink.jdbc'), false);
   const original = { table: 'validation', schedulingPeriod: '60 sec' };
   const config = dailyScheduleDefaults(original);
-  assert.equal(config.batchSchedulePolicy, DAILY_IMMEDIATE);
-  assert.equal(config.schedulingStrategy, 'TIMER_DRIVEN');
-  assert.equal(config.schedulingPeriod, '1 day');
+  assert.equal(config.batchSchedulePolicy, DAILY_STAGGERED);
+  assert.equal(config.schedulingStrategy, 'CRON_DRIVEN');
+  assert.equal(config.schedulingPeriod, '');
   assert.equal(original.schedulingPeriod, '60 sec');
-  assert.equal(automaticSchedule(config), false);
+  assert.equal(automaticSchedule(config), true);
   assert.equal(scheduleFieldVisible('schedulingPeriod', config), false);
   assert.equal(scheduleFieldVisible('schedulingStrategy', config), false);
   assert.equal(scheduleFieldVisible('schedulingPeriod', original), true);
@@ -24,7 +24,7 @@ test('staggering remains available and switching to immediate clears the saved c
   assert.equal(automaticSchedule(staggered), true);
   assert.equal(staggered.schedulingStrategy, 'CRON_DRIVEN');
   assert.equal(staggered.schedulingPeriod, '');
-  const immediate = dailyScheduleDefaults({ ...staggered, batchScheduleTime: '01:58:39' });
+  const immediate = immediateScheduleDefaults({ ...staggered, batchScheduleTime: '01:58:39' });
   assert.equal(immediate.batchScheduleTime, undefined);
   assert.equal(immediate.batchScheduleZone, undefined);
   assert.equal(immediate.schedulingPeriod, '1 day');

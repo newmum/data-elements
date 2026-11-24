@@ -103,8 +103,8 @@ class DslCompilerHiveTemporalWriterTest {
         assertThat(put.properties()).containsEntry("__haitong.linewell.insert-values","ODS_RKSJ=SYSDATE,ODS_GXSJ=SYSDATE")
                 .containsEntry("put-db-record-statement-type","INSERT");
         verify(nifi).createConnection("pg",normalize.id(),"PROCESSOR",put.id(),"PROCESSOR",List.of("success"));
-        verify(nifi).createConnection(eq("pg"),eq(normalize.id()),eq("PROCESSOR"),startsWith("funnel-"),eq("FUNNEL"),eq(List.of("failure")));
-        verify(nifi,never()).createConnection("pg",normalize.id(),"PROCESSOR",normalize.id(),"PROCESSOR",List.of("failure"));
+        verify(nifi).createConnection("pg",normalize.id(),"PROCESSOR",normalize.id(),"PROCESSOR",List.of("failure"));
+        verify(nifi,never()).createConnection(eq("pg"),eq(normalize.id()),eq("PROCESSOR"),anyString(),eq("FUNNEL"),eq(List.of("failure")));
         assertThat(result.nodes().get("jdbc").inletProcessorId).isEqualTo(normalize.id());
         // Execute the actual emitted projection, preserving every business value and row at 20/100 records.
         for(int size:List.of(20,100))try(var db=java.sql.DriverManager.getConnection("jdbc:h2:mem:validation_audit_"+size)) {
@@ -363,7 +363,7 @@ class DslCompilerHiveTemporalWriterTest {
                 new Pipeline.Dsl(1, base.dsl().nodes(), List.of(new Pipeline.Edge("edge", "h", "q", "default"))),
                 null, null, null, null, null, null, null);
         var result=compiler.compile(pipeline);
-        assertThat(namedProcessor("query/query").properties()).containsEntry("Record Writer", "global-hive-json-writer");
+        assertThat(namedProcessor("query/query").properties()).containsEntry("Record Writer", "oracle".equals(database)?"global-timestamp9":"global-hive-json-writer");
         assertThat(result.nodes().get("h").processorIds).isEmpty();
         assertThat(result.nodes().get("h").csIds).doesNotContainKey("date-fetch-dbcp");
         assertThat(services).noneMatch(service->service.name().endsWith("/date-fetch-dbcp")
@@ -476,9 +476,9 @@ class DslCompilerHiveTemporalWriterTest {
                 anyMap(), eq("5 sec"), eq("TIMER_DRIVEN"));
         verify(nifi).createBufferedConnection("pg", namedProcessor("字段映射").id(), merge.id(), "PROCESSOR", List.of("success"));
         verify(nifi).createBufferedConnection("pg", merge.id(), convert.id(), "PROCESSOR", List.of("merged"));
-        verify(nifi).createBufferedConnection(eq("pg"), eq(merge.id()), anyString(), eq("FUNNEL"), eq(List.of("failure")));
-        verify(nifi).createBufferedConnection(eq("pg"), eq(convert.id()), anyString(), eq("FUNNEL"), eq(List.of("failure")));
-        verify(nifi).createBufferedConnection(eq("pg"), eq(put.id()), anyString(), eq("FUNNEL"), eq(List.of("failure", "retry")));
+        verify(nifi).createBufferedConnection("pg", merge.id(), merge.id(), "PROCESSOR", List.of("failure"));
+        verify(nifi).createBufferedConnection("pg", convert.id(), convert.id(), "PROCESSOR", List.of("failure"));
+        verify(nifi).createBufferedConnection("pg", put.id(), put.id(), "PROCESSOR", List.of("failure", "retry"));
         assertThat(convert.properties()).containsEntry("Record Writer", "csv-service-id")
                 .containsEntry("Include Zero Record FlowFiles", "false");
         verify(nifi, times(1)).listControllerServices("root");

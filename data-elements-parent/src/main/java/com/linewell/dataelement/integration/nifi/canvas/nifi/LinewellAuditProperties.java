@@ -9,19 +9,27 @@ import java.util.*;
 public final class LinewellAuditProperties {
     public static final String PREFIX="__haitong.linewell.";
     private LinewellAuditProperties() {}
+    public static boolean usesDatabaseClock(String field,Map<String,Object> config){
+        if(!Set.of("ODS_RKSJ","ODS_GXSJ").contains(field.toUpperCase(Locale.ROOT)))return false;
+        Object raw=config.get("_runtimeGovernedAuditFields");
+        return !(raw instanceof Collection<?> fields)||fields.stream().noneMatch(value->field.equalsIgnoreCase(value.toString()));
+    }
     public static Map<String,String> defaults(Collection<String> columns,Map<String,Object> config) {
+        Set<String> governed=new HashSet<>();
+        Object raw=config.get("_runtimeGovernedAuditFields");
+        if(raw instanceof Collection<?> fields)fields.forEach(field->governed.add(field.toString().toUpperCase(Locale.ROOT)));
         String now=JdbcTemporalTypes.oracleDateHasTime(config)?"SYSDATE":"CURRENT_TIMESTAMP";
         List<String> insert=new ArrayList<>(),update=new ArrayList<>(),exclude=new ArrayList<>();
         for(String field:columns){ValueTypes.field(field);switch(field.toUpperCase(Locale.ROOT)){
-            case "ODS_RKSJ"->{insert.add(field+"="+now);exclude.add(field);}
-            case "ODS_GXSJ"->{insert.add(field+"="+now);update.add(field+"="+now);}
+            case "ODS_RKSJ"->{if(!governed.contains("ODS_RKSJ"))insert.add(field+"="+now);exclude.add(field);}
+            case "ODS_GXSJ"->{if(!governed.contains("ODS_GXSJ")){insert.add(field+"="+now);update.add(field+"="+now);}}
             case "ODS_UUID"->exclude.add(field);
             default->{}
         }}
         Map<String,String> values=new LinkedHashMap<>();
         if(!insert.isEmpty())values.put(PREFIX+"insert-values",String.join(",",insert));
         if(!update.isEmpty())values.put(PREFIX+"update-values",String.join(",",update));
-        if(!exclude.isEmpty()&&!insert.isEmpty())values.put(PREFIX+"exclude-update",String.join(",",exclude));
+        if(!exclude.isEmpty())values.put(PREFIX+"exclude-update",String.join(",",exclude));
         return values;
     }
     public static Map<String,String> resolve(Map<String,String> intents,JsonNode descriptors) {

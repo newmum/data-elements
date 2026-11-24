@@ -118,5 +118,61 @@ class JdbcExactNumberReaderTest {
     private static HaitongJdbcRecordReader reader(TestRunner runner)throws Exception {
         var service=new HaitongJdbcRecordReader();runner.addControllerService("reader",service);runner.setProperty(service,HaitongJdbcRecordReader.NUMBERS,"[\"n\"]");runner.setProperty(service,HaitongJdbcRecordReader.BINARY,"[\"content\"]");runner.enableControllerService(service);return service;
     }
+    @Test void declaredTimestampCarrierKeepsFullFractionsThroughNativeLinewellConversionAndJdbcBinding() throws Exception {
+        for(int count:List.of(20,100)) {
+            var runner=TestRunners.newTestRunner(PutDatabaseRecord.class);var service=reader(runner);
+            runner.disableControllerService(service);runner.setProperty(service,HaitongJdbcRecordReader.NUMBERS,"[]");runner.setProperty(service,HaitongJdbcRecordReader.BINARY,"[]");
+            runner.setProperty(service,HaitongJdbcRecordReader.TIMESTAMPS,"[\"AT\"]");runner.enableControllerService(service);
+            var rows=JSON.createArrayNode();
+            for(int i=0;i<count;i++) {
+                var row=rows.addObject().put("ID",i).put("TEXT","2024-01-02 03:04:05.986096123");
+                if(i%5==0)row.putNull("AT");else row.put("AT",switch(i%5){case 1->"2024-01-02";case 2->"2024-01-02 03:04:05.123";case 3->"2024-01-02 03:04:05.986096";default->"2024-01-02 03:04:05.986096123";});
+            }
+            byte[] bytes=JSON.writeValueAsBytes(rows);String url="jdbc:h2:mem:validation_jdbc_timestamp_"+UUID.randomUUID().toString().replace("-","")+";DB_CLOSE_DELAY=-1";
+            try(var db=java.sql.DriverManager.getConnection(url);var sql=db.createStatement()) {
+                sql.execute("CREATE TABLE VALIDATION_TIMESTAMP(ID INT, AT TIMESTAMP(9), TEXT VARCHAR(80))");
+                try(var values=service.createRecordReader(Map.of(),new ByteArrayInputStream(bytes),bytes.length,runner.getLogger());
+                    var insert=db.prepareStatement("INSERT INTO VALIDATION_TIMESTAMP VALUES(?,?,?)")) {
+                    assertEquals(RecordFieldType.TIMESTAMP,values.getSchema().getField("AT").orElseThrow().getDataType().getFieldType());
+                    assertEquals(RecordFieldType.STRING,values.getSchema().getField("TEXT").orElseThrow().getDataType().getFieldType());
+                    for(int i=0;i<count;i++) {
+                        var row=values.nextRecord();Object value=row.getValue("AT");
+                        if(value!=null) {
+                            var timestamp=assertInstanceOf(java.sql.Timestamp.class,value);
+                            value=org.apache.nifi.serialization.record.util.DataTypeUtils.convertType(timestamp,
+                                    org.apache.nifi.serialization.record.util.DataTypeUtils.getDataTypeFromSQLTypeValue(java.sql.Types.TIMESTAMP),"AT");
+                            assertEquals(timestamp.toLocalDateTime(),((java.sql.Timestamp)value).toLocalDateTime());
+                        }
+                        insert.setInt(1,i);insert.setObject(2,value,java.sql.Types.TIMESTAMP);insert.setString(3,row.getAsString("TEXT"));insert.addBatch();
+                    }
+                    assertNull(values.nextRecord());assertEquals(count,insert.executeBatch().length);
+                }
+                try(var stored=sql.executeQuery("SELECT ID,AT,TEXT FROM VALIDATION_TIMESTAMP ORDER BY ID")) {
+                    for(int i=0;i<count;i++) {
+                        assertTrue(stored.next());assertEquals(i,stored.getInt(1));assertEquals(rows.get(i).path("TEXT").asText(),stored.getString(3));
+                        if(i%5==0)assertNull(stored.getObject(2));else {
+                            String text=rows.get(i).path("AT").asText();var expected=text.length()==10?java.time.LocalDate.parse(text).atStartOfDay():java.time.LocalDateTime.parse(text.replace(' ','T'));
+                            assertEquals(expected,stored.getObject(2,java.time.LocalDateTime.class));
+                        }
+                    }assertFalse(stored.next());
+                }
+            }runner.shutdown();
+        }
+    }
+
+    @Test void timestampBoundaryRejectsInvalidOrOverlappingCarriersWithoutExposingTheirValues()throws Exception {
+        var runner=TestRunners.newTestRunner(PutDatabaseRecord.class);var service=reader(runner);
+        runner.disableControllerService(service);runner.setProperty(service,HaitongJdbcRecordReader.TIMESTAMPS,"[\"AT\"]");runner.enableControllerService(service);
+        for(String value:List.of("1234567890123","true","[]","{}","\"validation-invalid-timestamp\"","\"2024-02-30 01:02:03\"")) {
+            byte[] bytes=("[{\"AT\":"+value+"}]").getBytes(StandardCharsets.UTF_8);
+            try(var values=service.createRecordReader(Map.of(),new ByteArrayInputStream(bytes),bytes.length,runner.getLogger())) {
+                var error=assertThrows(MalformedRecordException.class,values::nextRecord);assertFalse(error.getMessage().contains("validation-invalid-timestamp"));assertNull(error.getCause());
+            }
+        }
+        runner.disableControllerService(service);runner.setProperty(service,HaitongJdbcRecordReader.NUMBERS,"[\"at\"]");runner.enableControllerService(service);
+        byte[] conflict="[{\"AT\":\"2024-01-02 03:04:05.986096123\"}]".getBytes(StandardCharsets.UTF_8);
+        assertThrows(MalformedRecordException.class,()->service.createRecordReader(Map.of(),new ByteArrayInputStream(conflict),conflict.length,runner.getLogger()));
+        runner.shutdown();
+    }
     private static String records(int size,boolean fields){var rows=new ArrayList<String>();for(int i=0;i<size;i++)rows.add("{\"n\":"+VALUES[i%VALUES.length]+(fields?",\"approximate\":0.1,\"text\":\"00123\",\"flag\":true,\"time\":\"2024-05-10 14:27:49\",\"content\":[0,127,255]":"")+"}");return "["+String.join(",",rows)+"]";}
 }

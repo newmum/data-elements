@@ -7,6 +7,10 @@ export function isBatchSource(key: string): boolean {
 
 /** Only applied on creation or an explicit policy switch, never when loading saved nodes. */
 export function dailyScheduleDefaults(config: Record<string, unknown>): Record<string, unknown> {
+  return staggeredScheduleDefaults(config);
+}
+
+export function immediateScheduleDefaults(config: Record<string, unknown>): Record<string, unknown> {
   return { ...config, batchSchedulePolicy: DAILY_IMMEDIATE, batchScheduleZone: undefined,
     batchScheduleTime: undefined, schedulingStrategy: 'TIMER_DRIVEN', schedulingPeriod: '1 day' };
 }

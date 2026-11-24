@@ -11,7 +11,7 @@ import java.util.*;
 
 /** Immutable compiled plans and bounded, staged lookup execution used by both backend and NiFi. */
 public final class MappingEngine {
-    public static final String VERSION="1.1.43";
+    public static final String VERSION="1.1.47";
     public static String engineVersion(){return VERSION;}
     public static final int WINDOW_RECORDS=512;
     public static final long WINDOW_BYTES=RecordBudget.WINDOW_BYTES;
@@ -35,7 +35,7 @@ public final class MappingEngine {
         private final Map<String,DictionarySpec> dictionaries;
         private final String hash,recordMode,missingPolicy;
         private final boolean passthrough,caseSensitive;
-        private final Set<String> excludes;
+        private final Set<String> excludes,declaredSourceFields;
         private Plan(ObjectNode doc,List<Rule> rules,Map<String,DictionarySpec> dicts){
             this.document=doc.deepCopy();this.diagnostics=new MappingDiagnostics.Catalog(this.document);this.rules=List.copyOf(rules);this.dictionaries=Collections.unmodifiableMap(new LinkedHashMap<>(dicts));
             hash=MappingEngine.hash(doc);recordMode=doc.path("policies").path("recordErrorMode").asText("FAIL_FLOWFILE");
@@ -43,6 +43,7 @@ public final class MappingEngine {
             passthrough=doc.path("policies").path("allowUnmappedPassthrough").asBoolean(false);
             caseSensitive=doc.path("policies").path("caseSensitive").asBoolean(true);
             Set<String> excluded=new HashSet<>();doc.path("exclude").forEach(n->excluded.add(ValueTypes.field(n.asText())));excludes=Set.copyOf(excluded);
+            Set<String> declared=new HashSet<>();doc.path("schemaContract").path("source").forEach(field->declared.add(field.path("name").asText()));rules.forEach(rule->declared.addAll(rule.sources));declaredSourceFields=Set.copyOf(declared);
         }
         public ObjectNode document(){return document.deepCopy();}
         public String hash(){return hash;}
@@ -56,6 +57,7 @@ public final class MappingEngine {
         public Map<String,DictionarySpec> dictionaries(){return dictionaries;}
         public boolean passthrough(){return passthrough;}
         public Set<String> excludes(){return excludes;}
+        public SourceFieldNames sourceNames(Collection<String> names){return new SourceFieldNames(names,caseSensitive,declaredSourceFields);}
     }
     private static final class Wait extends RuntimeException {
         private final String dictionary;private final Set<DictionarySpec.Key> keys;
@@ -84,6 +86,7 @@ public final class MappingEngine {
         public Object target(String name){if(!done.contains(name))throw new TargetWait();return output.get(name);}
         public Object sourceRaw(String name){
             String resolved=sourceNames.resolve(name);
+            if(resolved!=null&&!resolved.equals(name)&&plan.declaredSourceFields.contains(resolved))return ValueTypes.MISSING;
             return resolved==null?ValueTypes.MISSING:original.get(resolved);
         }
         public Object value(){return current;}

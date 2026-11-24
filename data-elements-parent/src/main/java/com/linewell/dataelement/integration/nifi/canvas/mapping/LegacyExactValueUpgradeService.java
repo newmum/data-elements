@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.linewell.dataelement.integration.nifi.canvas.compile.DslCompiler;
+import com.linewell.dataelement.integration.nifi.canvas.compile.JdbcTimestampJsonPolicy;
 import com.linewell.dataelement.integration.nifi.canvas.mapping.LegacyNativeGraph.Graph;
 import com.linewell.dataelement.integration.nifi.canvas.mapping.RegisteredMappingSchemaService.Resolved;
 import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient;
@@ -106,7 +107,129 @@ public class LegacyExactValueUpgradeService {
         }
     }
 
+    /** Change only stopped, owned codec references; source IDs, watermarks, plans and public codecs stay intact. */
+    public Map<String, Object> upgradeTimestampCodecs(Pipeline pipeline, String tenant, String sourceNodeId,
+                                                     boolean dryRun, String expectedFingerprint) {
+        requireTimestampUpgradeScope(pipeline, tenant);
+        try (var ignored = nifi.bindAssignedNode(pipeline.nodeMapping().runtimeNodeId())) {
+            Prepared prepared = prepare(pipeline, tenant, sourceNodeId, true);
+            JsonNode codec = JdbcTimestampJsonPolicy.requireWriter(nifi);
+            String writer = codec.path("component").path("id").asText(codec.path("id").asText());
+            var protectedServices = new LinkedHashMap<>(prepared.oldServices());
+            protectedServices.put(writer, codec);
+            prepared = new Prepared(prepared.pipeline(), prepared.sourceId(), prepared.graph(), prepared.branches(),
+                    prepared.plans(), protectedServices, prepared.fingerprint(), prepared.complete());
+            var nodes = new LinkedHashSet<String>(); nodes.add(sourceNodeId);
+            Map<String,JsonNode> visibleServices = LegacyNativeGraph.indexed(nifi.get("/flow/process-groups/" + pipeline.nifiProcessGroupId()
+                    + "/controller-services?includeAncestorGroups=true&includeDescendantGroups=false",JsonNode.class).path("controllerServices"));
+            if(visibleServices.size()>512)throw unsupported();
+            for (Branch branch : prepared.branches()) {
+                nodes.add(branch.boundary().governor().id()); nodes.add(branch.boundary().target().id());
+                JsonNode archived=parse(property(branch.boundary().nativeGovernor(),PLAN).asText());
+                if(!(archived instanceof ObjectNode active)||active.path("_deployment").path("planId").asText().isBlank())throw unsupported();
+                ObjectNode document=active.deepCopy();document.remove("_deployment");
+                if(!MappingEngine.compile(document).hash().equals(prepared.plans().get(branch.boundary().governor().id()).hash()))
+                    throw failure("DRAFT_NOT_SAVED","运行治理计划与已保存规则不一致，未修改时间引用");
+            }
+            Map<String, Edit> changes = new LinkedHashMap<>();
+            boolean sourceWriterVerified=false;
+            for (var entry : prepared.graph().processors().entrySet()) {
+                if (!nodes.contains(pipeline.nodeMapping().processorIdToCanvasNode().get(entry.getKey()))) continue;
+                JsonNode processor = entry.getValue();
+                ObjectNode properties = JSON.createObjectNode();
+                String kind = type(processor);
+                if("TimestampFormatProcessor".equals(kind)&&!property(processor,"timestamp-fields").asText().isBlank()
+                        &&!property(processor,"date-format").asText().equals("yyyy-MM-dd"))
+                    throw failure("MIGRATION_SCOPE_UNSUPPORTED","旧链路含独立时间格式处理器，须先审阅该处理器的精度合同，未修改时间引用");
+                if (Set.of("ExecuteSQLRecord", "QueryDatabaseTableRecord", "QueryRecord", "ConvertRecord").contains(kind)
+                        && !property(processor, "Record Writer").asText().isBlank()) {
+                    String current = property(processor, "Record Writer").asText();
+                    JsonNode service = requiredService(current,visibleServices,protectedServices);
+                    if ("org.apache.nifi.json.JsonRecordSetWriter".equals(service.path("component").path("type").asText())) {
+                        if(sourceNodeId.equals(pipeline.nodeMapping().processorIdToCanvasNode().get(entry.getKey())))sourceWriterVerified=true;
+                        protectedServices.put(current, service);
+                        if (!writer.equals(current)) properties.put("Record Writer", writer);
+                    }
+                }
+                if (GOV.equals(processor.path("component").path("type").asText())) {
+                    if (!writer.equals(property(processor, "record-writer").asText())) properties.put("record-writer", writer);
+                    if (!property(processor, "format-historical-timestamp-text").asBoolean()) properties.put("format-historical-timestamp-text", "true");
+                }
+                if (!properties.isEmpty()) changes.put(entry.getKey(), new Edit(processor, properties, false));
+            }
+            if(!sourceWriterVerified)throw unsupported();
+            Map<String,Branch> timestampReaders=new LinkedHashMap<>();
+            for(Branch branch:prepared.branches()){
+                if(branch.writer()==null||parse(branch.reader().getOrDefault("timestamp-fields","[]")).isEmpty())continue;
+                String current=property(branch.writer(),INSERT_READER).asText();
+                if(matchesService(visibleServices.get(current),EXACT_READER,pipeline.nifiProcessGroupId(),branch.reader()))continue;
+                String target=branch.boundary().target().id(),processor=branch.writer().path("id").asText();
+                timestampReaders.put(target,branch);
+                ObjectNode settings=changes.containsKey(processor)?changes.get(processor).properties().deepCopy():JSON.createObjectNode();
+                settings.put(INSERT_READER,"timestamp-reader:"+target);
+                changes.put(processor,new Edit(branch.writer(),settings,false));
+            }
+            ObjectNode witness = JSON.createObjectNode().put("mode", "jdbc-timestamp-codecs").put("base", prepared.fingerprint());
+            witness.set("publicCodec", stableComponent(codec)); witness.put("codecRevision",revision(codec));
+            ObjectNode proposed = witness.putObject("changes");
+            changes.forEach((id,edit) -> proposed.putObject(id).put("revision",revision(edit.original())).set("properties",edit.properties()));
+            ObjectNode readerWitness=witness.putObject("timestampReaders");
+            timestampReaders.forEach((id,branch)->readerWitness.set(id,JSON.valueToTree(branch.reader())));
+            String fingerprint = MappingEngine.hash(witness);
+            if (!dryRun && !fingerprint.equals(expectedFingerprint)) throw failure("DRAFT_VERSION_CONFLICT", "原生时间引用或公共服务在预检后变化");
+            Map<String,String> createdReaders=new LinkedHashMap<>();
+            var result = Map.<String, Object>of("mode", "jdbc-timestamp-codecs", "fingerprint", fingerprint,
+                    "dryRun", dryRun, "alreadyApplied", changes.isEmpty(), "applied", !dryRun && !changes.isEmpty(),
+                    "changedProcessors", changes.size(), "writerId", writer, "started", false,
+                    "timestampReaderCount",timestampReaders.size(),"timestampReaderIds",createdReaders);
+            if (dryRun || changes.isEmpty()) return result;
+            Map<String, Edit> applied = new LinkedHashMap<>();
+            Set<String> created=new LinkedHashSet<>();
+            try {
+                for(var entry:timestampReaders.entrySet())createdReaders.put(entry.getKey(),createService(pipeline.nifiProcessGroupId(),EXACT_READER,
+                        servicePrefix(sourceNodeId)+entry.getKey()+" / 完整时间Reader",entry.getValue().reader(),created));
+                if(!created.isEmpty())nifi.enableControllerServices(pipeline.nifiProcessGroupId(),created,Set.of(),30_000);
+                for(var entry:timestampReaders.entrySet())if(!matchesService(service(createdReaders.get(entry.getKey())),EXACT_READER,pipeline.nifiProcessGroupId(),entry.getValue().reader()))
+                    throw failure("MIGRATION_VALIDATION_FAILED","JDBC完整时间Reader尚未通过原生配置核验");
+                for (var entry : changes.entrySet()) {
+                    Edit edit=entry.getValue();ObjectNode properties=edit.properties().deepCopy();
+                    String reference=properties.path(INSERT_READER).asText();
+                    if(reference.startsWith("timestamp-reader:"))properties.put(INSERT_READER,createdReaders.get(reference.substring("timestamp-reader:".length())));
+                    Edit resolved=new Edit(edit.original(),properties,false);
+                    applied.put(entry.getKey(),resolved);
+                    applyEdit(resolved);
+                }
+                nifi.requireValidProcessors(pipeline.nifiProcessGroupId(), applied.keySet());
+                verify(prepared, applied);
+                transaction.executeWithoutResult(status -> pipelines.update(pipeline.id(), saved -> {
+                    if (!Objects.equals(saved.updatedAt(), pipeline.updatedAt()) || !Objects.equals(saved.nodeMapping(), pipeline.nodeMapping()))
+                        throw failure("DRAFT_VERSION_CONFLICT", "流程在时间引用升级期间变化");
+                    return saved;
+                }));
+                return result;
+            } catch (RuntimeException error) {
+                boolean restored = restore(prepared, applied, created, false, error);
+                throw new MappingException(restored ? "TRANSPORT_UPGRADE_FAILED" : "TRANSPORT_UPGRADE_RECOVERY_REQUIRED",
+                        restored ? "时间编解码升级失败，原引用已恢复" : "时间编解码引用须核对，流程保持停止", error);
+            }
+        }
+    }
+
+    private static void requireTimestampUpgradeScope(Pipeline pipeline, String tenant) {
+        if (!Objects.equals(tenant, TenantContext.requireTenantId())) throw failure("RESOURCE_FORBIDDEN", "流程必须属于当前租户");
+        if (pipeline.status() != PipelineStatus.STOPPED || pipeline.nifiProcessGroupId() == null || pipeline.nodeMapping() == null
+                || pipeline.nodeMapping().candidate() != null || pipeline.nodeMapping().primaryProcessorIds() == null
+                || pipeline.nodeMapping().processorIdToCanvasNode() == null || pipeline.nodeMapping().edgeProcessorEndpoints() == null
+                || pipeline.dsl() == null || pipeline.dsl().nodes() == null || pipeline.dsl().edges() == null
+                || pipeline.dsl().nodes().size() > 64 || pipeline.dsl().edges().size() > 128)
+            throw failure("MIGRATION_UNAVAILABLE", "流程须停止、有完整原生映射且无候选部署");
+    }
+
     private Prepared prepare(Pipeline pipeline, String tenant, String sourceId) {
+        return prepare(pipeline, tenant, sourceId, false);
+    }
+
+    private Prepared prepare(Pipeline pipeline, String tenant, String sourceId, boolean timestampOnly) {
         String group = pipeline.nifiProcessGroupId();
         if (!("data-elements:v1:" + tenant + ":pipeline:" + pipeline.id())
                 .equals(nifi.getProcessGroup(group).path("component").path("comments").asText())) {
@@ -153,6 +276,9 @@ public class LegacyExactValueUpgradeService {
         Map<String, Resolved> registrations = schemas.resolve(references);
         if (!registrations.keySet().equals(references.keySet())) throw unauthorized();
         Resolved registeredSource = registrations.get(sourceId);
+        if (timestampOnly && java.util.stream.StreamSupport.stream(registeredSource.fields().spliterator(), false)
+                .noneMatch(field -> Set.of("DATETIME", "INSTANT").contains(com.linewell.dataelement.mapping.core.ValueTypes.type(field.path("physicalType").asText()))))
+            throw failure("MIGRATION_UNAVAILABLE", "已登记来源没有 JDBC 时间戳字段");
         if (!matchesTable(property(sourceProcessor, "Table Name").asText(), registeredSource)) throw unauthorized();
         Map<String, Resolved> targets = new LinkedHashMap<>(registrations);
         targets.remove(sourceId);
@@ -175,14 +301,14 @@ public class LegacyExactValueUpgradeService {
             if (!plan.dictionaries().isEmpty()) throw unsupported();
             plans.put(boundary.governor().id(), plan);
             Branch branch = prepareBranch(pipeline, graph, boundary, targets.get(boundary.target().id()),
-                    physical.get(boundary.target().id()), plan, services, oldServices);
+                    physical.get(boundary.target().id()), plan, services, oldServices, timestampOnly);
             branches.add(branch);
         }
         boolean complete = branches.stream().allMatch(Branch::complete);
-        if (branches.stream().noneMatch(branch -> !branch.reader().isEmpty())) {
+        if (!timestampOnly && branches.stream().noneMatch(branch -> !branch.reader().isEmpty())) {
             throw failure("MIGRATION_UNAVAILABLE", "已登记目标没有需要精确读取的字段");
         }
-        if (!complete && services.values().stream().map(service -> service.path("component")).anyMatch(
+        if (!timestampOnly && !complete && services.values().stream().map(service -> service.path("component")).anyMatch(
                 service -> group.equals(service.path("parentGroupId").asText())
                         && service.path("name").asText().startsWith(servicePrefix(sourceId)))) {
             throw failure("TRANSPORT_UPGRADE_RECOVERY_REQUIRED", "旧流程已有部分精确读取候选，须核对候选引用");
@@ -194,6 +320,7 @@ public class LegacyExactValueUpgradeService {
         witness.set("processors", JSON.valueToTree(graph.processorRevisions()));
         witness.set("connections", JSON.valueToTree(graph.connectionRevisions()));
         witness.set("targets", JSON.valueToTree(physical));
+        if (timestampOnly) witness.set("sourceFields", registeredSource.fields());
         witness.set("services", JSON.valueToTree(oldServices.entrySet().stream()
                 .map(entry -> entry.getKey() + ":" + revision(entry.getValue())).sorted().toList()));
         var plansNode = witness.putObject("plans");
@@ -202,7 +329,7 @@ public class LegacyExactValueUpgradeService {
     }
 
     private Branch prepareBranch(Pipeline pipeline, Graph graph, Boundary boundary, Resolved target, JsonNode columns,
-                                 MappingEngine.Plan plan, Map<String, JsonNode> services, Map<String, JsonNode> oldServices) {
+                                 MappingEngine.Plan plan, Map<String, JsonNode> services, Map<String, JsonNode> oldServices, boolean timestampOnly) {
         String group = pipeline.nifiProcessGroupId();
         boolean oracle = "sink.jdbc".equals(boundary.target().manifestKey());
         var connection = target.connections().get(target.datasourceId());
@@ -232,22 +359,25 @@ public class LegacyExactValueUpgradeService {
 
         List<String> exactNumbers = new ArrayList<>();
         List<String> binary = new ArrayList<>();
+        List<String> timestamps=new ArrayList<>();
         for (JsonNode column : columns) {
             String physical = column.path("physicalType").asText().replaceFirst("\\s*\\(.*$", "").trim().toUpperCase(Locale.ROOT);
             String name = outputName(plan, column.path("name").asText());
             if (name == null) continue;
             if (NUMERIC_TYPES.contains(physical)) exactNumbers.add(name);
+            if(timestampOnly&&oracle&&"DATETIME".equals(com.linewell.dataelement.mapping.core.JdbcTemporalTypes.logicalType(column.path("physicalType").asText(),connection)))timestamps.add(name);
             if (oracle && "BLOB".equals(physical)) {
                 if (!"BINARY".equals(plan.outputContracts().get(name).logicalType())) throw unsupported();
                 binary.add(name);
             }
         }
-        if (oracle && exactNumbers.isEmpty() && binary.isEmpty()) throw unsupported();
+        if (!timestampOnly && oracle && exactNumbers.isEmpty() && binary.isEmpty()) throw unsupported();
         Map<String, String> reader = new LinkedHashMap<>();
         String assignedReader = "";
-        if (!exactNumbers.isEmpty() || !binary.isEmpty()) {
+        if (!exactNumbers.isEmpty() || !binary.isEmpty() || !timestamps.isEmpty()) {
             Set<String> existing = new LinkedHashSet<>();
-            consumers.forEach((id, processor) -> existing.add(property(processor, readerKeys.get(id)).asText()));
+            if(timestampOnly&&oracle)existing.add(property(writer,INSERT_READER).asText());
+            else consumers.forEach((id, processor) -> existing.add(property(processor, readerKeys.get(id)).asText()));
             if (existing.size() != 1 || existing.contains("")) throw unsupported();
             assignedReader = existing.iterator().next();
             JsonNode originalReader = requiredService(assignedReader, services, oldServices);
@@ -261,6 +391,7 @@ public class LegacyExactValueUpgradeService {
             }
             reader.put("number-fields", JSON.valueToTree(exactNumbers).toString());
             if (!binary.isEmpty()) reader.put("binary-fields", JSON.valueToTree(binary).toString());
+            if(!timestamps.isEmpty())reader.put("timestamp-fields",JSON.valueToTree(timestamps).toString());
         }
         Map<String, String> pool = Map.of();
         String oldPool = "";
@@ -467,8 +598,8 @@ public class LegacyExactValueUpgradeService {
                 }
                 nifi.delete(SERVICES + "/" + id + "?version=" + revision(service(id)));
             }
-            return nifi.listControllerServices(prepared.pipeline().nifiProcessGroupId()).stream().noneMatch(
-                    service -> service.path("component").path("name").asText().startsWith(servicePrefix(prepared.sourceId())));
+            return created.isEmpty() || nifi.listControllerServices(prepared.pipeline().nifiProcessGroupId()).stream().noneMatch(
+                    service -> created.contains(service.path("component").path("id").asText(service.path("id").asText())));
         } catch (RuntimeException recovery) {
             error.addSuppressed(recovery);
             return false;

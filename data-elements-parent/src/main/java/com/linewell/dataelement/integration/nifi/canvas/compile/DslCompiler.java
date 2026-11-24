@@ -218,6 +218,7 @@ public class DslCompiler {
             if(manualBackfill||explicitBackfill) {
                 if(!"source".equals(node.category())||!supportsSyncSettings(effectiveManifestKey(node)))
                     throw new NodeConfigException(node.id(),node.label(),manualBackfill?"manualBackfill":"backfillSource","补数入口只支持已配置的 JDBC 数据库来源",null);
+                backfillWatermark(node,config);
                 backfillProcessor=true;
             }
             if(explicitBackfill) {
@@ -265,7 +266,7 @@ public class DslCompiler {
                     &&version.equals(bundle.path("version").asText()))matches++;
         }
         if(matches!=1)throw new NodeConfigException(node.id(),node.label(),"targetColumns",
-                "Hive 精确数值写入需要当前 NiFi 注册唯一匹配版本的 HaitongJdbcRecordReader（haitong-mapping-nar:"+version+"）；旧流程已保留",null);
+                "精确字段读取需要当前 NiFi 注册唯一匹配版本的 HaitongJdbcRecordReader（haitong-mapping-nar:"+version+"）；旧流程已保留",null);
     }
 
     private void preflightScriptProcesses(Pipeline pipeline) {
@@ -409,9 +410,16 @@ public class DslCompiler {
         Map<String,JsonNode> javaSpecs=javaMappingSpecifications(pipeline);
         Map<String,UnifiedMappingService.Compiled> preparedJavaPlans=javaSpecs.isEmpty()?Map.of():unifiedMappingService.compileBatch(javaSpecs);
         Map<String,List<String>> hiveNumericText=hiveNumericTextFields(pipeline,preparedJavaPlans);
-        if(!hiveNumericText.isEmpty()&&pipeline.dsl().nodes().stream().noneMatch(node->"sink.hive".equals(node.manifestKey())
+        Pipeline.Node timestampSink=null;
+        Set<String> timestampNodes=JdbcTimestampJsonPolicy.writerNodes(pipeline);
+        for(var node:pipeline.dsl().nodes())if("sink.jdbc".equals(node.manifestKey())&&timestampNodes.contains(node.id())
+                &&node.config()!=null&&usesLinewellJdbcWriter(node.config())){
+            for(var column:targetColumnMetadata(node.config()))if("DATETIME".equals(com.linewell.dataelement.mapping.core.JdbcTemporalTypes.logicalType(column.type(),node.config()))){timestampSink=node;break;}
+            if(timestampSink!=null)break;
+        }
+        if(timestampSink!=null||!hiveNumericText.isEmpty()&&pipeline.dsl().nodes().stream().noneMatch(node->"sink.hive".equals(node.manifestKey())
                 &&!hiveNumberFields(node.config(),Set.of()).isEmpty()))
-            requireHiveExactReader(pipeline.dsl().nodes().stream().filter(node->hiveNumericText.containsKey(node.id())).findFirst().orElseThrow());
+            requireHiveExactReader(timestampSink!=null?timestampSink:pipeline.dsl().nodes().stream().filter(node->hiveNumericText.containsKey(node.id())).findFirst().orElseThrow());
         GlobalJsonRecordServices globalJson = GlobalJsonRecordServices.resolve(nifi, pipeline, usesSqlSourceRecordWriter(pipeline));
         if(!hiveNumericText.isEmpty())globalJson.jdbcReaderFormatProperties();
         String parentId = layout == null ? nifi.getRootProcessGroupId() : layout.parentId();
@@ -477,6 +485,8 @@ public class DslCompiler {
             manifestByNode.put(n.id(), m);
 
             Map<String, Object> cfg = manifestConfig(m, n.config());
+            // Runtime service IDs are assigned below from registered metadata, never accepted from a draft.
+            cfg.remove("_runtimeJdbcTimestampReader");
             if (periodicSource != null && "sink.jdbc".equals(m.key())) {
                 String strategy = SyncPolicy.fullStrategy(periodicSource.config());
                 cfg.put("statementType", "TRUNCATE_RELOAD".equals(strategy) ? "INSERT"
@@ -506,6 +516,7 @@ public class DslCompiler {
                 cfg.put("dbType", "MYSQL");
             }
             cfg.remove("_runtimeHiveTargetInput");
+            cfg.remove("_runtimeGovernedAuditFields");
             if(hiveInputNodes.contains(n.id()))cfg.put("_runtimeHiveTargetInput",true);
             cfgByNode.put(n.id(), cfg);
 
@@ -638,6 +649,7 @@ public class DslCompiler {
                 compiled.get(n.id()).csIds.put("sql-dbcp", cs.id());
             }
         }
+        applyGovernedAuditFields(pipeline,cfgByNode,fieldMappingPlans);
         Map<String,com.linewell.dataelement.mapping.core.MappingEngine.Plan> archivedPlans=new LinkedHashMap<>();javaMappingPlans.forEach((node,plan)->archivedPlans.put(node,plan.plan()));
         Map<String,String> planVersionIds=mappingVersions==null?Map.of():mappingVersions.archive(pipeline,archivedPlans);
         // Mapping consumers use the same public Reader, including chained mappings and JDBC sinks.
@@ -671,6 +683,21 @@ public class DslCompiler {
             var service = nifi.createControllerService(pgId, "com.linewell.dataelement.nifi.HaitongBinaryRecordReader",
                     node.label()+"/二进制字段Reader", Map.of("delegate-reader",globalJson.readerId(),"binary-fields",MAPPER.valueToTree(binary).toString()));
             compiled.get(node.id()).csIds.put("jdbc-value-reader", service.id());
+        }
+        // Only the final Linewell boundary receives Timestamp carriers. Intermediate
+        // QueryRecord/JSON steps keep full-fraction text rather than coercing it through SQL timestamps.
+        for(var node:pipeline.dsl().nodes()){
+            Map<String,Object> cfg=cfgByNode.get(node.id());
+            if(!"sink.jdbc".equals(node.manifestKey())||!globalJson.timestampNodes().contains(node.id())||!usesLinewellJdbcWriter(cfg))continue;
+            List<String> timestamps=new ArrayList<>();
+            for(var column:targetColumnMetadata(cfg))if("DATETIME".equals(com.linewell.dataelement.mapping.core.JdbcTemporalTypes.logicalType(column.type(),cfg)))timestamps.add(column.name());
+            if(timestamps.isEmpty())continue;
+            Map<String,String> properties=new LinkedHashMap<>(globalJson.jdbcReaderFormatProperties());
+            properties.put("number-fields",MAPPER.valueToTree(oracleNumberColumns(cfg)).toString());
+            List<String> binary=oracleBlobColumns(cfg);if(!binary.isEmpty())properties.put("binary-fields",MAPPER.valueToTree(binary).toString());
+            properties.put("timestamp-fields",MAPPER.valueToTree(timestamps).toString());
+            String id=nifi.createControllerService(pgId,"com.linewell.dataelement.nifi.HaitongJdbcRecordReader",node.label()+"/JDBC完整时间Reader",properties).id();
+            compiled.get(node.id()).csIds.put("jdbc-timestamp-reader",id);cfg.put("_runtimeJdbcTimestampReader",id);
         }
         // Every Hive JSON reread must preserve the same authorized canonical numeric fields.
         // Create the branch reader before the shared enable phase, never inside processor creation.
@@ -920,8 +947,7 @@ public class DslCompiler {
             nc.inletProcessorId = spec.inlet() == null ? null : nc.processorIds.get(spec.inlet());
             if (ScriptProcessPolicy.supports(m.key())) {
                 // A failed process must not feed partial output downstream or lose its diagnostics.
-                NifiEntity retained = nifi.createRetentionFunnel(pgId, nodeOriginX(nodeLayout) + 520, nodeOriginY(nodeLayout) + 180);
-                nifi.createConnection(pgId, nc.inletProcessorId, "PROCESSOR", retained.id(), "FUNNEL", List.of("nonzero status"));
+                nifi.createConnection(pgId, nc.inletProcessorId, "PROCESSOR", nc.inletProcessorId, "PROCESSOR", List.of("nonzero status"));
             }
             if (spec.outlets() != null) {
                 for (var o : spec.outlets()) {
@@ -939,8 +965,7 @@ public class DslCompiler {
                     node.label()+"/登记字段规范化",nodeOriginX(nodeLayout)+2*PROCESSOR_COLUMN_GAP,
                     nodeOriginY(nodeLayout)+5*PROCESSOR_ROW_GAP,Map.of("source-record-shape",source.getValue().toString()),null,null);
             connectInternal(pgId,nc,original.processorId(),normalized.id(),original.relationship());
-            NifiEntity retained=nifi.createRetentionFunnel(pgId,nodeOriginX(nodeLayout)+3*PROCESSOR_COLUMN_GAP,nodeOriginY(nodeLayout)+5*PROCESSOR_ROW_GAP);
-            nifi.createConnection(pgId,normalized.id(),"PROCESSOR",retained.id(),"FUNNEL",List.of("failure"));
+            nifi.createConnection(pgId,normalized.id(),"PROCESSOR",normalized.id(),"PROCESSOR",List.of("failure"));
             nc.processorIds.put("registered-normalize",normalized.id());nc.outlets.put("default",new Outlet(normalized.id(),"success"));
         }
 
@@ -1033,8 +1058,7 @@ public class DslCompiler {
             if(main==null||!main.processorIds.containsKey("fetch"))
                 throw new NodeConfigException(node.id(),node.label(),"manualBackfill","当前来源没有独立读取处理器，无法派生备用补数入口",null);
             Map<String,Object> replayConfig=new LinkedHashMap<>(config);
-            for(String key:List.of("customQuery","sql","whereClause","additionalWhereClause","incrementalColumn"))replayConfig.remove(key);
-            replayConfig.put("customWherePredicate","1=0");
+            for(String key:List.of("customQuery","sql"))replayConfig.remove(key);
             replayConfig.put("backfillSource",true);
             var replay=new Pipeline.Node(node.id()+"/manual-backfill",node.manifestKey(),node.label()+"/备用补数",node.category(),node.x(),node.y(),replayConfig);
             NodeCompilation generated=new NodeCompilation();generated.csIds.putAll(main.csIds);
@@ -1213,7 +1237,16 @@ public class DslCompiler {
         compiled.outlets.put("default", new Outlet(processor.id(), "success"));
     }
 
-    /** A manual replay has no watermark: an operator selects a bounded predicate and runs it once. */
+    private String backfillWatermark(Pipeline.Node node,Map<String,Object> config){
+        String column=configText(config,"incrementalColumn");
+        if(column.isBlank())throw new NodeConfigException(node.id(),node.label(),"incrementalColumn","备用补数默认使用增量水位，请先为来源选择有效的增量字段",null);
+        validateColumnList(column,"补数增量字段");
+        String tie=configText(config,"tieBreakerColumn");
+        if(!tie.isBlank()){validateColumnList(tie,"补数次级增量字段");column=column.trim()+","+tie.trim();}
+        return column;
+    }
+
+    /** The disabled manual source owns its watermark; it never copies or clears the main source state. */
     private void buildBackfillSource(String pgId,Pipeline.Node node,NodeCompilation compiled,NodeLayout layout,
                                      Map<String,Object> cfg,Map<String,String> sharedCs) {
         Map<String,String> properties=new LinkedHashMap<>();
@@ -1222,6 +1255,7 @@ public class DslCompiler {
         properties.put("Database Type",nifiDatabaseType(configText(cfg,"dbType")));
         properties.put("Record Writer",sourceQueryRecordWriter(sharedCs,cfg));
         properties.put("Initial Load Strategy","Start at Beginning");
+        properties.put("Maximum-value Columns",backfillWatermark(node,cfg));
         properties.put("Set Auto Commit","false");
         properties.put("Use Avro Logical Types","true");
         properties.put("Normalize Table/Column Names","false");
@@ -1796,7 +1830,12 @@ public class DslCompiler {
     }
     private void enableCreatedService(NifiEntity service){ObjectNode body=MAPPER.createObjectNode();body.set("revision",MAPPER.valueToTree(service.revision()));body.put("state","ENABLED").put("disconnectedNodeAcknowledged",false);nifi.put("/controller-services/"+service.id()+"/run-status",body,JsonNode.class);}
     private static Map<String,String> sharedJsonForNode(Map<String,String> globals,GlobalJsonRecordServices services,String nodeId) {
-        Map<String,String> result=new HashMap<>(globals);result.put("jsonWriter",services.writerForNode(nodeId));return result;
+        Map<String,String> result=new HashMap<>(globals);result.put("jsonWriter",services.writerForNode(nodeId));
+        if(services.timestampNodes().contains(nodeId)){
+            result.put("timeJsonWriter",services.writerForNode(nodeId));
+            result.put("timestampJsonWriter",services.writerForNode(nodeId));
+        }
+        return result;
     }
     private boolean hasAvailableTemporalTargetColumns(Map<String, Object> cfg, Set<String> availableFields) {
         if (availableFields == null || availableFields.isEmpty()) {
@@ -1838,7 +1877,7 @@ public class DslCompiler {
     private boolean requiresLinewellInsertAuditProjection(ComponentManifest manifest, Map<String,Object> cfg, Set<String> availableFields) {
         if (!usesLinewellJdbcWriter(manifest,"put",cfg)
                 || !"INSERT".equals(jdbcStatementType(configText(cfg,"statementType"),configText(cfg,"dbType"),cfg))) return false;
-        return targetColumnMetadata(cfg).stream().anyMatch(column -> isDatabaseClockInsertColumn(column.name())
+        return targetColumnMetadata(cfg).stream().anyMatch(column -> com.linewell.dataelement.integration.nifi.canvas.nifi.LinewellAuditProperties.usesDatabaseClock(column.name(),cfg)
                 && (availableFields.isEmpty() || availableFields.stream().anyMatch(field -> column.name().equalsIgnoreCase(field))));
     }
 
@@ -1866,7 +1905,7 @@ public class DslCompiler {
                 x, y + PROCESSOR_ROW_GAP, resolved, null, null);
         nc.processorIds.put(putSpec.localId(), put.id());
         connectInternal(pgId,nc,normalize.id(),put.id(),"success");
-        if (insertAuditProjection) retainProjectionFailure(pgId,nc,normalize.id(),x,y);
+        if (insertAuditProjection) loopProjectionFailure(pgId,nc,normalize.id());
         if (spec.outlets() != null) {
             for (CompileSpec.Outlet outlet : spec.outlets()) {
                 nc.outlets.put(outlet.name(), new Outlet(put.id(), outlet.relationship()));
@@ -1886,7 +1925,7 @@ public class DslCompiler {
         for (TargetColumnMetadata column : columns) {
             // Linewell INSERT appends these SQL values to the column list. Its MERGE adapter
             // removes incoming duplicates itself; INSERT requires a record projection first.
-            if (insertAuditProjection && isDatabaseClockInsertColumn(column.name())) continue;
+            if (insertAuditProjection && com.linewell.dataelement.integration.nifi.canvas.nifi.LinewellAuditProperties.usesDatabaseClock(column.name(),cfg)) continue;
             if (!availableLower.isEmpty() && !availableLower.contains(column.name().toLowerCase(Locale.ROOT))) {
                 continue;
             }
@@ -1912,9 +1951,8 @@ public class DslCompiler {
         return normalize;
     }
 
-    private void retainProjectionFailure(String pgId,NodeCompilation nc,String projection,double x,double y) {
-        NifiEntity retained=nifi.createRetentionFunnel(pgId,x+PROCESSOR_ROW_GAP,y);
-        nifi.createConnection(pgId,projection,"PROCESSOR",retained.id(),"FUNNEL",List.of("failure"));
+    private void loopProjectionFailure(String pgId,NodeCompilation nc,String projection) {
+        nifi.createConnection(pgId,projection,"PROCESSOR",projection,"PROCESSOR",List.of("failure"));
         nc.usedOutgoing.computeIfAbsent(projection,key->new LinkedHashSet<>()).add("failure");
     }
 
@@ -1945,11 +1983,10 @@ public class DslCompiler {
         NifiEntity fallback=nifi.createProcessor(pgId,processorType,node.label()+"/put",x+(project?2:1)*PROCESSOR_COLUMN_GAP,y,fallbackProps,null,null);
         nc.processorIds.put("insert",insert.id());nc.processorIds.put("put",fallback.id());
         nc.inletProcessorId=projection==null?insert.id():projection.id();
-        if(projection!=null){connectInternal(pgId,nc,projection.id(),insert.id(),"success");retainProjectionFailure(pgId,nc,projection.id(),x,y);}
+        if(projection!=null){connectInternal(pgId,nc,projection.id(),insert.id(),"success");loopProjectionFailure(pgId,nc,projection.id());}
         connectInternal(pgId,nc,insert.id(),fallback.id(),"failure");
         connectInternal(pgId,nc,insert.id(),insert.id(),"retry");
-        NifiEntity retained=nifi.createRetentionFunnel(pgId,x+3*PROCESSOR_COLUMN_GAP,y+PROCESSOR_ROW_GAP);
-        nifi.createConnection(pgId,fallback.id(),"PROCESSOR",retained.id(),"FUNNEL",List.of("failure","retry"));
+        nifi.createConnection(pgId,fallback.id(),"PROCESSOR",fallback.id(),"PROCESSOR",List.of("failure","retry"));
         nc.usedOutgoing.computeIfAbsent(fallback.id(),key->new LinkedHashSet<>()).addAll(List.of("failure","retry"));
         if(spec.outlets()!=null)for(CompileSpec.Outlet outlet:spec.outlets())
             nc.outlets.put(outlet.name(),new Outlet(fallback.id(),outlet.relationship()));
@@ -1962,6 +1999,38 @@ public class DslCompiler {
                                                     Map<String, FieldMappingService.CompiledMapping> mappingPlans) {
         return resolveInputFields(pipeline, targetNodeId, manifestByNode, cfgByNode, mappingPlans,
                 new LinkedHashSet<>());
+    }
+
+    /** Only fields supplied by governance on every input path suppress database-clock fallback. */
+    private void applyGovernedAuditFields(Pipeline pipeline,Map<String,Map<String,Object>> configs,
+            Map<String,FieldMappingService.CompiledMapping> plans){
+        Map<String,Pipeline.Node> nodes=new LinkedHashMap<>();pipeline.dsl().nodes().forEach(node->nodes.put(node.id(),node));
+        Map<String,Set<String>> incoming=new LinkedHashMap<>();
+        for(var edge:pipeline.dsl().edges()==null?List.<Pipeline.Edge>of():pipeline.dsl().edges())
+            if(!Set.of("failure","retry").contains(Objects.toString(edge.outlet(),"").toLowerCase(Locale.ROOT)))
+                incoming.computeIfAbsent(edge.target(),key->new LinkedHashSet<>()).add(edge.source());
+        Map<String,Set<String>> memo=new HashMap<>();
+        for(var node:pipeline.dsl().nodes())if("sink.jdbc".equals(node.manifestKey()))
+            configs.get(node.id()).put("_runtimeGovernedAuditFields",List.copyOf(governedAuditInputs(node.id(),nodes,incoming,plans,memo,new HashSet<>())));
+    }
+    private Set<String> governedAuditInputs(String id,Map<String,Pipeline.Node> nodes,Map<String,Set<String>> incoming,
+            Map<String,FieldMappingService.CompiledMapping> plans,Map<String,Set<String>> memo,Set<String> visiting){
+        if(memo.containsKey(id))return memo.get(id);
+        if(!visiting.add(id))return Set.of();
+        Set<String> result=null;
+        for(String parent:incoming.getOrDefault(id,Set.of())){
+            Set<String> supplied=new LinkedHashSet<>();
+            var mapping=plans.get(parent);
+            if(mapping!=null)mapping.outputFields().stream().filter(DslCompiler::isDatabaseClockInsertColumn)
+                    .map(name->name.toUpperCase(Locale.ROOT)).forEach(supplied::add);
+            else {
+                var node=nodes.get(parent);
+                if(node!=null&&(node.category().equals("transport")||node.manifestKey().equals("route.funnel")))
+                    supplied.addAll(governedAuditInputs(parent,nodes,incoming,plans,memo,visiting));
+            }
+            if(result==null)result=supplied;else result.retainAll(supplied);
+        }
+        visiting.remove(id);Set<String> resolved=result==null?Set.of():Set.copyOf(result);memo.put(id,resolved);return resolved;
     }
 
     private Set<String> resolveInputFields(Pipeline pipeline,
@@ -3317,6 +3386,8 @@ public class DslCompiler {
             return;
         }
         moveProcessorProperty(properties, "Record Reader", "put-db-record-record-reader");
+        String timestampReader=configText(cfg,"_runtimeJdbcTimestampReader");
+        if(!timestampReader.isBlank())properties.put("put-db-record-record-reader",timestampReader);
         moveProcessorProperty(properties, "Database Connection Pooling Service", "put-db-record-dcbp-service");
         moveProcessorProperty(properties, "Database Type", "db-type");
         moveProcessorProperty(properties, "Statement Type", "put-db-record-statement-type");
@@ -3911,6 +3982,13 @@ public class DslCompiler {
             return;
         }
         JdbcDriverPropertyResolver.resolve(config).forEach(properties::putIfAbsent);
+        String configured=configText(config,"maxTotalConnections");
+        if(configured.isBlank())configured="50";
+        try{int limit=Integer.parseInt(configured);if(limit<1||limit>1000)throw new NumberFormatException();}
+        catch(NumberFormatException invalid){throw new IllegalStateException("连接池最大连接数须为1至1000之间的整数");}
+        properties.putIfAbsent("Max Total Connections",configured);
+        String wait=configText(config,"connectionMaxWaitTime");
+        properties.putIfAbsent("Max Wait Time",wait.isBlank()?"30 sec":wait);
     }
 
     private String buildSourceJdbcUrl(Map<String, Object> sourceCfg) {
@@ -4222,7 +4300,7 @@ public class DslCompiler {
         List<String> timestampFields=hiveTimestampFields(cfg,availableFields);
         NifiEntity date=null;
         if(Boolean.parseBoolean(configText(cfg,"hiveTimestampFormat"))) {
-            if(!timestampFields.isEmpty()) {
+            if(!timestampFields.isEmpty()&&!sharedCs.containsKey("timestampJsonWriter")) {
                 timestamp=createHiveTimeFormatter(pgId,node.label()+"/timestamp-format",x,y,sharedCs,timestampFields,"yyyy-MM-dd HH:mm:ss");
                 nc.processorIds.put("hive-timestamp",timestamp.id());x+=PROCESSOR_COLUMN_GAP;
             }
@@ -4257,9 +4335,8 @@ public class DslCompiler {
         NifiEntity lastFormatter=date==null?timestamp:date;
         if(lastFormatter!=null) {
             connectInternal(pgId,nc,lastFormatter.id(),merge==null?convert.id():merge.id(),"success");
-            NifiEntity retained=nifi.createRetentionFunnel(pgId,x,y+PROCESSOR_ROW_GAP);
             for(NifiEntity formatter:timestamp==null?List.of(date):date==null?List.of(timestamp):List.of(timestamp,date)) {
-                nifi.createBufferedConnection(pgId,formatter.id(),retained.id(),"FUNNEL",List.of("failure"));
+                nifi.createBufferedConnection(pgId,formatter.id(),formatter.id(),"PROCESSOR",List.of("failure"));
                 nc.usedOutgoing.computeIfAbsent(formatter.id(),key->new LinkedHashSet<>()).add("failure");
             }
         }
@@ -4269,10 +4346,9 @@ public class DslCompiler {
         nc.usedOutgoing.computeIfAbsent(filename.id(), ignored -> new LinkedHashSet<>()).add("success");
         if (merge != null) {
             nifi.createBufferedConnection(pgId, merge.id(), convert.id(), "PROCESSOR", List.of("merged"));
-            NifiEntity failed = nifi.createRetentionFunnel(pgId, x + 2 * PROCESSOR_COLUMN_GAP, y - PROCESSOR_ROW_GAP);
-            nifi.createBufferedConnection(pgId, merge.id(), failed.id(), "FUNNEL", List.of("failure"));
-            nifi.createBufferedConnection(pgId, convert.id(), failed.id(), "FUNNEL", List.of("failure"));
-            nifi.createBufferedConnection(pgId, put.id(), failed.id(), "FUNNEL", nifi.configureWriteFailureRetries(put));
+            nifi.createBufferedConnection(pgId, merge.id(), merge.id(), "PROCESSOR", List.of("failure"));
+            nifi.createBufferedConnection(pgId, convert.id(), convert.id(), "PROCESSOR", List.of("failure"));
+            nifi.createBufferedConnection(pgId, put.id(), put.id(), "PROCESSOR", nifi.configureWriteFailureRetries(put));
         }
     }
 

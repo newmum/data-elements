@@ -9,10 +9,15 @@
         "kind": "magic",
         "id": "50319b91bfff4fe3b19f24db5aa7c8a4",
         "file": "magic/api/09.海通流程接口/03.画布模板/03.分页查询接入模板.ms",
-        "reviewedSha256": "8089838f65d1c0e0f0cf4a613b363dd01f5c8aec35050da95644ad6dba7edf6a"
+        "reviewedSha256": "0d182d7eced4c0ae3a965857cc241b91688ad6f6516654caf45b93cd441c230c"
       },
       "request": {
-        "type": "object"
+        "type": "object",
+        "properties": {
+          "includeTargets": {
+            "type": "boolean"
+          }
+        }
       },
       "response": {
         "type": "object",
@@ -41,7 +46,7 @@
           }
         }
       },
-      "review": "按行业与已发布状态分页查询模板摘要，支持name/version/updatedAt稳定排序，返回默认模板、目标绑定与sourceSchedule来源调度策略。列表不返回流程正文，20/100条固定三次SQL；空Mock场景不伪造模板。来源适配与物化链路使用真实Magic和编译器验证。 默认仅从当前租户已发布的模板行读取，列表筛选不改变默认指向；详情直接从该行取默认标记。响应字段及权限契约保持一致。"
+      "review": "按行业与已发布状态分页查询模板摘要，支持name/version/updatedAt稳定排序，默认标记只从模板表读取。普通列表20/100条固定三次SQL；includeTargets=true时，本页与页外默认项共用一次批量目标读取，20/100条均固定四次SQL，逐ID校验当前租户和角色范围。可见完整绑定返回selectionReady=true、available=true、targets及defaultTemplate，缺失或无权绑定返回available=false和空targets，不泄露目标名称；提交时沿用正式模板和逐资产校验。Mock与真实Magic同步可选参数及返回语义，不新增模拟NiFi执行或固定目标连接。"
     },
     {
       "operation": "POST /nifi/canvas/templatedetail",

@@ -91,6 +91,7 @@ public class HaitongTransformRecord extends AbstractProcessor {
         try {
         FlowFile original=session.get();if(original==null)return;List<FlowFile>derived=new ArrayList<>();
         try{
+            if(original.getSize()==0){session.remove(original);session.adjustCounter("Empty input batches",1,false);return;}
             String loopNext=original.getAttribute(MappingErrorRecords.NEXT);
             if(loopNext!=null&&Long.parseLong(loopNext)>System.currentTimeMillis()){
                 Relationship waiting="invalid".equals(original.getAttribute(MappingErrorRecords.RELATIONSHIP))?INVALID:FAILURE;
@@ -119,22 +120,30 @@ public class HaitongTransformRecord extends AbstractProcessor {
             FlowFile exactInput=exactNumbers?session.clone(original):null;if(exactInput!=null)derived.add(exactInput);
             try(InputStream in=session.read(original);RecordReader reader=errorEnvelope?new MappingErrorRecords(in,original.getAttributes(),plan):readers.createRecordReader(original.getAttributes(),in,original.getSize(),getLogger());
                     InputStream exactStream=exactInput==null?null:session.read(exactInput);ExactJsonNumbers exact=exactStream==null?null:new ExactJsonNumbers(exactStream);OutputStream out=session.write(success);OutputStream bad=session.write(invalid)){
-                RecordSchema inputSchema=jdbcAliases.restore(reader.getSchema());
-                if(plan.document().path("schemaContract").path("source").isArray())SchemaContract.requireInput(plan,inputContract(inputSchema,plan,preserveNumbers));
-                invalidAttributes.put(MappingErrorRecords.SCHEMA,MappingErrorRecords.schemaText(inputSchema));
-                RecordSchema schema=binaryTransportSchema(outputSchema(plan,inputSchema));
-                DynamicOutput dynamic=plan.outputContracts().values().stream().anyMatch(type->type.logicalType().equals("ANY")||type.logicalType().equals("ARRAY")||type.logicalType().equals("DECIMAL")&&type.precision()==0)?new DynamicOutput(session,original,writers,schema,derived,dynamicFiles):null;
-                try(RecordSetWriter writer=writers.createWriter(getLogger(),schema,out,original.getAttributes());BufferedWriter errors=new BufferedWriter(new OutputStreamWriter(bad,java.nio.charset.StandardCharsets.UTF_8))){
-                    writer.beginRecordSet();List<Map<String,Object>>window=new ArrayList<>();List<Long>indices=new ArrayList<>();long bytes=0,memory=0,offset=0;Record record;
-                    while((record=reader.nextRecord())!=null){@SuppressWarnings("unchecked") Map<String,Object>row=(Map<String,Object>)NifiTemporalValues.inputValue(record);if(exact!=null)exact.restore(row);row=jdbcAliases.restore(row);var size=RecordBudget.record(row,"输入记录，inputRecordIndex="+offset);
-                        if(!window.isEmpty()&&(window.size()>=MappingEngine.WINDOW_RECORDS||bytes+size.utf8()>MappingEngine.WINDOW_BYTES||memory+size.memory()>RecordBudget.MEMORY_BYTES)){writeWindow(window,indices,execution,dictionaries,writer,errors,schema,counts,dynamic);window.clear();indices.clear();bytes=0;memory=0;}
-                        window.add(row);indices.add(reader instanceof MappingErrorRecords envelope?envelope.originalIndex():offset);offset++;bytes+=size.utf8();memory+=size.memory();
-                    }
+                Record firstRecord=reader.nextRecord();
+                if(firstRecord==null){
+                    // A valid zero-row batch has no inferred fields. Do not validate an empty
+                    // schema as a business record or manufacture audit-only output rows.
                     if(exact!=null)exact.requireEnd();
-                    if(!window.isEmpty())writeWindow(window,indices,execution,dictionaries,writer,errors,schema,counts,dynamic);
-                    writerAttributes.putAll(writer.finishRecordSet().getAttributes());writerAttributes.put("mime.type",writer.getMimeType());writer.flush();errors.flush();
+                }else{
+                    RecordSchema inputSchema=jdbcAliases.restore(reader.getSchema());
+                    if(plan.document().path("schemaContract").path("source").isArray())SchemaContract.requireInput(plan,inputContract(inputSchema,plan,preserveNumbers),formatHistoricalTimestampText);
+                    invalidAttributes.put(MappingErrorRecords.SCHEMA,MappingErrorRecords.schemaText(inputSchema));
+                    RecordSchema schema=binaryTransportSchema(outputSchema(plan,inputSchema));
+                    DynamicOutput dynamic=plan.outputContracts().values().stream().anyMatch(type->type.logicalType().equals("ANY")||type.logicalType().equals("ARRAY")||type.logicalType().equals("DECIMAL")&&type.precision()==0)?new DynamicOutput(session,original,writers,schema,derived,dynamicFiles):null;
+                    try(RecordSetWriter writer=writers.createWriter(getLogger(),schema,out,original.getAttributes());BufferedWriter errors=new BufferedWriter(new OutputStreamWriter(bad,java.nio.charset.StandardCharsets.UTF_8))){
+                        writer.beginRecordSet();List<Map<String,Object>>window=new ArrayList<>();List<Long>indices=new ArrayList<>();long bytes=0,memory=0,offset=0;Record record=firstRecord;
+                        do{@SuppressWarnings("unchecked") Map<String,Object>row=(Map<String,Object>)NifiTemporalValues.inputValue(record);if(exact!=null)exact.restore(row);row=jdbcAliases.restore(row);var size=RecordBudget.record(row,"输入记录，inputRecordIndex="+offset);
+                            if(!window.isEmpty()&&(window.size()>=MappingEngine.WINDOW_RECORDS||bytes+size.utf8()>MappingEngine.WINDOW_BYTES||memory+size.memory()>RecordBudget.MEMORY_BYTES)){writeWindow(window,indices,execution,dictionaries,writer,errors,schema,counts,dynamic);window.clear();indices.clear();bytes=0;memory=0;}
+                            window.add(row);indices.add(reader instanceof MappingErrorRecords envelope?envelope.originalIndex():offset);offset++;bytes+=size.utf8();memory+=size.memory();
+                        }while((record=reader.nextRecord())!=null);
+                        if(exact!=null)exact.requireEnd();
+                        if(!window.isEmpty())writeWindow(window,indices,execution,dictionaries,writer,errors,schema,counts,dynamic);
+                        writerAttributes.putAll(writer.finishRecordSet().getAttributes());writerAttributes.put("mime.type",writer.getMimeType());writer.flush();errors.flush();
+                    }
                 }
             }
+            if(counts[0]==0&&counts[1]==0)session.adjustCounter("Empty input batches",1,false);
             if(exactInput!=null){session.remove(exactInput);derived.remove(exactInput);}
             writerAttributes.putAll(Map.of("ht.plan.hash",plan.hash(),"ht.engine.version",MappingEngine.VERSION,"record.count",Long.toString(counts[0]),"ht.invalid.count",Long.toString(counts[1]),"ht.window.count",Long.toString(counts[2]),"ht.dictionary.batches",Long.toString(counts[3])));
             if(planId!=null&&!planId.isBlank())writerAttributes.put("ht.plan.id",planId);
@@ -232,7 +241,7 @@ public class HaitongTransformRecord extends AbstractProcessor {
         return session.putAllAttributes(file,Map.of(MappingErrorRecords.ATTEMPT,Integer.toString(attempt),MappingErrorRecords.NEXT,Long.toString(System.currentTimeMillis()+delay),MappingErrorRecords.RELATIONSHIP,relationship.getName()));
     }
     private static RecordSchema outputSchema(MappingEngine.Plan plan,RecordSchema input){
-        var sourceNames=new SourceFieldNames(input.getFieldNames(),plan.document().path("policies").path("caseSensitive").asBoolean(true));
+        var sourceNames=plan.sourceNames(input.getFieldNames());
         var origins=plan.outputOrigins();
         LinkedHashMap<String,RecordField>fields=new LinkedHashMap<>();if(plan.passthrough())input.getFields().forEach(f->{if(!plan.excludes().contains(f.getFieldName()))fields.put(f.getFieldName(),f);});
         plan.outputContracts().forEach((name,contract)->{String type=contract.logicalType();
@@ -246,7 +255,7 @@ public class HaitongTransformRecord extends AbstractProcessor {
     }
     private static int integer(String value){try{return value==null?0:Math.max(0,Integer.parseInt(value));}catch(Exception ex){return 0;}}
     private static List<SchemaContract.Field> inputContract(RecordSchema schema,MappingEngine.Plan plan,boolean exactNumbers){
-        var document=plan.document();var sourceNames=new SourceFieldNames(schema.getFieldNames(),document.path("policies").path("caseSensitive").asBoolean(true));
+        var document=plan.document();var sourceNames=plan.sourceNames(schema.getFieldNames());
         Map<String,String> jdbcDates=new HashMap<>();Set<String> binaryFields=new HashSet<>(),decimalFields=new HashSet<>();
         for(var declared:document.path("schemaContract").path("source")) {
             String logical=declared.path("logicalType").asText();

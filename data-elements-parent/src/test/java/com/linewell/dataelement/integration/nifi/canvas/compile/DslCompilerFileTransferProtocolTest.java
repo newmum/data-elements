@@ -25,6 +25,49 @@ import org.junit.jupiter.api.Test;
 
 class DslCompilerFileTransferProtocolTest {
 
+    @Test
+    void kafkaIsolationLevelUsesTheDeclaredDefaultAndExplicitLegacySetting() throws Exception {
+        for (String level : List.of("default", "read_committed", "read_uncommitted", "legacy")) {
+            NifiClient nifi = mock(NifiClient.class);
+            ManifestRegistry registry = mock(ManifestRegistry.class);
+            ComponentManifest manifest;
+            try (var stream = getClass().getResourceAsStream("/manifests/sources/kafka.json")) {
+                manifest = new ObjectMapper().readValue(stream, ComponentManifest.class);
+            }
+            when(registry.get("source.kafka")).thenReturn(manifest);
+            when(nifi.getRootProcessGroupId()).thenReturn("root");
+            HiveServiceFixtures.stubGlobals(nifi);
+            when(nifi.listProcessGroups("root")).thenReturn(List.of());
+            when(nifi.createProcessGroup(anyString(), anyString(), anyDouble(), anyDouble())).thenReturn(entity("pg"));
+            when(nifi.createControllerService(anyString(), anyString(), anyString(), anyMap())).thenReturn(entity("service"));
+            when(nifi.createProcessor(anyString(), anyString(), anyString(), anyDouble(), anyDouble(),
+                    anyMap(), nullable(String.class), nullable(String.class))).thenReturn(entity("processor"));
+            when(nifi.createConnection(anyString(), anyString(), anyString(), anyString(), anyString(), any())).thenReturn(entity("connection"));
+            Map<String, Object> config = new java.util.LinkedHashMap<>(Map.of(
+                    "bootstrapServers", "validation.invalid:9092", "topic", "business", "groupId", "validation"));
+            String serviceType = "org.apache.nifi.kafka.service.Kafka3ConnectionService";
+            if (level.equals("legacy")) {
+                serviceType = "com.linewell.dataelement.nifi.HaitongLegacyKafkaConnectionService";
+                config.put("kafkaServiceType", serviceType);
+                config.put("isolationLevel", "read_uncommitted");
+            } else if (!level.equals("default")) {
+                config.put("isolationLevel", level);
+            }
+            Pipeline pipeline = new Pipeline("task", "Kafka", null, null, null,
+                    new Pipeline.Dsl(1, List.of(new Pipeline.Node("source", "source.kafka", "Kafka",
+                            "source", 0, 0, config)), List.of()), null, null, null, null, null, null, null);
+            new DslCompiler(nifi, registry, mock(FieldMappingService.class), mock(HiveModule.class)).compile(pipeline);
+            String expected = switch (level) {
+                case "default" -> "read_committed";
+                case "legacy" -> "read_uncommitted";
+                default -> level;
+            };
+            verify(nifi).createControllerService(eq("pg"), eq(serviceType),
+                    anyString(), argThat(properties -> expected.equals(properties.get("isolation.level"))));
+        }
+    }
+
+
     @Test void registeredSourceShapesUseOneAuthorizedBatchAndRejectMissingOrStaleSnapshots() throws Exception {
         for(int count:List.of(20,100)) {
             var json=new ObjectMapper();var nifi=mock(NifiClient.class);var schemas=mock(com.linewell.dataelement.integration.nifi.canvas.mapping.RegisteredMappingSchemaService.class);

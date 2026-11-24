@@ -86,7 +86,7 @@ class ScriptProcessPolicyTest {
         String suffix = language.equals("java") ? ".jar" : language.equals("python") ? ".py" : ".sh";
         var result = compiler(nifi, registry).compile(pipeline(List.of(node(language, Map.of("programPath", "/opt/process" + suffix)))));
         assertThat(result.nodes().get("node").outlets.get("default").relationship()).isEqualTo("output stream");
-        verify(nifi).createConnection("pg", "execute", "PROCESSOR", "errors", "FUNNEL", List.of("nonzero status"));
+        verify(nifi).createConnection("pg", "execute", "PROCESSOR", "execute", "PROCESSOR", List.of("nonzero status"));
     }
 
     private DslCompiler compiler(NifiClient nifi, ManifestRegistry registry) {

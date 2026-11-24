@@ -13,6 +13,7 @@
 - [跨数据库物化字符串容量规则](#materialized-strings)
 - [字段映射扩展](#mapping-extension)
 - [时间窗口抓取扩展](#date-fetch-extension)
+- [旧 Kafka 客户端扩展](#kafka-legacy-extension)
 
 <a id="overview"></a>
 
@@ -835,13 +836,14 @@ Hive文本写入分支的登记数值字段使用任务内`HaitongJdbcRecordRead
 | JSON 读取 | `PUBLIC-READER-JSON` | `org.apache.nifi.json.JsonTreeReader` |
 | 普通 JSON 转换及写出 | `PUBLIC-WRITER-JSON` | `org.apache.nifi.json.JsonRecordSetWriter` |
 | 数据库采集 ExecuteSQLRecord 与 Hive 时间格式链路 | `PUBLIC-WRITER-JSON-TIME_FORMAT` | `org.apache.nifi.json.JsonRecordSetWriter` |
+| 登记字段包含 JDBC DATETIME / TIMESTAMP 的完整精度链路 | `PUBLIC-WRITER-JSON-TIMESTAMP9` | `org.apache.nifi.json.JsonRecordSetWriter` |
 
 
 <a id="nifi-json-services--发布约束"></a>
 
 ### 发布约束
 
-- 新生成的数据库采集 `ExecuteSQLRecord` 和直接在来源库执行的 SQL 查询绑定 `PUBLIC-WRITER-JSON-TIME_FORMAT` 的真实 Controller Service ID，并启用 Avro 逻辑类型。日期、时间和时间戳输出按 NiFi 中该公共服务的实际配置执行。字段映射、字典查询和其他 JSON 转换组件沿用既有链路规则。
+- 已登记 JDBC 来源快照含 DATETIME / TIMESTAMP 时，来源及其可达下游 JSON 转换使用根服务 `PUBLIC-WRITER-JSON-TIMESTAMP9`，要求 `Schema Access Strategy=inherit-record-schema`、`Timestamp Format=yyyy-MM-dd HH:mm:ss.SSSSSSSSS`。数据库来源的 Avro 逻辑类型保持启用；普通 DATE、TIME、时间外观的 VARCHAR 和 SQL Server 二进制 timestamp 不因此变成时间戳。其他数据库采集及既有时间链路继续绑定 `PUBLIC-WRITER-JSON-TIME_FORMAT`。这两项服务均由环境维护，发布程序只校验、引用，不自动创建、覆盖或启停。
 - 混合画布的下游映射和转换按发布后的实际连接关系分类。写入 Hive 的原始分支绕过映射后，共享映射仍供 Oracle 等目标消费时，该映射使用普通 Writer。
 - 仅校验当前流程所需的 Writer。文件等无数据库采集且无 Hive 时间格式链路的流程继续使用普通 Writer。需要时间格式 Writer 时，编译检查该公共服务是否存在、唯一且可用。
 - 编译器读取实际 Flow 根组及其直接 Controller Services，不把配置的租户／应用子组视为全局根，不按同名任务级服务替代。
@@ -851,6 +853,8 @@ Hive文本写入分支的登记数值字段使用任务内`HaitongJdbcRecordRead
 - `typed-record-reader` 兼容属性也引用同一个全局 Reader；遗留 `mergeSchemaText` 不再创建专用 JSON Reader，实际读取策略由全局服务配置决定。
 - 日期、时间、Schema、输出分组等属性以选中的全局服务当前配置为准。平台不覆盖这些属性，不启停全局服务，也不额外创建 Schema 服务。
 - CSV、Excel、Avro、数据库连接池及字典服务仍按自身类型与用途配置；JSON 统一引用不改变它们的服务类型。
+- 完整精度 JDBC 时间已经由 JSON Writer 输出九位小数文本；Hive 写入保留该文本，不再追加旧秒级时间格式处理器。CSV Reader 对这类值保持 STRING，因此不会再次通过 CSV Writer 的毫秒格式截断。显式来源 Schema 只在已启用时间文本编解码模式、物理类型明确为 DATETIME / TIMESTAMP 时允许 STRING 传输载体，逐值转换仍校验；其他类型漂移继续拒绝。
+- Linewell 的默认时间文本转换不能直接承担九位小数秒。完整精度链路在最终 JDBC 写入端使用现有 `HaitongJdbcRecordReader` 的 `timestamp-fields` 白名单，按已登记目标物理时间列转换为带纳秒的 `java.sql.Timestamp`；空值保留，不按字符串外观或字段名称猜测日期、epoch 或偏移。该 Reader 同时保留声明的精确数值和二进制。中间 QueryRecord、JSON 和 Hive CSV 继续保留时间文本；INSERT 与 MERGE 最终写入端使用同一白名单 Reader，草稿中的运行服务 ID 不作为绑定依据。
 
 
 <a id="nifi-json-services--历史流程调整约束"></a>
@@ -858,6 +862,8 @@ Hive文本写入分支的登记数值字段使用任务内`HaitongJdbcRecordRead
 ### 历史流程调整约束
 
 历史调整应先批量读取原生流程与平台发布关联，逐流程核验租户、流程 ID 与 `data-elements:v1:<tenant>:pipeline:<id>` 归属标记。缺少关联或无法证明归属的原生流程不自动修改。
+
+`POST /nifi/maprun/upgrade` 的 `jdbc-timestamp-codecs` 模式用于边界清晰、已停止且队列为空的 MySQL / PostgreSQL / Oracle 原生来源及 Oracle、Hive 治理分支。先 dryRun，再按相同画布版本和指纹升级；当前租户、逐资源权限、实际连接、原生归属和已保存治理计划均须一致。升级调整选定处理器的 JSON Writer 引用及时间文本标记，并按已登记 Oracle 目标时间列暂存最终写入端的专用 `HaitongJdbcRecordReader`；预检指纹同时包含其字段配置。保留来源 ID、本地/集群水位、连接、执行计划和原公共服务配置，校验失败则回退原引用并清理本次新建服务。含独立旧时间格式处理器的图明确拒绝，须另行审阅精度合同，不能只换 Writer 后宣称完整精度。该模式不会恢复已经截断的历史值，也不会启动或重放来源。
 
 在保留处理器 ID、连接、队列和采集状态的前提下，只替换相关处理器／服务属性中的 JSON 服务 ID。需要停机修改的处理器应记住原状态，配置完成后只恢复原先处于运行状态的处理器。不得通过重建流程、清队列或清采集水位完成引用调整。
 
@@ -869,9 +875,9 @@ Hive文本写入分支的登记数值字段使用任务内`HaitongJdbcRecordRead
 
 ### 新建批处理任务的默认调度
 
-新建批处理来源（数据库、FTP/SFTP/FTPS、MinIO、Elasticsearch、API 拉取等）默认“每天一次（立即执行）”，保存 `batchSchedulePolicy=DAILY_IMMEDIATE`、`schedulingStrategy=TIMER_DRIVEN`、`schedulingPeriod=1 day`，启动后沿用 NiFi 原生立即执行、之后按一天间隔调度的语义，不绑定固定钟点；停止后再次启动仍沿用原生启动行为。Kafka 保留实时消费配置；已有任务和明确选择的自定义周期/Cron 不自动迁移。登记补齐、画布新增来源及后端模板使用同一 `BatchSchedulePolicy`，API 已明确配置的 Cron 保持不变。
+新建批处理来源（数据库、FTP/SFTP/FTPS、MinIO、Elasticsearch、API拉取等）默认“每天一次（自动错峰）”，首次保存按可信租户、流程和来源节点标识分配固定秒位，写入`DAILY_STAGGERED`、`CRON_DRIVEN`、北京时间时刻和六段Cron。Kafka保留实时策略；已有任务明确保存的`DAILY_IMMEDIATE`或`CUSTOM`配置继续沿用。登记补齐、画布新增来源及后端模板使用同一`BatchSchedulePolicy`，不逐节点读取数据库或按打开时间重新分配时刻。
 
-用户仍可选择“每天一次（自动错峰）”：首次保存按可信租户 ID、流程 ID、来源节点 ID 的 SHA-256 分配一天内的固定秒位，写入现有 DSL 的 `batchSchedulePolicy=DAILY_STAGGERED`、`batchScheduleTime`、`batchScheduleZone=Asia/Shanghai`、`schedulingStrategy=CRON_DRIVEN` 和六段 `schedulingPeriod`。后续保存、重启和部署读取已存值；复制为新流程时使用新流程 ID 重新分配。切换到立即执行会清除错峰时刻及其时区；已有错峰任务不会因默认值调整而自动切换。两种预设均为纯内存处理，20/100 个节点不增加逐项 SQL 或 HTTP 读取；沿用当前租户路由和保存权限，不使用请求体中的租户值。
+自动错峰按可信租户ID、流程ID、来源节点ID的SHA-256分配一天内固定秒位，写入现有DSL的`batchScheduleTime`、`batchScheduleZone=Asia/Shanghai`及六段`schedulingPeriod`。后续保存、重启和部署读取已存值；复制为新流程时使用新流程ID重新分配。用户仍可显式选择“每天一次（立即执行）”，清除旧错峰时刻及其时区并使用`TIMER_DRIVEN / 1 day`。两种预设均为纯内存处理，20/100个节点不增加逐项SQL或HTTP读取；沿用当前租户路由和保存权限，不使用请求体中的租户值。
 
 这属于均匀散列错峰，不能保证绝对无碰撞，也不表示已实现按任务时长或节点负载分配。此次不批量迁移历史任务、不增加全局并发限流或补跑机制。停止状态下错过当天时刻后，按 NiFi 原有 Cron 语义等待后续触发。
 
@@ -1078,7 +1084,7 @@ Hive 作为目标库时的原始写入发布规则见[详细设计第27章](data
 
 预览最多100行，使用相同8MiB记录/窗口及32MiB内存预算；大于4096个字符的文本只返回长度说明，敏感字段继续脱敏，执行输出和错误队列中的原文保持完整。错误摘要同样不截取大图片前缀。升级不修改业务表；Oracle/OceanBase Oracle的图片列应使用足够容量的CLOB，MySQL使用MEDIUMTEXT/LONGTEXT。nginx及海通接收应用的HTTP请求限制仍须按部署链路单独配置。
 
-推送 JSON 的 `eventNo`、`cameraIndexCode`、`picBase64` 等驼峰字段可以被登记的 `event_no`、`camera_index_code`、`pic_base64` 规则读取。输入 Schema 与逐记录取值使用同一套名称解析，精确名称优先且包含显式 NULL；没有精确名称时匹配标准驼峰/下划线形式。纯大小写差异仍遵循已有 `caseSensitive` 设置，关闭大小写敏感时才采用唯一的大小写/分隔符匹配；多义匹配返回 `AMBIGUOUS_FIELD`，缺字段、类型变化及非空约束继续拒绝。预览与 NiFi 共用该内核，不在 Reader 里复制、重写整批业务 JSON，也不根据字段名称猜测时间格式。
+推送 JSON 的 `eventNo`、`cameraIndexCode`、`picBase64` 等驼峰字段可以被登记的 `event_no`、`camera_index_code`、`pic_base64` 规则读取。输入 Schema 与逐记录取值使用同一套名称解析，精确名称优先且包含显式 NULL；没有精确名称时匹配标准驼峰/下划线形式。若候选名称已经作为另一个来源字段独立登记或被规则独立引用，缺少的字段不得借用该候选值，例如同时映射 `openKflx` 和 `open_kflx` 时只出现后者，前者继续采用原缺值策略。可选字段允许缺失，必需字段仍按契约拒绝。该保护由 1.1.45 共享内核在编译时预计算名称集合，Schema、预览及 NiFi 逐记录取值保持一致，不增加 SQL 或接口查询。纯大小写差异仍遵循已有 `caseSensitive` 设置，关闭大小写敏感时才采用唯一的大小写/分隔符匹配；多义匹配返回 `AMBIGUOUS_FIELD`，类型变化及非空约束继续拒绝。预览与 NiFi 共用该内核，不在 Reader 里复制、重写整批业务 JSON，也不根据字段名称猜测时间格式。
 
 推送时间字段继续按已保存的 DATE/DATETIME 登记或显式日期步骤转换，AUTO 支持秒/毫秒数字字符串；没有日期规则的文本列保留文本。图片字段完整经过既有有界窗口，目标物理列仍须具备相应文本容量：Oracle/OceanBase Oracle 使用 CLOB，MySQL 使用 LONGTEXT 等；本次兼容不自动修改已有业务表。空字符串经过 Oracle 字符列时按数据库语义成为 NULL，可空字段保持可空。回归使用真实 JsonTreeReader，覆盖14字段、20/100条、2万字符图片、毫秒时间和隔离的 Oracle/MySQL 兼容模式两级 JDBC 往返；兼容模式验证不代表真实生产驱动已验收。
 
@@ -1486,7 +1492,7 @@ Linewell显式INSERT的追加值会直接增加SQL列，不会像其MERGE适配�
 
 复用现有字段映射的日期处理表单，输入默认AUTO逐值识别；同一列可以同时出现横线、斜线、点号、紧凑、中文、英文、ISO偏移等文本，不按首行固定格式。年月、月日、纯时间转完整日期需要显式defaultDate，数字时间戳显式选单位，非法值走现有失败策略。原有指定格式规则保留。
 
-使用：打开“转换和规则” → 日期处理 → 自动识别 → 日期时间（保留时分秒），先预览混合样本，再保存并重新发布/受控升级字段节点。需要仅日期才选择DATE。前端预览保留小数秒，不改全局JSON时间格式。
+使用：打开“转换和规则” → 日期处理 → 自动识别 → 日期时间（保留时分秒），先预览混合样本，再保存并重新发布/受控升级字段节点。需要仅日期才选择DATE。前端预览保留小数秒，不改全局JSON时间格式。 MySQL／MariaDB 的无时区 DATETIME 在抽样和分页结果中直接读取 JDBC 文本，保留数据库返回的小数秒，避免全局 Date JSON 格式省略毫秒。Oracle／Hive 既有无时区 TIMESTAMP 同样使用此载体；MySQL TIMESTAMP、带时区类型及其他字段继续使用原载体。
 
 此节为1.1.10历史记录；当前正式版本为1.1.13，升级见第28章。历史包：NiFi 2.11默认包 `logs/field-mapping-extension/haitong-mapping-nar/haitong-mapping-nar-1.1.10.nar`，2.9匹配包 `logs/field-mapping-extension/nifi-2.9.0/haitong-mapping-nar/haitong-mapping-nar-1.1.10.nar`。不要采用构建中的中间包，不覆盖已加载的同版本NAR，不把两种NiFi构建装入同一实例。
 
@@ -1696,3 +1702,16 @@ NiFi发布使用调用范围内的HTTP客户端，避免逐组件重新创建TLS
 CSV 只含摘要，防前导空白后的公式，历史时间仅回退已归一化的 `created_time`；JSONL／新归档保留安全快照、不导出检索投影。新归档编码及旧归档兼容已有测试，未改旧文件；真实新快照归档尚未运行，不称 VERIFIED，离线归档参数关键词检索不扩展。真实 API、页面、同筛选 CSV／JSONL 下载及跨真实物理库拒绝已有本机证据，未写业务数据或修改授权。
 
 后端完整回归 **415 套／3304 项，跳过 7 项，失败与错误均为 0**；当前请求按策略不采集时使用 `OMITTED` 而非历史 `LEGACY`，录制器回归与真实只读请求均已验证。86 四行业两张日志表各新增三列、共 24 列，三方言四库生产渲染器原生验证 **124/124**、五库完整导出通过；这不是 H2 或全仓通过。全库检查仍有澄天既有 53 项差异（缺 43 表、9 列、1 项索引），前后报告一致、本批新增 0；Mock 数据源保存摘要、导航预期和万象主题 hash 基线红灯仍保留，不擅自补库或刷新摘要。其他 9 条资源差异及远端 44 个 Magic／3 个低代码新资源未覆盖。前端回归、Mock fixture 与整页 E2E 的区别、备份复核和归档限制以公共说明“当前实现与发布状态”为准。
+
+
+<a id="kafka-legacy-extension"></a>
+
+## 旧 Kafka 客户端扩展
+
+`kafka-legacy-extension` 是独立构建的 NiFi 技术扩展，版本 `1.0.0`。`HaitongLegacyKafkaConnectionService` 继承匹配 NiFi SDK 的官方连接服务，复用其认证、SSL、消费组、提交和回滚接口，在独立 NAR 内加载 Kafka `3.7.2` 客户端。Kafka 4 客户端已提高协议版本下限，旧实例仍可完成元数据读取时也可能无法完成正式消费。正式来源组件的 `kafkaServiceType` 提供原生及旧实例兼容客户端选择，默认使用原生服务。Kafka 0.10 实例同时显式配置 `isolationLevel=read_uncommitted`。
+
+构建使用 Java 21。分别执行 `mvn -f data-elements-parent/kafka-legacy-extension/pom.xml -Dnifi.version=2.9.0 -Dkafka.extension.output.root=<仓库绝对路径>/logs/kafka-legacy-extension/nifi-2.9.0 clean package` 及对应的 `2.11.0` 命令。每个 SDK 使用独立输出目录和同名 NAR，安装时按实际 NiFi 版本选择。构建依赖 `org.apache.nifi:nifi-kafka-service-api-nar`，镜像缺少该父包时，从对应 NiFi 发行包的 `lib/nifi-kafka-service-api-nar-<版本>.nar` 取得原包，核对其 manifest 的 group、ID 和版本，再以原坐标导入本机 Maven 仓库。
+
+打包仅注册兼容服务类，官方连接服务实现随该服务打入专用 JAR，共享 NiFi 接口由 Kafka 服务 API 父 NAR 提供。发布前核对包内只有 Kafka 3.7.2 客户端，Java 类无重复，服务注册无重合，父 NAR 版本与目标一致。通过 NiFi NAR 管理器上传后回读完整字节及控制器服务类型，再由正式画布保存、部署选中的任务。改变客户端前先保存当前图、消费组、位点、队列和目标数据，首次失败时仍按已消费数据及提交位点核对恢复范围。
+
+NiFi 2.9 与 2.11 两套 SDK 均已通过实际兼容服务单测，并在既有 Kafka 0.10.2 主题只读取得全部 14 条原消息，字节逐项匹配且未提交诊断组位点。共享 NiFi 2.9 已按正式任务配置使用兼容服务，原 14 条消息在 Oracle11g 与开源 Hive3 各落 14 行，全部业务字段及 ODS 通过，流程停止且队列为空。其他所选对象继续逐项进行独立物理验收。

@@ -746,14 +746,31 @@ export class ChengtianMockRuntime {
           return (sortDir === "asc" ? order : -order) || left.tid.localeCompare(right.tid);
         });
       const start = (pageNum - 1) * pageSize;
-      const defaultVersionId = (this.database.accessTemplates || []).find(row =>
-        row.tenantId === this.session.tenantId && row.status === "PUBLISHED" && row.defaultTenantId === row.tenantId)?.tid || "";
-      return { list: rows.slice(start, start + pageSize).map(({ tenantId, defaultTenantId, ...row }) => {
+      const defaultTemplate = (this.database.accessTemplates || []).find(row =>
+        row.tenantId === this.session.tenantId && row.status === "PUBLISHED" && row.defaultTenantId === row.tenantId);
+      const defaultVersionId = defaultTemplate?.tid || "";
+      const includeTargets = body.includeTargets === true;
+      const visible = includeTargets ? new Map(visibleSources(this.database,this.session).map(row => [row.tid,row])) : new Map();
+      const option = ({ tenantId, defaultTenantId, ...row }) => {
         const { flow, nativeSnapshot, previewImage, ...spec } = row.spec || {};
-        return { ...row, isDefault: row.tid === defaultVersionId,
+        const item = { ...row, isDefault: row.tid === defaultVersionId,
           spec: { ...spec, hasFlow: Boolean(flow), hasNative: Boolean(nativeSnapshot) } };
-      }),
-        total: rows.length, pageNum, pageSize, defaultVersionId };
+        if (includeTargets) {
+          const ids = spec.targetDatasourceIds || [];
+          assert(ids.length <= 8,409,"模板目标超过8个，请在模板管理中核对");
+          item.available = ids.length > 0 && ids.length === (spec.targets || []).length && ids.every(id => visible.has(id));
+          item.selectionReady = true;
+          item.targets = item.available ? ids.map(id => {
+            const target=visible.get(id);
+            return {tid:id,value:id,label:target.dbName,dbName:target.dbName,dbType:target.dbType,
+              layerCode:"ODS",tablePrefix:"ODS",parentValue:"TEMPLATE"};
+          }) : [];
+        }
+        return item;
+      };
+      return { list: rows.slice(start, start + pageSize).map(option),
+        total: rows.length, pageNum, pageSize, defaultVersionId,
+        defaultTemplate: includeTargets && defaultTemplate ? option(defaultTemplate) : null };
     }
     if (key === "POST /nifi/canvas/templatedetail") {
       const id = String(body.tid || "").trim();

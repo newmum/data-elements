@@ -141,6 +141,20 @@ class DslCompilerTargetTableTest {
 
         assertThat(properties).containsEntry("oracle.jdbc.encryption_client", "required")
                 .containsEntry("oracle.jdbc.encryption_algorithms_client", "(AES256,AES192,AES128)")
-                .containsEntry("Database User", "scott");
+                .containsEntry("Database User", "scott").containsEntry("Max Total Connections","50")
+                .containsEntry("Max Wait Time","30 sec");
+    }
+
+    @Test void poolLimitsPreserveExplicitConfigurationAndNativeProperties() {
+        Map<String,String> properties=new LinkedHashMap<>();
+        DslCompiler.appendJdbcDriverProperties("org.apache.nifi.dbcp.DBCPConnectionPool",
+                Map.of("maxTotalConnections",20,"connectionMaxWaitTime","5 sec"),properties);
+        assertThat(properties).containsEntry("Max Total Connections","20").containsEntry("Max Wait Time","5 sec");
+        properties.put("Max Total Connections","30");properties.put("Max Wait Time","10 sec");
+        DslCompiler.appendJdbcDriverProperties("org.apache.nifi.dbcp.DBCPConnectionPool",Map.of(),properties);
+        assertThat(properties).containsEntry("Max Total Connections","30").containsEntry("Max Wait Time","10 sec");
+        Map<String,String> other=new LinkedHashMap<>();
+        DslCompiler.appendJdbcDriverProperties("org.apache.nifi.json.JsonTreeReader",Map.of(),other);
+        assertThat(other).isEmpty();
     }
 }

@@ -672,6 +672,8 @@ class NifiMappingAssetReadMagicTest {
                 .thenReturn(Map.of("dryRun", true, "started", false));
         when(fixture.exactUpgrade.upgrade(any(), eq("tenant-a"), eq("source"), eq(true), eq("preview")))
                 .thenReturn(Map.of("dryRun", true, "started", false));
+        when(fixture.exactUpgrade.upgradeTimestampCodecs(any(), eq("tenant-a"), eq("source"), eq(true), eq("preview")))
+                .thenReturn(Map.of("dryRun", true, "started", false));
         when(fixture.shapeUpgrade.upgradeWorkbookRows(any(), eq("tenant-a"), eq("source"), eq(true), eq("preview")))
                 .thenReturn(Map.of("dryRun", true, "started", false));
         when(fixture.workbookReaderUpgrade.upgrade(any(), eq("tenant-a"), eq("source"), eq("retained"), eq(true), eq("preview")))
@@ -681,6 +683,8 @@ class NifiMappingAssetReadMagicTest {
             request.put("start", true);
             assertError(fixture.run("upgrade", Map.of(), Map.of("body", request)), "MIGRATION_UNAVAILABLE");
             request.put("start", false).put("mode", "exact-value-readers");
+            assertThat(page(fixture.run("upgrade", Map.of(), Map.of("body", request)))).containsEntry("dryRun", true);
+            request.put("mode", "jdbc-timestamp-codecs");
             assertThat(page(fixture.run("upgrade", Map.of(), Map.of("body", request)))).containsEntry("dryRun", true);
             request.put("start", true);
             assertError(fixture.run("upgrade", Map.of(), Map.of("body", request)), "MIGRATION_UNAVAILABLE");
@@ -695,6 +699,7 @@ class NifiMappingAssetReadMagicTest {
         }
         verify(fixture.shapeUpgrade).upgrade(any(), eq("tenant-a"), eq("source"), eq(true), eq("preview"));
         verify(fixture.exactUpgrade).upgrade(any(), eq("tenant-a"), eq("source"), eq(true), eq("preview"));
+        verify(fixture.exactUpgrade).upgradeTimestampCodecs(any(), eq("tenant-a"), eq("source"), eq(true), eq("preview"));
         verify(fixture.shapeUpgrade).upgradeWorkbookRows(any(), eq("tenant-a"), eq("source"), eq(true), eq("preview"));
         verify(fixture.workbookReaderUpgrade).upgrade(any(), eq("tenant-a"), eq("source"), eq("retained"), eq(true), eq("preview"));
         verifyNoInteractions(fixture.nativeUpgrade, fixture.transportUpgrade);

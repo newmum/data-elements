@@ -53,12 +53,15 @@ public final class SchemaContract {
     }
 
     public static void requireInput(MappingEngine.Plan plan,List<Field> actual) {
+        requireInput(plan,actual,false);
+    }
+    public static void requireInput(MappingEngine.Plan plan,List<Field> actual,boolean sqlTimestampText) {
         JsonNode contract = plan.document().path("schemaContract");
         List<Field> expected = read(contract.path("source")); Set<String> optional = new HashSet<>();
         for (JsonNode rule : plan.document().path("rules")) if (rule.path("sourceOptional").asBoolean() && rule.path("input").path("kind").asText().equals("FIELD")) optional.add(rule.path("input").path("name").asText());
         if (expected.isEmpty()) return;
         // Reader schema and record evaluation must resolve the same physical JSON field.
-        var names=new SourceFieldNames(actual.stream().map(Field::name).toList(),plan.document().path("policies").path("caseSensitive").asBoolean(true));
+        var names=plan.sourceNames(actual.stream().map(Field::name).toList());
         Set<String> declaredNames=new HashSet<>();expected.forEach(field->declaredNames.add(field.name()));
         Map<String,String> renamed=new HashMap<>();
         for(Field field:expected){
@@ -86,6 +89,16 @@ public final class SchemaContract {
                 ?new Field(field.name(),declaredTypes.get(field.name()),field.nullable(),field.length(),field.precision(),field.scale()):field).toList();
         actual=actual.stream().map(field->field.logicalType().equals("DATETIME")&&"INSTANT".equals(declaredTypes.get(field.name()))
                 ?new Field(field.name(),"INSTANT",field.nullable(),field.length(),field.precision(),field.scale()):field).toList();
+        // A full-fraction JSON writer transports JDBC timestamps as text. Only explicitly
+        // declared physical timestamp fields in this codec mode receive that allowance;
+        // VARCHAR, DATE, numeric carriers and per-value conversion retain their contracts.
+        if(sqlTimestampText){
+            Set<String> timestamps=new HashSet<>();
+            for(JsonNode field:contract.path("source"))if(Set.of("DATETIME","INSTANT").contains(ValueTypes.type(field.path("physicalType").asText()))
+                    &&Set.of("DATETIME","INSTANT").contains(declaredTypes.getOrDefault(field.path("name").asText(),"")))timestamps.add(field.path("name").asText());
+            actual=actual.stream().map(field->timestamps.contains(field.name())&&"STRING".equals(field.logicalType())
+                    ?new Field(field.name(),declaredTypes.get(field.name()),field.nullable(),field.length(),field.precision(),field.scale()):field).toList();
+        }
         if(!contract.path("enforceReaderNullability").asBoolean(false)){
             Map<String,Boolean> nullable=new HashMap<>();expected.forEach(field->nullable.put(field.name(),field.nullable()));
             actual=actual.stream().map(field->new Field(field.name(),field.logicalType(),nullable.getOrDefault(field.name(),field.nullable()),field.length(),field.precision(),field.scale())).toList();

@@ -53,12 +53,15 @@ return withHttp(() => {
         }
         var nodeId = input.path('nodeId').asText()
         var mode = input.path('mode').asText()
-        if (['mysql-read-pool', 'source-normalization', 'exact-value-readers', 'workbook-record-policy', 'workbook-reader'].contains(mode)) {
+        if (['mysql-read-pool', 'source-normalization', 'exact-value-readers', 'jdbc-timestamp-codecs', 'workbook-record-policy', 'workbook-reader'].contains(mode)) {
             if (input.path('start').asBoolean(false)) {
                 throw new MappingException('MIGRATION_UNAVAILABLE', '来源原位升级必须保持流程停止')
             }
             var dryRun = input.path('dryRun').asBoolean(false)
             var fingerprint = input.path('expectedFingerprint').asText()
+            if (mode == 'jdbc-timestamp-codecs') {
+                return ResponseEntity.ok(exactUpgrade.upgradeTimestampCodecs(pipeline, tenantId, nodeId, dryRun, fingerprint))
+            }
             if (mode == 'mysql-read-pool') {
                 return ResponseEntity.ok(transportUpgrade.upgradeMySqlReadPool(pipeline, tenantId, nodeId, dryRun, fingerprint))
             }

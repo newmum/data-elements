@@ -21,13 +21,16 @@ import org.apache.nifi.serialization.record.Record;
 import org.apache.nifi.serialization.record.type.DecimalDataType;
 import java.io.*;
 import java.math.BigDecimal;
+import java.sql.Timestamp;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.function.BiConsumer;
 import static org.apache.nifi.schema.inference.SchemaInferenceUtil.INFER_SCHEMA;
 
-/** JSON JDBC boundary: exact registered decimals and bytes, with standard inference for other fields. */
-@Tags({"haitong","json","jdbc","decimal","binary"})
-@CapabilityDescription("按真实JDBC目标字段解析精确NUMBER/DECIMAL与二进制，不经过Double中转；其他字段沿用NiFi JSON类型推断和时间格式。")
+/** JSON JDBC boundary: declared decimals, bytes and local timestamp text; other fields keep ordinary inference. */
+@Tags({"haitong","json","jdbc","decimal","binary","timestamp"})
+@CapabilityDescription("按已登记JDBC目标字段解析精确数值、二进制及SQL本地时间文本，保留纳秒；未声明字段沿用NiFi JSON类型推断和时间格式。")
 public final class HaitongJdbcRecordReader extends SchemaRegistryService implements RecordReaderFactory {
     public static final PropertyDescriptor NUMBERS=new PropertyDescriptor.Builder().name("number-fields")
             .description("已登记物理NUMBER/DECIMAL/NUMERIC字段名JSON数组，不是RecordPath或SQL")
@@ -35,13 +38,16 @@ public final class HaitongJdbcRecordReader extends SchemaRegistryService impleme
     public static final PropertyDescriptor BINARY=new PropertyDescriptor.Builder().name("binary-fields")
             .description("同一目标中已登记BLOB字段名JSON数组，缺省不转换二进制")
             .required(false).addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
-    private volatile Set<String> numberFields=Set.of(),binaryFields=Set.of();
+    public static final PropertyDescriptor TIMESTAMPS=new PropertyDescriptor.Builder().name("timestamp-fields")
+            .description("已登记JDBC目标时间字段名JSON数组；只将这些字段的SQL本地时间文本转换为Timestamp，保留1至9位小数，不猜测普通VARCHAR或epoch单位")
+            .required(false).addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
+    private volatile Set<String> numberFields=Set.of(),binaryFields=Set.of(),timestampFields=Set.of();
     private volatile String dateFormat,timeFormat,timestampFormat;
     private volatile TokenParserFactory parserFactory;
 
     @Override protected List<PropertyDescriptor> getSupportedPropertyDescriptors(){
         var properties=new ArrayList<>(super.getSupportedPropertyDescriptors());
-        properties.addAll(List.of(NUMBERS,BINARY,AbstractJsonRowRecordReader.MAX_STRING_LENGTH,JsonWireOptions.ALLOW_COMMENTS,
+        properties.addAll(List.of(NUMBERS,BINARY,TIMESTAMPS,AbstractJsonRowRecordReader.MAX_STRING_LENGTH,JsonWireOptions.ALLOW_COMMENTS,
                 DateTimeUtils.DATE_FORMAT,DateTimeUtils.TIME_FORMAT,DateTimeUtils.TIMESTAMP_FORMAT));return properties;
     }
     @Override protected List<AllowableValue> getSchemaAccessStrategyValues(){return List.of(INFER_SCHEMA);}
@@ -49,8 +55,10 @@ public final class HaitongJdbcRecordReader extends SchemaRegistryService impleme
 
     @OnEnabled public void configure(ConfigurationContext context)throws IOException {
         MappingCompatibility.requireRuntime();
-        numberFields=fields(context.getProperty(NUMBERS).getValue(),true);binaryFields=fields(context.getProperty(BINARY).getValue(),false);
-        if(numberFields.stream().anyMatch(binaryFields::contains))throw new IllegalArgumentException("同一字段不能同时是数值和二进制");
+        numberFields=fields(context.getProperty(NUMBERS).getValue(),false);binaryFields=fields(context.getProperty(BINARY).getValue(),false);
+        timestampFields=fields(context.getProperty(TIMESTAMPS).getValue(),false);
+        if(numberFields.isEmpty()&&binaryFields.isEmpty()&&timestampFields.isEmpty())throw new IllegalArgumentException("至少须声明一种JDBC精确字段");
+        if(overlap(numberFields,binaryFields,timestampFields))throw new IllegalArgumentException("同一字段不能声明为不同JDBC精确类型");
         dateFormat=context.getProperty(DateTimeUtils.DATE_FORMAT).getValue();timeFormat=context.getProperty(DateTimeUtils.TIME_FORMAT).getValue();
         timestampFormat=context.getProperty(DateTimeUtils.TIMESTAMP_FORMAT).getValue();
         int max=context.getProperty(AbstractJsonRowRecordReader.MAX_STRING_LENGTH).asDataSize(DataUnit.B).intValue();
@@ -70,12 +78,13 @@ public final class HaitongJdbcRecordReader extends SchemaRegistryService impleme
     @Override public RecordReader createRecordReader(Map<String,String> attributes,InputStream input,long length,ComponentLog logger)
             throws IOException,MalformedRecordException,SchemaNotFoundException {
         RecordSchema inferred=getSchema(attributes,input,null);
-        Set<String> numbers=resolve(inferred.getFieldNames(),numberFields),binary=resolve(inferred.getFieldNames(),binaryFields);
-        if(numbers.stream().anyMatch(binary::contains))throw new MalformedRecordException("JDBC字段同时匹配数值和二进制目标，原输入保留");
+        Set<String> numbers=resolve(inferred.getFieldNames(),numberFields),binary=resolve(inferred.getFieldNames(),binaryFields),timestamps=resolve(inferred.getFieldNames(),timestampFields);
+        if(overlap(numbers,binary,timestamps))throw new MalformedRecordException("JDBC字段同时匹配不同精确类型，原输入保留");
         var fields=inferred.getFields().stream().map(field->{
             DataType type=field.getDataType();
             if(numbers.contains(field.getFieldName())&&!(type instanceof DecimalDataType))type=RecordFieldType.DECIMAL.getDecimalDataType(38,0);
             if(binary.contains(field.getFieldName()))type=RecordFieldType.ARRAY.getArrayDataType(RecordFieldType.BYTE.getDataType());
+            if(timestamps.contains(field.getFieldName()))type=RecordFieldType.TIMESTAMP.getDataType();
             return type==field.getDataType()?field:new RecordField(field.getFieldName(),type,field.getDefaultValue(),field.getAliases(),field.isNullable());
         }).toList();
         RecordSchema schema=new SimpleRecordSchema(fields);
@@ -92,9 +101,25 @@ public final class HaitongJdbcRecordReader extends SchemaRegistryService impleme
                     try {return BinaryValues.bytes(getRawNodeValue(node,name));}
                     catch(RuntimeException invalid){throw new MalformedRecordException("JDBC二进制载体无效，原输入保留");}
                 }
+                if(timestamps.contains(name)){
+                    if(node==null||node.isNull())return null;
+                    try {
+                        if(!node.isTextual())throw new IllegalArgumentException("时间字段需要SQL本地时间文本");
+                        String text=node.textValue();
+                        LocalDateTime local=text.length()==10?LocalDate.parse(text).atStartOfDay():LocalDateTime.parse(text.replace(' ','T'));
+                        // This is a JDBC local-wall carrier, matching Timestamp.valueOf and the
+                        // native writer's SQL TIMESTAMP binding; no epoch or offset is inferred.
+                        return Timestamp.valueOf(local);
+                    }catch(RuntimeException invalid){throw new MalformedRecordException("JDBC时间文本载体无效，原输入保留");}
+                }
                 return super.convertField(node,name,type,drop);
             }
         };
+    }
+
+    private static boolean overlap(Set<String> numbers,Set<String> binary,Set<String> timestamps){
+        return numbers.stream().anyMatch(name->binary.contains(name)||timestamps.contains(name))
+                ||binary.stream().anyMatch(timestamps::contains);
     }
 
     private static BigDecimal number(BigDecimal value){
