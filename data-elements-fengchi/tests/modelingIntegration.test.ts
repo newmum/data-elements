@@ -72,7 +72,7 @@ describe('metadata return toolbar entry',()=>{
 
 describe('operator library refinement',()=>{it('uses collapsible categories and Ant Design form controls',()=>{expect(editor).toContain('<Collapse className="modeling-operator-collapse"');expect(editor).toContain('<Form layout="vertical"');expect(editor).toContain('useState(250)');expect(editor).toContain("operatorSearch.trim()?operatorGroups");});});
 
-describe('compact modeling workspace',()=>{it('keeps equal default panels and inline preview status',()=>{expect(editor).toContain('[paletteWidth,setPaletteWidth]=useState(250),[propertiesWidth,setPropertiesWidth]=useState(250)');expect(editor).toContain('<ModelingNodeHeading');expect(editor).toContain('modeling-collapsed-rail');expect(editor).toContain('modeling-preview-tab-status');expect(editor).toContain("scroll={{x:'max-content'}}");expect(editor).not.toContain("y:Math.max(70,previewHeight-130)");});});
+describe('compact modeling workspace',()=>{it('keeps the default palette and inline preview status',()=>{expect(editor).toContain('[paletteWidth,setPaletteWidth]=useState(250)');expect(editor).not.toContain('modeling-properties');expect(editor).toContain('modeling-collapsed-rail');expect(editor).toContain('modeling-preview-tab-status');expect(editor).toContain("scroll={{x:'max-content'}}");expect(editor).not.toContain("y:Math.max(70,previewHeight-130)");});});
 
 describe('modeling task entry',()=>{it('opens the shared viewport drawer for explicit configuration',()=>{expect(startNode).toContain('onDoubleClick');expect(editor).toContain('onConfigure={startTask} onSelect={selectStart}');expect(editor).toContain('<ModelingConfigDrawer');expect(editor).toContain('setConfigOpen(true)');expect(editor).not.toContain('executionOpen');expect(editor).not.toContain('<Modal');});});
 
@@ -117,4 +117,15 @@ describe('per-model preview visibility',()=>{
   expect(editor).toContain('onStart={()=>void run(true)}');
   expect(editor).toContain('{previewOpen&&<>');
  });
+});
+
+it('selects on a single click and opens the same viewport drawer directly on double click or Enter',()=>{
+ const card=editor.split('className="modeling-card"')[1].split('className="modeling-node-icon"')[0];
+ expect(card).toContain('onClick={()=>selectNode(n.id)}');
+ expect(card).toContain('onDoubleClick={()=>openNodeConfig(n.id)}');
+ expect(card).toContain("e.key==='Enter'&&!e.repeat");
+ expect(card).toContain('onPointerDown=');
+ expect(editor).toContain('function openNodeConfig(id:string){selectNode(id);setConfigOpen(true)}');
+ expect(editor).not.toContain('className="modeling-configure"');
+ expect(editor).not.toContain('modeling-selection-summary');
 });
