@@ -326,6 +326,10 @@ public class RegisteredMappingSchemaService {
     public void checkContract(JsonNode contract){
         checkContracts(Map.of("node",contract));
     }
+    // Logical INT includes several storage sizes. Pin that size to trusted metadata.
+    private static boolean integerContract(JsonNode field){
+        return Set.of("INT","LONG").contains(ValueTypes.type(field.path("logicalType").asText()));
+    }
     /** Editor validation authorizes every reference and field without requiring a live JDBC source/target. */
     public void checkRegisteredContracts(Map<String,JsonNode> contracts){
         contracts=withTargetBranches(contracts);
@@ -344,7 +348,7 @@ public class RegisteredMappingSchemaService {
                 if(field instanceof ObjectNode object){
                     object.put("comment",found.path("comment").asText());
                     if(found.has("registeredFormat"))object.set("registeredFormat",found.get("registeredFormat"));else object.remove("registeredFormat");
-                    if(!object.hasNonNull("physicalType"))object.set("physicalType",found.path("physicalType"));
+                    if(!object.hasNonNull("physicalType")||integerContract(object))object.set("physicalType",found.path("physicalType"));
                     if(found.path("dateContainsTime").asBoolean()){
                         object.put("dateContainsTime",true);
                         if(ValueTypes.type(object.path("logicalType").asText()).equals("DATE"))object.put("logicalType","DATETIME");
@@ -392,6 +396,7 @@ public class RegisteredMappingSchemaService {
             // Other type/length/nullability drift continues to fail below.
             for(JsonNode field:contract.getValue().path(side)){JsonNode found=physical.get(field.path("name").asText());if(field instanceof ObjectNode object&&found!=null){
                 object.put("comment",found.path("comment").asText());
+                if(integerContract(object))object.set("physicalType",found.path("physicalType"));
                 if(found.has("registeredFormat"))object.set("registeredFormat",found.get("registeredFormat"));else object.remove("registeredFormat");
                 if(side.equals("target")&&ValueTypes.type(field.path("logicalType").asText()).equals("BINARY")
                         &&BinaryValues.largeText(found.path("physicalType").asText()))

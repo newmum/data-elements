@@ -3518,9 +3518,12 @@ CREATE TABLE `nifi_access_template_t` (
   `created_by` varchar(64) COLLATE utf8mb4_general_ci NOT NULL COMMENT '创建人标识',
   `created_at` bigint NOT NULL COMMENT '创建时间戳，Unix毫秒',
   `updated_at` bigint NOT NULL COMMENT '更新时间戳，Unix毫秒',
+  `default_tenant_id` varchar(32) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '当前行业的默认模板标记，仅已发布默认版本填所属租户标识，其余为空',
   PRIMARY KEY (`tid`),
   UNIQUE KEY `uk_access_template_version` (`tenant_id`,`family_id`,`revision_no`),
-  KEY `idx_access_template_list` (`tenant_id`,`status`,`updated_at`,`tid`)
+  UNIQUE KEY `uk_access_template_default` (`default_tenant_id`),
+  KEY `idx_access_template_list` (`tenant_id`,`status`,`updated_at`,`tid`),
+  CONSTRAINT `ck_access_template_default` CHECK (((`default_tenant_id` is null) or ((`default_tenant_id` = `tenant_id`) and (`status` = _utf8mb4'PUBLISHED'))))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='数据接入-NiFi接入模板版本';
 
 -- TABLE nifi_node_t

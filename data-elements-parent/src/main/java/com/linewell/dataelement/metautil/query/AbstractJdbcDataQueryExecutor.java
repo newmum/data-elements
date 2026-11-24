@@ -1,6 +1,7 @@
 package com.linewell.dataelement.metautil.query;
 
 import com.linewell.dataelement.metautil.explorer.AbstractMetadataExplorer;
+import com.linewell.dataelement.metautil.jdbc.JdbcPreviewValues;
 import com.linewell.dataelement.metautil.model.dto.DataSourceConfig;
 import com.linewell.dataelement.metautil.model.dto.DatabaseInfo;
 import com.linewell.dataelement.metautil.model.dto.IndexInfo;
@@ -88,7 +89,7 @@ public abstract class AbstractJdbcDataQueryExecutor extends AbstractMetadataExpl
             long total = executeCount(connection, countSql, whereClause.params());
 
             String baseSql = "SELECT " + joinColumns(selectedColumns) + " FROM " + qualifiedTable + whereClause.sql() + orderByClause;
-            PageQueryResult result = executeQuery(connection, baseSql, whereClause.params(), selectedColumns, pageNo, pageSize);
+            PageQueryResult result = executeQuery(connection, baseSql, whereClause.params(), selectedColumns, pageNo, pageSize, databaseType);
             result.setPageNo(pageNo);
             result.setPageSize(pageSize);
             result.setTotal(total);
@@ -285,31 +286,35 @@ public abstract class AbstractJdbcDataQueryExecutor extends AbstractMetadataExpl
         List<Object> whereParams,
         List<String> selectedColumns,
         int pageNo,
-        int pageSize
+        int pageSize,
+        DatabaseType databaseType
     ) throws Exception {
         List<Object> params = new ArrayList<>(whereParams);
         String pagedSql = appendPagination(baseSql, params, selectedColumns, pageNo, pageSize);
         try (PreparedStatement statement = connection.prepareStatement(pagedSql)) {
             bindParams(statement, params);
             try (ResultSet rs = statement.executeQuery()) {
-                return mapResult(rs, selectedColumns);
+                return mapResult(rs, selectedColumns, databaseType);
             }
         }
     }
 
-    private PageQueryResult mapResult(ResultSet rs, List<String> selectedColumns) throws Exception {
+    private PageQueryResult mapResult(ResultSet rs, List<String> selectedColumns, DatabaseType databaseType) throws Exception {
         PageQueryResult result = new PageQueryResult();
         ResultSetMetaData metaData = rs.getMetaData();
         List<String> columns = new ArrayList<>();
         List<String> columnTypes = new ArrayList<>();
         int columnCount = metaData.getColumnCount();
+        boolean[] localTimestamps = new boolean[columnCount];
         for (int i = 1; i <= columnCount; i++) {
             String columnLabel = metaData.getColumnLabel(i);
             if (columnLabel == null || columnLabel.isBlank()) {
                 columnLabel = metaData.getColumnName(i);
             }
             columns.add(columnLabel);
-            columnTypes.add(metaData.getColumnTypeName(i));
+            String columnType = metaData.getColumnTypeName(i);
+            columnTypes.add(columnType);
+            localTimestamps[i - 1] = JdbcPreviewValues.isLocalTimestamp(databaseType, columnType);
         }
         if (columns.isEmpty()) {
             columns.addAll(selectedColumns);
@@ -321,7 +326,8 @@ public abstract class AbstractJdbcDataQueryExecutor extends AbstractMetadataExpl
         while (rs.next()) {
             Map<String, Object> row = new LinkedHashMap<>();
             for (int i = 1; i <= columnCount; i++) {
-                row.put(columns.get(i - 1), JdbcValueNormalizer.normalize(rs.getObject(i)));
+                Object value = JdbcPreviewValues.read(rs, i, localTimestamps[i - 1]);
+                row.put(columns.get(i - 1), JdbcValueNormalizer.normalize(value));
             }
             rows.add(row);
         }

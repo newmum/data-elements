@@ -71,6 +71,63 @@ class SharedTargetContractTest {
         assertTrue(error.getMessage().contains("STRING"));assertTrue(error.getMessage().contains("INT"));
     }
 
+    @Test void hiveIntAcceptsBoundedIntegralDecimalAndPreservesTheSharedDecimalOutput()throws Exception {
+        var draft=sharedDraft("DECIMAL",5,0,false);
+        secondaryField(draft).put("logicalType","INT").put("physicalType","int");
+        var plan=MappingEngine.compile(draft);
+        assertDoesNotThrow(()->UnifiedMappingService.validateSharedTargetFields(draft,plan));
+        var result=MappingEngine.execute(plan,List.of(java.util.Map.of("raw",-99999),java.util.Map.of("raw",99999)),0,
+                new com.linewell.dataelement.mapping.core.ExecutionContext(java.time.Instant.EPOCH,
+                        java.time.ZoneOffset.UTC,java.util.Locale.ROOT,"validation"),null);
+        assertTrue(result.rows().stream().allMatch(MappingEngine.Row::success));
+        assertEquals(List.of(new java.math.BigDecimal("-99999"),new java.math.BigDecimal("99999")),
+                result.rows().stream().map(row->row.output().get("VALUE")).toList());
+        assertEquals("DECIMAL",plan.outputContracts().get("VALUE").logicalType());
+    }
+
+    @Test void integerTargetsRejectFractionalUnboundedAndOutOfRangeDecimalContracts(){
+        for(int[] dimensions:List.of(new int[]{5,1},new int[]{0,0},new int[]{10,0})){
+            var draft=sharedDraft("DECIMAL",dimensions[0],dimensions[1],true);
+            secondaryField(draft).put("logicalType","INT").put("physicalType","int");
+            assertEquals("TARGET_TYPE_MISMATCH",sharedError(draft).code());
+        }
+        for(String physical:List.of("smallint","tinyint","int(11) unsigned")){
+            var draft=sharedDraft("DECIMAL",5,0,true);
+            secondaryField(draft).put("logicalType","INT").put("physicalType",physical);
+            assertEquals("TARGET_TYPE_MISMATCH",sharedError(draft).code());
+        }
+        var bigint=sharedDraft("DECIMAL",18,0,true);
+        secondaryField(bigint).put("logicalType","LONG").put("physicalType","bigint");
+        assertSharedAccepted(bigint);
+        var oversized=sharedDraft("DECIMAL",19,0,true);
+        secondaryField(oversized).put("logicalType","LONG").put("physicalType","bigint");
+        assertEquals("TARGET_TYPE_MISMATCH",sharedError(oversized).code());
+    }
+
+    @Test void registeredTinyintRemainsInRangeThroughOracleDecimalAndHiveSmallint()throws Exception {
+        var draft=MappingEngine.legacy((ObjectNode)JSON.readTree("""
+            {"version":"1.0","mappings":[{"from":"/status","to":"/STATUS",
+              "expression":"CAST(${field:status} AS INTEGER)","targetType":"NUMBER(5)"}],
+             "schemaContract":{
+               "sourceRef":{"datasourceId":"validation-source","tableId":"validation-source-table"},
+               "source":[{"name":"status","logicalType":"INT","physicalType":"tinyint"}],
+               "target":[{"name":"STATUS","logicalType":"DECIMAL","physicalType":"NUMBER","precision":5,"scale":0}],
+               "targets":[{"nodeId":"hive","label":"Hive","fields":[{"name":"status","logicalType":"INT","physicalType":"smallint"}]}]
+             }}
+            """));
+        assertSharedAccepted(draft);
+        var source=(ObjectNode)draft.path("schemaContract").path("source").get(0);
+        source.put("physicalType","int");
+        assertEquals("TARGET_TYPE_MISMATCH",sharedError(draft).code());
+        source.put("physicalType","tinyint");
+        var rule=(ObjectNode)draft.path("rules").get(0);
+        ((ObjectNode)rule.path("input")).put("expression","${field:status} * 1000");
+        assertEquals("TARGET_TYPE_MISMATCH",sharedError(draft).code());
+        ((ObjectNode)rule.path("input")).put("expression","CAST(${field:status} AS INTEGER)");
+        ((ObjectNode)draft.path("schemaContract")).remove("sourceRef");
+        assertEquals("TARGET_TYPE_MISMATCH",sharedError(draft).code());
+    }
+
     @Test void defaultValueCannotMakeAnIncludedNullableOutputFitANonNullableTarget()throws Exception {
         var draft=sharedDraft("STRING",0,0,true);
         secondaryField(draft).put("logicalType","STRING").put("nullable",false).put("hasDefault",true);

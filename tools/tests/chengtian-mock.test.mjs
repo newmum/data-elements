@@ -67,20 +67,20 @@ test("Oracle审查范围20/100项按引号身份去重并保留来源权限", as
 test("接入模板下拉按行业、发布状态和名称分页", async () => {
   const { runtime } = setup("registrar");
   const tenantId = runtime.session.tenantId;
-  const published = { tenantId, tid: "validation-template", name: "并行接入", status: "PUBLISHED", updatedAt: 1 };
+  const published = { tenantId, defaultTenantId: tenantId, tid: "validation-template", name: "并行接入", status: "PUBLISHED", updatedAt: 1 };
   runtime.database.accessTemplates = [
     published,
-    { ...published, tid: "validation-draft", status: "DRAFT" },
-    { ...published, tid: "validation-foreign", tenantId: "different-tenant" },
+    { ...published, tid: "validation-draft", status: "DRAFT", defaultTenantId: null },
+    { ...published, tid: "validation-foreign", tenantId: "different-tenant", defaultTenantId: "different-tenant" },
   ];
-  runtime.database.defaultAccessTemplateId = published.tid;
   runtime.persist(runtime.database);
   const path = "/nifi/canvas/templates";
   const result = (await request(runtime, path, { keyword: "并行", pageSize: 20 })).body.data;
-  const { tenantId: ignored, ...expected } = published;
+  const { tenantId: ignored, defaultTenantId: ignoredDefault, ...expected } = published;
   assert.deepEqual(result, { list: [{ ...expected, isDefault: true, spec: { hasFlow: false, hasNative: false } }],
     total: 1, pageNum: 1, pageSize: 20, defaultVersionId: published.tid });
   assert.equal((await request(runtime, path, { keyword: "其他" })).body.data.total, 0);
+  assert.equal((await request(runtime, path, { keyword: "其他" })).body.data.defaultVersionId, published.tid);
   assert.equal((await request(runtime, "/nifi/canvas/templatedetail", { tid: published.tid })).body.data.name, published.name);
   assert.equal((await request(runtime, "/nifi/canvas/templatedetail", { tid: "validation-foreign" })).body.code, 404);
   const own = runtime.database.sources.find(row => row.createdBy === runtime.session.userId);

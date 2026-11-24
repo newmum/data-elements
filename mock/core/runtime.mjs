@@ -746,8 +746,9 @@ export class ChengtianMockRuntime {
           return (sortDir === "asc" ? order : -order) || left.tid.localeCompare(right.tid);
         });
       const start = (pageNum - 1) * pageSize;
-      const defaultVersionId = this.database.defaultAccessTemplateId || "";
-      return { list: rows.slice(start, start + pageSize).map(({ tenantId, ...row }) => {
+      const defaultVersionId = (this.database.accessTemplates || []).find(row =>
+        row.tenantId === this.session.tenantId && row.status === "PUBLISHED" && row.defaultTenantId === row.tenantId)?.tid || "";
+      return { list: rows.slice(start, start + pageSize).map(({ tenantId, defaultTenantId, ...row }) => {
         const { flow, nativeSnapshot, previewImage, ...spec } = row.spec || {};
         return { ...row, isDefault: row.tid === defaultVersionId,
           spec: { ...spec, hasFlow: Boolean(flow), hasNative: Boolean(nativeSnapshot) } };
@@ -760,7 +761,7 @@ export class ChengtianMockRuntime {
       const template = (this.database.accessTemplates || []).find(row =>
         row.tenantId === this.session.tenantId && row.status === "PUBLISHED" && row.tid === id);
       assert(template, 404, "模板不存在或无访问权限");
-      const { tenantId, ...detail } = template;
+      const { tenantId, defaultTenantId, ...detail } = template;
       const ids = template.spec?.targetDatasourceIds || [];
       const visible = visibleSources(this.database, this.session);
       const byId = new Map(visible.map(row => [row.tid, row]));
@@ -770,7 +771,7 @@ export class ChengtianMockRuntime {
         return { tid: id, value: id, label: row.dbName, dbName: row.dbName, dbType: row.dbType,
           layerCode: "ODS", tablePrefix: "ODS", parentValue: "TEMPLATE" };
       });
-      return clone({ ...detail, targets, isDefault: template.tid === this.database.defaultAccessTemplateId });
+      return clone({ ...detail, targets, isDefault: defaultTenantId === tenantId });
     }
     if (key === "GET /sym/menu/routes") return this.routes();
     if (key === "GET /sym/dict/query") return query.code ? [] : {};

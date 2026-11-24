@@ -5,7 +5,7 @@
   "groupId": "701972acc05f55a89609ca99c376725c",
   "name": "01.升级运行字段节点",
   "path": "/upgrade",
-  "description": "按版本和原生边界升级字段治理、来源连接、工作簿空行策略及 JDBC 精确读取。",
+  "description": "按版本和原生边界升级字段治理、来源连接、工作簿读取及 JDBC 精确读取。",
   "parameters": [],
   "options": [
     {
@@ -30,6 +30,7 @@ import com.linewell.dataelement.integration.nifi.canvas.mapping.LegacySourceShap
 import com.linewell.dataelement.integration.nifi.canvas.mapping.LegacyTransportUpgradeService as transportUpgrade
 import com.linewell.dataelement.integration.nifi.canvas.mapping.MappingUpgradeService as nativeUpgrade
 import com.linewell.dataelement.integration.nifi.canvas.mapping.UnifiedMappingService as mapping
+import com.linewell.dataelement.integration.nifi.canvas.mapping.WorkbookReaderUpgradeService as workbookReaderUpgrade
 import com.linewell.dataelement.mapping.core.MappingException
 import java.lang.String
 import java.util.Objects
@@ -52,7 +53,7 @@ return withHttp(() => {
         }
         var nodeId = input.path('nodeId').asText()
         var mode = input.path('mode').asText()
-        if (['mysql-read-pool', 'source-normalization', 'exact-value-readers', 'workbook-record-policy'].contains(mode)) {
+        if (['mysql-read-pool', 'source-normalization', 'exact-value-readers', 'workbook-record-policy', 'workbook-reader'].contains(mode)) {
             if (input.path('start').asBoolean(false)) {
                 throw new MappingException('MIGRATION_UNAVAILABLE', '来源原位升级必须保持流程停止')
             }
@@ -66,6 +67,10 @@ return withHttp(() => {
             }
             if (mode == 'workbook-record-policy') {
                 return ResponseEntity.ok(shapeUpgrade.upgradeWorkbookRows(pipeline, tenantId, nodeId, dryRun, fingerprint))
+            }
+            if (mode == 'workbook-reader') {
+                var retainedFailure = input.path('retainedFailureConnectionId').asText()
+                return ResponseEntity.ok(workbookReaderUpgrade.upgrade(pipeline, tenantId, nodeId, retainedFailure, dryRun, fingerprint))
             }
             return ResponseEntity.ok(exactUpgrade.upgrade(pipeline, tenantId, nodeId, dryRun, fingerprint))
         }

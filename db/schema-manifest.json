@@ -56,7 +56,7 @@
       "objects": {
         "tables": 212,
         "views": 4,
-        "indexes": 898,
+        "indexes": 899,
         "explicitIndexes": 467,
         "foreignKeys": 2,
         "triggers": 20,
@@ -64,7 +64,7 @@
         "functions": 0,
         "sequences": 0
       },
-      "sha256": "26c4c4d78656817b479fd2708df6201ecd4dcaf8159659e01bf29921014471c6",
+      "sha256": "84de58aaf054b706635531b58eb3a8b4c6e127443a141703b2f556b9ebc83ebb",
       "exportNotes": {
         "definitions": "DBMS_METADATA.GET_DDL",
         "comments": "DBA_TAB_COMMENTS/DBA_COL_COMMENTS",
@@ -79,14 +79,14 @@
       "objects": {
         "tables": 165,
         "views": 0,
-        "indexes": 595,
+        "indexes": 596,
         "foreignKeys": 2,
         "triggers": 20,
         "functions": 49,
         "procedures": 0,
         "events": 0
       },
-      "sha256": "b940806f910e0283a4e7abdc1b072120f6ae653a78d8725fb6ad408988e9fda8",
+      "sha256": "a5b8c7f3b8f80ef08a147b692486ac3af94d15d1636a9002b1e994459aa1f4f4",
       "exportNotes": {
         "definitions": "Kingbase native catalogs and pg_get_*def",
         "sqlSchema": "public",
@@ -101,14 +101,14 @@
       "objects": {
         "tables": 212,
         "views": 4,
-        "indexes": 765,
+        "indexes": 766,
         "foreignKeys": 2,
         "triggers": 0,
         "procedures": 0,
         "functions": 0,
         "events": 0
       },
-      "sha256": "7f1be775da8f98e3b0902879c5485399cb949b9275d8fa7f6d8733f8c8ada2c7",
+      "sha256": "e49845f347d3d269c05c286a737c233d3c0a19c8e7903438fa98db8e9c92f76b",
       "exportNotes": {
         "definitions": "SHOW CREATE",
         "routineDefiners": "omitted",
@@ -123,14 +123,14 @@
       "objects": {
         "tables": 212,
         "views": 4,
-        "indexes": 765,
+        "indexes": 766,
         "foreignKeys": 2,
         "triggers": 0,
         "procedures": 0,
         "functions": 0,
         "events": 0
       },
-      "sha256": "cc40bbdcb1f34df10b3588aa61add89db5c588932d072d9c13f22cf13729ade8",
+      "sha256": "a8417a0fae3c090e9a1f70d870f0998a1d666c0c2678f4652b32c4fc0ddf519d",
       "exportNotes": {
         "definitions": "SHOW CREATE",
         "routineDefiners": "omitted",

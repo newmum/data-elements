@@ -14,6 +14,7 @@ import com.linewell.dataelement.metautil.model.dto.SampleDataResult;
 import com.linewell.dataelement.metautil.model.dto.SampleRequest;
 import com.linewell.dataelement.metautil.model.dto.SqlValidationResult;
 import com.linewell.dataelement.metautil.model.enums.DatabaseType;
+import com.linewell.dataelement.metautil.jdbc.JdbcPreviewValues;
 import com.linewell.dataelement.platform.persistence.jdbc.JdbcValueNormalizer;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
@@ -1140,18 +1141,22 @@ public abstract class AbstractMetadataExplorer implements MetadataExplorer {
 
             ResultSetMetaData metaData = rs.getMetaData();
             int columnCount = metaData.getColumnCount();
+            boolean[] localTimestamps = new boolean[columnCount];
+            DatabaseType databaseType = config.getEffectiveDatabaseType();
 
             // 获取列信息
             for (int i = 1; i <= columnCount; i++) {
                 columnNames.add(metaData.getColumnName(i));
-                columnTypes.add(metaData.getColumnTypeName(i));
+                String columnType = metaData.getColumnTypeName(i);
+                columnTypes.add(columnType);
+                localTimestamps[i - 1] = JdbcPreviewValues.isLocalTimestamp(databaseType, columnType);
             }
 
             // 获取数据
             while (rs.next()) {
                 Map<String, Object> row = new LinkedHashMap<>();
                 for (int i = 1; i <= columnCount; i++) {
-                    Object value = rs.getObject(i);
+                    Object value = JdbcPreviewValues.read(rs, i, localTimestamps[i - 1]);
                     // 处理特殊类型
                     if (value instanceof java.sql.Clob) {
                         java.sql.Clob clob = (java.sql.Clob) value;
@@ -1161,7 +1166,7 @@ public abstract class AbstractMetadataExplorer implements MetadataExplorer {
                     } else if (value instanceof byte[]) {
                         value = "[BINARY DATA]";
                     }
-                    row.put(metaData.getColumnName(i), JdbcValueNormalizer.normalize(value));
+                    row.put(columnNames.get(i - 1), JdbcValueNormalizer.normalize(value));
                 }
                 data.add(row);
             }

@@ -47,11 +47,11 @@ var result = query.page({tid: id, familyId: col('family_id', 'TEXT'), version: c
     name: name, status: state, definition: col('definition', 'TEXT'), updatedAt: updated},
     sorts[sortField], sortDir, 'tid', pageNum, pageSize)
 
-var defaults = tableRead.from('sym_config_t','c',tenantId)
-defaults.where(tableRead.equal(tableRead.column('c','tid','TEXT'),'nifiaccessdefault' + tenantId))
-defaults.where(tableRead.equal(tableRead.column('c','is_del','NUMBER'),0))
-var defaultRows = defaults.rows({value:tableRead.column('c','config_value','TEXT')},1)
-var defaultVersionId = defaultRows.isEmpty() ? '' : (defaultRows[0].value || '').toString()
+var defaults = tableRead.from('nifi_access_template_t','t',tenantId)
+defaults.where(tableRead.equal(col('default_tenant_id','TEXT'),tenantId))
+defaults.where(tableRead.equal(state,'PUBLISHED'))
+var defaultRows = defaults.rows({tid:id},1)
+var defaultVersionId = defaultRows.isEmpty() ? '' : defaultRows[0].tid.toString()
 
 var rows = []
 for (row in result.rows) {

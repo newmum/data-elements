@@ -7192,7 +7192,10 @@ CREATE TABLE "public"."nifi_access_template_t" (
   "created_by" character varying(64 char) NOT NULL,
   "created_at" bigint NOT NULL,
   "updated_at" bigint NOT NULL,
+  "default_tenant_id" character varying(32 char),
+  CONSTRAINT "ck_access_template_default" CHECK (default_tenant_id IS NULL OR default_tenant_id::text = tenant_id::text AND status::text = 'PUBLISHED'::text),
   CONSTRAINT "nifi_access_template_t_pkey" PRIMARY KEY (tid),
+  CONSTRAINT "uk_access_template_default" UNIQUE (default_tenant_id),
   CONSTRAINT "uk_access_template_version" UNIQUE (tenant_id, family_id, revision_no)
 );
 
@@ -7217,6 +7220,8 @@ COMMENT ON COLUMN "public"."nifi_access_template_t"."created_by" IS '创建人�
 COMMENT ON COLUMN "public"."nifi_access_template_t"."created_at" IS '创建时间戳，Unix毫秒';
 
 COMMENT ON COLUMN "public"."nifi_access_template_t"."updated_at" IS '更新时间戳，Unix毫秒';
+
+COMMENT ON COLUMN "public"."nifi_access_template_t"."default_tenant_id" IS '当前行业的默认模板标记，仅已发布默认版本填所属租户标识，其余为空';
 
 CREATE TABLE "public"."nifi_node_t" (
   "tid" character varying(32 char) NOT NULL,

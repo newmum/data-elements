@@ -238,25 +238,23 @@ if (action == 'create' || action == 'save') {
     if (definition.length() > 2000000) { exit 400, '模板定义最多2MB' }
 }
 var actor = StpUtil.getLoginIdAsString()
+var reference = requested == '' ? null : db.table('nifi_access_template_t').where()
+    .eq('tenant_id', tenantId).eq('tid', requested).selectOne()
+if (requested != '' && reference == null) { exit 404, '模板版本不存在' }
 return db.transaction(() => {
-    // 默认选择使用行业现有配置表的一条确定记录，所有默认切换与版本发布共用此行锁。
-    var settingId = 'nifiaccessdefault' + tenantId
-    var setting = tableWrite.lockRow('sym_config_t',tenantId,'tid',settingId,['tid','config_value'],{is_del:0})
-    if (setting == null) {
-        // 新行业首次管理时创建空默认配置，后续切换由同一记录串行化。
-        db.table('sym_config_t').insert({tid:settingId,tenant_id:tenantId,config_code:'access_default_template',
-            config_name:'接入默认模板',config_value:'',config_group:'NIFI',is_use:1,sort_no:0,is_encrypt:0,
-            is_del:0,value_type:'STRING',config_scope:'INTERNAL',cache_ttl_seconds:0,version_no:1})
-        setting = {config_value:''}
+    // 先锁当前默认版本，再锁模板族。首次选默认由唯一键保护，冲突时整笔事务回滚。
+    var selected = ['default','publish','retire'].contains(action)
+        ? tableWrite.lockRow('nifi_access_template_t',tenantId,'default_tenant_id',tenantId,['tid','family_id'],{}) : null
+    var defaultId = selected?.tid
+    var setDefault = id => {
+        if (defaultId == id) { return }
+        if (defaultId != null && tableWrite.batchUpdate('nifi_access_template_t',tenantId,['default_tenant_id'],['tid'],
+            {},[{tid:defaultId,default_tenant_id:null}]) != 1) { exit 409, '默认模板已变化，请刷新' }
+        if (tableWrite.batchUpdate('nifi_access_template_t',tenantId,['default_tenant_id'],['tid'],
+            {status:'PUBLISHED'},[{tid:id,default_tenant_id:tenantId}]) != 1) { exit 409, '只能将已发布模板设为默认' }
     }
-    var defaultId = (setting.configValue || setting.config_value || setting.CONFIG_VALUE || '').toString()
-    var setDefault = id => tableWrite.batchUpdate('sym_config_t',tenantId,['config_value'],['tid'],
-        {is_del:0},[{tid:settingId,config_value:id}])
-    var current = requested == '' ? null : db.table('nifi_access_template_t').where()
-        .eq('tenant_id', tenantId).eq('tid', requested).selectOne()
-    if (requested != '' && current == null) { exit 404, '模板版本不存在' }
-    var family = current?.familyId
-    if (current != null && tableWrite.lockRow('nifi_access_template_t', tenantId, 'tid', family,
+    var family = reference?.familyId
+    if (reference != null && tableWrite.lockRow('nifi_access_template_t', tenantId, 'tid', family,
         ['tid'], {}) == null) { exit 409, '模板已变化，请刷新' }
     var now = System.currentTimeMillis()
     if (action == 'create') {
@@ -274,7 +272,13 @@ return db.transaction(() => {
             created_by: actor, created_at: now, updated_at: now})
         return {tid: tid, version: nextVersion, status: 'DRAFT'}
     }
-    if (current == null) { exit 400, '请选择模板版本' }
+    if (reference == null) { exit 400, '请选择模板版本' }
+    // 以锁内的版本记录为准，避免并发发布或绑定时使用旧事务快照。
+    var locked = tableWrite.lockRow('nifi_access_template_t',tenantId,'tid',requested,
+        ['status','definition','display_name','updated_at','revision_no','default_tenant_id'],{})
+    if (locked == null) { exit 409, '模板已变化，请刷新' }
+    var current = {status:locked.status,definition:locked.definition,displayName:locked.display_name,
+        updatedAt:locked.updated_at,revisionNo:locked.revision_no}
     if (body?.expectedUpdatedAt != null && current.updatedAt::long != body.expectedUpdatedAt::long) {
         exit 409, '模板已被其他操作更新，请刷新后重试'
     }
@@ -282,7 +286,7 @@ return db.transaction(() => {
         if (current.status != 'PUBLISHED') { exit 409, '只能将已发布模板设为默认' }
         var configured = JSONUtil.parseObj(current.definition)
         validateTargets(configured,configured.targetDatasourceIds,true)
-        if (setDefault(requested) != 1) { exit 409, '默认配置已变化，请刷新' }
+        setDefault(requested)
         return {tid:requested,isDefault:true}
     }
     if (action == 'bind') {
@@ -296,7 +300,7 @@ return db.transaction(() => {
         if (changed != 1) { exit 409, '模板已变化，请刷新' }
         return {tid:requested,status:current.status}
     }
-    if (action == 'retire' && defaultId == requested) { exit 409, '请先将其他模板设为默认，再停用当前默认模板' }
+    if (action == 'retire' && locked.default_tenant_id != null) { exit 409, '请先将其他模板设为默认，再停用当前默认模板' }
     if (action == 'save') {
         if (current.status != 'DRAFT') { exit 409, '已发布或停用版本须通过新建版本修改' }
         var changed = db.table('nifi_access_template_t').where().eq('tenant_id', tenantId).eq('tid', requested)
@@ -316,10 +320,7 @@ return db.transaction(() => {
         .eq('tid', requested).eq('status', expected).update({status: next, updated_at: now})
     if (changed != 1) { exit 409, '模板状态已变化，请刷新' }
     if (action == 'publish') {
-        if (defaultId != '' && defaultId != requested) {
-            var selected = db.table('nifi_access_template_t').where().eq('tenant_id',tenantId).eq('tid',defaultId).selectOne()
-            if (selected != null && selected.familyId == family) { setDefault(requested) }
-        }
+        if (selected?.family_id == family) { setDefault(requested) }
         db.table('nifi_access_template_t').where().eq('tenant_id', tenantId).eq('family_id', family)
             .eq('status', 'PUBLISHED').ne('tid', requested).update({status: 'RETIRED', updated_at: now})
     }

@@ -714,7 +714,8 @@ public class NifiClient {
         if(type.equals("com.linewell.dataelement.nifi.JdbcHaitongDictionaryService")
                 ||type.equals("com.linewell.dataelement.nifi.HaitongBinaryRecordReader")
                 ||type.equals("com.linewell.dataelement.nifi.HaitongJdbcRecordReader")
-                ||type.equals("com.linewell.dataelement.nifi.HaitongMongoRecordReader"))component.set("bundle",mappingBundle());
+                ||type.equals("com.linewell.dataelement.nifi.HaitongMongoRecordReader")
+                ||type.equals("com.linewell.dataelement.nifi.HaitongWorkbookRecordReader"))component.set("bundle",mappingBundle());
         component.put("name", name);
         if (properties != null && !properties.isEmpty()) {
             ObjectNode props = mapper.createObjectNode();

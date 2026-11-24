@@ -28,6 +28,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.ssssssss.magicapi.datasource.model.MagicDynamicDataSource;
+import org.ssssssss.magicapi.modules.db.ColumnMapperAdapter;
+import org.ssssssss.magicapi.modules.db.SQLModule;
+import org.ssssssss.magicapi.modules.db.provider.CamelColumnMapperProvider;
+import org.ssssssss.magicapi.modules.db.provider.DefaultColumnMapperProvider;
 import org.ssssssss.script.MagicScript;
 import org.ssssssss.script.MagicScriptContext;
 import org.ssssssss.script.runtime.ExitValue;
@@ -35,6 +40,7 @@ import org.ssssssss.script.runtime.ExitValue;
 class AccessTemplateMagicTest {
     private static final String LIST = "api/09.海通流程接口/03.画布模板/03.分页查询接入模板.ms";
     private static final String MANAGE = "api/09.海通流程接口/03.画布模板/04.管理接入模板版本.ms";
+    private static final String DETAIL = "api/09.海通流程接口/03.画布模板/05.读取接入模板详情.ms";
     private static final String BIND = "function/01.通用函数/79.读取接入模板版本.ms";
     private static final String PERMISSION = "MENU:2081000000000000002";
     private static final String DEFINITION = """
@@ -43,7 +49,7 @@ class AccessTemplateMagicTest {
             """;
 
     @Test void allChangedScriptsCompile() throws Exception {
-        for (String file : List.of(LIST, MANAGE, BIND, "api/09.海通流程接口/03.画布模板/05.读取接入模板详情.ms",
+        for (String file : List.of(LIST, MANAGE, BIND, DETAIL,
                 "api/09.海通流程接口/03.画布模板/06.模板目标数据源选项.ms",
                 "api/03.数据接入/03.接入任务/05.按来源表补齐接入任务.ms",
                 "api/03.数据接入/12.目标数据/01.数据接入物化建表.ms")) {
@@ -251,7 +257,7 @@ class AccessTemplateMagicTest {
         fixture.insert("foreign", "ct", "PUBLISHED");
         fixture.insert("draft", "ga", "DRAFT");
         fixture.insert("retired", "ga", "RETIRED");
-        fixture.jdbc.update("INSERT INTO sym_config_t VALUES ('nifiaccessdefaultga','ga','published-0',0)");
+        fixture.jdbc.update("UPDATE nifi_access_template_t SET default_tenant_id=tenant_id WHERE tid IN ('published-0','foreign')");
         when(fixture.scope.dataSource()).thenReturn(Map.of("scope", "OWNER"));
         try (var ignored = TenantContext.use("ga")) {
             for (int size : List.of(20, 100)) {
@@ -267,6 +273,14 @@ class AccessTemplateMagicTest {
                     assertThat(row.get("isDefault")).isEqualTo(true);
                 });
             }
+            var filtered = (Map<?, ?>) fixture.run(LIST, Map.of("body", Map.of("keyword", "published-77")));
+            assertThat(filtered.get("defaultVersionId")).isEqualTo("published-0");
+            fixture.jdbc.update("UPDATE nifi_access_template_t SET definition='{}' WHERE tid='published-0'");
+            fixture.reads.set(0);
+            var detail = (Map<?, ?>) fixture.run(DETAIL, Map.of("body", Map.of("tid", "published-0")));
+            assertThat(detail.get("isDefault")).isEqualTo(true);
+            assertThat(fixture.reads.get()).isEqualTo(1);
+            assertThat(status(fixture.run(DETAIL, Map.of("body", Map.of("tid", "foreign"))))).isEqualTo(404);
             assertThat(status(fixture.run(LIST, Map.of("body", Map.of("manage", true))))).isEqualTo(403);
         }
     }
@@ -299,6 +313,38 @@ class AccessTemplateMagicTest {
                 denied.put("versionId", id);
                 assertThat(status(fixture.run(BIND, denied))).isEqualTo(409);
             }
+        }
+    }
+
+    @Test void defaultMovesWithFamilyPublicationAndRejectsRetirementOfTheSelectedVersion() throws Exception {
+        var fixture = new Fixture();
+        fixture.insert("original", "ga", "PUBLISHED");
+        fixture.insert("new-family", "ga", "PUBLISHED");
+        fixture.insert("next-version", "ga", "DRAFT");
+        fixture.insert("foreign", "ct", "PUBLISHED");
+        fixture.jdbc.update("UPDATE nifi_access_template_t SET family_id='new-family',revision_no=2,definition=? WHERE tid='next-version'",
+                JSONUtil.parseObj(DEFINITION).set("engine", "GENERATED").toString());
+        fixture.jdbc.execute("""
+                CREATE TABLE db_datasource_t(tid varchar(32),tenant_id varchar(32),db_type varchar(32),
+                  pool_cfg clob,is_del int,show_connect int,created_by varchar(32),org_id varchar(32))
+                """);
+        fixture.jdbc.update("INSERT INTO db_datasource_t VALUES ('oracle','ga','oceanbase',?,0,1,'owner','org')",
+                "{\"compatibleMode\":\"ORACLE\"}");
+        fixture.jdbc.update("INSERT INTO db_datasource_t VALUES ('hive','ga','hive','{}',0,1,'owner','org')");
+        when(fixture.scope.dataSource()).thenReturn(Map.of("scope", "ALL"));
+        when(fixture.scope.visibleDataSourcesFor(eq(PERMISSION), any())).thenAnswer(call -> call.getArgument(1));
+        try (var ignored = TenantContext.use("ga")) {
+            assertThat(status(fixture.manage("default", "foreign"))).isEqualTo(404);
+            assertThat(((Map<?, ?>) fixture.manage("default", "original")).get("isDefault")).isEqualTo(true);
+            assertThat(status(fixture.manage("retire", "original"))).isEqualTo(409);
+            fixture.manage("default", "new-family");
+            fixture.manage("publish", "next-version");
+            assertThat(fixture.jdbc.queryForList("SELECT tid FROM nifi_access_template_t WHERE default_tenant_id='ga'", String.class))
+                    .containsExactly("next-version");
+            assertThat(fixture.jdbc.queryForObject("SELECT status FROM nifi_access_template_t WHERE tid='new-family'", String.class))
+                    .isEqualTo("RETIRED");
+            assertThat(fixture.jdbc.queryForObject("SELECT status FROM nifi_access_template_t WHERE tid='original'", String.class))
+                    .isEqualTo("PUBLISHED");
         }
     }
 
@@ -432,22 +478,44 @@ class AccessTemplateMagicTest {
         private final StructuredTableReadMagicModule reader = new StructuredTableReadMagicModule(jdbc);
 
         Fixture() {
-            jdbc.execute("CREATE TABLE sym_config_t(tid varchar(64),tenant_id varchar(32),config_value varchar(64),is_del int)");
             jdbc.execute("""
                     CREATE TABLE nifi_access_template_t(tid varchar(32) primary key, tenant_id varchar(32),
                       family_id varchar(32), revision_no int, display_name varchar(96), status varchar(16),
-                      definition clob, updated_at bigint)
+                      definition clob, updated_at bigint, default_tenant_id varchar(32) unique,
+                      check (default_tenant_id is null or (default_tenant_id=tenant_id and status='PUBLISHED')))
                     """);
         }
 
         void insert(String id, String tenant, String status) {
-            jdbc.update("INSERT INTO nifi_access_template_t VALUES (?,?,?,1,?,?,?,0)", id, tenant, id, id, status, DEFINITION);
+            jdbc.update("INSERT INTO nifi_access_template_t VALUES (?,?,?,1,?,?,?,0,null)", id, tenant, id, id, status, DEFINITION);
         }
 
         Object run(String file, Map<String, Object> input) throws Exception {
             String script = source(file).replaceAll("(?m)^import (?:dataScope|tableRead|tenantRuntime)\\R", "");
             var context = new HashMap<>(input);
             context.putAll(Map.of("dataScope", scope, "tenantRuntime", new TenantMagicModule(null), "tableRead", reader));
+            return MagicScript.create(script, null).execute(new MagicScriptContext(context));
+        }
+
+        Object manage(String action, String id) throws Exception {
+            var sources = new MagicDynamicDataSource();
+            sources.setDefault(jdbc.getDataSource());
+            var db = new SQLModule(sources);
+            db.setDataSourceNode(sources.getDataSource());
+            var columns = new ColumnMapperAdapter();
+            columns.add(new DefaultColumnMapperProvider());
+            columns.add(new CamelColumnMapperProvider());
+            columns.setDefault("camel");
+            db.setColumnMapperProvider(columns);
+            db.setColumnMapRowMapper(columns.getDefaultColumnMapRowMapper());
+            db.setRowMapColumnMapper(value -> value);
+            db.setSqlInterceptors(List.of());
+            db.setNamedTableInterceptors(List.of());
+            String script = source(MANAGE).replaceAll("(?m)^import (?:dataScope|tableRead|tableWrite|tenantRuntime)\\R", "")
+                    .replace("StpUtil.getLoginIdAsString()", "'validation-operator'");
+            var context = Map.<String, Object>of("body", Map.of("action", action, "tid", id),
+                    "db", db, "tableWrite", new StructuredTableWriteMagicModule(jdbc), "tableRead", reader,
+                    "dataScope", scope, "tenantRuntime", new TenantMagicModule(null));
             return MagicScript.create(script, null).execute(new MagicScriptContext(context));
         }
     }

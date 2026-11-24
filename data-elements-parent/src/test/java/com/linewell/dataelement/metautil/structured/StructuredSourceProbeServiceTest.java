@@ -81,12 +81,16 @@ class StructuredSourceProbeServiceTest {
             for (int i = 0; i < values.size(); i++) {
                 data.createCell(i).setCellValue(values.get(i));
             }
+            data.createCell(7).setCellStyle(workbook.createCellStyle());
             workbook.write(output);
             bytes = output.toByteArray();
         }
         var table = service.parseRemoteFileSampleForTest("Monthly.xlsx", bytes.length, bytes).getTables().getFirst();
-        var shape = new StructuredJsonRecords.Contract(new ObjectMapper().valueToTree(table.getRecordShape()));
+        com.fasterxml.jackson.databind.JsonNode definition = new ObjectMapper().valueToTree(table.getRecordShape());
+        var shape = new StructuredJsonRecords.Contract(definition);
         assertThat(shape.skipBlankRecords()).isTrue();
+        assertThat(com.linewell.dataelement.mapping.core.WorkbookRows.Layout.parse(definition.path("workbook")).fields())
+                .containsExactly("metric", "column_1", "column_2", "amount", "amount_1");
         assertThat(shape.normalize(Map.of("metric", "records", "column_1", "approved", "column_2", "held",
                 "amount", "two", "amount_1", "three")).values()).isEqualTo(table.getRows().getFirst());
         assertThat(table.getRows().getFirst()).containsExactlyInAnyOrderEntriesOf(

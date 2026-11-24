@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import java.time.*;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Pattern;
 
 @Service
 public class UnifiedMappingService {
@@ -137,19 +138,24 @@ public class UnifiedMappingService {
     }
     /** One shared output must have an unambiguous destination field in every authorized branch. */
     static void validateSharedTargetFields(ObjectNode draft,MappingEngine.Plan plan){
+        var outputContracts=plan.outputContracts();
+        var integralSources=integralSourceWidths(draft);
         for(JsonNode branch:draft.path("schemaContract").path("targets")){
             JsonNode fields=branch.path("target").isArray()?branch.path("target"):branch.path("fields");
             if(!fields.isArray())throw new MappingException("INVALID_SCHEMA","目标分支尚未读取字段结构："+branch.path("label").asText(branch.path("nodeId").asText()));
             Map<String,List<SchemaContract.Field>> names=new HashMap<>();
+            Map<String,String> physicalTypes=new HashMap<>();
+            fields.forEach(field -> physicalTypes.put(ValueTypes.field(field.path("name").asText()),field.path("physicalType").asText()));
             for(var field:SchemaContract.read(fields))names.computeIfAbsent(field.name().toLowerCase(Locale.ROOT),ignored->new ArrayList<>()).add(field);
             for(String output:plan.outputFields()){
                 var matches=names.getOrDefault(output.toLowerCase(Locale.ROOT),List.of());
                 if(matches.size()!=1)throw new MappingException(matches.isEmpty()?"TARGET_NOT_FOUND":"AMBIGUOUS_FIELD",
                         "共享治理目标“"+branch.path("label").asText(branch.path("nodeId").asText())+"”"+(matches.isEmpty()?"缺少输出字段：":"字段大小写有歧义：")+output);
-                var actual=matches.getFirst();var expected=plan.outputContracts().get(output);
+                var actual=matches.getFirst();var expected=outputContracts.get(output);
                 String label="共享治理目标“"+branch.path("label").asText(branch.path("nodeId").asText())+"”字段 "+output;
                 if(!actual.nullable()&&expected.nullable())throw new MappingException("TARGET_NULLABILITY_MISMATCH",label+"不允许空值，请为共享规则明确非空输出");
-                if(!sharedTypeAccepts(expected,actual))throw new MappingException("TARGET_TYPE_MISMATCH",label+"无法无损接收 "+expected.logicalType()+"("+expected.precision()+","+expected.scale()+")，目标为 "+actual.logicalType()+"("+actual.precision()+","+actual.scale()+")");
+                if(!sharedTypeAccepts(expected,actual,physicalTypes.get(actual.name()),integralSources.getOrDefault(output,0)))
+                    throw new MappingException("TARGET_TYPE_MISMATCH",label+"无法无损接收 "+expected.logicalType()+"("+expected.precision()+","+expected.scale()+")，目标为 "+actual.logicalType()+"("+actual.precision()+","+actual.scale()+")");
             }
             Set<String> outputs=new HashSet<>();plan.outputFields().forEach(name->outputs.add(name.toLowerCase(Locale.ROOT)));
             Set<String> source=new HashSet<>();draft.path("schemaContract").path("source").forEach(field->source.add(field.path("name").asText().toLowerCase(Locale.ROOT)));
@@ -161,7 +167,8 @@ public class UnifiedMappingService {
             }
         }
     }
-    private static boolean sharedTypeAccepts(MappingEngine.OutputType output,SchemaContract.Field target){
+    private static boolean sharedTypeAccepts(MappingEngine.OutputType output,SchemaContract.Field target,
+                                              String physicalType,int sourceWidth){
         String source=output.logicalType(),type=target.logicalType();if(type.equals("ANY"))return true;
         if(type.equals("DECIMAL")){
             int precision=source.equals("INT")?10:source.equals("LONG")?19:output.precision();
@@ -169,9 +176,74 @@ public class UnifiedMappingService {
             return Set.of("INT","LONG","DECIMAL").contains(source)&&(target.precision()==0
                     ||precision>0&&target.scale()>=scale&&target.precision()-target.scale()>=precision-scale);
         }
+        if(source.equals("DECIMAL") && Set.of("INT","LONG").contains(type)){
+            // A zero-scale, bounded decimal fits only when every value of the declared precision
+            // can stay integral in the destination. Do not round or alter the shared output.
+            int width = Math.min(type.equals("INT") ? 32 : 64,signedIntegerWidth(physicalType,type));
+            int digits = switch(width){
+                case 8 -> 2;
+                case 16 -> 4;
+                case 24 -> 6;
+                case 32 -> 9;
+                case 64 -> 18;
+                default -> 0;
+            };
+            return output.scale()==0 && output.precision()>0
+                    && (output.precision()<=digits || sourceWidth>0 && sourceWidth<=width);
+        }
         return source.equals(type)||source.equals("DATE")&&type.equals("DATETIME")
                 ||source.equals("INT")&&Set.of("LONG","DOUBLE").contains(type)
                 ||type.equals("STRING")&&Set.of("DATE","DATETIME","TIME","INSTANT").contains(source);
+    }
+
+    private static int signedIntegerWidth(String physicalType,String absentType){
+        String type = physicalType == null || physicalType.isBlank() ? absentType : physicalType.trim().toUpperCase(Locale.ROOT);
+        // MySQL display width does not change the signed integer range.
+        type = type.replaceFirst("\\(\\s*\\d+\\s*\\)$","").trim();
+        return switch(type){
+            case "TINYINT" -> 8;
+            case "SMALLINT", "INT2" -> 16;
+            case "MEDIUMINT" -> 24;
+            case "INT", "INTEGER", "INT4" -> 32;
+            case "LONG", "BIGINT", "INT8" -> 64;
+            default -> 0;  // Includes unsigned and unknown physical types.
+        };
+    }
+
+    private static final Pattern DIRECT_INTEGER_CAST = Pattern.compile(
+            "^CAST\\s*\\(\\s*\\$\\{field:([^}]+)}\\s+AS\\s+(INT|INTEGER|BIGINT)\\s*\\)$", Pattern.CASE_INSENSITIVE);
+
+    /** A direct field or identity integer cast can preserve a stricter registered source range. */
+    private static Map<String,Integer> integralSourceWidths(ObjectNode draft){
+        JsonNode contract=draft.path("schemaContract");
+        if(!contract.path("sourceRef").isObject() || contract.path("sourceRangeUnverified").asBoolean())return Map.of();
+        Map<String,Integer> sources=new HashMap<>();
+        for(JsonNode field:contract.path("source")){
+            if(!Set.of("INT","LONG").contains(ValueTypes.type(field.path("logicalType").asText())))continue;
+            String physical=field.path("physicalType").asText().trim().toUpperCase(Locale.ROOT);
+            boolean unsigned=physical.endsWith(" UNSIGNED");
+            int width=signedIntegerWidth(unsigned ? physical.substring(0,physical.length()-9).trim() : physical,"");
+            if(width>0)sources.put(field.path("name").asText(),unsigned ? width+1 : width);
+        }
+        Map<String,Integer> result=new HashMap<>();
+        for(JsonNode rule:draft.path("rules")){
+            if(!rule.path("enabled").asBoolean(true) || rule.hasNonNull("when") || rule.hasNonNull("defaultValue")
+                    || !"ERROR".equals(rule.path("onError").asText("ERROR")) || !rule.path("steps").isEmpty())continue;
+            JsonNode input=rule.path("input");
+            String name;
+            int castWidth=64;
+            if("FIELD".equals(input.path("kind").asText())){
+                name=input.path("name").asText(input.path("field").asText());
+            } else if("EXPRESSION".equals(input.path("kind").asText())){
+                var match=DIRECT_INTEGER_CAST.matcher(input.path("expression").asText().trim());
+                if(!match.matches())continue;
+                name=match.group(1);
+                if(!match.group(2).equalsIgnoreCase("BIGINT"))castWidth=32;
+            } else continue;
+            int width=sources.getOrDefault(name,0);
+            if(width>0 && width<=castWidth)result.put(rule.path("target").path("name").asText(),width);
+        }
+        return result;
     }
     /** Old materialization templates called timestamp audit columns DATE. Repair only their
      * untouched clock generators, after the existing batch schema/authorization check above.

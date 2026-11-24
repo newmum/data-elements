@@ -73,7 +73,7 @@ public class LegacySourceShapeUpgradeService {
         }
     }
 
-    private void requireStopped(Pipeline pipeline, String tenant) {
+    void requireStopped(Pipeline pipeline, String tenant) {
         NifiNodeMapping indexes = pipeline.nodeMapping();
         if (!Objects.equals(tenant, TenantContext.requireTenantId())) {
             throw failure("RESOURCE_FORBIDDEN", "流程必须属于当前租户");
@@ -97,18 +97,22 @@ public class LegacySourceShapeUpgradeService {
         return planBranches(pipeline, source, graph, edges, shape);
     }
 
-    private static Pipeline.Node minioSource(Pipeline pipeline, String sourceNodeId) {
+    static Pipeline.Node minioSource(Pipeline pipeline, String sourceNodeId) {
         return pipeline.dsl().nodes().stream().filter(node -> sourceNodeId.equals(node.id()) && "source.minio".equals(node.manifestKey()))
                 .findFirst().orElseThrow(() -> failure("RESOURCE_FORBIDDEN", "所选节点不是当前流程的已登记 MinIO 来源"));
     }
 
     private Graph readOwnedGraph(Pipeline pipeline, String tenant, Pipeline.Node source) {
+        return readOwnedGraph(pipeline, tenant, source, "");
+    }
+
+    Graph readOwnedGraph(Pipeline pipeline, String tenant, Pipeline.Node source, String retainedFailure) {
         String group = pipeline.nifiProcessGroupId();
         String marker = "data-elements:v1:" + tenant + ":pipeline:" + pipeline.id();
         if (!marker.equals(nifi.getProcessGroup(group).path("component").path("comments").asText())) {
             throw failure("RESOURCE_FORBIDDEN", "原生流程组缺少当前租户和流程归属标记");
         }
-        Graph graph = nativeGraph.read(group);
+        Graph graph = nativeGraph.read(group, retainedFailure);
         String primary = pipeline.nodeMapping().primaryProcessorIds().get(source.id());
         JsonNode origin = graph.processors().get(primary);
         if (origin == null || !LIST_S3.equals(origin.path("component").path("type").asText())
@@ -211,10 +215,10 @@ public class LegacySourceShapeUpgradeService {
                 throw failure("MIGRATION_SCOPE_UNSUPPORTED", "未找到有界的已发布工作簿规范化组件");
             }
             ObjectNode wantedPaths = workbook.deepCopy();
-            wantedPaths.remove("skipBlankRecords");
+            wantedPaths.remove(List.of("skipBlankRecords", "workbook"));
             for (JsonNode entity : eligible.values()) {
                 if (!(parse(property(entity, SHAPE).asText()) instanceof ObjectNode previous)
-                        || !wantedPaths.equals(previous.without("skipBlankRecords"))
+                        || !wantedPaths.equals(previous.without(List.of("skipBlankRecords", "workbook")))
                         || !"STOPPED".equals(entity.path("component").path("state").asText())) throw changed();
             }
             var changes = new LinkedHashMap<>(eligible);

@@ -545,7 +545,7 @@ public class DslCompiler {
                 }
             }
             if (isStructuredObjectSource(m.key())) {
-                createFileTransferReaderServices(pgId, n, nc, cfg);
+                createFileTransferReaderServices(pgId, n, nc, cfg, sourceShapes.get(n.id()));
             }
             if (isMinioObjectSource(m.key())) {
                 Map<String, String> credentials = new LinkedHashMap<>();
@@ -1237,7 +1237,7 @@ public class DslCompiler {
      * 与后续字段映射节点共享 {@code JsonRecordSetWriter} 的输出格式。
      */
     private void createFileTransferReaderServices(String pgId, Pipeline.Node node,
-                                                  NodeCompilation nc, Map<String, Object> cfg) {
+                                                  NodeCompilation nc, Map<String, Object> cfg, JsonNode registeredShape) {
         String encoding = firstNonBlankStatic(configText(cfg, "csvEncoding"),
                 configText(cfg, "csvCharset"), configText(cfg, "ftpCharset"), configText(cfg, "charset"), "UTF-8");
         String delimiter = ",";
@@ -1262,6 +1262,14 @@ public class DslCompiler {
         csvProperties.put("Value Separator", delimiter);
         nc.csIds.put("fileCsvReader", nifi.createControllerService(pgId, CSV_READER_TYPE,
                 node.label() + "/CSV 文件读取器", csvProperties).id());
+
+        if (registeredShape != null && registeredShape.has("workbook")) {
+            String reader = nifi.createControllerService(pgId, WorkbookReaderConfiguration.TYPE,
+                    node.label() + "/登记工作簿读取器", WorkbookReaderConfiguration.properties(registeredShape)).id();
+            nc.csIds.put("fileXlsReader", reader);
+            nc.csIds.put("fileXlsxReader", reader);
+            return;
+        }
 
         Map<String, String> xlsProperties = new LinkedHashMap<>();
         xlsProperties.put("Schema Access Strategy", "Use Starting Row");

@@ -3148,8 +3148,11 @@ CREATE TABLE "baseline_beijing_gd"."nifi_access_template_t"
 "created_by" VARCHAR(64) NOT NULL,
 "created_at" BIGINT NOT NULL,
 "updated_at" BIGINT NOT NULL,
+"default_tenant_id" VARCHAR(32),
 NOT CLUSTER PRIMARY KEY("tid"),
-CONSTRAINT "uk_access_template_version" UNIQUE("tenant_id", "family_id", "revision_no")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+CONSTRAINT "uk_access_template_version" UNIQUE("tenant_id", "family_id", "revision_no"),
+CONSTRAINT "uk_access_template_default" UNIQUE("default_tenant_id"),
+CONSTRAINT "ck_access_template_default" CHECK( ("default_tenant_id" IS NULL  OR  ("default_tenant_id" = "tenant_id" AND "status" = 'PUBLISHED' ) ))) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 -- TABLE nifi_node_t
 CREATE TABLE "baseline_beijing_gd"."nifi_node_t"
@@ -8661,6 +8664,7 @@ COMMENT ON COLUMN "baseline_beijing_gd"."metadata_table_collection_job_t"."uncha
 COMMENT ON COLUMN "baseline_beijing_gd"."metadata_table_collection_job_t"."updated_time" IS '更新时间';
 COMMENT ON COLUMN "baseline_beijing_gd"."nifi_access_template_t"."created_at" IS '创建时间戳，Unix毫秒';
 COMMENT ON COLUMN "baseline_beijing_gd"."nifi_access_template_t"."created_by" IS '创建人标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."nifi_access_template_t"."default_tenant_id" IS '当前行业的默认模板标记，仅已发布默认版本填所属租户标识，其余为空';
 COMMENT ON COLUMN "baseline_beijing_gd"."nifi_access_template_t"."definition" IS '接入拓扑、目标类型及处理器默认配置，不含连接凭据';
 COMMENT ON COLUMN "baseline_beijing_gd"."nifi_access_template_t"."display_name" IS '模板显示名称';
 COMMENT ON COLUMN "baseline_beijing_gd"."nifi_access_template_t"."family_id" IS '模板标识';

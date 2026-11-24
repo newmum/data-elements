@@ -33,6 +33,10 @@ final class LegacyNativeGraph {
     }
 
     Graph read(String group) {
+        return read(group, "");
+    }
+
+    Graph read(String group, String retainedFailure) {
         var flow = nifi.get("/flow/process-groups/" + group, JsonNode.class).path("processGroupFlow").path("flow");
         var processors = indexed(flow.path("processors"));
         var connections = indexed(flow.path("connections"));
@@ -58,10 +62,16 @@ final class LegacyNativeGraph {
         });
         connections.forEach((id, edge) -> {
             var status = edge.path("status").path("aggregateSnapshot");
-            if (status.path("flowFilesQueued").asLong(-1) != 0 || status.path("bytesQueued").asLong(-1) != 0) {
+            long count = status.path("flowFilesQueued").asLong(-1);
+            long bytes = status.path("bytesQueued").asLong(-1);
+            if (id.equals(retainedFailure) && count == 1 && bytes > 0 && bytes <= 20L * 1024 * 1024) return;
+            if (count != 0 || bytes != 0 || !retainedFailure.isEmpty() && id.equals(retainedFailure)) {
                 throw failure("MIGRATION_QUEUE_NOT_EMPTY", "全部连接队列须确认为空");
             }
         });
+        if (!retainedFailure.isEmpty() && !connections.containsKey(retainedFailure)) {
+            throw failure("MIGRATION_QUEUE_NOT_EMPTY", "所选失败队列不在当前原生流程中");
+        }
         return new Graph(processors, connections, states, funnels);
     }
 

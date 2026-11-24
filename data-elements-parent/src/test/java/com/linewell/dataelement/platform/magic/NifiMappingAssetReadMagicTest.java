@@ -22,6 +22,7 @@ import com.linewell.dataelement.integration.nifi.canvas.compile.DateTableFetchPo
 import com.linewell.dataelement.integration.nifi.canvas.lifecycle.NifiMutationAspect;
 import com.linewell.dataelement.integration.nifi.canvas.mapping.LegacyTransportUpgradeService;
 import com.linewell.dataelement.integration.nifi.canvas.mapping.LegacySourceShapeUpgradeService;
+import com.linewell.dataelement.integration.nifi.canvas.mapping.WorkbookReaderUpgradeService;
 import com.linewell.dataelement.integration.nifi.canvas.mapping.LegacyExactValueUpgradeService;
 import com.linewell.dataelement.integration.nifi.canvas.mapping.FieldMappingService;
 import com.linewell.dataelement.integration.nifi.canvas.mapping.MappingProjectionService;
@@ -673,6 +674,8 @@ class NifiMappingAssetReadMagicTest {
                 .thenReturn(Map.of("dryRun", true, "started", false));
         when(fixture.shapeUpgrade.upgradeWorkbookRows(any(), eq("tenant-a"), eq("source"), eq(true), eq("preview")))
                 .thenReturn(Map.of("dryRun", true, "started", false));
+        when(fixture.workbookReaderUpgrade.upgrade(any(), eq("tenant-a"), eq("source"), eq("retained"), eq(true), eq("preview")))
+                .thenReturn(Map.of("dryRun", true, "started", false));
         try (var tenant = TenantContext.use("tenant-a")) {
             assertThat(page(fixture.run("upgrade", Map.of(), Map.of("body", request)))).containsEntry("dryRun", true);
             request.put("start", true);
@@ -685,10 +688,15 @@ class NifiMappingAssetReadMagicTest {
             assertThat(page(fixture.run("upgrade", Map.of(), Map.of("body", request)))).containsEntry("dryRun", true);
             request.put("start", true);
             assertError(fixture.run("upgrade", Map.of(), Map.of("body", request)), "MIGRATION_UNAVAILABLE");
+            request.put("start", false).put("mode", "workbook-reader").put("retainedFailureConnectionId", "retained");
+            assertThat(page(fixture.run("upgrade", Map.of(), Map.of("body", request)))).containsEntry("dryRun", true);
+            request.put("start", true);
+            assertError(fixture.run("upgrade", Map.of(), Map.of("body", request)), "MIGRATION_UNAVAILABLE");
         }
         verify(fixture.shapeUpgrade).upgrade(any(), eq("tenant-a"), eq("source"), eq(true), eq("preview"));
         verify(fixture.exactUpgrade).upgrade(any(), eq("tenant-a"), eq("source"), eq(true), eq("preview"));
         verify(fixture.shapeUpgrade).upgradeWorkbookRows(any(), eq("tenant-a"), eq("source"), eq(true), eq("preview"));
+        verify(fixture.workbookReaderUpgrade).upgrade(any(), eq("tenant-a"), eq("source"), eq("retained"), eq(true), eq("preview"));
         verifyNoInteractions(fixture.nativeUpgrade, fixture.transportUpgrade);
     }
 
@@ -852,6 +860,7 @@ class NifiMappingAssetReadMagicTest {
         final MappingUpgradeService nativeUpgrade = mock(MappingUpgradeService.class);
         final LegacyTransportUpgradeService transportUpgrade = mock(LegacyTransportUpgradeService.class);
         final LegacySourceShapeUpgradeService shapeUpgrade = mock(LegacySourceShapeUpgradeService.class);
+        final WorkbookReaderUpgradeService workbookReaderUpgrade = mock(WorkbookReaderUpgradeService.class);
         final LegacyExactValueUpgradeService exactUpgrade = mock(LegacyExactValueUpgradeService.class);
         final NifiClient nifi = mock(NifiClient.class);
         final AtomicBoolean lockAvailable = new AtomicBoolean(true);
@@ -907,6 +916,7 @@ class NifiMappingAssetReadMagicTest {
             globals.put("nativeUpgrade", nativeUpgrade);
             globals.put("transportUpgrade", transportUpgrade);
             globals.put("shapeUpgrade", shapeUpgrade);
+            globals.put("workbookReaderUpgrade", workbookReaderUpgrade);
             globals.put("exactUpgrade", exactUpgrade);
             globals.put("nifi", nifi);
             var lockDataSource = mock(javax.sql.DataSource.class);
@@ -1094,7 +1104,7 @@ class NifiMappingAssetReadMagicTest {
             MagicScript.create(source, null).compile();
             source = source.replaceAll("(?m)^import '@/common/(\\w+)' as (\\w+)$", "var $2 = $1");
             source = source.replaceAll("(?m)^import (db|tableRead|tableWrite|tenantRuntime|request)$", "");
-            source = source.replaceAll("(?m)^import (\\S+\\.)?\\w+ as (mapper|mapping|schemas|pipelines|projections|mutation|nativeUpgrade|transportUpgrade|shapeUpgrade|exactUpgrade|nifi|transactions|sources)$", "");
+            source = source.replaceAll("(?m)^import (\\S+\\.)?\\w+ as (mapper|mapping|schemas|pipelines|projections|mutation|nativeUpgrade|transportUpgrade|shapeUpgrade|workbookReaderUpgrade|exactUpgrade|nifi|transactions|sources)$", "");
             return MagicScript.create(source, null);
         }
     }

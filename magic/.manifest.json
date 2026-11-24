@@ -1193,7 +1193,7 @@
         "ods_nifi_node_save_01"
       ],
       "kind": "api",
-      "baseSha256": "f1e7cbf034ca4a4393f976c1c657d335b90731806218a38d46bb9a84674a0bb4",
+      "baseSha256": "b35959261f64972d09a39c9b5d269beaeafe73357006b054035589db8cca5866",
       "metadataId": "ods_nifi_node_save_01"
     },
     {
@@ -7589,7 +7589,7 @@
         "ab983b1eaf85488ebd9e9a71e577bf1b"
       ],
       "kind": "api",
-      "baseSha256": "dbe5b71e65e1b615eef314d73af07310a7d63a880b970e84c97d8e49a4323cdf",
+      "baseSha256": "8089838f65d1c0e0f0cf4a613b363dd01f5c8aec35050da95644ad6dba7edf6a",
       "metadataId": "50319b91bfff4fe3b19f24db5aa7c8a4"
     },
     {
@@ -7599,7 +7599,7 @@
         "12d140ad77734d74804fb7e046d92b75"
       ],
       "kind": "api",
-      "baseSha256": "c8ced576784f3d1302cf0469210210b5f059d1290a34850d2561aebdc0dacf1f",
+      "baseSha256": "c4ad62c82129278920f58f1543a0117a881fe03543792a7dd57539577d153362",
       "metadataId": "6138f2d3794847a78cb00dd1c8c14385"
     },
     {
@@ -7610,7 +7610,7 @@
       ],
       "kind": "api",
       "metadataId": "2ef3373371f9445280a1b5ca8d18efcb",
-      "baseSha256": "c78513370fb3e528799af5b7264002bcef06f49b38f9cd4f517a58823c3c0738"
+      "baseSha256": "e178f9d56f3b11ad23d62a047c8a9be21002cddd1e25d508eeac691091673216"
     },
     {
       "path": "api/09.海通流程接口/03.画布模板/06.模板目标数据源选项.ms",
@@ -8248,7 +8248,7 @@
         "2015a9d9959f4bf580721b834650c6cf"
       ],
       "kind": "api",
-      "baseSha256": "036e9bd4d29b14ee02ef1e9fa74f5421dbc057abff1b935e619ca88cb367fef2",
+      "baseSha256": "8d375fc8aa7d5c9b547158ec134af8b1b83ee6c208b74cf20b897b9750f1298c",
       "metadataId": "nifi_map_upgrade_post_v1"
     },
     {

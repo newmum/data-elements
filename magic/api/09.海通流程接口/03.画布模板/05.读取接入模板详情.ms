@@ -32,14 +32,9 @@ query.where(tableRead.equal(column('tid', 'TEXT'), requested))
 if (dataScope.dataSource().scope != 'ALL') { query.where(tableRead.equal(column('status', 'TEXT'), 'PUBLISHED')) }
 var rows = query.rows({tid: column('tid','TEXT'),familyId: column('family_id','TEXT'),
     name: column('display_name','TEXT'),version: column('revision_no','NUMBER'),status: column('status','TEXT'),
-    definition: column('definition','LOB'),updatedAt: column('updated_at','NUMBER')}, 1)
+    definition: column('definition','LOB'),updatedAt: column('updated_at','NUMBER'),
+    defaultTenantId: column('default_tenant_id','TEXT')}, 1)
 if (rows.isEmpty()) { exit 404, '模板不存在或无访问权限' }
-
-var defaults = tableRead.from('sym_config_t','c',tenantId)
-defaults.where(tableRead.equal(tableRead.column('c','tid','TEXT'),'nifiaccessdefault' + tenantId))
-defaults.where(tableRead.equal(tableRead.column('c','is_del','NUMBER'),0))
-var defaultRows = defaults.rows({value:tableRead.column('c','config_value','TEXT')},1)
-var defaultVersionId = defaultRows.isEmpty() ? '' : (defaultRows[0].value || '').toString()
 
 var row = rows[0]
 var spec = JSONUtil.parseObj(row.definition)
@@ -64,4 +59,4 @@ if (!targetIds.isEmpty()) {
 }
 
 return {tid: row.tid,familyId: row.familyId,name: row.name,version: row.version,status: row.status,
-    spec: spec,targets:boundTargets,isDefault:row.tid == defaultVersionId,updatedAt: row.updatedAt}
+    spec: spec,targets:boundTargets,isDefault:row.defaultTenantId == tenantId,updatedAt: row.updatedAt}

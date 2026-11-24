@@ -10,6 +10,7 @@ import com.jcraft.jsch.ChannelSftp;
 import com.jcraft.jsch.JSch;
 import com.jcraft.jsch.Session;
 import com.linewell.dataelement.integration.transfer.FtpsClientFactory;
+import com.linewell.dataelement.mapping.core.WorkbookRows;
 import io.minio.GetObjectArgs;
 import io.minio.MinioClient;
 import io.minio.Result;
@@ -74,7 +75,6 @@ import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.common.PartitionInfo;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.serialization.StringDeserializer;
-import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.DataFormatter;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
@@ -1351,17 +1351,21 @@ public class StructuredSourceProbeService {
             StructuredProbeResult result,
             int rowLimit
     ) throws Exception {
-        DataFormatter formatter = new DataFormatter();
+        DataFormatter formatter = WorkbookRows.formatter();
         try (Workbook workbook = WorkbookFactory.create(new ByteArrayInputStream(content))) {
             for (Sheet sheet : workbook) {
                 Row header = sheet.getRow(sheet.getFirstRowNum());
                 if (header == null) continue;
+                int width = WorkbookRows.registeredWidth(sheet, header, formatter);
+                if (width == 0) continue;
                 List<String> headers = new ArrayList<>();
                 List<String> readerHeaders = new ArrayList<>();
+                List<String> titles = new ArrayList<>();
                 Map<String, Integer> readerHeaderCounts = new LinkedHashMap<>();
                 Set<String> boundReaderHeaders = new HashSet<>();
-                for (int i = 0; i < header.getLastCellNum(); i++) {
-                    String raw = formatter.formatCellValue(header.getCell(i));
+                for (int i = 0; i < width; i++) {
+                    String raw = WorkbookRows.value(formatter, header.getCell(i));
+                    titles.add(raw);
                     // Match NiFi ExcelReader's starting-row field names while preserving registered aliases.
                     String readerHeader = raw.isEmpty() ? "column_" + i : raw;
                     int occurrence = readerHeaderCounts.merge(readerHeader, 1, Integer::sum);
@@ -1380,8 +1384,7 @@ public class StructuredSourceProbeService {
                     Map<String, Object> row = new LinkedHashMap<>();
                     boolean populated = false;
                     for (int columnIndex = 0; columnIndex < headers.size(); columnIndex++) {
-                        Cell cell = sourceRow.getCell(columnIndex);
-                        String value = cell == null ? "" : formatter.formatCellValue(cell);
+                        String value = WorkbookRows.value(formatter, sourceRow.getCell(columnIndex));
                         if (!value.isBlank()) populated = true;
                         row.put(headers.get(columnIndex), value);
                     }
@@ -1395,6 +1398,8 @@ public class StructuredSourceProbeService {
                 table.setFileRecordFormat(extension(file.name));
                 Map<String, Object> shape = headerShape(headers, readerHeaders);
                 shape.put("skipBlankRecords", true);
+                shape.put("workbook", Map.of("sheet", sheet.getSheetName(), "headerRow", header.getRowNum(),
+                        "fields", readerHeaders, "titles", titles));
                 table.setRecordShape(shape);
                 result.getTables().add(table);
             }

@@ -165,10 +165,11 @@ var values = {
     insecure_tls: insecureTls, jdbc_driver_locations: jdbcDriverDirectory, remark: text(body?.remark).trim(),
     enabled: enabled, is_default: isDefault, updated_time: now
 }
-// 校验完成后，在同一事务切换默认节点并保存，失败时保留原有默认节点。
+// 在同一事务中切换已有默认节点并保存，普通编辑只更新当前节点。
 db.transaction(() => {
     if (values.is_default == 1) {
-        db.table('nifi_node_t').where().eq('tenant_id', tenantId).eq('network_code', networkCode).eq('is_del', 0)
+        db.table('nifi_node_t').where().eq('tenant_id', tenantId).eq('network_code', networkCode)
+            .eq('is_del', 0).eq('is_default', 1).ne('tid', nodeId)
             .update({ is_default: 0, updated_time: now })
     }
     if (creating) {

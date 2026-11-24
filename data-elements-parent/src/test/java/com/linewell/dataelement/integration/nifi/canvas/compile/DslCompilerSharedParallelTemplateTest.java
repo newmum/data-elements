@@ -6,10 +6,13 @@ import com.linewell.dataelement.integration.nifi.canvas.manifest.ComponentManife
 import com.linewell.dataelement.integration.nifi.canvas.manifest.ManifestRegistry;
 import com.linewell.dataelement.integration.nifi.canvas.mapping.FieldMappingService;
 import com.linewell.dataelement.integration.nifi.canvas.mapping.MappingVersionStore;
+import com.linewell.dataelement.integration.nifi.canvas.mapping.RegisteredDictionaryCatalog;
+import com.linewell.dataelement.integration.nifi.canvas.mapping.RegisteredMappingSchemaService;
 import com.linewell.dataelement.integration.nifi.canvas.mapping.UnifiedMappingService;
 import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient;
 import com.linewell.dataelement.integration.nifi.canvas.pipeline.Pipeline;
 import com.linewell.dataelement.mapping.core.MappingEngine;
+import com.linewell.dataelement.mapping.core.MappingException;
 import com.linewell.dataelement.model.nifi.NifiEntity;
 import com.linewell.dataelement.platform.magic.module.HiveModule;
 import java.util.ArrayList;
@@ -83,6 +86,65 @@ class DslCompilerSharedParallelTemplateTest {
         when(unified.compileBatch(anyMap())).thenAnswer(call->{Map<String,UnifiedMappingService.Compiled> values=new LinkedHashMap<>();call.<Map<String,?>>getArgument(0).keySet().forEach(id->values.put(id,new UnifiedMappingService.Compiled(plan,Map.of())));return values;});
         compiler.setUnifiedMappingService(unified);
         var versions=mock(MappingVersionStore.class);when(versions.archive(any(),anyMap())).thenReturn(Map.of("mapping","plan-version"));compiler.setMappingVersions(versions);
+    }
+
+    @Test void deploymentAuthorizesDirectRegisteredSourceForLegacyDecimalToHiveInteger() throws Exception {
+        var fields = Map.of(
+                "registered-table", JSON.readTree("""
+                        [{"name":"status","logicalType":"INT","physicalType":"tinyint(1)"}]
+                        """),
+                "oracle-table", JSON.readTree("""
+                        [{"name":"STATUS","logicalType":"DECIMAL","physicalType":"NUMBER","precision":5,"scale":0}]
+                        """),
+                "hive-table", JSON.readTree("""
+                        [{"name":"status","logicalType":"INT","physicalType":"SMALLINT"}]
+                        """));
+        var dictionaries = mock(RegisteredDictionaryCatalog.class);
+        when(dictionaries.bind(any())).thenAnswer(call -> new RegisteredDictionaryCatalog.Bound(call.getArgument(0), Map.of()));
+        var mappingService = new UnifiedMappingService(dictionaries, new FieldMappingService());
+        var schemas = spy(new RegisteredMappingSchemaService(null, null, mappingService));
+        doAnswer(call -> {
+            Map<String, JsonNode> references = call.getArgument(0);
+            var resolved = new LinkedHashMap<String, RegisteredMappingSchemaService.Resolved>();
+            references.forEach((hash, ref) -> {
+                String table = ref.path("tableId").asText();
+                resolved.put(hash, new RegisteredMappingSchemaService.Resolved(ref.path("datasourceId").asText(),
+                        table, "", table, fields.get(table), Map.of(), false, false, null));
+            });
+            return resolved;
+        }).when(schemas).resolve(anyMap());
+        doAnswer(call -> {
+            Map<String, RegisteredMappingSchemaService.Resolved> resolved = call.getArgument(0);
+            var physical = new LinkedHashMap<String, JsonNode>();
+            resolved.forEach((hash, table) -> physical.put(hash, table.fields().deepCopy()));
+            return physical;
+        }).when(schemas).physicalBatch(anyMap());
+        mappingService.setSchemas(schemas);
+        compiler.setUnifiedMappingService(mappingService);
+
+        var input = new Pipeline.Node("source", "source.mysql", "登记来源", "source", 0, 0,
+                Map.of("registeredDatasourceId", "registered-db", "sourceTableId", "registered-table"));
+        var governance = new Pipeline.Node("mapping", "transform.field-enrichment", "字段治理", "transform", 0, 0,
+                Map.of("mappings", JSON.readTree("""
+                        {"version":"1.0","executionEngine":"JAVA_RECORD","mappings":[
+                          {"from":"/status","to":"/STATUS","expression":"CAST(${field:status} AS INTEGER)","targetType":"NUMBER(5)"}
+                        ]}
+                        """)));
+        var oracle = new Pipeline.Node("jdbc", "sink.jdbc", "Oracle", "sink", 0, 0,
+                Map.of("targetDbId", "oracle-db", "targetTableId", "oracle-table"));
+        var hiveTarget = new Pipeline.Node("hive", "sink.hive", "Hive", "sink", 0, 0,
+                Map.of("targetDbId", "hive-db", "targetTableId", "hive-table"));
+        var edges = List.of(edge("sm", "source", "mapping"), edge("mj", "mapping", "jdbc"), edge("mh", "mapping", "hive"));
+        compiler.preflightMapping(flow(List.of(input, governance, oracle, hiveTarget), edges));
+        verify(schemas).resolve(argThat(refs -> refs.size() == 3 && refs.values().stream()
+                .anyMatch(ref -> "registered-table".equals(ref.path("tableId").asText()))));
+        verify(schemas).physicalBatch(anyMap());
+        verify(nifi).requireMappingExtension();
+
+        var custom = new Pipeline.Node(input.id(), input.manifestKey(), input.label(), input.category(), 0, 0,
+                Map.of("registeredDatasourceId", "registered-db", "sourceTableId", "registered-table", "customQuery", "SELECT 40000 AS status"));
+        assertThatThrownBy(() -> compiler.preflightMapping(flow(List.of(custom, governance, oracle, hiveTarget), edges)))
+                .isInstanceOfSatisfying(MappingException.class, error -> assertThat(error.code()).isEqualTo("TARGET_TYPE_MISMATCH"));
     }
 
     @Test void oneGovernanceFeedsIndependentInsertFallbackAndExplicitHiveTimestampConversion() {

@@ -28,11 +28,48 @@ final class MappingFieldLabels {
         Set<String> binaryFields=directBinaryFields(node);
         for(String collection:List.of("rules","mappings"))for(JsonNode rule:spec.path(collection))binaryInput(rule,binaryFields);
         var targets=sharedTargets(node);
-        if(targets.size()>1)bindSharedTargets(targets,spec);
+        if(targets.size()>1){
+            bindSharedTargets(targets,spec);
+            bindSharedSource(node,(ObjectNode)spec.path("schemaContract"));
+        }
         else if(hasBinary(spec,0))bindBinaryTarget(node,spec);
         for(String side:List.of("source","target"))for(JsonNode field:spec.path("schemaContract").path(side))
             putComment(field,"comment",lookup(side.equals("source")?source:target,field.path("name").asText()));
         return spec;
+    }
+    /** Only a direct, unambiguous registered table can prove the narrower input range at deployment. */
+    private void bindSharedSource(String node,ObjectNode contract){
+        ObjectNode registered=null;
+        for(String parent:incoming.getOrDefault(node,List.of())){
+            Pipeline.Node source=nodes.get(parent);
+            ObjectNode reference=directJdbcReference(source);
+            if(reference==null || registered!=null && !registered.equals(reference)){
+                registered=null;
+                break;
+            }
+            registered=reference;
+        }
+        JsonNode existing=contract.path("sourceRef");
+        if(registered==null){
+            if(existing.isObject())contract.put("sourceRangeUnverified",true);
+            return;
+        }
+        if(existing.isObject() && (!existing.path("datasourceId").equals(registered.path("datasourceId"))
+                || !existing.path("tableId").equals(registered.path("tableId"))))
+            throw new MappingException("SOURCE_REFERENCE_MISMATCH","字段治理的来源引用与实际连接的登记表不一致，请重新读取来源结构");
+        contract.remove("sourceRangeUnverified");
+        if(!existing.isObject())contract.set("sourceRef",registered);
+    }
+
+    private static ObjectNode directJdbcReference(Pipeline.Node source){
+        if(source==null || !"source".equals(source.category()) || source.config()==null)return null;
+        var config=source.config();
+        if(!Set.of("source.mysql","source.mariadb","source.tdsql-mysql","source.oracle","source.oceanbase",
+                "source.postgresql","source.kingbase","source.dameng","source.sqlserver").contains(source.manifestKey())
+                || !first(config,"customQuery").isBlank())return null;
+        String datasource=first(config,"registeredDatasourceId","sourceDbId"), table=first(config,"sourceTableId");
+        if(datasource.isBlank() || table.isBlank())return null;
+        return JSON.createObjectNode().put("datasourceId",datasource).put("tableId",table);
     }
     /** Discover terminal targets once in memory, crossing transport adapters but never another governance node. */
     private List<Pipeline.Node> sharedTargets(String node){

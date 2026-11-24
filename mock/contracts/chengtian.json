@@ -9,7 +9,7 @@
         "kind": "magic",
         "id": "50319b91bfff4fe3b19f24db5aa7c8a4",
         "file": "magic/api/09.海通流程接口/03.画布模板/03.分页查询接入模板.ms",
-        "reviewedSha256": "dbe5b71e65e1b615eef314d73af07310a7d63a880b970e84c97d8e49a4323cdf"
+        "reviewedSha256": "8089838f65d1c0e0f0cf4a613b363dd01f5c8aec35050da95644ad6dba7edf6a"
       },
       "request": {
         "type": "object"
@@ -41,7 +41,7 @@
           }
         }
       },
-      "review": "按行业与已发布状态分页查询模板摘要，支持name/version/updatedAt稳定排序，返回默认模板、目标绑定与sourceSchedule来源调度策略。列表不返回流程正文，20/100条固定三次SQL；空Mock场景不伪造模板。来源适配与物化链路使用真实Magic和编译器验证。"
+      "review": "按行业与已发布状态分页查询模板摘要，支持name/version/updatedAt稳定排序，返回默认模板、目标绑定与sourceSchedule来源调度策略。列表不返回流程正文，20/100条固定三次SQL；空Mock场景不伪造模板。来源适配与物化链路使用真实Magic和编译器验证。 默认仅从当前租户已发布的模板行读取，列表筛选不改变默认指向；详情直接从该行取默认标记。响应字段及权限契约保持一致。"
     },
     {
       "operation": "POST /nifi/canvas/templatedetail",
@@ -49,7 +49,7 @@
         "kind": "magic",
         "id": "2ef3373371f9445280a1b5ca8d18efcb",
         "file": "magic/api/09.海通流程接口/03.画布模板/05.读取接入模板详情.ms",
-        "reviewedSha256": "c78513370fb3e528799af5b7264002bcef06f49b38f9cd4f517a58823c3c0738"
+        "reviewedSha256": "e178f9d56f3b11ad23d62a047c8a9be21002cddd1e25d508eeac691091673216"
       },
       "request": {
         "type": "object"
@@ -57,7 +57,7 @@
       "response": {
         "type": "object"
       },
-      "review": "主动读取本行业已发布流程定义、isDefault及按配置顺序返回的目标数据源元数据。全部目标逐ID检查当前角色数据范围，越权整批403，不返回连接凭据。完整DSL保留四节点共享字段治理、来源manualBackfill原生补数开关和各分支写入策略；备用补数只在NiFi内部派生、默认禁用，不作为海通画布节点；Mock仅克隆回读配置，不模拟模板发布、补数或NiFi执行，使用当前场景已有数据源和模板。"
+      "review": "主动读取本行业已发布流程定义、isDefault及按配置顺序返回的目标数据源元数据。全部目标逐ID检查当前角色数据范围，越权整批403，不返回连接凭据。完整DSL保留四节点共享字段治理、来源manualBackfill原生补数开关和各分支写入策略；备用补数只在NiFi内部派生、默认禁用，不作为海通画布节点；Mock仅克隆回读配置，不模拟模板发布、补数或NiFi执行，使用当前场景已有数据源和模板。 默认仅从当前租户已发布的模板行读取，列表筛选不改变默认指向；详情直接从该行取默认标记。响应字段及权限契约保持一致。"
     },
     {
       "operation": "GET /portal/main/index",

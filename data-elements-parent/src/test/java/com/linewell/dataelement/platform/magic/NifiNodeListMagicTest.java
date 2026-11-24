@@ -331,6 +331,34 @@ class NifiNodeListMagicTest {
         assertNull(fixture.jdbc.queryForObject("select auth_password from nifi_node_t where tid=?", String.class, id));
     }
 
+    @Test
+    void editingDefaultNodeUpdatesOnlyThatNodeAndSwitchingClearsOnlyThePreviousDefault() throws Exception {
+        var fixture = new Fixture(3);
+        fixture.jdbc.update("""
+                update nifi_node_t set network_code='GAW', is_default=1, updated_time='2026-01-01 00:00:00'
+                where tid in ('own-0','foreign','deleted')
+                """);
+        fixture.jdbc.update("update nifi_node_t set network_code='GAW',updated_time='2026-01-01 00:00:00' where tid='own-1'");
+        fixture.jdbc.update("update nifi_node_t set network_code='HLW',is_default=1 where tid='own-2'");
+        String otherNodes = "select * from nifi_node_t where tid in ('own-2','foreign','deleted') order by tid";
+        var unchanged = fixture.jdbc.queryForList(otherNodes);
+        var peer = fixture.jdbc.queryForMap("select * from nifi_node_t where tid='own-1'");
+        var form = new LinkedHashMap<String, Object>(Map.of("tid", "own-0", "nodeName", "validation",
+                "nodeCode", "code-0", "networkCode", "GAW", "baseUrl", "http://example.test",
+                "authUsername", "validation", "isDefault", true,
+                "jdbcDriverDirectory", "GAUSSDB_OPENGAUSS=/opt/nifi/validation/opengauss-jdbc.jar"));
+        assertEquals("own-0", assertInstanceOf(Map.class, fixture.save(form)).get("tid"));
+        assertEquals(peer, fixture.jdbc.queryForMap("select * from nifi_node_t where tid='own-1'"));
+        assertEquals(unchanged, fixture.jdbc.queryForList(otherNodes));
+
+        form.put("tid", "own-1");
+        form.put("nodeCode", "code-1");
+        assertEquals("own-1", assertInstanceOf(Map.class, fixture.save(form)).get("tid"));
+        assertEquals(List.of(0, 1), fixture.jdbc.queryForList(
+                "select is_default from nifi_node_t where tid in ('own-0','own-1') order by tid", Integer.class));
+        assertEquals(unchanged, fixture.jdbc.queryForList(otherNodes));
+    }
+
     static class Fixture {
         final JdbcTemplate jdbc;
         final SQLModule db;
