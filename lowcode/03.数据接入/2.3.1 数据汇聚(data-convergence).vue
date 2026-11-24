@@ -5,7 +5,6 @@
         <div class="left-panel">
           <div class="panel-header">
           <h3>{{ taskName }}</h3>
-          <el-tooltip :content="runtimeHint" placement="bottom"><el-tag :type="runtimeConnection === 'live' ? 'success' : runtimeConnection === 'connecting' ? 'info' : 'warning'" size="small" effect="plain">{{ runtimeConnection === 'live' ? '实时状态' : runtimeConnection === 'connecting' ? '连接中' : runtimeConnection === 'partial' ? '部分节点待确认' : '状态待确认' }}</el-tag></el-tooltip>
           </div>
 
           <div class="tree-container">
@@ -139,7 +138,7 @@
                         <template v-for="(stage, stageIndex) in route.stages" :key="stageIndex">
                           <div v-if="stageIndex" class="task-link-arrow" :aria-label="route.links[stageIndex - 1].text">
                             <span class="task-link-arrow__line" aria-hidden="true"></span>
-                            <el-tag class="task-link-arrow__status" size="small" effect="light" :type="route.links[stageIndex - 1].tone === 'idle' ? 'info' : route.links[stageIndex - 1].tone">{{ route.links[stageIndex - 1].text }}</el-tag>
+                            <el-tag class="task-link-arrow__status" :title="route.tasks[stageIndex - 1]?.runtimeMessage || ''" size="small" effect="light" :type="route.links[stageIndex - 1].tone === 'idle' ? 'info' : route.links[stageIndex - 1].tone">{{ route.links[stageIndex - 1].text }}</el-tag>
                             <span class="task-link-arrow__line task-link-arrow__line--end" aria-hidden="true"></span>
                           </div>
                           <div class="task-targets">
@@ -365,7 +364,7 @@
 
 <script setup>
 import { ElMessageBox } from "element-plus";
-import { computed, nextTick, onActivated, onDeactivated, onMounted, onUnmounted, reactive, ref } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 import { get } from "lodash-es";
 
@@ -395,84 +394,12 @@ const taskName = `${taskPage.verb}任务`;
 const router = useRouter();
 const treeRef = ref();
 const tableRef = ref();
-const runtimeConnection = ref('connecting');
-const runtimeReadAt = ref(0);
-const runtimeWarning = ref('');
-const runtimeHint = computed(() => runtimeWarning.value || (runtimeReadAt.value ? `NiFi 最近确认：${new Date(runtimeReadAt.value).toLocaleTimeString()}` : '正在读取 NiFi 当前运行状态'));
-let runtimeRevision = '', runtimeEventRevision = '', taskFetchSequence = 0, runtimeNodeIds = [];
-const applyRuntimeScope = (ids) => {
-  const next = [...new Set((ids || []).filter(id => /^[A-Za-z0-9_-]{1,64}$/.test(id)))].sort();
-  if (JSON.stringify(next) === JSON.stringify(runtimeNodeIds)) return;
-  stopRuntimeStream(); runtimeNodeIds = next; runtimeEventRevision = '';
-  if (next.length) startRuntimeStream();
-};
-let runtimeActive = true, runtimeAbort = null, reconnectTimer = null, statusRefreshTimer = null, reconnectDelay = 1000;
-const refreshRuntimePage = () => {
-  if (statusRefreshTimer) return;
-  statusRefreshTimer = setTimeout(() => { statusRefreshTimer = null; if (runtimeActive && !document.hidden) tableRef.value?.refresh?.(false); }, 150);
-};
-// 跨节点采样完成会改变列表成员，事件只触发授权分页重读，不能用全节点健康覆盖本页状态。
-const acceptRuntimeEvent = (payload) => {
-  if (runtimeEventRevision !== payload.revision) refreshRuntimePage();
-  runtimeEventRevision = payload.revision;
-};
-const startRuntimeStream = async () => {
-  if (!runtimeActive || document.hidden || runtimeAbort || !runtimeNodeIds.length) return;
-  const controller = new AbortController(); runtimeAbort = controller;
-  let stalled = false, watchdog;
-  const armWatchdog = () => { clearTimeout(watchdog); watchdog = setTimeout(() => { stalled = true; controller.abort(); }, 20000); };
-  armWatchdog();
-  try {
-    // The existing Axios interceptor supplies the current token to this adapter.
-    // Fetch keeps the stream open without putting credentials in the URL.
-    await $request.get('/nifi/run/events', {
-      params: { nodeIds: JSON.stringify(runtimeNodeIds) },
-      signal: controller.signal, timeout: 0, responsePolicy: 'raw', errorPolicy: 'silent',
-      headers: { Accept: 'text/event-stream' },
-      adapter: async (config) => {
-        const headers = Object.fromEntries(Object.entries(config.headers.toJSON()).filter(([, value]) => value != null).map(([key, value]) => [key, String(value)]));
-        const response = await fetch($request.getUri(config), { headers, signal: controller.signal, cache: 'no-store' });
-        if (!response.ok || !response.headers.get('content-type')?.includes('text/event-stream') || !response.body) throw new Error('实时状态连接不可用');
-        reconnectDelay = 1000;
-        const reader = response.body.getReader(), decoder = new TextDecoder();
-        let buffer = '';
-        try {
-          while (true) {
-            const { value, done } = await reader.read(); if (done) break;
-            armWatchdog();
-            buffer += decoder.decode(value, { stream: true }).replace(/\r/g, '');
-            if (buffer.length > 65536) throw new Error('实时状态消息过大');
-            let end;
-            while ((end = buffer.indexOf('\n\n')) >= 0) {
-              const event = buffer.slice(0, end); buffer = buffer.slice(end + 2);
-              const data = event.split('\n').filter(line => line.startsWith('data:')).map(line => line.slice(5).trimStart()).join('\n');
-              if (data && !controller.signal.aborted) acceptRuntimeEvent(JSON.parse(data));
-            }
-          }
-        } finally { reader.releaseLock(); }
-        return { data: null, status: response.status, statusText: 'OK', headers: {}, config };
-      },
-    });
-  } catch (error) {
-    if (!controller.signal.aborted || stalled) { runtimeConnection.value = 'unavailable'; runtimeWarning.value = '实时连接中断，正在自动重连；当前显示最近确认结果'; }
-  } finally {
-    clearTimeout(watchdog);
-    const cancelled = controller.signal.aborted && !stalled;
-    controller.abort();
-    if (runtimeAbort === controller) runtimeAbort = null;
-    if (runtimeActive && !document.hidden && !cancelled) {
-      reconnectTimer = setTimeout(startRuntimeStream, reconnectDelay + Math.random() * 300);
-      reconnectDelay = Math.min(30000, reconnectDelay * 2);
-    }
-  }
-};
-const stopRuntimeStream = () => { runtimeAbort?.abort(); runtimeAbort = null; clearTimeout(reconnectTimer); clearTimeout(statusRefreshTimer); reconnectTimer = null; statusRefreshTimer = null; };
-const runtimeVisibility = () => { if (document.hidden) stopRuntimeStream(); else { refreshRuntimePage(); startRuntimeStream(); } };
+// 查询结果保持到下一次用户搜索、分页、筛选或任务操作。
+let taskFetchSequence = 0;
 
 const sourcePanelRef = ref();
 const taskLinksWidth = ref(0);
 let taskLinksObserver;
-const skipFirstActivation = ref(true);
 const orgTreeSource = ref([]);
 const expandedRows = ref([]);
 
@@ -648,8 +575,11 @@ const taskLinkTargets = (task) => Array.isArray(task?.targetTables) && task.targ
 const taskLinkStatus = (task) => {
   // 与任务监控共用 NiFi 快照；历史启停标志和执行结果不代表当前运行态。
   const current = String(task?.runtimeState || '').trim().toUpperCase();
-  if (!current || task?.runtimeFresh !== true || runtimeConnection.value === 'unavailable') {
-    return { text: '状态待确认', tone: 'warning' };
+  if (!current || task?.runtimeFresh !== true) {
+    const reason = String(task?.runtimeMessage || '');
+    const text = /认证|授权/.test(reason) ? '认证或授权失败'
+      : /连接|网络|超时|连不通|offline|unreachable/i.test(reason) ? '节点连不通' : '状态待确认';
+    return { text, tone: 'warning' };
   }
   const text = String(task.runtimeLabel || '状态待确认');
   if (current === 'RUNNING') return { text, tone: 'success' };
@@ -924,15 +854,6 @@ const fetchSources = async ({ pageNo = 1, pageSize = 20 } = {}) => {
     if (sequence === taskFetchSequence) {
       state.datasourceTypeStatistics = page.datasourceTypeStatistics?.complete === true ? page.datasourceTypeStatistics : null;
       state.datasourceTypeError = state.datasourceTypeStatistics ? "" : "类型统计暂不可用";
-    }
-    if (sequence === taskFetchSequence && page.runtimeRevision) {
-      applyRuntimeScope(page.runtimeWatchNodeIds || page.runtimeNodeIds);
-      if (runtimeReadAt.value > Number(page.runtimeObservedAt || 0) && runtimeRevision !== page.runtimeRevision) {
-        refreshRuntimePage();
-      } else {
-        runtimeRevision = page.runtimeRevision; runtimeReadAt.value = Number(page.runtimeObservedAt || 0);
-        runtimeConnection.value = page.runtimeFresh ? 'live' : page.runtimePartial ? 'partial' : 'unavailable'; runtimeWarning.value = page.runtimeMessage || '';
-      }
     }
     const list = (page.list || []).map((item) => ({
       ...item,
@@ -1476,8 +1397,6 @@ const handleMessage = (event) => {
 };
 
 onMounted(() => {
-  document.addEventListener('visibilitychange', runtimeVisibility);
-  startRuntimeStream();
   // 展开单元格随主表横向滚动而变宽；链路按可见面板宽度排布。
   taskLinksObserver = new ResizeObserver(([entry]) => {
     taskLinksWidth.value = Math.max(0, entry.contentRect.width - 28);
@@ -1489,19 +1408,7 @@ onMounted(() => {
   window.addEventListener("message", handleMessage);
 });
 
-onActivated(() => {
-  runtimeActive = true; startRuntimeStream();
-  if (skipFirstActivation.value) {
-    skipFirstActivation.value = false;
-    return;
-  }
-  tableRef.value?.refresh?.();
-});
-
-onDeactivated(() => { runtimeActive = false; stopRuntimeStream(); });
-
 onUnmounted(() => {
-  runtimeActive = false; stopRuntimeStream(); document.removeEventListener('visibilitychange', runtimeVisibility);
   taskLinksObserver?.disconnect();
   window.removeEventListener("message", handleMessage);
 });

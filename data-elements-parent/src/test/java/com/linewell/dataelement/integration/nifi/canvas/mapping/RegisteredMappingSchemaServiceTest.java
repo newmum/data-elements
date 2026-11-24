@@ -22,6 +22,90 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 class RegisteredMappingSchemaServiceTest {
+    @Test void nativeHiveStringSentinelIsUnboundedForTwentyAndHundredPhysicalTables()throws Exception {
+        for(int count:List.of(20,100))for(int sentinel:List.of(0,Integer.MAX_VALUE)){
+            Fixture f=hiveTextFixture(count,"STRING",sentinel);
+            try(var tenant=TenantContext.use("tenant-A")){
+                var registered=f.service.resolve(f.references);
+                registered.values().forEach(table->assertEquals(0,table.fields().get(0).path("length").asInt()));
+                var actual=f.service.physicalBatch(registered);
+                assertEquals(count,actual.size());actual.values().forEach(fields->assertEquals(0,fields.get(0).path("length").asInt()));
+            }
+            verify(f.sources,times(1)).resolveBatch(eq("tenant-A"),eq(Set.of("db")),anyString());
+            verify(f.jdbc,times(2)).queryForList(anyString(),any(Object[].class));
+            verify(f.engine,times(1)).openRegistered(eq("db"),anyMap());
+            verify(f.metadata,times(1)).getColumns(any(),any(),any(),any());
+        }
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings={"DATA_FROM","OPRSTATUS","data_from"})
+    void deploymentRevalidatesCachedHiveSentinelThroughTheRealMappingCompiler(String name)throws Exception {
+        Fixture f=hiveTextFixture(1,"STRING",Integer.MAX_VALUE,name);
+        var engine=mappingCompiler(f);
+        var spec=hiveTextSpec(f,"STRING",Integer.MAX_VALUE);
+        try(var tenant=TenantContext.use("tenant-A")){
+            var compiled=engine.compile(spec);
+            assertEquals(0,compiled.plan().document().path("schemaContract").path("targets").get(0).path("target").get(0).path("length").asInt());
+            assertEquals("DECIMAL",compiled.plan().outputContracts().get(name).logicalType());
+        }
+        verify(f.metadata,times(1)).getColumns(any(),any(),any(),any());
+    }
+
+    @Test void physicalVarcharCapacityCannotBeHiddenByACachedUnboundedString()throws Exception {
+        for(int length:List.of(255,Integer.MAX_VALUE)){
+            Fixture f=hiveTextFixture(1,"VARCHAR",length);
+            var engine=mappingCompiler(f);var spec=hiveTextSpec(f,"STRING",0);
+            try(var tenant=TenantContext.use("tenant-A")){
+                var error=assertThrows(MappingException.class,()->engine.compile(spec));
+                assertEquals("TARGET_TYPE_MISMATCH",error.code());assertTrue(error.getMessage().contains("长度="+length));
+            }
+        }
+    }
+
+    private static Fixture hiveTextFixture(int count,String physicalType,int length)throws Exception {
+        return hiveTextFixture(count,physicalType,length,"id");
+    }
+    private static Fixture hiveTextFixture(int count,String physicalType,int length,String name)throws Exception {
+        Fixture f=new Fixture(count);f.config=Map.of("db",Map.of("dbType","HIVE","defaultSchema","business"));
+        when(f.metadata.getDatabaseProductName()).thenReturn("Apache Hive");
+        f.columns.replaceAll(column->{var changed=new HashMap<>(column);changed.put("column_name",name);changed.put("data_type",physicalType);changed.put("length",length);return changed;});
+        var rows=new ArrayList<Map<String,Object>>();
+        for(int index=0;index<count;index++){
+            var row=new HashMap<String,Object>(jdbcColumn("catalog","business","table_"+index,name));
+            row.put("TYPE_NAME",physicalType);row.put("COLUMN_SIZE",length);rows.add(row);
+        }
+        when(f.metadata.getColumns(any(),any(),any(),any())).thenAnswer(call->rows(rows));
+        return f;
+    }
+    private static UnifiedMappingService mappingCompiler(Fixture f){
+        var dictionaries=mock(RegisteredDictionaryCatalog.class);
+        when(dictionaries.bind(any())).thenAnswer(call->new RegisteredDictionaryCatalog.Bound(call.getArgument(0),Map.of()));
+        var engine=new UnifiedMappingService(dictionaries,new FieldMappingService());engine.setSchemas(f.service);return engine;
+    }
+    private static com.fasterxml.jackson.databind.node.ObjectNode hiveTextSpec(Fixture f,String cachedPhysicalType,int cachedLength){
+        String name=f.columns.getFirst().get("column_name").toString();
+        var spec=JSON.createObjectNode().put("version","1.0");
+        spec.putArray("mappings").addObject().put("from","/raw").put("to","/"+name).put("targetType","NUMBER");
+        var contract=spec.putObject("schemaContract");contract.putArray("source").addObject().put("name","raw").put("logicalType","DECIMAL");
+        contract.putArray("target").addObject().put("name",name).put("logicalType","DECIMAL").put("precision",0).put("scale",0);
+        var branch=contract.putArray("targets").addObject().put("nodeId","hive").put("label","Hive");branch.set("reference",f.references.get("ref-0"));
+        branch.putArray("fields").addObject().put("name",name).put("logicalType","STRING").put("physicalType",cachedPhysicalType).put("length",cachedLength);
+        return spec;
+    }
+    @Test void physicalFailuresIdentifyTheStageAndSqlProtocolCodeWithoutLeakingVendorCredentials()throws Exception {
+        for(boolean connected:List.of(false,true)){
+            Fixture f=new Fixture(1);var failure=new SQLException("jdbc:hive2://private;password=secret","08001",1045);
+            if(connected)when(f.statement.executeQuery()).thenThrow(failure);
+            else when(f.engine.openRegistered(anyString(),anyMap())).thenThrow(failure);
+            try(var tenant=TenantContext.use("tenant-A")){
+                var error=assertThrows(MappingException.class,()->f.service.physicalBatch(f.service.resolve(f.references)));
+                assertEquals("SCHEMA_UNAVAILABLE",error.code());assertTrue(error.getMessage().contains(connected?"批量读取物理字段":"建立认证连接"));
+                assertTrue(error.getMessage().contains("SQLState=08001"));assertTrue(error.getMessage().contains("1045"));
+                assertFalse(error.getMessage().contains("private"));assertFalse(error.getMessage().contains("secret"));
+            }
+        }
+    }
     @Test void twentyAndHundredSamplesUseStandardTemporalGettersAndNeverGuessUnitsForNumberColumns()throws Exception {
         for(int count:List.of(20,100)){
             Fixture f=new Fixture(1);

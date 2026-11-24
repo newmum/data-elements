@@ -56,6 +56,7 @@ import com.linewell.dataelement.integration.nifi.canvas.lifecycle.TargetTableCle
 import com.linewell.dataelement.integration.nifi.canvas.mapping.AccessTaskFieldMappingBinder as mappingBinder
 import com.linewell.dataelement.integration.nifi.canvas.mapping.MappingVersionStore as versions
 import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient as nifi
+import com.linewell.dataelement.integration.nifi.canvas.runtime.TaskRuntimeStatusService as runtimeStatus
 import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiException
 import com.linewell.dataelement.integration.nifi.canvas.pipeline.DslHasher
 import com.linewell.dataelement.integration.nifi.canvas.pipeline.HiveSinkPublicationPolicy
@@ -93,7 +94,7 @@ return respond(rootCause => {
         if (saved == null) {
             return ResponseEntity.notFound().build()
         }
-        var nodeId = saved.nodeMapping()?.runtimeNodeId()
+        var nodeId = runtimeStatus.resolveLegacyOwner(saved)
         var discardQueueFor = options?.discardQueueFor
         if (discardQueueFor != null && (options?.forceRebuild != true || options?.startAfterDeploy == true
             || options?.preserveExisting == true || discardQueueFor != saved.nifiProcessGroupId())) {
@@ -174,7 +175,7 @@ return respond(rootCause => {
                     }
                 }
             }
-            var mapping = new NifiNodeMapping(primary, reverse, edges)
+            var mapping = new NifiNodeMapping(primary, reverse, edges).withRuntimeNode(nifi.runtimeNodeId())
             try {
                 mapping = mapping.withAttributes(attributeSync.capture(attributesFrom.dsl(), compiled.processGroupId(), mapping))
             } catch (failure) {

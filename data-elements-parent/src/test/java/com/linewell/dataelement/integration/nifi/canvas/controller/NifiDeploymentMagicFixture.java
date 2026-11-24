@@ -59,6 +59,9 @@ final class NifiDeploymentMagicFixture {
             ErrorService errors, TaskOperations tasks, PipelineGroupOrganizer groups,
             TargetTableCleanupService cleanup, boolean nativeScope) {
         this.repository = repository;
+        var runtimeStatus=mock(com.linewell.dataelement.integration.nifi.canvas.runtime.TaskRuntimeStatusService.class);
+        when(runtimeStatus.resolveLegacyOwner(any())).thenAnswer(call->{Pipeline p=call.getArgument(0);return p.nodeMapping()==null?null:p.nodeMapping().runtimeNodeId();});
+        bindings.put("runtimeStatus",runtimeStatus);
         bindings.putAll(Map.of("compiler", compiler, "nifi", nifi, "errorStore", errors,
                 "groups", groups, "targetCleanup", new Cleanup(cleanup), "tenantRuntime", new TenantMagicModule(null),
                 "lineage", mock(com.linewell.dataelement.feature.metadatagovernance.application.LineageAnalysisService.class),
@@ -173,7 +176,7 @@ final class NifiDeploymentMagicFixture {
         try {
             String source = CanonicalMagicSources.byPath(path, id);
             MagicScript.create(source, null).compile();
-            return MagicScript.create(source.replaceAll("(?m)^import (?:'@/[^']+' as \\w+|(?:tableRead|tableWrite|tenantRuntime)|[^\\r\\n]+ as (?:lineage|compiler|errorStore|mutation|groups|mappingBinder|versions|nifi|transactions|mappingVersions|targetCleanup|organizer))\\R", ""), null);
+            return MagicScript.create(source.replaceAll("(?m)^import (?:'@/[^']+' as \\w+|(?:tableRead|tableWrite|tenantRuntime)|[^\\r\\n]+ as (?:lineage|compiler|errorStore|mutation|groups|mappingBinder|versions|nifi|transactions|mappingVersions|targetCleanup|organizer|runtimeStatus))\\R", ""), null);
         } catch (java.io.IOException e) {
             throw new IllegalStateException(e);
         }

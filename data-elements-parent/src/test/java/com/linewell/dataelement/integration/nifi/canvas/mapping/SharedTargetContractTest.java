@@ -71,6 +71,36 @@ class SharedTargetContractTest {
         assertTrue(error.getMessage().contains("STRING"));assertTrue(error.getMessage().contains("INT"));
     }
 
+    @Test void hiveStringAcceptsUnboundedOracleNumberWithoutChangingNumericOutput()throws Exception {
+        var draft=sharedDraft("DECIMAL",0,0,true);
+        secondaryField(draft).put("logicalType","STRING").put("physicalType","STRING").put("length",0);
+        var plan=MappingEngine.compile(draft);
+        assertDoesNotThrow(()->UnifiedMappingService.validateSharedTargetFields(draft,plan));
+        var large=new java.math.BigDecimal("-123456789012345678901234567890.123456789");
+        var nullable=new java.util.HashMap<String,Object>();nullable.put("raw",null);
+        var result=MappingEngine.execute(plan,List.of(java.util.Map.of("raw",large),nullable),0,
+                new com.linewell.dataelement.mapping.core.ExecutionContext(java.time.Instant.EPOCH,
+                        java.time.ZoneOffset.UTC,java.util.Locale.ROOT,"validation"),null);
+        assertTrue(result.rows().stream().allMatch(MappingEngine.Row::success));
+        assertEquals(large,result.rows().getFirst().output().get("VALUE"));
+        assertNull(result.rows().getLast().output().get("VALUE"));
+        assertEquals("DECIMAL",plan.outputContracts().get("VALUE").logicalType());
+    }
+
+    @Test void boundedTextRequiresTheFullDeclaredNumericCapacity(){
+        for(var type:List.of("INT","LONG","DECIMAL")){
+            int capacity=type.equals("INT")?11:type.equals("LONG")?20:8;
+            var draft=sharedDraft(type,type.equals("DECIMAL")?6:0,type.equals("DECIMAL")?2:0,true);
+            secondaryField(draft).put("logicalType","STRING").put("length",capacity);
+            assertSharedAccepted(draft);
+            secondaryField(draft).put("length",capacity-1);
+            assertEquals("TARGET_TYPE_MISMATCH",sharedError(draft).code());
+        }
+        var unknown=sharedDraft("DECIMAL",0,0,true);
+        secondaryField(unknown).put("logicalType","STRING").put("length",255);
+        assertEquals("TARGET_TYPE_MISMATCH",sharedError(unknown).code());
+    }
+
     @Test void hiveIntAcceptsBoundedIntegralDecimalAndPreservesTheSharedDecimalOutput()throws Exception {
         var draft=sharedDraft("DECIMAL",5,0,false);
         secondaryField(draft).put("logicalType","INT").put("physicalType","int");

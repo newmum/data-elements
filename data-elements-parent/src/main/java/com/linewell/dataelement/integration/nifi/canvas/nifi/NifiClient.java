@@ -85,6 +85,10 @@ public class NifiClient {
         return selectedRuntimeNode().code();
     }
 
+    public String runtimeNodeId() {
+        return selectedRuntimeNode().id();
+    }
+
     /** Build a direct native link from the tenant's configured endpoint. No credentials are sent to the browser. */
     public String assignedNodeUiUrl(String nodeId, String groupId) {
         var node = runtimeResolver.resolveAssignedNode(nodeId);

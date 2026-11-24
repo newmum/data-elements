@@ -489,7 +489,7 @@ class NifiPipelineReadMagicTest {
                 "com.fasterxml.jackson.databind.ObjectMapper as objectMapper", "tableRead", "tenantRuntime");
         final MagicScript link = script(PIPELINE_API + "02.流程设计/07.查询流程原生地址.ms", "nifi_pipeline_ui_link_get_v1",
                 "'@/common/nifiFindCanvas' as findCanvas", "'@/common/nifiPipelineReadHttp' as withHttpResponse",
-                "com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient as nifi", "dataScope", "tenantRuntime");
+                "com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient as nifi", "com.linewell.dataelement.integration.nifi.canvas.runtime.TaskRuntimeStatusService as runtimeStatus", "dataScope", "tenantRuntime");
         final List<String> detailSql = new ArrayList<>();
         final MagicScript decodeCanvas = script(COMMON + "43.海通解码保存画布.ms", "e06d4eb123494419e67f70f2fc03bceb",
                 "com.fasterxml.jackson.databind.ObjectMapper as mapper");
@@ -606,6 +606,9 @@ class NifiPipelineReadMagicTest {
             MagicScriptLambdaFunction http = (context, args) ->
                     response.execute(new MagicScriptContext(Map.of("action", args[0], "request", request)));
             var variables = new LinkedHashMap<>(extras);
+            var runtimeStatus=mock(com.linewell.dataelement.integration.nifi.canvas.runtime.TaskRuntimeStatusService.class);
+            when(runtimeStatus.resolveLegacyOwner(org.mockito.ArgumentMatchers.any())).thenAnswer(call->{Pipeline p=call.getArgument(0);return p.nodeMapping()==null?null:p.nodeMapping().runtimeNodeId();});
+            variables.putIfAbsent("runtimeStatus",runtimeStatus);
             var defaultNifi = mock(NifiClient.class);
             when(defaultNifi.assignedNodeUiUrl("secondary", "group-a"))
                     .thenReturn("https://secondary-nifi.test/nifi/#/process-groups/group-a");

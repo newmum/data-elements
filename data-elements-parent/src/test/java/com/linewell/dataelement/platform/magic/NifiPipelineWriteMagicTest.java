@@ -59,6 +59,7 @@ class NifiPipelineWriteMagicTest {
     private final MappingProjectionService projections = mock(MappingProjectionService.class);
     private final DataScopeMagicModule scope = mock(DataScopeMagicModule.class);
     private final NifiClient nifi = mock(NifiClient.class);
+    private final com.linewell.dataelement.integration.nifi.canvas.runtime.TaskRuntimeStatusService runtimeStatus = mock(com.linewell.dataelement.integration.nifi.canvas.runtime.TaskRuntimeStatusService.class);
     private final EsCommonService index = mock(EsCommonService.class);
     private final List<String> readSql = new ArrayList<>();
     private JdbcTemplate jdbc;
@@ -125,7 +126,7 @@ class NifiPipelineWriteMagicTest {
                 Map.entry("tableWrite", new StructuredTableWriteMagicModule(jdbc)), Map.entry("mapper", new ObjectMapper()),
                 Map.entry("tenantRuntime", new TenantMagicModule(null)), Map.entry("mutation", mutation),
                 Map.entry("projections", projections), Map.entry("dataScope", scope),
-                Map.entry("nifi", nifi), Map.entry("organizer", new PipelineGroupOrganizer(nifi, jdbc)), Map.entry("index", index),
+                Map.entry("nifi", nifi), Map.entry("runtimeStatus",runtimeStatus), Map.entry("organizer", new PipelineGroupOrganizer(nifi, jdbc)), Map.entry("index", index),
                 Map.entry("transactionManager", manager), Map.entry("log", LoggerFactory.getLogger(getClass()))));
         register("respond", "35.海通流程列表超文本响应.ms", "nifi_pipe_list_response_v1", "action");
         register("existingCanvas", "42.海通目录关联画布.ms", "71a48eec67605a2d5da8ce93b2cc02cb", "catalogId");
@@ -349,6 +350,25 @@ class NifiPipelineWriteMagicTest {
         assertThat(jdbc.queryForObject("SELECT name FROM nifi_pipeline_t WHERE id=?", String.class, created.id())).isEqualTo(created.name());
     }
 
+    @Test void legacySaveRepairsOnlyTheVerifiedNodeAndKeepsDesignWritableWhileOriginalNodeIsOffline()throws Exception {
+        var created=canvas(create(null));
+        String mapping="{\"primaryProcessorIds\":{\"source\":\"processor\"},\"oneShotSources\":[\"processor\"],\"cleanupConfirmationRequired\":true}";
+        jdbc.update("UPDATE nifi_pipeline_t SET status='RUNNING',nifi_process_group_id='native',node_mapping_json=? WHERE id=?",mapping,created.id());
+        when(runtimeStatus.resolveLegacyOwner(any())).thenReturn("original-node");
+        var repaired=canvas(save(created.id(),"历史设计",Map.of()));
+        assertThat(repaired.nodeMapping().runtimeNodeId()).isEqualTo("original-node");
+        assertThat(repaired.nodeMapping().primaryProcessorIds()).containsEntry("source","processor");
+        assertThat(repaired.nodeMapping().oneShotSources()).containsExactly("processor");
+        assertThat(repaired.nifiProcessGroupId()).isEqualTo("native");assertThat(repaired.status()).isEqualTo(PipelineStatus.RUNNING);
+        var persisted=new ObjectMapper().readTree(jdbc.queryForObject("SELECT node_mapping_json FROM nifi_pipeline_t WHERE id=?",String.class,created.id()));
+        assertThat(persisted.path("runtimeNodeId").asText()).isEqualTo("original-node");
+        jdbc.update("UPDATE nifi_pipeline_t SET node_mapping_json=? WHERE id=?",mapping,created.id());
+        when(runtimeStatus.resolveLegacyOwner(any())).thenThrow(new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT,"原节点暂不可达"));
+        var offline=canvas(save(created.id(),"离线仍保存",Map.of()));
+        assertThat(offline.name()).isEqualTo("离线仍保存");assertThat(offline.nodeMapping().runtimeNodeId()).isNull();
+        assertThat(offline.nifiProcessGroupId()).isEqualTo("native");verify(nifi,never()).deleteProcessGroup(any());
+    }
+
     @Test
     void savesHiveRawDesignAndRetainsDescriptionAcrossSuccessiveRevisions() throws Exception {
         var loaded = canvas(create(null));
@@ -514,7 +534,7 @@ class NifiPipelineWriteMagicTest {
     private static MagicScript script(String path, String id) throws Exception {
         var source = CanonicalMagicSources.byPath(path, id);
         MagicScript.create(source, null).compile();
-        return MagicScript.create(source.replaceAll("(?m)^import (?:'@[^\\r\\n]+|tenantRuntime|tableRead|tableWrite|dataScope|request|log|[^\\r\\n]+ as (?:mapper|mutation|catalogProjection|projections|transactions|transactionManager|organizer|nifi|index|mappingVersions|errorStore|lineage))\\R", ""), null);
+        return MagicScript.create(source.replaceAll("(?m)^import (?:'@[^\\r\\n]+|tenantRuntime|tableRead|tableWrite|dataScope|request|log|[^\\r\\n]+ as (?:mapper|mutation|catalogProjection|projections|transactions|transactionManager|organizer|nifi|index|mappingVersions|errorStore|lineage|runtimeStatus))\\R", ""), null);
     }
 
     private String rule(String id) {

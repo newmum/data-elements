@@ -155,7 +155,12 @@ public class DslCompiler {
 
     public void preflightMapping(Pipeline pipeline){
         Map<String,JsonNode> specs=javaMappingSpecifications(HiveSinkPublicationPolicy.forPublication(pipeline));
-        if(!specs.isEmpty()){if(unifiedMappingService==null)throw new IllegalStateException("统一字段规则服务未配置");unifiedMappingService.compileBatch(specs);nifi.requireMappingExtension();}
+        if(!specs.isEmpty()){if(unifiedMappingService==null)throw new IllegalStateException("统一字段规则服务未配置");
+            var plans=unifiedMappingService.compileBatch(specs);nifi.requireMappingExtension();
+            var textNumbers=hiveNumericTextFields(pipeline,plans);
+            if(!textNumbers.isEmpty())requireHiveExactReader(pipeline.dsl().nodes().stream()
+                    .filter(node->textNumbers.containsKey(node.id())).findFirst().orElseThrow());
+        }
     }
     public void preflightGlobalRecordServices(Pipeline pipeline) {
         GlobalJsonRecordServices.resolve(nifi,pipeline);
@@ -403,7 +408,12 @@ public class DslCompiler {
         if(!sourceShapes.isEmpty())nifi.requireMappingExtension();
         Map<String,JsonNode> javaSpecs=javaMappingSpecifications(pipeline);
         Map<String,UnifiedMappingService.Compiled> preparedJavaPlans=javaSpecs.isEmpty()?Map.of():unifiedMappingService.compileBatch(javaSpecs);
+        Map<String,List<String>> hiveNumericText=hiveNumericTextFields(pipeline,preparedJavaPlans);
+        if(!hiveNumericText.isEmpty()&&pipeline.dsl().nodes().stream().noneMatch(node->"sink.hive".equals(node.manifestKey())
+                &&!hiveNumberFields(node.config(),Set.of()).isEmpty()))
+            requireHiveExactReader(pipeline.dsl().nodes().stream().filter(node->hiveNumericText.containsKey(node.id())).findFirst().orElseThrow());
         GlobalJsonRecordServices globalJson = GlobalJsonRecordServices.resolve(nifi, pipeline, usesSqlSourceRecordWriter(pipeline));
+        if(!hiveNumericText.isEmpty())globalJson.jdbcReaderFormatProperties();
         String parentId = layout == null ? nifi.getRootProcessGroupId() : layout.parentId();
         String pgName = layout != null && layout.name() != null ? layout.name()
                 : pipeline.name() == null ? pipeline.id() : pipeline.name();
@@ -669,6 +679,7 @@ public class DslCompiler {
             List<String> numbers;
             try { numbers=hiveNumberFields(cfgByNode.get(node.id()),resolveUpstreamOutputFields(pipeline,node.id(),manifestByNode,cfgByNode,fieldMappingPlans)); }
             catch(IllegalStateException error){throw new NodeConfigException(node.id(),node.label(),"targetColumns",error.getMessage(),error);}
+            var exact=new LinkedHashSet<>(numbers);exact.addAll(hiveNumericText.getOrDefault(node.id(),List.of()));numbers=List.copyOf(exact);
             if(numbers.isEmpty())continue;
             Map<String,String> properties=new LinkedHashMap<>(globalJson.jdbcReaderFormatProperties());
             properties.put("number-fields",MAPPER.valueToTree(numbers).toString());
@@ -4276,6 +4287,41 @@ public class DslCompiler {
     /** Format only declared time fields, keeping numeric identifiers outside both selections. */
     private List<String> hiveTimestampFields(Map<String,Object> cfg) {
         return hiveTimestampFields(cfg,Set.of());
+    }
+    /** Numeric shared outputs remain exact even when Hive stores them in textual columns. */
+    private Map<String,List<String>> hiveNumericTextFields(Pipeline pipeline,Map<String,UnifiedMappingService.Compiled> plans){
+        if(plans.isEmpty())return Map.of();
+        Map<String,Pipeline.Node> nodes=new LinkedHashMap<>();pipeline.dsl().nodes().forEach(node->nodes.put(node.id(),node));
+        Map<String,List<String>> incoming=new LinkedHashMap<>();
+        for(var edge:pipeline.dsl().edges()==null?List.<Pipeline.Edge>of():pipeline.dsl().edges())if(!Set.of("failure","retry").contains(Objects.toString(edge.outlet(),"").toLowerCase(Locale.ROOT)))
+            incoming.computeIfAbsent(edge.target(),key->new ArrayList<>()).add(edge.source());
+        Map<String,List<String>> result=new LinkedHashMap<>();
+        for(var sink:pipeline.dsl().nodes()){
+            if(!"sink.hive".equals(sink.manifestKey())||sink.config()==null
+                    ||!HiveSinkPublicationPolicy.isHdfsWriteMode(configText(sink.config(),"hiveWriteMode")))continue;
+            Set<String> numeric=new LinkedHashSet<>(),visited=new HashSet<>();var pending=new ArrayDeque<>(incoming.getOrDefault(sink.id(),List.of()));
+            while(!pending.isEmpty()){
+                String id=pending.removeFirst();if(!visited.add(id))continue;
+                var plan=plans.get(id);
+                if(plan!=null){plan.plan().outputContracts().forEach((name,type)->{if(Set.of("INT","LONG","DECIMAL").contains(type.logicalType()))numeric.add(name);});continue;}
+                var node=nodes.get(id);
+                // Do not infer the output types of an uncompiled transform or another source.
+                if(node==null||"source".equals(node.category())||isFieldMappingTransform(registry.get(effectiveManifestKey(node))))continue;
+                if(Set.of("route.funnel","transport.kafka","transport.remote-process-group").contains(node.manifestKey()))pending.addAll(incoming.getOrDefault(id,List.of()));
+            }
+            Set<String> exact=new LinkedHashSet<>();
+            for(var column:targetColumnMetadata(sink.config()))if("STRING".equals(com.linewell.dataelement.mapping.core.ValueTypes.type(column.type()))){
+                var matches=numeric.stream().filter(name->name.equalsIgnoreCase(column.name())).toList();
+                if(matches.size()>1)throw new NodeConfigException(sink.id(),sink.label(),"targetColumns","Hive 文本目标的数值输出大小写有歧义",null);
+                if(matches.size()==1)exact.add(matches.getFirst());
+            }
+            if(!exact.isEmpty()){
+                var all=new HashSet<>(hiveNumberFields(sink.config(),Set.of()));all.addAll(exact);
+                if(all.size()>1000)throw new NodeConfigException(sink.id(),sink.label(),"targetColumns","Hive 精确数值字段超过1000项",null);
+                result.put(sink.id(),List.copyOf(exact));
+            }
+        }
+        return result;
     }
     private List<String> hiveNumberFields(Map<String,Object> config,Set<String> availableFields) {
         if(firstNonBlankStatic(configText(config,"targetDbId"),configText(config,"registeredDatasourceId"),configText(config,"selectedDatabaseId"),configText(config,"datasourceId"),configText(config,"dataSourceId"),configText(config,"dbId")).isBlank()

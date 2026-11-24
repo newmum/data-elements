@@ -28,7 +28,7 @@ const context = vm.createContext({
     }) } };
   },
 });
-vm.runInContext(code + '\nglobalThis.actual={startRuntimeStream,stopRuntimeStream,acceptRuntimeEvent,runtimeConnection,runtimeWarning,runtimeReadAt};', context);
+vm.runInContext(code + '\nruntimeNodeIds=["validation-node"];\nglobalThis.actual={startRuntimeStream,stopRuntimeStream,acceptRuntimeEvent,runtimeConnection,runtimeWarning,runtimeReadAt};', context);
 await context.actual.startRuntimeStream();
 await new Promise(resolve => setTimeout(resolve, 180));
 context.actual.stopRuntimeStream();
@@ -36,11 +36,11 @@ assert.equal(requests.length, 1, 'One stream for the page, not one per row');
 assert.equal(reads.length, 1); assert.ok(!reads[0].url.includes('test-session'));
 assert.equal(reads[0].options.headers.token, 'test-session');
 assert.deepEqual(refreshes, [false], '120 unchanged samples cause no reads; a new revision refreshes the current page once');
-assert.equal(context.actual.runtimeConnection.value, 'live');
+assert.equal(context.actual.runtimeConnection.value, 'connecting', 'Only the authorized page response confirms aggregate status');
 context.actual.acceptRuntimeEvent({ revision: 'v3', fresh: false, observedAt: 130, message: 'NiFi 连接失败' });
-assert.equal(context.actual.runtimeConnection.value, 'unavailable'); assert.equal(context.actual.runtimeWarning.value, 'NiFi 连接失败');
+assert.equal(context.actual.runtimeConnection.value, 'connecting'); assert.equal(context.actual.runtimeWarning.value, '');
 context.actual.stopRuntimeStream();
-console.log('PASS: one authenticated stream, split UTF-8/CRLF frames, no token URL, unchanged revisions add zero requests, coalesced refresh, explicit unavailable state and cancellation');
+console.log('PASS: one scoped authenticated monitor stream, split UTF-8/CRLF frames, unchanged revisions add zero requests, coalesced refresh and cancellation');
 
 // Exercise the canvas transport itself: multiple consumers share one connection,
 // and losing the transport actively marks existing displays as unconfirmed.

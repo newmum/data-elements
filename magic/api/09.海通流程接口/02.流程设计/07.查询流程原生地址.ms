@@ -36,6 +36,7 @@
 import '@/common/nifiFindCanvas' as findCanvas
 import '@/common/nifiPipelineReadHttp' as withHttpResponse
 import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient as nifi
+import com.linewell.dataelement.integration.nifi.canvas.runtime.TaskRuntimeStatusService as runtimeStatus
 import dataScope
 import com.linewell.dataelement.platform.tenant.domain.TenantAccessException
 import com.linewell.dataelement.platform.tenant.domain.TenantContext
@@ -66,7 +67,7 @@ return withHttpResponse((parameterValues, textParameter, rootCause) => {
     if (groupId == null || groupId.isBlank()) {
         return ResponseEntity.badRequest().body({error: '当前任务尚未部署到 NiFi，请先部署流程'})
     }
-    var nodeId = canvas.nodeMapping()?.runtimeNodeId()
+    var nodeId = runtimeStatus.resolveLegacyOwner(canvas)
     if (nodeId == null || nodeId.isBlank()) {
         return ResponseEntity.badRequest().body({error: '当前任务缺少部署节点记录，请先核对任务的节点关联'})
     }

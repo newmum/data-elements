@@ -45,7 +45,7 @@ public class RegisteredMappingSchemaService {
         String query="SELECT `table_id`,`column_name`,`column_comment`,`data_type`,`length`,`precision_length`,`scale`,`nullable`,`is_masking`,`data_standard_id` FROM `db_table_column_t` WHERE `table_id` IN ("+String.join(",",Collections.nCopies(tableIds.size(),"?"))+") AND `tenant_id`=? AND `is_del`=0 ORDER BY `ordinal_position`,`tid`";
         var columns=jdbc.queryForList(query.replace("`",quote),columnArgs.toArray());if(columns.size()>MAX_TOTAL_FIELDS)throw new MappingException("BUDGET_EXCEEDED","登记Schema字段总数超过20000个");Map<String,ArrayNode> fields=new HashMap<>();
         Map<String,String> tableSources=new HashMap<>();matched.values().forEach(row->tableSources.put(String.valueOf(row.get("tid")),String.valueOf(row.get("datasource_id"))));
-        for(var column:columns){String tableId=String.valueOf(column.get("table_id"));var tableFields=fields.computeIfAbsent(tableId,ignored->JSON.createArrayNode());if(tableFields.size()>=MAX_FIELDS_PER_TABLE)throw new MappingException("BUDGET_EXCEEDED","登记Schema单表字段超过2000个");String physicalType=String.valueOf(column.get("data_type"));String logical=jdbcLogicalType(physicalType,connections.get(tableSources.get(tableId)));var field=tableFields.addObject();field.put("name",String.valueOf(column.get("column_name"))).put("comment",Objects.toString(column.get("column_comment"),"")).put("logicalType",logical).put("physicalType",physicalType).put("dateContainsTime",ValueTypes.type(physicalType).equals("DATE")&&logical.equals("DATETIME")).put("nullable",number(column.get("nullable"))!=0).put("length",Set.of("STRING","BINARY").contains(logical)?number(column.get("length")):0).put("precision",number(column.get("precision_length"))).put("scale",number(column.get("scale"))).put("sensitive",number(column.get("is_masking"))!=0);}
+        for(var column:columns){String tableId=String.valueOf(column.get("table_id"));var tableFields=fields.computeIfAbsent(tableId,ignored->JSON.createArrayNode());if(tableFields.size()>=MAX_FIELDS_PER_TABLE)throw new MappingException("BUDGET_EXCEEDED","登记Schema单表字段超过2000个");String physicalType=String.valueOf(column.get("data_type"));String logical=jdbcLogicalType(physicalType,connections.get(tableSources.get(tableId)));var field=tableFields.addObject();field.put("name",String.valueOf(column.get("column_name"))).put("comment",Objects.toString(column.get("column_comment"),"")).put("logicalType",logical).put("physicalType",physicalType).put("dateContainsTime",ValueTypes.type(physicalType).equals("DATE")&&logical.equals("DATETIME")).put("nullable",number(column.get("nullable"))!=0).put("length",logical.equals("STRING")?textLength(physicalType,number(column.get("length"))):logical.equals("BINARY")?number(column.get("length")):0).put("precision",number(column.get("precision_length"))).put("scale",number(column.get("scale"))).put("sensitive",number(column.get("is_masking"))!=0);}
         applyRegisteredFormats(matched.values(),columns,fields);
         Map<String,Resolved> result=new LinkedHashMap<>();matched.forEach((key,row)->{String source=String.valueOf(row.get("datasource_id")),tableId=String.valueOf(row.get("tid"));var names=DdlDialect.names(String.valueOf(row.get("table_name")));if(names.size()>2)throw new MappingException("INVALID_SCHEMA","登记表须明确schema和表名");String schema=names.size()==2?names.getFirst().value():"";String table=names.getLast().value();boolean schemaQuoted=names.size()==2?names.getFirst().quoted():configuredSchemaQuoted(connections.get(source));if(schema.isBlank()){schema=Objects.toString(JdbcMetadataScope.configuredSchema(connections.get(source)),"");}
             if(schema.isBlank()){String url=String.valueOf(connections.get(source).getOrDefault("jdbcURL",connections.get(source).getOrDefault("jdbcUrl","")));var database=java.util.regex.Pattern.compile("^jdbc:(?:mysql|mariadb)://[^/]+/([^?;]+)").matcher(url);if(database.find())schema=database.group(1);}
@@ -134,7 +134,9 @@ public class RegisteredMappingSchemaService {
         int responseFields=fileFields;
         for (var group:groups.entrySet()) {
             Resolved first=group.getValue().values().iterator().next();
+            String phase="建立认证连接";
             try (Connection connection=engine.openRegistered(group.getKey(),first.connections())) {
+                phase="读取数据库信息";
                 DatabaseMetaData metadata=connection.getMetaData();
                 String product=metadata.getDatabaseProductName().toLowerCase(Locale.ROOT);
                 boolean mysql=product.contains("mysql") || product.contains("mariadb");
@@ -156,6 +158,7 @@ public class RegisteredMappingSchemaService {
                 }
                 Map<String,Object> temporalConfig=new HashMap<>(first.connections().get(group.getKey()));
                 if(product.contains("oracle"))temporalConfig.put("dbType","ORACLE");
+                phase="批量读取物理字段";
                 if (mysql) readMysqlColumns(connection,byTable,totalFields,mysqlIgnoreCase,temporalConfig);
                 else {
                     String registeredType=Objects.toString(temporalConfig.getOrDefault("dbType",temporalConfig.get("databaseType")),"").toLowerCase(Locale.ROOT).replaceAll("[\\s_-]","");
@@ -182,7 +185,13 @@ public class RegisteredMappingSchemaService {
             } catch (MappingException error) {
                 throw error;
             } catch (SQLException error) {
-                throw new MappingException("SCHEMA_UNAVAILABLE","数据源 "+group.getKey()+" 的物理Schema批量读取失败，请检查连接、驱动与权限");
+                String state=Objects.toString(error.getSQLState(),"");
+                String reason=state.startsWith("08")?"连接中断或网络不可达":state.startsWith("28")?"认证失败"
+                        :state.equals("42501")?"元数据读取权限不足":state.startsWith("42")?"元数据查询或目录权限不兼容":"请检查连接、驱动与元数据权限";
+                // Vendor messages can contain URLs, users or credentials. Expose only protocol codes.
+                String safeState=state.matches("[A-Za-z0-9]{5}")?state:"未知";
+                throw new MappingException("SCHEMA_UNAVAILABLE","数据源 "+group.getKey()+" 在“"+phase+"”阶段失败："+reason
+                        +"（SQLState="+safeState+", 错误码="+error.getErrorCode()+"）");
             }
         }
         return result;
@@ -301,12 +310,22 @@ public class RegisteredMappingSchemaService {
         if (++totalFields[0]>MAX_TOTAL_FIELDS) throw new MappingException("BUDGET_EXCEEDED","物理Schema字段总数超过20000个");
         String physicalType=columns.getString("TYPE_NAME"),type=jdbcLogicalType(physicalType,temporalConfig);
         var field=fields.addObject().put("name",columns.getString("COLUMN_NAME")).put("logicalType",type).put("physicalType",physicalType).put("dateContainsTime",ValueTypes.type(physicalType).equals("DATE")&&type.equals("DATETIME")).put("nullable",nullable).put("hasDefault",hasDefault);
-        if (type.equals("STRING")) field.put("length",columns.getInt("COLUMN_SIZE"));
+        if (type.equals("STRING")) field.put("length",textLength(physicalType,columns.getInt("COLUMN_SIZE")));
         if (type.equals("DECIMAL")) {
             int precision=columns.getInt("COLUMN_SIZE"),scale=columns.getInt("DECIMAL_DIGITS");
             if(precision==0||scale==-127){precision=0;scale=0;}
             field.put("precision",precision).put("scale",scale);
         }
+    }
+    // Hive JDBC reports Integer.MAX_VALUE for native STRING. This is a driver sentinel,
+    // not a VARCHAR(n) declaration; only the native physical STRING type is unbounded.
+    private static int textLength(String physicalType,int reported){
+        return "STRING".equalsIgnoreCase(Objects.toString(physicalType,"").trim())?0:reported;
+    }
+    private static void repairNativeString(ObjectNode field,JsonNode trusted){
+        if("STRING".equals(ValueTypes.type(field.path("logicalType").asText()))
+                &&"STRING".equalsIgnoreCase(trusted.path("physicalType").asText().trim()))
+            field.put("length",0).set("physicalType",trusted.path("physicalType"));
     }
     /** Resolve optional JDBC metadata labels once per result set; some drivers use IS_AUTO_INCREMENT. */
     private static String identityColumn(ResultSet columns)throws SQLException {
@@ -346,6 +365,7 @@ public class RegisteredMappingSchemaService {
                 if(found==null){var matches=folded.getOrDefault(name.toLowerCase(Locale.ROOT),List.of());if(matches.size()==1)found=matches.getFirst();}
                 if(found==null)throw new MappingException("SCHEMA_FIELD_MISSING","字段不属于当前授权登记表或名称有歧义："+name);
                 if(field instanceof ObjectNode object){
+                    repairNativeString(object,found);
                     object.put("comment",found.path("comment").asText());
                     if(found.has("registeredFormat"))object.set("registeredFormat",found.get("registeredFormat"));else object.remove("registeredFormat");
                     if(!object.hasNonNull("physicalType")||integerContract(object))object.set("physicalType",found.path("physicalType"));
@@ -395,6 +415,7 @@ public class RegisteredMappingSchemaService {
             // Repair known transport metadata only after authoritative batch authorization.
             // Other type/length/nullability drift continues to fail below.
             for(JsonNode field:contract.getValue().path(side)){JsonNode found=physical.get(field.path("name").asText());if(field instanceof ObjectNode object&&found!=null){
+                repairNativeString(object,found);
                 object.put("comment",found.path("comment").asText());
                 if(integerContract(object))object.set("physicalType",found.path("physicalType"));
                 if(found.has("registeredFormat"))object.set("registeredFormat",found.get("registeredFormat"));else object.remove("registeredFormat");
@@ -406,7 +427,14 @@ public class RegisteredMappingSchemaService {
                 object.put("dateContainsTime",true).put("physicalType",found.path("physicalType").asText());
             }}}
             if(contract.getValue() instanceof ObjectNode object)object.put(side+"Hash",MappingEngine.hash(contract.getValue().path(side)));
-            var differences=SchemaContract.compare(SchemaContract.read(contract.getValue().path(side)),SchemaContract.read(actual),side.equals("source")&&contract.getValue().path("allowAdditionalSourceFields").asBoolean(true),Set.of());if(!differences.isEmpty())throw new MappingException("SCHEMA_DRIFT",contract.getKey()+" / "+side+" / "+differences.getFirst().code()+" / "+differences.getFirst().field());}
+            var differences=SchemaContract.compare(SchemaContract.read(contract.getValue().path(side)),SchemaContract.read(actual),side.equals("source")&&contract.getValue().path("allowAdditionalSourceFields").asBoolean(true),Set.of());if(!differences.isEmpty())throw new MappingException("SCHEMA_DRIFT",contract.getKey()+" / "+side+" / "+differences.getFirst().code()+" / "+differences.getFirst().field());
+            // An omitted cached length must not make a physical VARCHAR(n) unbounded.
+            if(side.equals("target"))for(JsonNode field:contract.getValue().path(side)){
+                JsonNode found=physical.get(field.path("name").asText());
+                if(field instanceof ObjectNode object&&found!=null&&"STRING".equals(ValueTypes.type(found.path("logicalType").asText())))
+                    object.set("length",found.path("length"));
+            }
+        }
     }
     /** JDBC sinks already match unquoted field names ignoring case; retain that carrier spelling only when unique. */
     private static JsonNode targetAliases(JsonNode actual,JsonNode aliases){

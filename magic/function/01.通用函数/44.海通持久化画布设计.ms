@@ -45,7 +45,9 @@ import com.linewell.dataelement.integration.nifi.canvas.mapping.MappingProjectio
 import com.linewell.dataelement.integration.nifi.canvas.pipeline.BatchSchedulePolicy
 import com.linewell.dataelement.integration.nifi.canvas.pipeline.DslHasher
 import com.linewell.dataelement.integration.nifi.canvas.pipeline.HiveSinkPublicationPolicy
+import com.linewell.dataelement.integration.nifi.canvas.pipeline.NifiNodeMapping
 import com.linewell.dataelement.integration.nifi.canvas.pipeline.Pipeline
+import com.linewell.dataelement.integration.nifi.canvas.runtime.TaskRuntimeStatusService as runtimeStatus
 import java.lang.IllegalStateException
 import java.lang.Math
 import java.lang.System
@@ -53,6 +55,7 @@ import java.util.ArrayList
 import java.util.Objects
 import org.springframework.http.HttpStatus
 import org.springframework.web.server.ResponseStatusException
+import org.slf4j.LoggerFactory
 import tableWrite
 
 // @/common/nifiWriteCanvas 共享已有画布的设计更新，调用方持有写事务和共享 NiFi 锁。
@@ -83,6 +86,23 @@ if (current == null) {
 }
 verifyRevision(current)
 
+// 历史画布只缺节点 ID 时，按原组及处理器定位后补齐；不能连通或存在歧义仍允许保存设计。
+// 定位失败由后续属性同步/部署展示具体诊断，不以当前默认节点覆盖历史关联。
+var mapping = current.nodeMapping()
+if (current.nifiProcessGroupId() != null && !current.nifiProcessGroupId().isBlank()
+    && (mapping?.runtimeNodeId() == null || mapping.runtimeNodeId().isBlank())) {
+    try {
+        var owner = runtimeStatus.resolveLegacyOwner(current)
+        if (owner != null && !owner.isBlank()) {
+            if (mapping == null) { mapping = new NifiNodeMapping(null, null, null) }
+            mapping = mapping.withRuntimeNode(owner)
+        }
+    } catch (failure) {
+        LoggerFactory.getLogger('com.linewell.dataelement.integration.nifi.canvas.LegacyBinding')
+            .warn('历史运行节点未自动确认，保留画布设计及原部署关联，pipeline={}', current.id())
+    }
+}
+
 var design = HiveSinkPublicationPolicy.forCanvas(submitted)
 var description = design.description() == null ? current.description() : design.description()
 var unnormalized = new Pipeline(current.id(), design.name(), description, current.createdAt(), current.updatedAt(),
@@ -96,8 +116,11 @@ var dsl = Objects.equals(design.dsl(), current.dsl()) ? current.dsl()
     : BatchSchedulePolicy.normalize(design.dsl(), current.dsl(), tenantId, current.id())
 var saved = new Pipeline(current.id(), design.name(), description, current.createdAt(), timestamp, dsl,
     current.nifiProcessGroupId(), current.status(), current.lastDeployedHash(), current.lastDeployedAt(),
-    current.lastStoppedAt(), current.nodeMapping(), current.lastBulletinId())
+    current.lastStoppedAt(), mapping, current.lastBulletinId())
 var values = designValues(saved)
+if (!Objects.equals(mapping, current.nodeMapping())) {
+    values.node_mapping_json = mapper.writeValueAsString(mapping)
+}
 // 历史 ORM 更新保留未提供的名称和空 DSL。DRAFT 等旧状态值沿用其规范化语义。
 for (key in ['name', 'dsl_json', 'dsl_hash', 'dsl_version']) {
     if (values.get(key) == null) {

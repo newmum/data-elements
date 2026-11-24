@@ -352,6 +352,30 @@ class DslCompilerSharedParallelTemplateTest {
         verify(nifi,never()).createProcessGroup(anyString(),anyString(),anyDouble(),anyDouble());
     }
 
+    @Test void hiveStringTargetPreservesSharedOracleNumbersThroughMergeAndCsvWithoutDoubleInference()throws Exception {
+        plan=MappingEngine.compile(JSON.readTree("""
+            {"version":"1.0","mappings":[{"to":"/OPRSTATUS","constant":"-12345678901234567890.123456789","targetType":"NUMBER"}]}
+            """));
+        var globalServices=HiveServiceFixtures.withCsv(JSON.valueToTree(Map.of("component",Map.of("id","csv","name","PUBLIC-WRITER-CSV-HDFS",
+                "type","org.apache.nifi.csv.CSVRecordSetWriter","properties",Map.of("Include Header Line","false","Value Separator","\\u0001")))));
+        for(JsonNode service:globalServices)if("global-json-reader".equals(service.path("component").path("id").asText()))
+            ((com.fasterxml.jackson.databind.node.ObjectNode)service.path("component")).putObject("properties")
+                    .put("Schema Access Strategy","infer-schema").put("Starting Field Strategy","ROOT_NODE");
+        when(nifi.listControllerServices("root")).thenReturn(globalServices);
+        var mapping=new Pipeline.Node("mapping","transform.field-enrichment","共享字段治理","transform",500,0,Map.of("mappings",plan.document()));
+        var hive=hive(Map.of("targetColumns",List.of(Map.of("columnName","oprstatus","dataType","STRING"))));
+        var pipeline=flow(List.of(source("source",Map.of()),mapping,jdbc(Map.of()),hive),List.of(
+                edge("sm","source","mapping"),edge("mj","mapping","jdbc"),edge("mh","mapping","hive")));
+        var result=compiler.compile(pipeline);
+        var reader=service(result.nodes().get("hive").csIds.get("hive-value-reader"));
+        assertThat(reader.type()).isEqualTo(EXACT_READER);assertThat(reader.properties()).containsEntry("number-fields","[\"OPRSTATUS\"]");
+        for(String name:List.of("Hive目标/merge-records","Hive目标/convert"))
+            assertThat(processor(name).properties()).containsEntry("Record Reader",reader.id());
+        verify(nifi,times(1)).get("/flow/controller-service-types",JsonNode.class);
+        var guard=inOrder(nifi);guard.verify(nifi).get("/flow/controller-service-types",JsonNode.class);
+        guard.verify(nifi).createProcessGroup(anyString(),anyString(),anyDouble(),anyDouble());
+    }
+
     @Test void missingHiveExactReaderStopsBeforeAnyGroupIsCreated() {
         when(nifi.get("/flow/controller-service-types",JsonNode.class)).thenReturn(JSON.valueToTree(Map.of("controllerServiceTypes",List.of())));
         var hive=hive(Map.of("targetColumns",List.of(Map.of("columnName","amount","dataType","DECIMAL(20,6)"))));

@@ -21,6 +21,8 @@ public class UnifiedMappingService {
     private MappingVersionStore versions;
     private final DictionaryPolicyProvider.Cache cache=new DictionaryPolicyProvider.Cache();
     private RegisteredMappingSchemaService schemas;
+    private com.linewell.dataelement.platform.magic.module.HiveModule serverHive;
+    @org.springframework.beans.factory.annotation.Autowired public void setServerHive(com.linewell.dataelement.platform.magic.module.HiveModule serverHive){this.serverHive=serverHive;}
     @org.springframework.beans.factory.annotation.Autowired public void setSchemas(@org.springframework.context.annotation.Lazy RegisteredMappingSchemaService schemas){this.schemas=schemas;}
     @org.springframework.beans.factory.annotation.Autowired public void setVersions(MappingVersionStore versions){this.versions=versions;}
     public UnifiedMappingService(RegisteredDictionaryCatalog dictionaries,FieldMappingService legacy){this.dictionaries=dictionaries;this.legacy=legacy;}
@@ -155,7 +157,8 @@ public class UnifiedMappingService {
                 String label="共享治理目标“"+branch.path("label").asText(branch.path("nodeId").asText())+"”字段 "+output;
                 if(!actual.nullable()&&expected.nullable())throw new MappingException("TARGET_NULLABILITY_MISMATCH",label+"不允许空值，请为共享规则明确非空输出");
                 if(!sharedTypeAccepts(expected,actual,physicalTypes.get(actual.name()),integralSources.getOrDefault(output,0)))
-                    throw new MappingException("TARGET_TYPE_MISMATCH",label+"无法无损接收 "+expected.logicalType()+"("+expected.precision()+","+expected.scale()+")，目标为 "+actual.logicalType()+"("+actual.precision()+","+actual.scale()+")");
+                    throw new MappingException("TARGET_TYPE_MISMATCH",label+"无法无损接收 "+expected.logicalType()+"("+expected.precision()+","+expected.scale()+")，目标为 "+actual.logicalType()
+                            +(actual.logicalType().equals("STRING")?"(长度="+(actual.length()>0?actual.length():"不限")+")":"("+actual.precision()+","+actual.scale()+")"));
             }
             Set<String> outputs=new HashSet<>();plan.outputFields().forEach(name->outputs.add(name.toLowerCase(Locale.ROOT)));
             Set<String> source=new HashSet<>();draft.path("schemaContract").path("source").forEach(field->source.add(field.path("name").asText().toLowerCase(Locale.ROOT)));
@@ -170,6 +173,20 @@ public class UnifiedMappingService {
     private static boolean sharedTypeAccepts(MappingEngine.OutputType output,SchemaContract.Field target,
                                               String physicalType,int sourceWidth){
         String source=output.logicalType(),type=target.logicalType();if(type.equals("ANY"))return true;
+        // Hive STRING is unbounded text. Its record writer renders numeric values without
+        // changing the shared numeric output used by the JDBC branch. Bounded text still
+        // needs room for every declared value, including sign, decimal point and leading zero.
+        if(type.equals("STRING")&&Set.of("INT","LONG","DECIMAL","DOUBLE").contains(source)){
+            if(target.length()<=0)return true;
+            int characters=switch(source){
+                case "INT" -> 11;
+                case "LONG" -> 20;
+                case "DECIMAL" -> output.precision()>0
+                        ? Math.max(output.precision()+Math.max(0,-output.scale()),output.scale()+1)+(output.scale()>0?2:1) : 0;
+                default -> 0;
+            };
+            return characters>0&&target.length()>=characters;
+        }
         if(type.equals("DECIMAL")){
             int precision=source.equals("INT")?10:source.equals("LONG")?19:output.precision();
             int scale=Set.of("INT","LONG").contains(source)?0:output.scale();
@@ -382,7 +399,22 @@ public class UnifiedMappingService {
         try{return connection.buildJdbcUrl();}
         catch(IllegalArgumentException invalid){throw new MappingException("DICTIONARY_UNAVAILABLE","SQL Server登记连接参数无效，请核对加密设置或明确的JDBC连接地址");}
     }
-    java.sql.Connection openRegistered(String id,Map<String,Map<String,Object>>connections)throws java.sql.SQLException{return pool(id,connections).getConnection();}
+    java.sql.Connection openRegistered(String id,Map<String,Map<String,Object>>connections)throws java.sql.SQLException{
+        var config=connections.get(id);
+        if(config==null)throw new MappingException("RESOURCE_FORBIDDEN","连接未授权");
+        String type=text(config,"dbType","databaseType").toUpperCase(Locale.ROOT).replaceAll("[\\s_-]","");
+        String mode=text(config,"metadataAccessMode","metadata_access_mode"),hiveMode=text(config,"hiveConnectionMode","hive_connection_mode");
+        boolean managed=Set.of("HIVE","MRSHIVE").contains(type)&&!mode.equalsIgnoreCase("jdbc")&&!hiveMode.equalsIgnoreCase("open-source")
+                &&(mode.equalsIgnoreCase("server-managed-mrs")||hiveMode.equalsIgnoreCase("huawei-mrs")||!text(config,"hiveProfile","hive_profile").isBlank());
+        if(!managed)return pool(id,connections).getConnection();
+        if(serverHive==null)throw new MappingException("SCHEMA_UNAVAILABLE","服务器托管的华为 MRS Hive 连接未配置");
+        String profile=text(config,"hiveProfile","hive_profile");
+        if(!profile.isBlank()&&!profile.equalsIgnoreCase("default"))throw new MappingException("SCHEMA_UNAVAILABLE","服务器未配置所选华为 MRS Hive 配置集");
+        try{return serverHive.getConnection();}
+        catch(java.io.IOException|ClassNotFoundException error){
+            throw new MappingException("SCHEMA_UNAVAILABLE","华为 MRS Hive 托管客户端不可用，请检查服务器 Hive 配置目录、驱动和认证文件");
+        }
+    }
     private static String text(Map<String,Object>cfg,String...keys){for(String key:keys){Object value=cfg.get(key);if(value!=null&&!value.toString().isBlank())return value.toString();}return "";}
     public FieldMappingService.ValidationResponse validateSchemas(JsonNode raw,List<FieldMappingService.FieldMeta>source,List<FieldMappingService.FieldMeta>target){
         return validateSchemas(compile(raw).plan(),source,target);

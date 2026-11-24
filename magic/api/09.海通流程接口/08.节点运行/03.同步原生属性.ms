@@ -62,6 +62,7 @@ import com.linewell.dataelement.integration.nifi.canvas.lifecycle.NifiAttributeS
 import com.linewell.dataelement.integration.nifi.canvas.lifecycle.NifiAttributeSync$Request as AttributeRequest
 import com.linewell.dataelement.integration.nifi.canvas.lifecycle.NifiMutationAspect as mutation
 import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient as nifi
+import com.linewell.dataelement.integration.nifi.canvas.runtime.TaskRuntimeStatusService as runtimeStatus
 import com.linewell.dataelement.platform.tenant.domain.TenantAccessException
 import com.linewell.dataelement.platform.tenant.domain.TenantContext
 import org.springframework.http.HttpStatus
@@ -89,7 +90,8 @@ return respond(rootCause => {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, '流程不存在')
         }
         // 只修改该任务绑定节点的原生组件，与首次部署、详情链接保持同一节点。
-        var runtime = nifi.bindAssignedNode(canvas.nodeMapping()?.runtimeNodeId())
+        var owner = runtimeStatus.resolveLegacyOwner(canvas)
+        var runtime = nifi.bindAssignedNode(owner)
         var applied = null
         try {
             applied = new NifiAttributeSync(nifi).apply(canvas, command)
@@ -98,7 +100,7 @@ return respond(rootCause => {
         }
         for (change in applied.results()) {
             if (['SYNCED', 'KEPT_NATIVE'].contains(change.status())) {
-                writeRuntime(pipelineId, tenantId, {mapping: canvas.nodeMapping().withAttributes(applied.baselines())})
+                writeRuntime(pipelineId, tenantId, {mapping: canvas.nodeMapping().withAttributes(applied.baselines()).withRuntimeNode(owner)})
                 break
             }
         }

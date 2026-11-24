@@ -4,7 +4,7 @@ import test from 'node:test';
 import {createRequire} from 'node:module';
 const require=createRequire(new URL('../../data-elements-chengtian/package.json',import.meta.url));
 const {ref,computed}=require('vue');
-for (const file of ['2.3.1 数据汇聚(data-convergence).vue','2.3.2 接入监控(access-monitoring).vue']) test(`${file}: one stream per page node scope, none for drafts, cancel old scope`,()=>{
+for (const file of ['2.3.2 接入监控(access-monitoring).vue']) test(`${file}: one stream per page node scope, none for drafts, cancel old scope`,()=>{
  const source=fs.readFileSync(new URL(`../../lowcode/03.数据接入/${file}`,import.meta.url),'utf8');
  const start=source.indexOf("const runtimeConnection = ref('connecting');");
  const end=source.indexOf('const runtimeVisibility =',start);const lineEnd=source.indexOf('\n',end);

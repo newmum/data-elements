@@ -37,6 +37,7 @@ import '@/common/nifiFindCanvas' as findCanvas
 import '@/common/nifiLifecycleResponse' as respond
 import com.linewell.dataelement.integration.nifi.canvas.lifecycle.NifiAttributeSync
 import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient as nifi
+import com.linewell.dataelement.integration.nifi.canvas.runtime.TaskRuntimeStatusService as runtimeStatus
 import com.linewell.dataelement.platform.tenant.domain.TenantAccessException
 import com.linewell.dataelement.platform.tenant.domain.TenantContext
 import org.springframework.http.HttpStatus
@@ -58,7 +59,7 @@ return respond(rootCause => {
         throw new ResponseStatusException(HttpStatus.NOT_FOUND, '流程不存在')
     }
     // 属性读取与部署共用该任务持久化的运行节点，关闭后恢复原线程绑定。
-    var runtime = nifi.bindAssignedNode(canvas.nodeMapping()?.runtimeNodeId())
+    var runtime = nifi.bindAssignedNode(runtimeStatus.resolveLegacyOwner(canvas))
     try {
         return ResponseEntity.ok(new NifiAttributeSync(nifi).preview(canvas))
     } finally {

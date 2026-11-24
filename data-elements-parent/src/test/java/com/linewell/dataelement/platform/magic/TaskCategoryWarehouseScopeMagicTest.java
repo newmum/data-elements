@@ -22,6 +22,35 @@ import org.ssssssss.script.runtime.ExitValue;
 /** Executes the editable resources against real SQL, including mixed tenant IDs and legacy menu scope. */
 class TaskCategoryWarehouseScopeMagicTest {
     @ParameterizedTest @ValueSource(ints={20,100})
+    void allTasksRemainVisibleWhenRuntimeCollectionFails(int count) throws Exception {
+        var f=fixture(count);
+        for(int i=0;i<count;i++) {
+            insertTask(f,"unreachable-"+i,"table-"+i,"warehouse-"+i,List.of("warehouse-"+i));
+            f.jdbc.update("update nifi_pipeline_t set nifi_process_group_id=?,node_mapping_json=? where id=?",
+                    "group-"+i,"{\"runtimeNodeId\":\"offline\"}","pipe-unreachable-"+i);
+        }
+        var counter=f.countQueries();
+        var request=Map.<String,Object>of("viewLevel","table","pageSize",count,"accessStatus","all",
+                "datasourceIds",List.of("db","foreign"),"tenantId","other");
+        var online=run(f,INGEST_PAGE,request);
+        int reads=counter.reads;
+        f.failRuntimeSnapshot=true;
+        counter.reads=0;
+        var page=run(f,INGEST_PAGE,request);
+        assertThat(page.get("total")).isEqualTo(online.get("total"));
+        assertThat((List<?>)page.get("list")).hasSize(count).allSatisfy(value -> {
+            var row=(Map<?,?>)value;
+            assertThat(row.get("datasourceId")).isEqualTo("db");
+            assertThat((List<?>)row.get("tasks")).singleElement().satisfies(task -> {
+                var state=(Map<?,?>)task;
+                assertThat(state.get("runtimeFresh")).isEqualTo(false);
+                assertThat(state.get("runtimeMessage").toString()).contains("节点状态读取失败");
+            });
+        });
+        assertThat(counter.reads).isEqualTo(reads);
+        System.out.println("ingestion manual query: rows="+count+", SQL="+reads+"; snapshot failure retains all authorized rows and tasks");
+    }
+    @ParameterizedTest @ValueSource(ints={20,100})
     void ingestionFindsLegacyUnboundTasksOnNonDefaultNodeForAllAndRunningTabs(int count) throws Exception {
         var f=fixture(count);
         var second=(com.fasterxml.jackson.databind.node.ObjectNode)TaskRuntimeMagicFixture.emptyRootStatus();
@@ -760,6 +789,7 @@ class TaskCategoryWarehouseScopeMagicTest {
         String script = CanonicalMagicSources.byId(id).replaceAll("(?m)^import (?!cn\\.hutool\\.)[^\\r\\n]*\\r?\\n", "");
         var scope = new DataIngestionRegistrationScopeTest.VisibleScope();
         var inputs = new LinkedHashMap<String, Object>(); inputs.put("db", f.db); inputs.put("body", body);
+        inputs.put("log", org.slf4j.LoggerFactory.getLogger(TaskCategoryWarehouseScopeMagicTest.class));
         inputs.put("tenantRuntime", scope); inputs.put("dataScope", scope); inputs.put("identityRuntime",scope);
         inputs.put("tableSort", new TableSortMagicModule());
         inputs.put("tableRead", f.tableRead);
@@ -771,9 +801,14 @@ class TaskCategoryWarehouseScopeMagicTest {
                 new MagicScriptContext(Map.of("tableRead", f.tableRead, "tenantRuntime", scope))));
         try (var runtime = new TaskRuntimeMagicFixture(scope.id(), response); var ignored = TenantContext.use(scope.id())) {
             configure.accept(runtime);
-            inputs.put("taskRuntime", runtime.module);
+            var module=runtime.module;
+            if(f.failRuntimeSnapshot){
+                module=org.mockito.Mockito.spy(module);
+                org.mockito.Mockito.doThrow(new IllegalStateException("invalid node configuration")).when(module).snapshotForRows(org.mockito.ArgumentMatchers.anyList());
+            }
+            inputs.put("taskRuntime", module);
             Object result = MagicScript.create(script, null).execute(new MagicScriptContext(inputs));
-            if (result instanceof Map<?, ?> page && page.containsKey("runtimeRevision")) runtime.verifyPageRootReads((java.util.List<?>)page.get("runtimeNodeIds"));
+            if (!f.failRuntimeSnapshot && result instanceof Map<?, ?> page && page.containsKey("runtimeRevision")) runtime.verifyPageRootReads((java.util.List<?>)page.get("runtimeNodeIds"));
             return result;
         }
     }
@@ -793,6 +828,7 @@ class TaskCategoryWarehouseScopeMagicTest {
     }
 
     static final class CategoryFixture extends DatasourceCompletionMagicTest.Fixture {
+        boolean failRuntimeSnapshot;
         final Counter counter = new Counter();
         final StructuredTableReadMagicModule tableRead;
 

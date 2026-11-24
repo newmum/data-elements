@@ -93,6 +93,17 @@ var formatCycle = (value) => {
     return v
 }
 
+// 状态只是本次查询的附加信息，采集失败仍返回已授权的数据库分页及任务。
+var readTaskRuntime = rows => {
+    try {
+        return rows == null ? taskRuntime.snapshot() : taskRuntime.snapshotForRows(rows)
+    } catch (failure) {
+        log.warn('接入任务状态快照读取失败，保留任务分页')
+        return {revision:'unavailable',fresh:false,observedAt:0,nodes:[],watchNodeIds:[],
+            message:'节点状态读取失败，请检查节点配置和网络后点击搜索重试'}
+    }
+}
+
 // 接入候选属于租户业务数据；只能使用服务端会话中的租户上下文，不能信任请求参数。
 var tenantId = text(tenantRuntime.id()).trim()
 if (blank(tenantId)) {
@@ -328,7 +339,7 @@ if (viewLevel == 'table') {
 
     // 运行状态筛选使用同一次快照，避免计数、分页和任务展示观察到不同版本。
     var needsRuntimeFilter = requestedAccessStatus == '1' || requestedAccessStatus == '3'
-    var tableRuntimeSnapshot = needsRuntimeFilter ? taskRuntime.snapshot() : null
+    var tableRuntimeSnapshot = needsRuntimeFilter ? readTaskRuntime(null) : null
 
     if (tableKeyword.length() > 100) { exit 400, '搜索词过长' }
     var textColumn = (alias, name) => tableRead.column(alias, name, 'TEXT')
@@ -793,7 +804,7 @@ if (viewLevel == 'table') {
     // 只装饰当前已授权、可达任务；一次节点快照供全部链路复用，不逐任务查 NiFi。
     var runtimeRows = []
     for (pageTable in tablePage) { for (task in pageTable.tasks) { runtimeRows.add(task) } }
-    var live = tableRuntimeSnapshot == null ? taskRuntime.snapshotForRows(runtimeRows) : tableRuntimeSnapshot
+    var live = tableRuntimeSnapshot == null ? readTaskRuntime(runtimeRows) : tableRuntimeSnapshot
     taskRuntime.decorate(runtimeRows, live)
     var pageRuntime = taskRuntime.summary(runtimeRows, live)
     for (task in runtimeRows) { task.currentStatus = task.runtimeState; task.taskStatusText = task.runtimeLabel }

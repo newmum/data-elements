@@ -59,9 +59,9 @@ for (const category of ['ingestion', 'distribution']) {
   assert.deepEqual(plain(ctx.status(running)), {text:'运行中',tone:'success'}, 'Historical failure cannot override live running');
   assert.deepEqual(plain(ctx.status({...running,runtimeFresh:false})), {text:'状态待确认',tone:'warning'});
   assert.deepEqual(plain(ctx.status({taskStatus:2,currentStatus:'RUN_ERROR'})), {text:'状态待确认',tone:'warning'}, 'Persisted flags cannot invent live state');
-  ctx.runtimeConnection.value='unavailable';
-  assert.deepEqual(plain(ctx.status(running)), {text:'状态待确认',tone:'warning'}, 'Transport loss invalidates both chain segments');
-  ctx.runtimeConnection.value='live';
+  assert.deepEqual(plain(ctx.status({...running,runtimeFresh:false,runtimeMessage:'NiFi 状态读取超时或连接失败，请检查节点网络'})),
+    {text:'节点连不通',tone:'warning'}, 'An unavailable node is shown on its own task');
+  assert.deepEqual(plain(ctx.status(running)), {text:'运行中',tone:'success'}, 'Another unavailable node cannot change this task snapshot');
   Object.assign(row.tasks[1],running);
   assert.ok(plain(ctx.routes(row))[0].links.every(link=>link.text==='运行中'),'Downstream task updates independently of the first task');
   assert.deepEqual(plain(ctx.status({})), {text:'状态待确认',tone:'warning'});

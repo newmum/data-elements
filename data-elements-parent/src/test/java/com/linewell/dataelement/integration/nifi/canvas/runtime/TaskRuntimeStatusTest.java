@@ -27,6 +27,30 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 class TaskRuntimeStatusTest {
+    @Test void legacyWritesLocateTheOriginalGraphAcrossNodesAndRejectAmbiguityOrMismatchedProcessors()throws Exception {
+        var resolver=mock(NifiNodeRuntimeResolver.class);var nifi=mock(NifiClient.class);
+        var first=new RuntimeNode("tenant-a","new-default","a","http://a.invalid","","",false,"root");
+        var original=new RuntimeNode("tenant-a","original","b","http://b.invalid","","",false,"root");
+        var offline=new RuntimeNode("tenant-a","other-network","c","http://c.invalid","","",false,"root");
+        when(resolver.samplingConfigurations()).thenReturn(List.of(Map.of("tid","new-default"),Map.of("tid","original"),Map.of("tid","other-network")));
+        when(resolver.runtimeNode(anyMap())).thenAnswer(call->switch(((Map<?,?>)call.getArgument(0)).get("tid").toString()){
+            case "new-default"->first;case "original"->original;default->offline;});
+        when(nifi.getRuntimeRootStatus(first)).thenReturn(MAPPER.readTree(response("Stopped").replace("child","another-group")));
+        when(nifi.getRuntimeRootStatus(original)).thenReturn(MAPPER.readTree(response("Running")));
+        when(nifi.getRuntimeRootStatus(offline)).thenThrow(new IllegalStateException("network unavailable"));
+        var service=new TaskRuntimeStatusService(resolver,nifi);
+        var mapping=new com.linewell.dataelement.integration.nifi.canvas.pipeline.NifiNodeMapping(Map.of("source","p"),Map.of(),Map.of());
+        var pipeline=new com.linewell.dataelement.integration.nifi.canvas.pipeline.Pipeline("historical","historical",null,1L,1L,null,"child",null,null,null,null,mapping,null);
+        try(var tenant=TenantContext.use("tenant-a")){
+            assertThat(service.resolveLegacyOwner(pipeline)).isEqualTo("original");
+            var mismatched=new com.linewell.dataelement.integration.nifi.canvas.pipeline.Pipeline("historical","historical",null,1L,1L,null,"child",null,null,null,null,
+                    new com.linewell.dataelement.integration.nifi.canvas.pipeline.NifiNodeMapping(Map.of("source","other-processor"),Map.of(),Map.of()),null);
+            assertThatThrownBy(()->service.resolveLegacyOwner(mismatched)).hasMessageContaining("处理器");
+            service.invalidateTenant();
+            when(nifi.getRuntimeRootStatus(first)).thenReturn(MAPPER.readTree(response("Stopped")));
+            assertThatThrownBy(()->service.resolveLegacyOwner(pipeline)).hasMessageContaining("多个节点");
+        }finally{service.close();}
+    }
     @Test void slowNonDefaultNodeRemainsInSubscriptionAndCompletionRevealsLegacyTask() throws Exception {
         var resolver=mock(NifiNodeRuntimeResolver.class);var nifi=mock(NifiClient.class);
         var first=new RuntimeNode("tenant-a","first","first","http://first.invalid","","",false,"root");

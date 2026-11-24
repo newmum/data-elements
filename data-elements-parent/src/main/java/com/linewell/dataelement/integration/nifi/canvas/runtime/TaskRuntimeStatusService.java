@@ -222,6 +222,39 @@ public class TaskRuntimeStatusService {
     public Map<String, Object> snapshotAll() {
         return snapshotForNodes(null);
     }
+
+    /** Explicit legacy operation: locate the saved graph without choosing today's default node. */
+    public String resolveLegacyOwner(com.linewell.dataelement.integration.nifi.canvas.pipeline.Pipeline pipeline) {
+        TenantContext.requireTenantId();
+        String assigned=pipeline.nodeMapping()==null?null:pipeline.nodeMapping().runtimeNodeId();
+        if(assigned!=null&&!assigned.isBlank())return assigned;
+        String groupId=pipeline.nifiProcessGroupId();
+        if(groupId==null||groupId.isBlank())return null;
+        List<Entry> sources=samplingEntries();
+        CompletableFuture<?>[] pending=sources.stream().map(this::scheduleRead).toArray(CompletableFuture[]::new);
+        try{CompletableFuture.allOf(pending).get(6,TimeUnit.SECONDS);}
+        catch(InterruptedException interrupted){Thread.currentThread().interrupt();}
+        catch(ExecutionException|TimeoutException unavailable){/* Other networks cannot hide a confirmed graph. */}
+        var owners=new ArrayList<Entry>();
+        for(Entry entry:sources)if(fresh(entry)&&entry.index.groups().containsKey(groupId))owners.add(entry);
+        if(owners.size()!=1)throw new org.springframework.web.server.ResponseStatusException(
+                org.springframework.http.HttpStatus.CONFLICT,owners.isEmpty()
+                ?"历史流程的部署节点暂无法确认：未在已连通节点中找到原流程组，请检查原节点连接和流程组配置；画布设计可以继续保存"
+                :"历史流程组同时存在于多个节点，无法自动关联，请核对任务的原部署节点");
+        Entry owner=owners.getFirst();
+        var primary=pipeline.nodeMapping()==null?null:pipeline.nodeMapping().primaryProcessorIds();
+        if(primary!=null&&!primary.isEmpty()){
+            Set<String> processors=new HashSet<>();
+            collectProcessorIds(owner.index.groups().get(groupId).snapshot(),processors);
+            if(!processors.containsAll(primary.values()))throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.CONFLICT,"历史流程组中的处理器与保存关联不一致，未自动更改部署节点，请核对原生流程");
+        }
+        return owner.node.id();
+    }
+    private static void collectProcessorIds(JsonNode group,Set<String> processors){
+        group.path("processorStatusSnapshots").forEach(item->{String id=item.path("processorStatusSnapshot").path("id").asText();if(!id.isBlank())processors.add(id);});
+        group.path("processGroupStatusSnapshots").forEach(item->collectProcessorIds(item.path("processGroupStatusSnapshot"),processors));
+    }
     public Map<String, Object> snapshotForNodes(Set<String> nodeIds) {
         return snapshotForNodes(nodeIds, false);
     }
