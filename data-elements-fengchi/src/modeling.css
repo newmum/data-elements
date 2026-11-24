@@ -162,11 +162,15 @@
 .modeling-properties .execution-status{line-height:1.7}
 
 /* Full viewport configuration uses Ant Design's body portal, independent of canvas geometry. */
-.modeling-config-drawer{--model-bg:#fff;--model-stage:#f6f8fc;--model-text:#303746;--model-muted:#707a8b;--model-line:#e2e7f0;color:var(--model-text)}
-[data-theme=dark] .modeling-config-drawer{--model-bg:#242932;--model-stage:#1e232b;--model-text:#dfe5ee;--model-muted:#a4aebd;--model-line:#39404c}
+.modeling-config-drawer{--model-drawer-gutter:14px;--model-bg:#fff;--model-stage:#f6f8fc;--model-text:#303746;--model-muted:#707a8b;--model-line:#e2e7f0;color:var(--model-text)}
+[data-theme=dark] .modeling-config-drawer{--model-drawer-gutter:14px;--model-bg:#242932;--model-stage:#1e232b;--model-text:#dfe5ee;--model-muted:#a4aebd;--model-line:#39404c}
 .modeling-config-drawer .model-ant-drawer-content{background:var(--model-bg);height:100%;color:var(--model-text)}
 .modeling-config-drawer .model-ant-drawer-header,.modeling-config-drawer .model-ant-drawer-footer{border-color:var(--model-line)}
-.modeling-drawer-heading{display:grid;gap:5px;min-width:0}.modeling-drawer-heading>small{font-size:12px;font-weight:400;color:var(--model-muted)}
+.modeling-config-drawer.is-start-configuration{--model-drawer-gutter:24px}
+.modeling-config-drawer .model-ant-drawer-header{padding:0 var(--model-drawer-gutter);min-height:44px}
+.modeling-config-drawer .modeling-drawer-close{color:var(--model-text);padding-inline:6px;margin-inline-end:-6px}
+.modeling-drawer-content .modeling-config-grid{padding-inline:var(--model-drawer-gutter)}
+.modeling-drawer-heading{min-width:0}
 .modeling-drawer-heading .modeling-node-heading>strong{font-size:18px;line-height:27px}.modeling-drawer-heading .modeling-node-heading>.model-ant-input{font-size:16px}
 .modeling-drawer-content{min-height:0;overflow:auto;flex:1;overscroll-behavior:contain}.modeling-drawer-start{min-height:0;flex:1;display:flex;flex-direction:column}
 .modeling-drawer-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.modeling-drawer-actions>span{flex:1;font-size:12px;color:var(--model-muted)}
@@ -175,7 +179,7 @@
 .modeling-configure:hover,.modeling-configure:focus-visible{color:var(--node-color);border-color:var(--node-color)}.modeling-card{padding-right:36px}
 .modeling-start-label{cursor:inherit}.modeling-start-label strong,.modeling-start-label small{pointer-events:none}
 .execution-start-editor{display:flex;flex-direction:column;flex:1;min-height:0;font-size:14px;color:var(--model-text)}
-.execution-content{flex:1;min-height:0;overflow:auto;padding:24px;overscroll-behavior:contain}.execution-content>.model-ant-alert,.execution-content>.execution-status{margin-top:18px}
+.execution-content{flex:1;min-height:0;overflow:auto;padding:24px var(--model-drawer-gutter,24px);overscroll-behavior:contain}.execution-content>.model-ant-alert,.execution-content>.execution-status{margin-top:18px}
 .execution-introduction{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:24px}.execution-introduction h3{font-size:20px;line-height:1.5;margin:0 0 6px}.execution-introduction p{line-height:1.7;margin:0;color:var(--model-muted);font-size:13px}
 .execution-start-editor .execution-section{border:1px solid var(--model-line);border-radius:8px;padding:20px;min-width:0}.execution-section h4{font-size:15px;line-height:1.5;margin:0 0 16px;font-weight:600}
 .execution-trigger-options{display:grid;gap:12px;width:100%}.execution-trigger-options>.model-ant-radio-wrapper{align-items:flex-start;padding:12px;margin:0;border:1px solid var(--model-line);border-radius:6px;background:var(--model-bg)}
@@ -188,8 +192,8 @@
 .execution-start-editor .execution-summary{background:var(--model-stage);border-color:var(--model-line);padding:20px}.execution-start-editor .execution-summary dl>div{font-size:13px;gap:12px;line-height:1.8}.execution-start-editor .execution-summary dt{color:var(--model-muted)}.execution-start-editor .execution-summary dd{text-align:right}.execution-start-editor .execution-summary h5{border-color:var(--model-line);font-size:13px}.execution-start-editor .execution-summary ol{line-height:1.9;font-size:13px}.execution-start-editor .execution-summary small,.execution-start-editor .execution-summary p{font-size:12px;line-height:1.8;color:var(--model-muted)}
 .execution-start-editor .execution-actions{flex-shrink:0;margin:0;padding:16px 24px;border-top:1px solid var(--model-line);background:var(--model-bg);flex-wrap:wrap;gap:10px}.execution-start-editor .execution-actions>span{flex:1;font-size:12px;line-height:1.6;color:var(--model-muted)}
 .execution-start-editor .execution-status{font-size:13px;line-height:1.8}
-@media(max-width:700px){.execution-start-grid{grid-template-columns:minmax(0,1fr)}.execution-content{padding:18px}.execution-start-editor .execution-section{padding:16px}.execution-start-editor .execution-engine{grid-template-columns:minmax(0,1fr)}}
-@media(max-width:600px){.modeling-config-drawer .model-ant-drawer-content-wrapper{width:100%!important}.execution-start-editor .execution-actions>span,.modeling-drawer-actions>span{flex-basis:100%}.execution-start-editor .execution-actions>.model-ant-btn{flex:1}.modeling-config-drawer .model-ant-drawer-header{padding-inline:18px!important}}
+@media(max-width:700px){.modeling-config-drawer.is-start-configuration{--model-drawer-gutter:18px}.execution-start-grid{grid-template-columns:minmax(0,1fr)}.execution-content{padding:18px var(--model-drawer-gutter,18px)}.execution-start-editor .execution-section{padding:16px}.execution-start-editor .execution-engine{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:600px){.modeling-config-drawer .model-ant-drawer-content-wrapper{width:100%!important}.execution-start-editor .execution-actions>span,.modeling-drawer-actions>span{flex-basis:100%}.execution-start-editor .execution-actions>.model-ant-btn{flex:1}}
 @media(prefers-reduced-motion:reduce){.modeling-config-drawer .model-ant-drawer-content-wrapper{transition:none!important}}
 
 /* Script controls reserve the editor for code; diagnostics appear only on demand. */

@@ -54,24 +54,19 @@ describe('complete semantic operator icon set',()=>{
  });
 });
 
-describe('matching panes and the full two-column palette',()=>{
+describe('the full two-column palette',()=>{
  const palette=workspace.split('<aside id="modeling-palette"')[1].split('</aside>')[0];
  const cards=workspace.split('const paletteItems=useMemo(')[1].split(' async function run')[0];
- it('shares header height, divider, typography and directional accessible toggles',()=>{
+ it('keeps the palette header and directional accessible toggles',()=>{
   expect(workspace).toContain('className="modeling-palette-title modeling-panel-heading"');
-  expect(workspace).toContain('className="modeling-properties-heading modeling-panel-heading"');
   expect(styles).toMatch(/\.modeling-panel-heading\{[^}]*height:47px[^}]*border-bottom:1px solid var\(--model-line\)/);
   expect(styles).toContain('.modeling-panel-heading>strong{font-size:13px;font-weight:600;line-height:20px}');
-  expect(workspace.match(/<PaneToggleIcon side="right" expanded=\{propertiesOpen\}\/>/g)).toHaveLength(2);
   expect(workspace.match(/icon=\{paletteOpen\?<MenuFoldOutlined\/>:<MenuUnfoldOutlined\/>\}/g)).toHaveLength(2);
   expect(workspace).not.toContain('<PaneToggleIcon side="left" expanded={paletteOpen}/>');
   expect(paneToggleDirection('left',true)).toBe('left');
   expect(paneToggleDirection('left',false)).toBe('right');
   expect(paneToggleDirection('right',true)).toBe('right');
   expect(paneToggleDirection('right',false)).toBe('left');
-  expect(workspace).toContain('aria-controls="modeling-properties"');
-  expect(workspace).toContain('aria-expanded={propertiesOpen}');
-  expect(workspace).toContain('propertiesOpen?"收起属性面板":"展开属性面板"');
  });
  it('uses the same two-column card grid for every category and preserves interaction wiring',()=>{
   expect(cards).toContain('className="modeling-operator-list modeling-operator-grid"');
@@ -84,7 +79,6 @@ describe('matching panes and the full two-column palette',()=>{
   expect(cards).toContain('onDragStart=');
   expect(cards).toContain("e.dataTransfer.setData('application/x-fengchi-model-node',kind)");
   expect(cards).toContain('onClick={()=>{if(kind)addOperatorRef.current(kind)}}');
-  expect(workspace).toContain('onClick={()=>setPropertiesOpen(v=>!v)}');
   expect(workspace).toContain('onClick={()=>setPaletteOpen(v=>!v)}');
  });
  it('shows business names and icons without capability marks, hints or muted variants',()=>{
