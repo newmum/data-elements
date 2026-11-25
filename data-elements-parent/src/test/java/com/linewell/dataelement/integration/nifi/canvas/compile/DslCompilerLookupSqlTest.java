@@ -11,6 +11,20 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DslCompilerLookupSqlTest {
+    @Test
+    void sourceSqlPushdownQuotesNumericLeadingCatalogAndTableNames() throws Exception {
+        Method method=DslCompiler.class.getDeclaredMethod("sourceSqlTable",Map.class);method.setAccessible(true);
+        var compiler=new DslCompiler(null,null,null,null);
+        for(String type:List.of("MYSQL","MARIADB","POSTGRESQL","KINGBASE")) {
+            String quote=type.equals("MYSQL")||type.equals("MARIADB")?"`":"\"";
+            assertEquals(quote+"201_202_203_datadevs"+quote+"."+quote+"123table"+quote,
+                    method.invoke(compiler,Map.of("dbType",type,"table","201_202_203_datadevs.123table")));
+        }
+        for(String text:List.of("201db.t;DROP TABLE x","201db.t -- x","201db..t","201db.t WHERE 1=1"))
+            org.junit.jupiter.api.Assertions.assertThrows(java.lang.reflect.InvocationTargetException.class,
+                    ()->method.invoke(compiler,Map.of("dbType","MYSQL","table",text)));
+    }
+
 
     @Test
     void combinesLookupsIntoOneEnrichmentQueryWithOracleSafeResultReferences() throws Exception {

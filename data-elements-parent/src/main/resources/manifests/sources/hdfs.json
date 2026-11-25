@@ -12,11 +12,12 @@
     { "key": "clientConfigDir", "label": "客户端配置目录", "type": "text", "group": "security" },
     { "key": "kerberosPrincipal", "label": "Kerberos Principal", "type": "text", "group": "security" },
     { "key": "keytabPath", "label": "Keytab 路径", "type": "text", "group": "security" },
+    {"key": "recurseSubdirectories", "label": "递归读取子目录", "type": "switch", "group": "read", "help": "是否列出登记目录下的子目录；沿用 NiFi 原有默认开启。文件内行数无通用抓取批参数。", "default": true},
     { "key": "schedulingPeriod", "label": "调度周期", "type": "duration", "default": "60 sec", "group": "schedule" }
   ],
   "compile": {
     "processors": [
-      { "localId": "list", "type": "org.apache.nifi.processors.hadoop.ListHDFS", "schedulingPeriod": "${config.schedulingPeriod}", "schedulingStrategy": "TIMER_DRIVEN", "properties": { "Hadoop Configuration Resources": "${config.clientConfigDir}/core-site.xml,${config.clientConfigDir}/hdfs-site.xml", "Directory": "${config.path}", "File Filter": "${config.fileFilterRegex}", "Kerberos Principal": "${config.kerberosPrincipal}", "Kerberos Keytab": "${config.keytabPath}" } },
+      { "localId": "list", "type": "org.apache.nifi.processors.hadoop.ListHDFS", "schedulingPeriod": "${config.schedulingPeriod}", "schedulingStrategy": "TIMER_DRIVEN", "properties": { "Hadoop Configuration Resources": "${config.clientConfigDir}/core-site.xml,${config.clientConfigDir}/hdfs-site.xml", "Directory": "${config.path}", "Recurse Subdirectories": "${config.recurseSubdirectories}", "File Filter": "${config.fileFilterRegex}", "Kerberos Principal": "${config.kerberosPrincipal}", "Kerberos Keytab": "${config.keytabPath}" } },
       { "localId": "fetch", "type": "org.apache.nifi.processors.hadoop.FetchHDFS", "properties": { "Hadoop Configuration Resources": "${config.clientConfigDir}/core-site.xml,${config.clientConfigDir}/hdfs-site.xml", "Kerberos Principal": "${config.kerberosPrincipal}", "Kerberos Keytab": "${config.keytabPath}" } }
     ],
     "internalConnections": [{ "from": "list", "to": "fetch", "relationship": "success" }],

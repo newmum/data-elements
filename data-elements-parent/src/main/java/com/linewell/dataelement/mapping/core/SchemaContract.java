@@ -1,14 +1,23 @@
 package com.linewell.dataelement.mapping.core;
 
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.core.StreamReadConstraints;
+import com.fasterxml.jackson.core.exc.StreamConstraintsException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import java.io.IOException;
 import java.util.*;
 
 /** Schema checks concern declared fields, never values inferred from a sample. */
 public final class SchemaContract {
     private static final ObjectMapper JSON = new ObjectMapper().enable(com.fasterxml.jackson.databind.DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS);
+    private static final JsonFactory JSON_TEXT = JsonFactory.builder()
+            .disable(JsonFactory.Feature.CANONICALIZE_FIELD_NAMES).disable(JsonFactory.Feature.INTERN_FIELD_NAMES)
+            .streamReadConstraints(StreamReadConstraints.builder().maxDocumentLength(RecordBudget.RECORD_BYTES)
+                    .maxStringLength((int)RecordBudget.RECORD_BYTES).maxNumberLength((int)RecordBudget.RECORD_BYTES)
+                    .maxNameLength((int)RecordBudget.RECORD_BYTES).build()).build();
     public record Field(String name, String logicalType, boolean nullable, int length, int precision, int scale) {}
     public record Difference(String field, String code, String message) {}
     private SchemaContract() {}
@@ -77,6 +86,11 @@ public final class SchemaContract {
         actual=actual.stream().map(field->"BINARY".equals(declaredTypes.get(field.name()))
                 &&Set.of("ARRAY","STRING").contains(field.logicalType())
                 ?new Field(field.name(),"BINARY",field.nullable(),field.length(),field.precision(),field.scale()):field).toList();
+        Set<String> jsonText=jsonTextSources(contract.path("source"));
+        // Native JDBC JSON/JSONB is a JSON string carrier. Keep the SQL type in
+        // the contract; referenced values are syntax-checked without rewriting.
+        actual=actual.stream().map(field->jsonText.contains(field.name())&&"STRING".equals(field.logicalType())
+                ?new Field(field.name(),declaredTypes.get(field.name()),field.nullable(),field.length(),field.precision(),field.scale()):field).toList();
         Set<String> jdbcMillisFields=new HashSet<>();
         for(JsonNode field:contract.path("source"))if(field.path("dateContainsTime").asBoolean()
                 &&ValueTypes.type(field.path("physicalType").asText()).equals("DATE"))jdbcMillisFields.add(field.path("name").asText());
@@ -89,13 +103,15 @@ public final class SchemaContract {
                 ?new Field(field.name(),declaredTypes.get(field.name()),field.nullable(),field.length(),field.precision(),field.scale()):field).toList();
         actual=actual.stream().map(field->field.logicalType().equals("DATETIME")&&"INSTANT".equals(declaredTypes.get(field.name()))
                 ?new Field(field.name(),"INSTANT",field.nullable(),field.length(),field.precision(),field.scale()):field).toList();
-        // A full-fraction JSON writer transports JDBC timestamps as text. Only explicitly
-        // declared physical timestamp fields in this codec mode receive that allowance;
-        // VARCHAR, DATE, numeric carriers and per-value conversion retain their contracts.
+        // The configured JSON codec transports timestamps and explicitly registered SQL
+        // date-only fields as text. Per-value parsing still validates the calendar date.
         if(sqlTimestampText){
             Set<String> timestamps=new HashSet<>();
             for(JsonNode field:contract.path("source"))if(Set.of("DATETIME","INSTANT").contains(ValueTypes.type(field.path("physicalType").asText()))
                     &&Set.of("DATETIME","INSTANT").contains(declaredTypes.getOrDefault(field.path("name").asText(),"")))timestamps.add(field.path("name").asText());
+            for(JsonNode field:contract.path("source"))if("DATE".equals(ValueTypes.type(field.path("physicalType").asText()))
+                    &&"DATE".equals(declaredTypes.get(field.path("name").asText()))
+                    &&"DATE".equals(field.path("registeredFormat").asText()))timestamps.add(field.path("name").asText());
             actual=actual.stream().map(field->timestamps.contains(field.name())&&"STRING".equals(field.logicalType())
                     ?new Field(field.name(),declaredTypes.get(field.name()),field.nullable(),field.length(),field.precision(),field.scale()):field).toList();
         }
@@ -105,6 +121,25 @@ public final class SchemaContract {
         }
         List<Difference> differences = compare(expected,actual,contract.path("allowAdditionalSourceFields").asBoolean(true),optional);
         if (!differences.isEmpty()) throw new MappingException("SCHEMA_DRIFT", differences.getFirst().code()+"："+differences.getFirst().field());
+    }
+    static Set<String> jsonTextSources(JsonNode fields){
+        Set<String> names=new HashSet<>();
+        for(JsonNode field:fields)
+            if(Set.of("JSON","JSONB").contains(ValueTypes.type(field.path("logicalType").asText()))
+                    &&Set.of("JSON","JSONB").contains(ValueTypes.type(field.path("physicalType").asText())))
+                names.add(field.path("name").asText());
+        return Set.copyOf(names);
+    }
+    static void requireJsonText(Object value){
+        if(value==null||value==ValueTypes.MISSING)return;
+        if(!(value instanceof String text))throw new MappingException("TYPE_MISMATCH","已登记JSON来源字段需要有效JSON文本载体");
+        RecordBudget.record(text,"JSON来源字段");
+        try(var parser=JSON_TEXT.createParser(text)){
+            if(parser.nextToken()==null)throw new MappingException("INVALID_JSON","已登记JSON来源字段不能为空文本");
+            parser.skipChildren();
+            if(parser.nextToken()!=null)throw new MappingException("INVALID_JSON","已登记JSON来源字段包含多个JSON值");
+        }catch(StreamConstraintsException tooLarge){throw new MappingException("BUDGET_EXCEEDED","JSON来源字段超过有界解析限制；原始数据保留");}
+        catch(IOException malformed){throw new MappingException("INVALID_JSON","已登记JSON来源字段不是完整有效的JSON文本");}
     }
     public static void prepare(ObjectNode specification){
         JsonNode contract=specification.path("schemaContract");List<Field> target=read(contract.path("target"));Map<String,Field> targets=new HashMap<>();target.forEach(field->targets.put(field.name(),field));

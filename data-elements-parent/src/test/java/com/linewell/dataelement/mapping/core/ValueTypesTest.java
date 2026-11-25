@@ -8,6 +8,35 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ValueTypesTest {
+    @Test void mysqlZeroFillPreservesUnsignedRangeInsteadOfDisplayWidth() {
+        for(String type:List.of("INT(1) UNSIGNED ZEROFILL","integer(2) zerofill"," INT (10)  UNSIGNED   ZEROFILL ")){
+            assertEquals("LONG",ValueTypes.type(type));
+            assertEquals(4294967295L,ValueTypes.cast("4294967295",type,0,0,RoundingMode.UNNECESSARY));
+            assertEquals("TYPE_MISMATCH",assertThrows(MappingException.class,()->ValueTypes.cast("1.5",type,0,0,RoundingMode.UNNECESSARY)).code());
+        }
+        for(String type:List.of("TINYINT(1) UNSIGNED ZEROFILL","SMALLINT ZEROFILL","MEDIUMINT(8) UNSIGNED ZEROFILL"))assertEquals("INT",ValueTypes.type(type));
+        assertEquals("DECIMAL",ValueTypes.type("BIGINT(20) UNSIGNED ZEROFILL"));
+        assertEquals(new java.math.BigDecimal("18446744073709551615"),ValueTypes.cast("18446744073709551615","BIGINT(20) ZEROFILL",20,0,RoundingMode.UNNECESSARY));
+        assertEquals(new java.math.BigDecimal("1.25"),ValueTypes.cast("1.25","DECIMAL(10,2) UNSIGNED ZEROFILL",10,2,RoundingMode.UNNECESSARY));
+        assertEquals("DOUBLE",ValueTypes.type("DOUBLE PRECISION UNSIGNED ZEROFILL"));
+        assertEquals("INT",ValueTypes.type("INT(1)"));
+        for(String invalid:List.of("VARCHAR(20) ZEROFILL","INT ZEROFILL UNKNOWN","ZEROFILL INT","INT ZEROFILL UNSIGNED","INT UNSIGNED ZEROFILL;DROP"))
+            assertEquals("UNSUPPORTED_TYPE",assertThrows(MappingException.class,()->ValueTypes.requireType(invalid)).code(),invalid);
+    }
+    @Test void zeroFillSourceMetadataRemainsPhysicalWhileSchemaUsesPortableNumericFamilies() throws Exception {
+        for(int count:List.of(20,100)){
+            var spec=JSON.readTree("""
+                {"schemaVersion":"2.0","schemaContract":{"source":[{"name":"flag","logicalType":"INT UNSIGNED ZEROFILL","physicalType":"int(1) unsigned zerofill","nullable":false}],"target":[{"name":"FLAG","logicalType":"DECIMAL","precision":10,"scale":0}]},"rules":[{"input":{"kind":"FIELD","name":"flag"},"target":{"name":"FLAG","logicalType":"DECIMAL","precision":10,"scale":0},"steps":[]}]}
+                """);
+            var plan=MappingEngine.compile(spec);
+            assertEquals("int(1) unsigned zerofill",plan.document().path("schemaContract").path("source").get(0).path("physicalType").asText());
+            SchemaContract.requireInput(plan,List.of(new SchemaContract.Field("flag","LONG",false,0,0,0)));
+            assertEquals("SCHEMA_DRIFT",assertThrows(MappingException.class,()->SchemaContract.requireInput(plan,List.of(new SchemaContract.Field("flag","BOOLEAN",false,0,0,0)))).code());
+            var rows=new ArrayList<Map<String,Object>>();for(int i=0;i<count;i++)rows.add(Map.of("flag",i%2==0?0L:4294967295L));
+            var result=MappingEngine.execute(plan,rows,0,CONTEXT,null);
+            for(int i=0;i<count;i++){assertTrue(result.rows().get(i).success());assertEquals(new java.math.BigDecimal(i%2==0?"0":"4294967295"),result.rows().get(i).output().get("FLAG"));}
+        }
+    }
     @Test void numericColumnNamesAreLiteralFieldsAndNeverPathsOrSqlFragments() throws Exception {
         for (String name : List.of("0", "0123", "1231313", "123_name")) {
             assertEquals(name, ValueTypes.field("/" + name));

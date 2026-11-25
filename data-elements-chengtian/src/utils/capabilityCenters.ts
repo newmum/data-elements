@@ -5,7 +5,7 @@ export const capabilityCenterBases = {
     (import.meta.env.DEV ? "http://localhost:3001/" : "/qizhi/"),
   haitong:
     import.meta.env.VITE_HAITONG_BASE_URL?.trim() ||
-    (import.meta.env.DEV ? "http://localhost:3002/" : "/haitong/"),
+    (import.meta.env.DEV ? "http://localhost:3002/" : new URL("./haitong/", window.location.href).pathname),
   wanxiang:
     import.meta.env.VITE_WANXIANG_GOVERNANCE_URL?.trim() ||
     (import.meta.env.DEV ? "http://localhost:3010/" : "/wanxiang-governance/"),

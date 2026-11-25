@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, App, Button, Checkbox, Dropdown, Empty, Skeleton, Space, Tag, Tooltip, Typography } from 'antd';
+import { Alert, App, Button, Checkbox, Dropdown, Empty, Skeleton, Space, Tooltip, Typography } from 'antd';
 import { AppstoreOutlined, BulbOutlined, CodeOutlined, DeleteOutlined, DownOutlined, EyeOutlined, MoreOutlined, PlusOutlined, SettingOutlined, SwapOutlined, UnorderedListOutlined, UpOutlined } from '@ant-design/icons';
 import { nanoid } from 'nanoid';
 import { compileFieldMapping, fieldMappingCapabilities, mappingVersions, recommendFieldMapping, validateFieldMapping, type FieldMeta, type FunctionParameterSchema, type MappingIssue, type MappingTableRef, type MappingTargetRef, type MappingSchemaContract, type UnifiedMappingDraft, type UnifiedMappingRule, type MappingRule } from '../api/fieldMapping';
@@ -334,11 +334,6 @@ function FieldMappingEditorContent({value,onChange,columnMeta,datasources=EMPTY_
         <Dropdown trigger={['click']} getPopupContainer={getNifiOverlayContainer} menu={{items:more,onClick:({key})=>{if(key==='validate'||key==='compile'||key==='schema')setInspection(key);if(key==='assets')setAssetsOpen(true);if(key==='upgrade'||key==='start')setRuntimeOperation(key);}}}><Button size="small" aria-label="更多治理操作" icon={<MoreOutlined/>}/></Dropdown>
       </div>
     </header>
-    {(columnMeta?.targets?.length??0)>1&&<Alert className="fm-shared-targets" type="info" showIcon message={`共享字段治理 · 一次转换供 ${columnMeta!.targets!.length} 个目标使用`} description={<>
-      <div>自动匹配以“{columnMeta!.targets![0].label}”为逻辑输出参考；各分支独立适配字段名称、物理类型和时间格式。</div>
-      <Space size={[6,6]} wrap>{columnMeta!.targets!.map(target=><Tag key={target.nodeId}>{target.label} · {target.fields.length} 个字段</Tag>)}</Space>
-      <Button size="small" type="link" onClick={()=>setInspection('schema')}>查看各目标字段</Button>
-    </>}/>}
     {sharedContractError&&<Alert type="warning" showIcon message="多目标字段读取未完成" description={sharedContractError}/>}
     {(columnsLoading||columnsError)&&<Alert type={columnsError?'warning':'info'} showIcon message={columnsError||'正在读取上下游字段'} action={onReloadColumns&&<Button size="small" loading={columnsLoading} onClick={onReloadColumns}>重新读取</Button>}/>}
     {capabilityError&&<Alert message={capabilityError} type="warning" showIcon/>}

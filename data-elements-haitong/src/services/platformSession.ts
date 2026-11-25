@@ -1,4 +1,4 @@
-import { getBridgeToken,getSessionRevision,setBridgeToken } from '../nifi/api/bridgeSession';
+import { getBridgeToken,getSessionRevision,setBridgeToken,waitForToken } from '../nifi/api/bridgeSession';
 import {sourcePlatformBaseUrl,sourcePlatformHomeUrl,sourcePlatformLoginUrl} from './platformLocation';
 import { deploymentLanding, standaloneDeployment } from '../app/deployment';
 
@@ -6,6 +6,7 @@ import { deploymentLanding, standaloneDeployment } from '../app/deployment';
 export function reconcilePlatformSessionToken(token:string,expectedRevision=getSessionRevision()):boolean {
   if(expectedRevision!==getSessionRevision())return false;
   const current=getBridgeToken();
+  if(window.parent!==window&&current!==token)return false;
   if(current&&current!==token){
     // Embedded integrations retain their explicit parent INIT/SET_TOKEN identity.
     if(window.parent===window)setBridgeToken(token||null);
@@ -49,10 +50,16 @@ export function redirectToPlatformLogin(): boolean {
   return true;
 }
 
+/** Match the source platform's optional deployment namespace without copying credentials. */
+function platformStorageKey(key: string): string {
+  const prefix = (import.meta.env.VITE_SOURCE_PLATFORM_STORAGE_PREFIX || '').trim();
+  return prefix ? `data-elements:${prefix}:${key}` : key;
+}
+
 function sameOriginToken(): string {
   try {
-    const remember = localStorage.getItem('remember_me') === 'true';
-    const raw = (remember ? localStorage : sessionStorage).getItem('token') || '';
+    const remember = localStorage.getItem(platformStorageKey('remember_me')) === 'true';
+    const raw = (remember ? localStorage : sessionStorage).getItem(platformStorageKey('token')) || '';
     if (!raw) return '';
     try {
       const parsed: unknown = JSON.parse(raw);
@@ -89,6 +96,8 @@ function platformBridge(portal: URL): Promise<HTMLIFrameElement> {
 /** Request the current platform token through its existing exact-origin bridge. */
 export async function getPlatformSessionToken(): Promise<string> {
   if (loggingOut) { await loggingOut; throw new Error('正在退出登录'); }
+  // An embedded canvas belongs to its authenticated parent INIT, not another tab's storage.
+  if (window.parent !== window) return waitForToken();
   const portal = getPortalBaseUrl();
   if (portal.origin === window.location.origin) return sameOriginToken();
   const frame = await platformBridge(portal);
@@ -125,8 +134,8 @@ export function logoutPlatformSession(): Promise<void> {
       const result = await response.json();
       if (!response.ok || ![0, 200].includes(Number(result.code))) throw new Error(result.message || '退出登录失败，请重试');
       for (const storage of [localStorage, sessionStorage]) {
-        storage.removeItem('token');
-        storage.removeItem('remember_me');
+        storage.removeItem(platformStorageKey('token'));
+        storage.removeItem(platformStorageKey('remember_me'));
       }
       sessionStorage.removeItem(LOGIN_REDIRECT_KEY);
       setBridgeToken(null);

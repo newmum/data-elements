@@ -63,9 +63,12 @@ public class UnifiedMappingService {
             applyRegisteredTemporalInputs(draft);
             applyOdsTimestampTargets(draft);
             normalizeTargetLengths(draft);
+            applySharedDatePrecision(draft);
+            applySharedIntegerBounds(draft);
             MappingEngine.Plan plan;
             try{plan=MappingEngine.compile(draft);}catch(MappingException error){throw describeTargetTypeMismatch(draft,error);}
             validateSharedTargetFields(draft,plan);
+            for(JsonNode branch:draft.path("schemaContract").path("targets"))sharedTargetProjection(plan,branch.path("nodeId").asText());
             Map<String,Map<String,Object>>localConnections=new LinkedHashMap<>();plan.dictionaries().values().forEach(dictionary->localConnections.put(dictionary.datasourceId(),connections.get(dictionary.datasourceId())));ObjectNode localSnapshots=JSON.createObjectNode();bindings.forEach(binding->{String id=binding.path("snapshotId").asText();if(snapshots.has(id))localSnapshots.set(id,snapshots.get(id));});compiled.put(entry.getKey(),new Compiled(plan,localConnections,localSnapshots));contracts.put(entry.getKey(),plan.document().path("schemaContract"));
         }
         return compiled;
@@ -138,17 +141,109 @@ public class UnifiedMappingService {
         }
         for(String branch:List.of("then","else"))if(rule.has(branch))alignTarget(rule.path(branch),names,exact);
     }
+    /** Preserve the intrinsic day-only domain when Oracle DATE storage is exposed as DATETIME. */
+    static void applySharedDatePrecision(ObjectNode draft){
+        JsonNode contract=draft.path("schemaContract");
+        if(!contract.path("sourceRef").isObject()||contract.path("sourceRangeUnverified").asBoolean()
+                ||!contract.path("targetRef").isObject()||!contract.path("targets").isArray())return;
+        Map<String,ObjectNode> dates=new HashMap<>();for(JsonNode field:contract.path("source"))
+            if("DATE".equals(ValueTypes.type(field.path("logicalType").asText()))&&!field.path("dateContainsTime").asBoolean()
+                    &&"DATE".equalsIgnoreCase(field.path("physicalType").asText().trim())
+                    &&Set.of("","DATE").contains(field.path("registeredFormat").asText())&&field instanceof ObjectNode object)dates.put(field.path("name").asText(),object);
+        Map<String,ObjectNode> storageFields=new HashMap<>();for(JsonNode field:contract.path("target"))if(field instanceof ObjectNode object)storageFields.put(field.path("name").asText(),object);
+        Map<String,SchemaContract.Field> primary=new HashMap<>();for(var field:SchemaContract.read(contract.path("target")))primary.put(field.name(),field);
+        List<Map<String,SchemaContract.Field>> branches=new ArrayList<>();
+        for(JsonNode branch:contract.path("targets")){
+            if(!branch.path("reference").isObject())return;
+            JsonNode fields=branch.path("target").isArray()?branch.path("target"):branch.path("fields");if(!fields.isArray())return;
+            for(JsonNode field:fields)if("DATETIME".equals(field.path("registeredFormat").asText()))return;
+            Map<String,SchemaContract.Field> names=new HashMap<>();for(var field:SchemaContract.read(sharedCarrierFields(branch,fields)))
+                if(names.putIfAbsent(field.name().toLowerCase(Locale.ROOT),field)!=null)return;
+            branches.add(names);
+        }
+        for(JsonNode rule:draft.path("rules")){
+            if(!rule.path("enabled").asBoolean(true)||rule.hasNonNull("when")||rule.hasNonNull("defaultValue")||rule.hasNonNull("fallback")
+                    ||!"ERROR".equals(rule.path("onError").asText("ERROR"))||!rule.path("steps").isEmpty()
+                    ||!"FIELD".equals(rule.path("input").path("kind").asText())||!dates.containsKey(rule.path("input").path("name").asText())
+                    ||!(rule.path("target") instanceof ObjectNode target)||!Set.of("DATE","DATETIME").contains(target.path("logicalType").asText()))continue;
+            String name=target.path("name").asText();var storage=primary.get(name);var registered=storageFields.get(name);
+            if(storage==null||!storage.logicalType().equals("DATETIME")||registered==null||registered.hasNonNull("registeredFormat"))continue;
+            boolean dateReceiver=false,compatible=true;
+            for(var branch:branches){var field=branch.get(name.toLowerCase(Locale.ROOT));
+                if(field==null||!Set.of("DATE","DATETIME").contains(field.logicalType())){compatible=false;break;}
+                dateReceiver|=field.logicalType().equals("DATE");
+            }
+            if(compatible&&dateReceiver){
+                // Reuse the existing DATE-precision contract understood by every deployed NAR.
+                // This is a derived default, not a saved user format or altered physical type.
+                registered.put("registeredFormat","DATE").put("formatOrigin","NATIVE_SOURCE_DATE");
+                ObjectNode source=dates.get(rule.path("input").path("name").asText());
+                if(!source.hasNonNull("registeredFormat"))source.put("registeredFormat","DATE").put("formatOrigin","NATIVE_SOURCE_DATE");
+                target.put("logicalType","DATE");
+                ((ObjectNode)contract).put("sourceHash",MappingEngine.hash(contract.path("source")));
+                ((ObjectNode)contract).put("targetHash",MappingEngine.hash(contract.path("target")));
+            }
+        }
+    }
+    /** Add an enforced common integer bound after target authorization, never a sampled-source proof. */
+    static void applySharedIntegerBounds(ObjectNode draft){
+        JsonNode contract=draft.path("schemaContract");
+        if(!contract.path("targetRef").isObject()||!contract.path("target").isArray()
+                ||!contract.path("targets").isArray()||contract.path("targets").isEmpty())return;
+        List<JsonNode> arrays=new ArrayList<>();arrays.add(contract.path("target"));
+        for(JsonNode branch:contract.path("targets")){
+            if(!branch.path("reference").isObject())return;
+            JsonNode fields=branch.path("target").isArray()?branch.path("target"):branch.path("fields");
+            if(!fields.isArray())return;arrays.add(sharedCarrierFields(branch,fields));
+        }
+        List<Map<String,SchemaContract.Field>> fieldsByBranch=new ArrayList<>();
+        List<Map<String,String>> physicalByBranch=new ArrayList<>();
+        for(JsonNode fields:arrays){
+            Map<String,SchemaContract.Field> names=new HashMap<>();Map<String,String> physical=new HashMap<>();
+            for(var field:SchemaContract.read(fields))if(names.putIfAbsent(field.name().toLowerCase(Locale.ROOT),field)!=null)return;
+            for(JsonNode field:fields)physical.put(field.path("name").asText().toLowerCase(Locale.ROOT),field.path("physicalType").asText());
+            fieldsByBranch.add(names);physicalByBranch.add(physical);
+        }
+        for(JsonNode rule:draft.path("rules")){
+            if(!rule.path("enabled").asBoolean(true)||rule.hasNonNull("when")||rule.hasNonNull("defaultValue")
+                    ||!"ERROR".equals(rule.path("onError").asText("ERROR"))||!rule.path("steps").isEmpty()
+                    ||!"FIELD".equals(rule.path("input").path("kind").asText())||!(rule.path("target") instanceof ObjectNode target))continue;
+            if(!"DECIMAL".equals(ValueTypes.type(target.path("logicalType").asText()))||target.path("scale").asInt()!=0)continue;
+            String output=target.path("name").asText().toLowerCase(Locale.ROOT);
+            int width=64;boolean compatible=true,integerReceiver=false;
+            for(int index=0;index<fieldsByBranch.size();index++){
+                var field=fieldsByBranch.get(index).get(output);if(field==null){compatible=false;break;}
+                if(Set.of("INT","LONG").contains(field.logicalType())){
+                    integerReceiver=true;
+                    int physical=signedIntegerWidth(physicalByBranch.get(index).get(output),field.logicalType());
+                    width=Math.min(width,Math.min(field.logicalType().equals("INT")?32:64,physical));
+                }
+            }
+            if(!compatible||!integerReceiver||width<32||target.path("precision").asInt()<(width==32?10:19))continue;
+            String type=width==32?"INT":"LONG";
+            var proposed=new MappingEngine.OutputType(type,0,0,target.path("nullable").asBoolean(true));
+            for(int index=0;index<fieldsByBranch.size();index++)
+                if(!sharedTypeAccepts(proposed,fieldsByBranch.get(index).get(output),physicalByBranch.get(index).get(output),0,false)){compatible=false;break;}
+            if(compatible){
+                // Keep the decimal output and physical schemas. The existing strict CAST
+                // rejects fractions/overflow before either target sees a record.
+                ObjectNode step=((ObjectNode)rule).withArray("steps").addObject();step.put("operator","CAST").put("stepId","source-integer-range");
+                step.putObject("args").put("logicalType",type);
+            }
+        }
+    }
     /** One shared output must have an unambiguous destination field in every authorized branch. */
     static void validateSharedTargetFields(ObjectNode draft,MappingEngine.Plan plan){
         var outputContracts=plan.outputContracts();
         var integralSources=integralSourceWidths(draft);
+        var booleanSources=directBooleanOutputs(draft);
         for(JsonNode branch:draft.path("schemaContract").path("targets")){
             JsonNode fields=branch.path("target").isArray()?branch.path("target"):branch.path("fields");
             if(!fields.isArray())throw new MappingException("INVALID_SCHEMA","目标分支尚未读取字段结构："+branch.path("label").asText(branch.path("nodeId").asText()));
             Map<String,List<SchemaContract.Field>> names=new HashMap<>();
             Map<String,String> physicalTypes=new HashMap<>();
             fields.forEach(field -> physicalTypes.put(ValueTypes.field(field.path("name").asText()),field.path("physicalType").asText()));
-            for(var field:SchemaContract.read(fields))names.computeIfAbsent(field.name().toLowerCase(Locale.ROOT),ignored->new ArrayList<>()).add(field);
+            for(var field:SchemaContract.read(sharedCarrierFields(branch,fields)))names.computeIfAbsent(field.name().toLowerCase(Locale.ROOT),ignored->new ArrayList<>()).add(field);
             for(String output:plan.outputFields()){
                 var matches=names.getOrDefault(output.toLowerCase(Locale.ROOT),List.of());
                 if(matches.size()!=1)throw new MappingException(matches.isEmpty()?"TARGET_NOT_FOUND":"AMBIGUOUS_FIELD",
@@ -156,23 +251,67 @@ public class UnifiedMappingService {
                 var actual=matches.getFirst();var expected=outputContracts.get(output);
                 String label="共享治理目标“"+branch.path("label").asText(branch.path("nodeId").asText())+"”字段 "+output;
                 if(!actual.nullable()&&expected.nullable())throw new MappingException("TARGET_NULLABILITY_MISMATCH",label+"不允许空值，请为共享规则明确非空输出");
-                if(!sharedTypeAccepts(expected,actual,physicalTypes.get(actual.name()),integralSources.getOrDefault(output,0)))
+                String physical=branch.path("outputAliases").path(output).asText(actual.name());
+                if(!sharedTypeAccepts(expected,actual,physicalTypes.get(physical),integralSources.getOrDefault(output,0),booleanSources.contains(output)&&branch.path("targetBooleanNumberCarrier").asBoolean()))
                     throw new MappingException("TARGET_TYPE_MISMATCH",label+"无法无损接收 "+expected.logicalType()+"("+expected.precision()+","+expected.scale()+")，目标为 "+actual.logicalType()
                             +(actual.logicalType().equals("STRING")?"(长度="+(actual.length()>0?actual.length():"不限")+")":"("+actual.precision()+","+actual.scale()+")"));
             }
             Set<String> outputs=new HashSet<>();plan.outputFields().forEach(name->outputs.add(name.toLowerCase(Locale.ROOT)));
             Set<String> source=new HashSet<>();draft.path("schemaContract").path("source").forEach(field->source.add(field.path("name").asText().toLowerCase(Locale.ROOT)));
             Set<String> excluded=new HashSet<>();plan.excludes().forEach(name->excluded.add(name.toLowerCase(Locale.ROOT)));
-            for(JsonNode field:fields){String name=field.path("name").asText();
+            for(JsonNode field:sharedCarrierFields(branch,fields)){String name=field.path("name").asText();
                 if(!field.path("nullable").asBoolean(true)&&!field.path("hasDefault").asBoolean()&&!outputs.contains(name.toLowerCase(Locale.ROOT))
                         &&!(plan.passthrough()&&source.contains(name.toLowerCase(Locale.ROOT))&&!excluded.contains(name.toLowerCase(Locale.ROOT))))
                     throw new MappingException("TARGET_REQUIRED","共享治理目标“"+branch.path("label").asText()+"”非空字段缺少赋值："+name);
             }
         }
     }
+    private static JsonNode sharedCarrierFields(JsonNode branch,JsonNode fields){
+        if(!branch.path("outputAliases").isObject()||branch.path("outputAliases").isEmpty())return fields;
+        Map<String,String> inverse=new HashMap<>();branch.path("outputAliases").fields().forEachRemaining(alias->{
+            if(inverse.putIfAbsent(alias.getValue().asText(),alias.getKey())!=null)throw new MappingException("AMBIGUOUS_FIELD","共享目标投影不能覆盖同一字段");
+        });
+        JsonNode result=fields.deepCopy();for(JsonNode field:result){String name=field.path("name").asText();if(inverse.containsKey(name))((ObjectNode)field).put("name",inverse.get(name));}
+        return result;
+    }
+    /** Pure identity projection: physical order/names change; governed values and ODS identities do not. */
+    public static MappingEngine.Plan sharedTargetProjection(MappingEngine.Plan shared,String nodeId){
+        return sharedTargetProjection(shared,nodeId,false);
+    }
+    /** A branch-local transport projection also copies unchanged names and every original ODS value. */
+    public static MappingEngine.Plan sharedTargetProjection(MappingEngine.Plan shared,String nodeId,boolean transportProjection){
+        for(JsonNode branch:shared.document().path("schemaContract").path("targets")){
+            if(!branch.path("nodeId").asText().equals(nodeId)||!transportProjection&&branch.path("outputAliases").isEmpty())continue;
+            if(transportProjection&&(!branch.path("reference").isObject()
+                    ||!(branch.path("target").isArray()||branch.path("fields").isArray())))
+                throw new MappingException("INVALID_SCHEMA","Hive二进制传输需要已校验的登记目标字段");
+            ObjectNode draft=JSON.createObjectNode().put("schemaVersion","2.0");ObjectNode policies=shared.document().path("policies") instanceof ObjectNode value?value.deepCopy():JSON.createObjectNode();
+            policies.put("allowUnmappedPassthrough",false).put("caseSensitive",true).put("onMissingSource","ERROR").put("recordErrorMode","FAIL_FLOWFILE");draft.set("policies",policies);
+            ArrayNode rules=draft.putArray("rules");Map<String,String> inputs=new HashMap<>();
+            Map<String,MappingEngine.OutputType> types=new LinkedHashMap<>(shared.outputContracts());
+            if(shared.passthrough())for(var source:SchemaContract.read(shared.document().path("schemaContract").path("source")))
+                if(!shared.excludes().contains(source.name()))types.putIfAbsent(source.name(),new MappingEngine.OutputType(source.logicalType(),source.precision(),source.scale(),source.nullable()));
+            types.forEach((name,type)->{
+                String physical=branch.path("outputAliases").path(name).asText(name).toLowerCase(Locale.ROOT);
+                if(inputs.putIfAbsent(physical,name)!=null)throw new MappingException("AMBIGUOUS_FIELD","共享目标投影发生字段冲突");
+            });
+            JsonNode fields=branch.path("target").isArray()?branch.path("target"):branch.path("fields");
+            for(JsonNode field:fields){String physical=field.path("name").asText(),input=inputs.remove(physical.toLowerCase(Locale.ROOT));if(input==null)continue;
+                var type=types.get(input);ObjectNode rule=rules.addObject();rule.putObject("input").put("kind","FIELD").put("name",input);
+                rule.putObject("target").put("name",physical).put("logicalType",type.logicalType()).put("precision",type.precision()).put("scale",type.scale()).put("nullable",type.nullable());
+                rule.putArray("steps");
+            }
+            if(inputs.values().stream().anyMatch(shared.outputContracts()::containsKey))throw new MappingException("TARGET_NOT_FOUND","共享目标投影缺少输出字段");
+            return MappingEngine.compile(draft);
+        }
+        return null;
+    }
     private static boolean sharedTypeAccepts(MappingEngine.OutputType output,SchemaContract.Field target,
-                                              String physicalType,int sourceWidth){
+                                              String physicalType,int sourceWidth,boolean booleanSource){
         String source=output.logicalType(),type=target.logicalType();if(type.equals("ANY"))return true;
+        // A verified native boolean mapped directly to NUMBER(1) has exactly {0,1}.
+        // The registered Hive reader restores those two numeric values to BOOLEAN.
+        if(type.equals("BOOLEAN")&&source.equals("DECIMAL")&&output.precision()==1&&output.scale()==0&&booleanSource)return true;
         // Hive STRING is unbounded text. Its record writer renders numeric values without
         // changing the shared numeric output used by the JDBC branch. Bounded text still
         // needs room for every declared value, including sign, decimal point and leading zero.
@@ -230,12 +369,27 @@ public class UnifiedMappingService {
     private static final Pattern DIRECT_INTEGER_CAST = Pattern.compile(
             "^CAST\\s*\\(\\s*\\$\\{field:([^}]+)}\\s+AS\\s+(INT|INTEGER|BIGINT)\\s*\\)$", Pattern.CASE_INSENSITIVE);
 
+    /** Only an unchanged, authenticated BOOLEAN input proves the numeric 0/1 domain. */
+    private static Set<String> directBooleanOutputs(ObjectNode draft){
+        JsonNode contract=draft.path("schemaContract");
+        if(!contract.path("sourceRef").isObject()||contract.path("sourceRangeUnverified").asBoolean())return Set.of();
+        Set<String> sources=new HashSet<>(),outputs=new HashSet<>();
+        for(JsonNode field:contract.path("source"))if("BOOLEAN".equals(ValueTypes.type(field.path("logicalType").asText())))sources.add(field.path("name").asText());
+        for(JsonNode rule:draft.path("rules")){
+            if(!rule.path("enabled").asBoolean(true)||rule.hasNonNull("when")||rule.hasNonNull("defaultValue")
+                    ||!"ERROR".equals(rule.path("onError").asText("ERROR"))||!rule.path("steps").isEmpty())continue;
+            JsonNode input=rule.path("input");
+            if("FIELD".equals(input.path("kind").asText())&&sources.contains(input.path("name").asText(input.path("field").asText())))outputs.add(rule.path("target").path("name").asText());
+        }
+        return outputs;
+    }
+
     /** A direct field or identity integer cast can preserve a stricter registered source range. */
     private static Map<String,Integer> integralSourceWidths(ObjectNode draft){
         JsonNode contract=draft.path("schemaContract");
-        if(!contract.path("sourceRef").isObject() || contract.path("sourceRangeUnverified").asBoolean())return Map.of();
+        boolean verified=contract.path("sourceRef").isObject()&&!contract.path("sourceRangeUnverified").asBoolean();
         Map<String,Integer> sources=new HashMap<>();
-        for(JsonNode field:contract.path("source")){
+        if(verified)for(JsonNode field:contract.path("source")){
             if(!Set.of("INT","LONG").contains(ValueTypes.type(field.path("logicalType").asText())))continue;
             String physical=field.path("physicalType").asText().trim().toUpperCase(Locale.ROOT);
             boolean unsigned=physical.endsWith(" UNSIGNED");
@@ -245,7 +399,14 @@ public class UnifiedMappingService {
         Map<String,Integer> result=new HashMap<>();
         for(JsonNode rule:draft.path("rules")){
             if(!rule.path("enabled").asBoolean(true) || rule.hasNonNull("when") || rule.hasNonNull("defaultValue")
-                    || !"ERROR".equals(rule.path("onError").asText("ERROR")) || !rule.path("steps").isEmpty())continue;
+                    || !"ERROR".equals(rule.path("onError").asText("ERROR")))continue;
+            JsonNode steps=rule.path("steps");
+            if(steps.isArray()&&steps.size()==1&&"CAST".equals(steps.get(0).path("operator").asText())){
+                String type=ValueTypes.type(steps.get(0).path("args").path("logicalType").asText("STRING"));
+                if(Set.of("INT","LONG").contains(type))result.put(rule.path("target").path("name").asText(),type.equals("INT")?32:64);
+                continue;
+            }
+            if(!steps.isEmpty())continue;
             JsonNode input=rule.path("input");
             String name;
             int castWidth=64;
@@ -354,16 +515,24 @@ public class UnifiedMappingService {
         Map<String,Object> cfg=connections.get(id);if(cfg==null)throw new MappingException("RESOURCE_FORBIDDEN","字典连接未授权");String url=registeredJdbcUrl(cfg);String user=text(cfg,"username","dbUser"),password=text(cfg,"password","dbPassword");
         if(url.isBlank())throw new MappingException("DICTIONARY_UNAVAILABLE","已登记字典未配置JDBC连接");
         String driver=text(cfg,"driverClassName","driverClass","driver_class_name");
+        String family=text(cfg,"dbType","databaseType").toUpperCase(Locale.ROOT).replaceAll("[\\s_-]","");
+        var gauss=Set.of("GAUSSDB","OPENGAUSS").contains(family)
+                ?com.linewell.dataelement.metautil.jdbc.GaussDbVariant.from(cfg):null;
+        if(gauss!=null)gauss.validateUrl(url);
         String hiveMode=text(cfg,"hiveConnectionMode","hive_connection_mode").trim().toLowerCase(Locale.ROOT);
         Map<String,String> jdbcProperties=com.linewell.dataelement.metautil.jdbc.JdbcDriverPropertyResolver.resolve(cfg);
         // A changed authentication/client profile must never reuse a prior physical Hive session.
-        String key=MappingEngine.hash(JSON.valueToTree(List.of(id,url,user,password,driver,hiveMode,jdbcProperties,
+        String key=MappingEngine.hash(JSON.valueToTree(List.of(id,url,user,password,driver,hiveMode,jdbcProperties,gauss==null?"":gauss.code(),
                 text(cfg,"authMode","auth_mode"),text(cfg,"userPrincipal","principal"),text(cfg,"keytabPath","keytab"),
                 text(cfg,"krb5ConfPath"),text(cfg,"jaasConfPath"),text(cfg,"clientConfigDir"))));
         if(!pools.containsKey(key)&&pools.size()>=32)throw new MappingException("BUDGET_EXCEEDED","字典连接池数量超过32");
         return pools.computeIfAbsent(key,k->{
             DruidDataSource ds=new DruidDataSource();ds.setUrl(url);ds.setUsername(user);ds.setPassword(password);
-            if(hiveMode.equals("open-source")&&(url.startsWith("jdbc:hive2:")||url.startsWith("jdbc:hive:"))) {
+            if(gauss!=null) {
+                // Druid cannot resolve a vendor class that the metadata connector loaded externally.
+                // Bind the selected product's actual driver instead of guessing from the shared URL prefix.
+                ds.setDriver(com.linewell.dataelement.metautil.explorer.AbstractMetadataExplorer.loadGaussDriver(gauss.code()));
+            } else if(hiveMode.equals("open-source")&&(url.startsWith("jdbc:hive2:")||url.startsWith("jdbc:hive:"))) {
                 // Reuse the metadata connector's isolated Hive/Hadoop client, not the same-name MRS class.
                 // Its UGI belongs to that client loader; no application-wide Hadoop authentication is changed.
                 ds.setDriver(com.linewell.dataelement.metautil.explorer.AbstractMetadataExplorer.loadOpenSourceHiveDriver());
@@ -376,28 +545,31 @@ public class UnifiedMappingService {
             return ds;
         });
     }
-    /** Assemble a host-mode SQL Server registration using the metadata connector's URL rules.
+    /** Assemble host-mode MySQL/SQL Server registrations using the metadata connector's URL rules.
      * Explicit JDBC URLs and every other product retain their existing behavior. No registry write or source query. */
     static String registeredJdbcUrl(Map<String,Object> cfg) {
         String explicit=text(cfg,"jdbcURL","jdbcUrl","url");if(!explicit.isBlank())return explicit;
         com.linewell.dataelement.metautil.model.enums.DatabaseType type;
         try{type=com.linewell.dataelement.metautil.model.enums.DatabaseType.fromCode(text(cfg,"dbType","databaseType"));}
         catch(IllegalArgumentException unknown){return "";}
-        if(type!=com.linewell.dataelement.metautil.model.enums.DatabaseType.SQLSERVER)return "";
+        if(type!=com.linewell.dataelement.metautil.model.enums.DatabaseType.SQLSERVER
+                &&type!=com.linewell.dataelement.metautil.model.enums.DatabaseType.MYSQL)return "";
         String host=text(cfg,"host","dbMetaIp","dbIp","hostname"),database=text(cfg,"database","dbMetaDbName","dbName");
         if(host.isBlank()||database.isBlank())return "";
-        if(!host.matches("[A-Za-z0-9_.:\\[\\]-]+")||database.matches("(?s).*[;{}\\r\\n].*"))
-            throw new MappingException("DICTIONARY_UNAVAILABLE","SQL Server主机或数据库名称不适用于主机模式，请配置明确的JDBC连接地址");
+        String product=type.getDisplayName();
+        if(!host.matches("[A-Za-z0-9_.:\\[\\]-]+")||database.matches("(?s).*[;{}\\r\\n].*")
+                ||type==com.linewell.dataelement.metautil.model.enums.DatabaseType.MYSQL&&database.matches("(?s).*[/?#\\\\].*"))
+            throw new MappingException("DICTIONARY_UNAVAILABLE",product+"主机或数据库名称不适用于主机模式，请配置明确的JDBC连接地址");
         var connection=new com.linewell.dataelement.metautil.model.dto.DataSourceConfig();connection.setDatabaseType(type);
         connection.setHost(host);connection.setDatabase(database);connection.setConnectorProperties(cfg);
         connection.setExtraParams(text(cfg,"extraParams","extra_params"));
         String port=text(cfg,"port","dbMetaPort","dbPort");
         if(!port.isBlank()){
             try{int number=Integer.parseInt(port);if(number<1||number>65535)throw new NumberFormatException();connection.setPort(number);}
-            catch(NumberFormatException invalid){throw new MappingException("DICTIONARY_UNAVAILABLE","SQL Server登记端口须在1至65535之间");}
+            catch(NumberFormatException invalid){throw new MappingException("DICTIONARY_UNAVAILABLE",product+"登记端口须在1至65535之间");}
         }
         try{return connection.buildJdbcUrl();}
-        catch(IllegalArgumentException invalid){throw new MappingException("DICTIONARY_UNAVAILABLE","SQL Server登记连接参数无效，请核对加密设置或明确的JDBC连接地址");}
+        catch(IllegalArgumentException invalid){throw new MappingException("DICTIONARY_UNAVAILABLE",product+"登记连接参数无效，请核对连接设置或明确的JDBC连接地址");}
     }
     java.sql.Connection openRegistered(String id,Map<String,Map<String,Object>>connections)throws java.sql.SQLException{
         var config=connections.get(id);

@@ -93,7 +93,6 @@
 .fm-single-editor.fm-mode-list { height:auto; min-height:100%; flex:none; overflow:visible; }
 .fm-single-editor.fm-mode-list .fm-list-view { flex:none; overflow:visible; }
 .fm-single-editor.fm-mode-list .fm-list-table { flex:none; overflow:visible; }
-.fm-single-editor.fm-mode-list .fm-topbar { position:sticky; top:0; z-index:3; }
 .fm-single-editor .fm-list-table .ant-table-tbody>tr>td { padding:9px 10px; }
 .fm-single-editor .fm-list-table .ant-table-thead>tr>th { padding:9px 10px; }
 .fm-review-modal .ant-modal-body { padding:20px; }

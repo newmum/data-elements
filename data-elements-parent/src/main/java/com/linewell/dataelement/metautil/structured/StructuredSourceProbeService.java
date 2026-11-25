@@ -1821,6 +1821,11 @@ public class StructuredSourceProbeService {
             Map<String, String> connector = new TreeMap<>();
             String type = sourceType(source);
             connector.put("sourceType", type);
+            if (Set.of("ftp", "minio").contains(type)) {
+                // 单个登记表的探查结果只属于该文件范围，不能复用成目录或其他表的结果。
+                putCacheValue(connector, source, "registeredTableName", "_registeredTableName");
+                putCacheValue(connector, source, "fileFilterRegex", "fileFilterRegex");
+            }
             switch (type) {
                 case "api" -> {
                     putCacheValue(connector, source, "protocol", "apiProtocol");

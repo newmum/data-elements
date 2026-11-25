@@ -24,7 +24,8 @@ public final class NifiAttributeSync {
     private static final int MAX_CHANGES = 100;
     private static final Set<String> SOURCE_SCHEDULERS = Set.of("GenerateTableFetch", "GenerateDateTableFetch",
             "QueryDatabaseTableRecord", "ExecuteSQLRecord", "GetFTP", "GetSFTP", "ListFTP", "ListSFTP",
-            "GetHwFTP", "GetHwSFTP", "ListS3", "ListHDFS", "GenerateFlowFile", "ConsumeKafkaRecord_2_6");
+            "GetHwFTP", "GetHwSFTP", "ListS3", "ListHDFS", "GenerateFlowFile", "ConsumeKafkaRecord_2_6",
+            "ConsumeKafka", "GetMongo", "JsonQueryElasticsearch");
     private final NifiClient nifi;
 
     public NifiAttributeSync(NifiClient nifi) {
@@ -49,7 +50,13 @@ public final class NifiAttributeSync {
     private enum Field {
         PERIOD("schedulingPeriod", "调度周期", "schedulingPeriod", true),
         BATCH("batchSize", "单批最大条数", "Max Rows Per FlowFile", false),
-        FETCH("maxRowsPerRun", "JDBC 抓取行数", "Fetch Size", false),
+        FETCH("maxRowsPerRun", "JDBC 抓取批大小", "Fetch Size", false),
+        MONGO_BATCH("batchSize", "单批最大条数", "Results Per FlowFile", false),
+        MONGO_FETCH("fetchSize", "MongoDB 抓取批大小", "Batch Size", false),
+        REMOTE_POLL("remotePollBatchSize", "目录抓取批大小", "Remote Poll Batch Size", false),
+        REMOTE_FILES("maxFilesPerRun", "单次最大文件数", "Max Selects", false),
+        OBJECT_LIST("listingBatchSize", "清单输出批大小", "Listing Batch Size", false),
+        FTPS_FILES("maxFilesPerRun", "FTPS 单次最大文件数", "ftps.maxFiles", false),
         DIRECTORY("hdfsDirectory", "HDFS 写入目录", "Directory", false);
 
         final String key;
@@ -235,6 +242,17 @@ public final class NifiAttributeSync {
             return HiveSinkPublicationPolicy.supportsHdfsMerge(node);
         }
         if (!"source".equals(node.category()) || "PERIODIC_FULL".equals(node.config().get("syncMode"))) return false;
+        boolean mongo = "source.mongodb".equals(node.manifestKey());
+        boolean ftp = "source.ftp".equals(node.manifestKey());
+        boolean ftps = ftp && "ftps".equalsIgnoreCase(Objects.toString(node.config().getOrDefault("ftpProtocol", node.config().get("protocol")), ""));
+        if (field == Field.MONGO_BATCH || field == Field.MONGO_FETCH) return mongo;
+        if (field == Field.BATCH || field == Field.FETCH) return !Set.of("source.mongodb", "source.kafka",
+                "source.minio", "source.ftp", "source.sftp", "source.hdfs", "source.hbase",
+                "source.elasticsearch", "source.api").contains(node.manifestKey());
+        if (field == Field.REMOTE_POLL || field == Field.REMOTE_FILES) return (ftp || "source.sftp".equals(node.manifestKey())) && !ftps
+                && !"DELETE_AFTER_DATABASE_COMMIT".equals(node.config().get("fileConsumptionPolicy"));
+        if (field == Field.OBJECT_LIST) return "source.minio".equals(node.manifestKey());
+        if (field == Field.FTPS_FILES) return ftps;
         return field != Field.PERIOD || !Set.of("DAILY_IMMEDIATE", "DAILY_STAGGERED")
                 .contains(Objects.toString(node.config().get("batchSchedulePolicy"), ""));
     }
@@ -249,6 +267,12 @@ public final class NifiAttributeSync {
                     && !Objects.toString(field.current(processor), "").contains("${");
             case BATCH, FETCH -> "ExecuteSQLRecord".equals(type)
                     && component.path("config").path("properties").has(field.nativeKey);
+            case MONGO_BATCH, MONGO_FETCH -> "GetMongo".equals(type)
+                    && component.path("config").path("properties").has(field.nativeKey);
+            case REMOTE_POLL, REMOTE_FILES -> Set.of("GetFTP", "GetSFTP").contains(type)
+                    && component.path("config").path("properties").has(field.nativeKey);
+            case OBJECT_LIST -> "ListS3".equals(type) && component.path("config").path("properties").has(field.nativeKey);
+            case FTPS_FILES -> "ExecuteGroovyScript".equals(type) && component.path("config").path("properties").has(field.nativeKey);
             case PERIOD -> SOURCE_SCHEDULERS.contains(type)
                     && Objects.equals(mapping.primaryProcessorIds().get(node.id()), processor.path("id").asText())
                     && Objects.toString(node.config().get("schedulingStrategy"), "TIMER_DRIVEN")
@@ -259,7 +283,13 @@ public final class NifiAttributeSync {
     private static String desired(Pipeline.Node node, Field field) {
         String value = Objects.toString(node.config().get(field.key), "").strip();
         if (value.isEmpty() || value.length() > 1024 || value.chars().anyMatch(Character::isISOControl)) return null;
-        if ((field == Field.BATCH || field == Field.FETCH) && !value.matches("[0-9]{1,9}")) return null;
+        if (field != Field.PERIOD && field != Field.DIRECTORY) {
+            try {
+                int count = new java.math.BigDecimal(value).intValueExact();
+                if (count < (field == Field.FETCH ? 0 : 1) || field == Field.FTPS_FILES && count > 100) return null;
+                return Integer.toString(count);
+            } catch (NumberFormatException | ArithmeticException ex) { return null; }
+        }
         return value;
     }
 

@@ -64,9 +64,15 @@ final class MappingFieldLabels {
     private static ObjectNode directJdbcReference(Pipeline.Node source){
         if(source==null || !"source".equals(source.category()) || source.config()==null)return null;
         var config=source.config();
-        if(!Set.of("source.mysql","source.mariadb","source.tdsql-mysql","source.oracle","source.oceanbase",
-                "source.postgresql","source.kingbase","source.dameng","source.sqlserver").contains(source.manifestKey())
-                || !first(config,"customQuery").isBlank())return null;
+        if(source.manifestKey()==null || !source.manifestKey().startsWith("source.")
+                || !first(config,"customQuery","sql").isBlank())return null;
+        // Share the registration type catalogue; a second source-name whitelist misses
+        // GaussDB, ClickHouse, Hive and other supported JDBC products as they are added.
+        try {
+            var type=RegisteredDatasourceType.databaseType(source.manifestKey().substring("source.".length()),config);
+            if(type==null || !type.isRelational()
+                    || type==com.linewell.dataelement.metautil.model.enums.DatabaseType.MAXCOMPUTE)return null;
+        }catch(IllegalArgumentException unsupported){return null;}
         String datasource=first(config,"registeredDatasourceId","sourceDbId"), table=first(config,"sourceTableId");
         if(datasource.isBlank() || table.isBlank())return null;
         return JSON.createObjectNode().put("datasourceId",datasource).put("tableId",table);

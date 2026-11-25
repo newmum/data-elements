@@ -14,6 +14,7 @@ public final class ValueTypes {
     private static final Pattern DIMENSIONS = Pattern.compile("\\([^)]*\\)");
     private static final Pattern WHITESPACE = Pattern.compile("\\s+");
     private static final Pattern UNSIGNED = Pattern.compile("\\s+UNSIGNED$");
+    private static final Pattern MYSQL_ZEROFILL = Pattern.compile("(?:TINYINT|SMALLINT|MEDIUMINT|INT|INTEGER|BIGINT|DECIMAL|DEC|NUMERIC|FLOAT|REAL|DOUBLE(?: PRECISION)?)(?: UNSIGNED)? ZEROFILL");
     public static final Object MISSING = new Object();
     private ValueTypes() {}
     public static BigDecimal decimal(Object value) {
@@ -29,6 +30,12 @@ public final class ValueTypes {
         if (raw == null) return "ANY";
         if (LOGICAL_TYPES.contains(raw)) return raw;
         String value = WHITESPACE.matcher(DIMENSIONS.matcher(raw.toUpperCase(Locale.ROOT)).replaceAll("").trim()).replaceAll(" ");
+        // MySQL display padding never narrows the numeric value domain. ZEROFILL
+        // implies UNSIGNED even when the driver omits the redundant attribute.
+        if(MYSQL_ZEROFILL.matcher(value).matches()){
+            value=value.substring(0,value.length()-" ZEROFILL".length());
+            if(!value.endsWith(" UNSIGNED"))value+=" UNSIGNED";
+        }
         if(value.equals("INT UNSIGNED")||value.equals("INTEGER UNSIGNED"))return "LONG";
         if(value.equals("BIGINT UNSIGNED"))return "DECIMAL";
         value=UNSIGNED.matcher(value).replaceAll("");

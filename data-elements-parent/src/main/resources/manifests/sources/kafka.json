@@ -14,7 +14,7 @@
     ], "help": "Kafka 0.10 等旧实例选择兼容客户端，并配置 read_uncommitted。须先安装匹配 NiFi 版本的 haitong-kafka-legacy-nar。", "group": "advanced" },
     { "key": "messageFormat", "label": "消息格式", "type": "select", "default": "JSON", "options": [{ "label": "结构化 JSON", "value": "JSON" }] },
     { "key": "schemaRequired", "label": "要求结构化消息", "type": "boolean", "default": true },
-    { "key": "maxPollRecords", "label": "单次拉取条数", "type": "number", "default": 500 },
+    { "key": "maxPollRecords", "label": "单次拉取条数", "type": "number", "default": 500, "group": "read", "help": "Kafka 驱动 max.poll.records，限制每次 poll 的消息数，不限制任务总消息数或 JSON 数组展开后的记录数；取值 1～2147483647。" },
     { "key": "isolationLevel", "label": "消费隔离级别", "type": "select", "default": "read_committed", "options": [
       { "label": "仅读取已提交事务", "value": "read_committed" },
       { "label": "读取全部消息（含旧版本 Kafka）", "value": "read_uncommitted" }
@@ -37,11 +37,14 @@
     { "key": "krb5ConfPath", "label": "krb5.conf 路径", "type": "text", "group": "security" },
     { "key": "kerberosServiceName", "label": "Kerberos 服务名", "type": "text", "default": "kafka", "group": "security" },
     { "key": "schemaRegistryUrl", "label": "Schema Registry", "type": "text", "group": "advanced" },
+    {"key": "maxUncommittedSize", "label": "消费批最大字节数", "type": "text", "group": "read", "help": "消费累计到此序列化键值字节大小后转交 FlowFile，例如 10 MB；留空沿用时间阈值，不限制任务总量。"},
+    {"key": "maxUncommittedTime", "label": "消费批最长等待", "type": "duration", "default": "100 millis", "group": "read", "help": "转交本批 FlowFile 前的最长消费时间（Max Uncommitted Time），不是整个任务运行时长。"},
     { "key": "schedulingPeriod", "label": "调度周期", "type": "duration", "default": "0 sec", "group": "schedule" }
   ],
   "compile": {
     "controllerServices": [{ "localId": "kafka", "type": "${config.kafkaServiceType}", "properties": {
       "bootstrap.servers": "${config.bootstrapServers}",
+      "max.poll.records": "${config.maxPollRecords}",
       "isolation.level": "${config.isolationLevel}",
       "security.protocol": "${config.securityProtocol}",
       "sasl.mechanism": "${config.saslMechanism}",
@@ -52,7 +55,7 @@
       "kerberos.keytab": "${config.keytabPath}",
       "default.api.timeout.ms": "30 sec"
     }}],
-    "processors": [{ "localId": "consume", "type": "org.apache.nifi.kafka.processors.ConsumeKafka", "schedulingPeriod": "${config.schedulingPeriod}", "schedulingStrategy": "TIMER_DRIVEN", "properties": { "Kafka Connection Service": "${cs.kafka}", "Topic Format": "names", "Topics": "${config.topic}", "Group ID": "${config.groupId}", "auto.offset.reset": "earliest", "Commit Offsets": "true", "Processing Strategy": "FLOW_FILE" } }],
+    "processors": [{ "localId": "consume", "type": "org.apache.nifi.kafka.processors.ConsumeKafka", "schedulingPeriod": "${config.schedulingPeriod}", "schedulingStrategy": "TIMER_DRIVEN", "properties": { "Kafka Connection Service": "${cs.kafka}", "Topic Format": "names", "Topics": "${config.topic}", "Group ID": "${config.groupId}", "auto.offset.reset": "earliest", "Commit Offsets": "true", "Max Uncommitted Size": "${config.maxUncommittedSize}", "Max Uncommitted Time": "${config.maxUncommittedTime}", "Processing Strategy": "FLOW_FILE" } }],
     "outlets": [{ "name": "default", "processorRef": "consume", "relationship": "success" }]
   }
 }

@@ -7,6 +7,70 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class SharedGovernanceTopologyTest {
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(ints={20,100})
+    void gaussProductBranchesBindEachRegisteredSourceRangeInMemory(int count)throws Exception {
+        for(String variant:List.of("opengauss","gaussdb","gaussdb-jdbc","dws","mysql")) {
+            var nodes=new ArrayList<Pipeline.Node>();var edges=new ArrayList<Pipeline.Edge>();
+            for(int index=0;index<count;index++) {
+                nodes.add(node("source"+index,"source.gaussdb","source",Map.of("registeredDatasourceId","source-db","sourceTableId","source-"+index,"gaussdbVariant",variant)));
+                nodes.add(node("mapping"+index,"transform.field-enrichment","transform",Map.of()));
+                nodes.add(node("oracle"+index,"sink.jdbc","sink",Map.of("targetDbId","oracle-db","targetTableId","oracle-"+index)));
+                nodes.add(node("hive"+index,"sink.hive","sink",Map.of("targetDbId","hive-db","targetTableId","hive-"+index)));
+                edges.add(edge("source"+index,"mapping"+index));edges.add(edge("mapping"+index,"oracle"+index));edges.add(edge("mapping"+index,"hive"+index));
+            }
+            var labels=new MappingFieldLabels(flow(nodes,edges));
+            var raw=new ObjectMapper().readTree("{\"version\":\"1.0\",\"mappings\":[{\"from\":\"/enabled\",\"to\":\"/ENABLED\",\"targetType\":\"NUMBER(5)\"}]}");
+            for(int index=0;index<count;index++) {
+                var contract=labels.enrich("mapping"+index,raw).path("schemaContract");
+                assertEquals("source-"+index,contract.path("sourceRef").path("tableId").asText());
+                assertEquals("source-db",contract.path("sourceRef").path("datasourceId").asText());
+                assertFalse(contract.path("sourceRangeUnverified").asBoolean());
+                assertEquals(2,contract.path("targets").size());
+            }
+            assertFalse(raw.has("schemaContract"));
+        }
+    }
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings={"customQuery","sql"})
+    void customGaussProjectionCannotClaimItsUnderlyingRegisteredIntegerRange(String queryKey)throws Exception {
+        var source=node("source","source.gaussdb","source",Map.of("registeredDatasourceId","source-db","sourceTableId","source-table",queryKey,"SELECT enabled * 1000 AS enabled FROM validation_table"));
+        var mapping=node("mapping","transform.field-enrichment","transform",Map.of());
+        var oracle=node("oracle","sink.jdbc","sink",Map.of("targetDbId","oracle-db","targetTableId","oracle-table"));
+        var hive=node("hive","sink.hive","sink",Map.of("targetDbId","hive-db","targetTableId","hive-table"));
+        var raw=new ObjectMapper().readTree("{\"version\":\"1.0\",\"schemaContract\":{\"sourceRef\":{\"datasourceId\":\"source-db\",\"tableId\":\"source-table\"}},\"mappings\":[]}");
+        var contract=new MappingFieldLabels(flow(List.of(source,mapping,oracle,hive),List.of(edge("source","mapping"),edge("mapping","oracle"),edge("mapping","hive")))).enrich("mapping",raw).path("schemaContract");
+        assertTrue(contract.path("sourceRangeUnverified").asBoolean());
+    }
+    @Test void everyCurrentNativeJdbcSourceUsesTheSameRegisteredRangeBinding()throws Exception {
+        var javaSource=java.nio.file.Path.of(System.getProperty("backend.javaSourceDirectory","src/main/java"));
+        var directory=javaSource.getParent().resolve("resources/manifests/sources");
+        var json=new ObjectMapper();int jdbc=0;
+        try(var files=java.nio.file.Files.list(directory)) {
+            for(var path:files.filter(p->p.toString().endsWith(".json")).toList()) {
+                var manifest=json.readTree(path.toFile());boolean nativeJdbc=false;
+                for(var processor:manifest.path("compile").path("processors"))if(processor.path("type").asText().endsWith(".ExecuteSQLRecord"))nativeJdbc=true;
+                if(!nativeJdbc)continue;jdbc++;
+                var source=node("source",manifest.path("key").asText(),"source",Map.of("registeredDatasourceId","source-db","sourceTableId","source-table"));
+                var contract=sharedSourceContract(source);
+                assertEquals("source-table",contract.path("sourceRef").path("tableId").asText(),manifest.path("key").asText());
+            }
+        }
+        assertTrue(jdbc>=24,"All current JDBC source manifests must be included in the audit");
+    }
+    @Test void nonJdbcAndUnknownSourcesCannotBorrowARegisteredSqlIntegerRange()throws Exception {
+        for(String manifest:List.of("source.minio","source.ftp","source.sftp","source.kafka","source.mongodb","source.elasticsearch","source.api","source.hdfs","source.hbase","source.maxcompute","source.unknown")) {
+            var source=node("source",manifest,"source",Map.of("registeredDatasourceId","source-db","sourceTableId","source-table"));
+            assertFalse(sharedSourceContract(source).has("sourceRef"),manifest);
+        }
+    }
+    private static com.fasterxml.jackson.databind.JsonNode sharedSourceContract(Pipeline.Node source)throws Exception {
+        var mapping=node("mapping","transform.field-enrichment","transform",Map.of());
+        var oracle=node("oracle","sink.jdbc","sink",Map.of("targetDbId","oracle-db","targetTableId","oracle-table"));
+        var hive=node("hive","sink.hive","sink",Map.of("targetDbId","hive-db","targetTableId","hive-table"));
+        var raw=new ObjectMapper().readTree("{\"version\":\"1.0\",\"mappings\":[]}");
+        return new MappingFieldLabels(flow(List.of(source,mapping,oracle,hive),List.of(edge("source","mapping"),edge("mapping","oracle"),edge("mapping","hive")))).enrich("mapping",raw).path("schemaContract");
+    }
     @Test void manualAndNormalJdbcSourcesRetainTheirKnownTemporalWireUnits()throws Exception {
         var config=Map.<String,Object>of("jdbcUrl","jdbc:oracle:thin:@validation", "sourceColumns",List.of(Map.of("columnName","EVENT_TIME","columnType","TIMESTAMP")));
         var main=node("main","source.oracle","source",config);var backfill=node("backfill","source.oracle","source",config);

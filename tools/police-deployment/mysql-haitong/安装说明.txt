@@ -1,0 +1,51 @@
+源数据管理平台 公安MySQL R3：海通画布登录态修复版
+
+一、适用范围
+用于source-management-police-mysql-linux-x86_64-20261122-r3.zip已解压的完整目录。
+海通使用与R3同期的前端版本，复用原共享后端和公安租户；增加子路径与police-mysql会话命名空间适配。
+不替换JAR，不创建数据库，不重置账号或组织授权，不包含NiFi服务端或任何MySQL/Redis/ES二进制。
+本修复版同时更新控制库ui_component_t中schedule-setting这一条组件的源码、JS和CSS，修复“查看任务”的登录态传递。
+可从R3原包或此前的海通增补包直接升级。地址沿用当前域名、端口及部署前缀，无需写死地址，也无需手工执行SQL。
+安装器自动读取原config/external-services.json的control连接；JDBC驱动取自原后端JAR，使用原runtime/java中的JDK21，不需安装Python数据库模块。
+不会全量发布Magic/低代码，不执行原db目录初始化脚本，不修改任何业务表数据。
+同时带入外部中间件版启动器；如果已安装此前的外部中间件补丁，无需重复填写已有连接。
+
+二、安装
+将本增补包解压到临时目录，保留install.sh、install.py、manifest.json、payload目录的相对位置。
+执行：
+    bash /增补包解压目录/install.sh /原完整部署根目录
+例如目标目录结构应为 /原完整部署根目录/backend/data-element.jar、www/、config/。
+以原平台运行账号或root执行；Python要求3.6及以上，适用Linux x86_64。
+
+安装器会先核对原R3导航模块、网关和启动器的摘要；已应用同版外部中间件补丁也支持。
+发现自定义网关或其他版本会拒绝覆盖，请先核对并人工合并，不要绕过校验覆盖未知文件。
+组件身份及源码/JS/CSS须匹配R3原版或本修复版；发现其他编辑会拒绝覆盖。只备份并事务更新这个已核对的组件，更新后回读摘要。
+校验通过后，仅停止本目录PID记录且启动时间匹配的web和backend，绝不调用旧版启停脚本，不停MySQL/Redis/ES。
+原网关、导航模块和启动器自动备份到目标logs/haitong-overlay-backup-*。
+然后复制增补文件并更新上述组件；原config/external-services.json、application.yml、ports.json、身份文件、JAR和业务库均不覆盖。
+组件原版本单独备份到logs/haitong-component-update-*/before；异常时按摘要检查尝试回退，若检测到并发编辑或数据库状态不能确认则保留现场并提示核对。
+
+在原完整部署根目录执行：
+    bash check.sh
+    bash start.sh
+    bash status.sh
+安装器不自动启动，方便你先核对外部连接配置。
+如果从未填写外部连接，先复制config/external-services.json.example为config/external-services.json，权限设600，填写已有控制库、公安业务库、Redis和HTTP ES连接。
+启动器只启动backend和web；外部数据库须已有平台数据和原身份密钥，不自动导入或迁移。
+旧内置中间件若此前已经启动，需要管理员确认后单独停用，本增补不操作它们，也不删除旧数据。
+
+三、访问
+启动后浏览器强制刷新（Ctrl+F5），点击“工作台→全部导航→数据集成中心”。
+直接端口部署： http://服务器:网页端口/haitong/#/overview
+子路径部署：   https://域名/wanxiang/haitong/#/overview
+海通资源、API和返回平台地址均按当前前缀解析；原反向代理若已把整个/wanxiang/转发给本目录网关，无需新增海通公网端口。
+使用源数据管理平台当前登录账号和会话（包括已建好的manager），不另设海通账号，不把登录凭据拼进URL。
+未登录或会话过期时返回同一源数据管理平台登录页；跨租户和资源权限仍由原后端校验。
+“数据接入→查看任务”由原平台宿主统一读取当前登录态，通过精确origin的postMessage INIT传给内嵌画布；画布等待握手，不读取其他命名空间中的旧账号。
+首次重启会按原R3后端的冷加载逻辑刷新低代码缓存；仍需Ctrl+F5刷新浏览器，避免继续使用更新前的内存组件。
+
+四、功能边界
+海通入口、概览、任务与画布前端共用R3原有接口。NiFi执行引擎不在本增补中。
+部署/启动流程前，仍需在数据抽取节点配置中设置实际NiFi地址、认证和驱动；原有节点配置会保留。
+除schedule-setting这一条低代码组件外，不更新其他共享组件或Magic，不导入另一份开发资源。
+逐文件SHA256在manifest.json，ZIP校验值在SHA256SUMS.txt。

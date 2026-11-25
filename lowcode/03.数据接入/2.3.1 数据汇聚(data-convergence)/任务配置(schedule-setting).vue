@@ -96,6 +96,9 @@ const storedToken = (value: string | null) => {
 
 // 与主平台 AuthStorage 保持一致：未勾选“记住密码”时 token 在 sessionStorage。
 const getToken = () => {
+  // 由宿主统一读取当前会话，包含部署命名空间及“记住登录”选择；空会话不能回退到旧账号。
+  const hostToken = window["__DATA_ELEMENTS_GET_PLATFORM_TOKEN__"];
+  if (typeof hostToken === "function") return String(hostToken() || "").trim();
   const remembered = localStorage.getItem("remember_me") === "true";
   return storedToken(remembered ? localStorage.getItem("token") : sessionStorage.getItem("token"));
 };

@@ -363,7 +363,7 @@ public class NifiClient {
         long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(timeoutMs);
         while (true) {
             JsonNode response = get("/flow/process-groups/" + groupId
-                    + "/controller-services?includeAncestorGroups=true&includeDescendantGroups=false", JsonNode.class);
+                    + "/controller-services?includeAncestorGroups=true&includeDescendantGroups=false&includeReferencingComponents=false", JsonNode.class);
             JsonNode services = response.path("controllerServices");
             if (!services.isArray()) throw new NifiException("NiFi 未返回控制器服务清单", 502, null);
             var found = new java.util.HashSet<String>();
@@ -399,6 +399,9 @@ public class NifiClient {
                 put("/flow/process-groups/" + entry.getKey() + "/controller-services", body, JsonNode.class);
                 entry.getValue().fieldNames().forEachRemaining(sent::add);
             }
+            // The activation request may itself exceed the waiting budget. Confirm its
+            // accepted result once; pending still describes the snapshot before this write.
+            if (!activate.isEmpty()) continue;
             if (System.nanoTime() >= deadline)
                 throw new NifiException("控制器服务未在" + timeoutMs / 1000 + "秒内全部就绪，仍有" + pending.size() + "项", 504, null);
             try { Thread.sleep(250L); }
@@ -1334,8 +1337,8 @@ public class NifiClient {
 
     /** List direct child controller services of a PG. */
     public java.util.List<JsonNode> listControllerServices(String pgId) {
-        // includeAncestorGroups=false avoids picking up parent CS
-        JsonNode root = get("/flow/process-groups/" + pgId + "/controller-services?includeAncestorGroups=false&includeDescendantGroups=false",
+        // Direct service metadata is sufficient; omit the potentially large graph of its users.
+        JsonNode root = get("/flow/process-groups/" + pgId + "/controller-services?includeAncestorGroups=false&includeDescendantGroups=false&includeReferencingComponents=false",
                 JsonNode.class);
         java.util.List<JsonNode> out = new java.util.ArrayList<>();
         JsonNode arr = root.path("controllerServices");

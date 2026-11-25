@@ -22,7 +22,7 @@ public class HaitongTransformRecord extends AbstractProcessor {
     public static final PropertyDescriptor TYPED_READER=new PropertyDescriptor.Builder().name("typed-record-reader").displayName("Reader for avro.schema Attribute").identifiesControllerService(RecordReaderFactory.class).required(false).build();
     public static final PropertyDescriptor WRITER=new PropertyDescriptor.Builder().name("record-writer").displayName("Record Writer").identifiesControllerService(RecordSetWriterFactory.class).required(true).build();
     public static final PropertyDescriptor EXACT_JSON_NUMBERS=new PropertyDescriptor.Builder().name("preserve-json-numbers").displayName("Preserve JSON Number Precision")
-            .description("仅用于已声明的顶层JSON记录：从原数字token保留精确小数和整数，委托Reader的非数字值保持。CSV、Avro或未知Reader保持关闭。")
+            .description("仅用于已声明的顶层JSON记录：保留精确数字，以及已声明SQL DATE的ISO日历文本；其他Reader载体保持。CSV、Avro或未知Reader保持关闭。")
             .required(true).defaultValue("false").allowableValues("true","false").build();
     public static final PropertyDescriptor TIMESTAMP_INPUT=new PropertyDescriptor.Builder().name("timestamp-input-contract")
             .displayName("Timestamp Input Contract")
@@ -127,13 +127,23 @@ public class HaitongTransformRecord extends AbstractProcessor {
                     if(exact!=null)exact.requireEnd();
                 }else{
                     RecordSchema inputSchema=jdbcAliases.restore(reader.getSchema());
+                    Map<String,String> nullCandidates=exact==null?Map.of():nullInferenceCandidates(reader.getSchema(),inputSchema,plan,preserveNumbers);
+                    if(exact!=null)exact.trackNullFields(nullCandidates.values());
+                    if(exact!=null&&formatHistoricalTimestampText)exact.trackIsoDateFields(registeredIsoDateFields(reader.getSchema(),inputSchema,plan));
+                    @SuppressWarnings("unchecked") Map<String,Object> firstRow=(Map<String,Object>)NifiTemporalValues.inputValue(firstRecord);
+                    if(exact!=null)exact.restore(firstRow);firstRow=jdbcAliases.restore(firstRow);
+                    NullOnlyInput nullInput=nullableInput(inputSchema,plan,nullCandidates,firstRow,exact);
+                    inputSchema=nullInput.schema();
                     if(plan.document().path("schemaContract").path("source").isArray())SchemaContract.requireInput(plan,inputContract(inputSchema,plan,preserveNumbers),formatHistoricalTimestampText);
                     invalidAttributes.put(MappingErrorRecords.SCHEMA,MappingErrorRecords.schemaText(inputSchema));
                     RecordSchema schema=binaryTransportSchema(outputSchema(plan,inputSchema));
                     DynamicOutput dynamic=plan.outputContracts().values().stream().anyMatch(type->type.logicalType().equals("ANY")||type.logicalType().equals("ARRAY")||type.logicalType().equals("DECIMAL")&&type.precision()==0)?new DynamicOutput(session,original,writers,schema,derived,dynamicFiles):null;
                     try(RecordSetWriter writer=writers.createWriter(getLogger(),schema,out,original.getAttributes());BufferedWriter errors=new BufferedWriter(new OutputStreamWriter(bad,java.nio.charset.StandardCharsets.UTF_8))){
                         writer.beginRecordSet();List<Map<String,Object>>window=new ArrayList<>();List<Long>indices=new ArrayList<>();long bytes=0,memory=0,offset=0;Record record=firstRecord;
-                        do{@SuppressWarnings("unchecked") Map<String,Object>row=(Map<String,Object>)NifiTemporalValues.inputValue(record);if(exact!=null)exact.restore(row);row=jdbcAliases.restore(row);var size=RecordBudget.record(row,"输入记录，inputRecordIndex="+offset);
+                        do{Map<String,Object>row;
+                            if(offset==0)row=firstRow;
+                            else{@SuppressWarnings("unchecked") Map<String,Object>decodedRow=(Map<String,Object>)NifiTemporalValues.inputValue(record);row=decodedRow;if(exact!=null)exact.restore(row);row=jdbcAliases.restore(row);}
+                            nullInput.verify(row,exact);var size=RecordBudget.record(row,"输入记录，inputRecordIndex="+offset);
                             if(!window.isEmpty()&&(window.size()>=MappingEngine.WINDOW_RECORDS||bytes+size.utf8()>MappingEngine.WINDOW_BYTES||memory+size.memory()>RecordBudget.MEMORY_BYTES)){writeWindow(window,indices,execution,dictionaries,writer,errors,schema,counts,dynamic);window.clear();indices.clear();bytes=0;memory=0;}
                             window.add(row);indices.add(reader instanceof MappingErrorRecords envelope?envelope.originalIndex():offset);offset++;bytes+=size.utf8();memory+=size.memory();
                         }while((record=reader.nextRecord())!=null);
@@ -254,12 +264,65 @@ public class HaitongTransformRecord extends AbstractProcessor {
         });return new SimpleRecordSchema(new ArrayList<>(fields.values()));
     }
     private static int integer(String value){try{return value==null?0:Math.max(0,Integer.parseInt(value));}catch(Exception ex){return 0;}}
+    private record NullOnlyInput(RecordSchema schema,Map<String,String> wireByPhysical) {
+        void verify(Map<String,Object> row,ExactJsonNumbers exact) {
+            for(var field:wireByPhysical.entrySet())if(exact==null||!exact.explicitNull(field.getValue())
+                    ||!row.containsKey(field.getKey())||row.get(field.getKey())!=null)
+                throw new MappingException("SCHEMA_DRIFT","SCHEMA_TYPE_CHANGED："+field.getKey());
+        }
+    }
+    private static Set<String> registeredIsoDateFields(RecordSchema wire,RecordSchema restored,MappingEngine.Plan plan){
+        var names=plan.sourceNames(restored.getFieldNames());Map<String,String> raw=new HashMap<>();
+        for(int index=0;index<wire.getFieldCount();index++)raw.put(restored.getFields().get(index).getFieldName(),wire.getFields().get(index).getFieldName());
+        Set<String> result=new HashSet<>();
+        for(JsonNode field:plan.document().path("schemaContract").path("source"))
+            if("DATE".equals(field.path("logicalType").asText())&&"DATE".equalsIgnoreCase(field.path("physicalType").asText())
+                    &&"DATE".equals(field.path("registeredFormat").asText())){
+                String physical=names.resolve(field.path("name").asText());if(physical!=null&&raw.containsKey(physical))result.add(raw.get(physical));
+            }
+        return result;
+    }
+    private static Map<String,String> nullInferenceCandidates(RecordSchema wire,RecordSchema restored,MappingEngine.Plan plan,boolean exactNumbers) {
+        if(!plan.document().path("schemaContract").path("source").isArray())return Map.of();
+        var names=plan.sourceNames(restored.getFieldNames());Map<String,String> rawByPhysical=new HashMap<>();
+        for(int index=0;index<wire.getFieldCount();index++)rawByPhysical.put(restored.getFields().get(index).getFieldName(),wire.getFields().get(index).getFieldName());
+        Map<String,String> types=new HashMap<>();inputContract(restored,plan,exactNumbers).forEach(field->types.put(field.name(),field.logicalType()));
+        Map<String,String> result=new LinkedHashMap<>();
+        for(var field:SchemaContract.read(plan.document().path("schemaContract").path("source"))) {
+            String physical=names.resolve(field.name());
+            if(field.nullable()&&Set.of("INT","LONG","DOUBLE","DECIMAL","BOOLEAN","ARRAY").contains(field.logicalType())
+                    &&"STRING".equals(types.get(physical)))result.put(physical,rawByPhysical.get(physical));
+        }
+        return result;
+    }
+    private static NullOnlyInput nullableInput(RecordSchema schema,MappingEngine.Plan plan,Map<String,String> candidates,Map<String,Object> first,ExactJsonNumbers exact) {
+        if(candidates.isEmpty())return new NullOnlyInput(schema,Map.of());
+        var names=plan.sourceNames(schema.getFieldNames());Map<String,SchemaContract.Field> declared=new HashMap<>();
+        for(var field:SchemaContract.read(plan.document().path("schemaContract").path("source"))) {
+            String physical=names.resolve(field.name());if(physical!=null)declared.put(physical,field);
+        }
+        Map<String,String> proven=new LinkedHashMap<>();List<RecordField> fields=new ArrayList<>();
+        for(RecordField field:schema.getFields()) {
+            String name=field.getFieldName(),raw=candidates.get(name);
+            if(raw==null||!exact.explicitNull(raw)||!first.containsKey(name)||first.get(name)!=null){fields.add(field);continue;}
+            var expected=declared.get(name);org.apache.nifi.serialization.record.DataType type=switch(expected.logicalType()) {
+                case "INT"->RecordFieldType.INT.getDataType();case "LONG"->RecordFieldType.LONG.getDataType();
+                case "DOUBLE"->RecordFieldType.DOUBLE.getDataType();case "BOOLEAN"->RecordFieldType.BOOLEAN.getDataType();
+                case "DECIMAL"->RecordFieldType.DECIMAL.getDecimalDataType(Math.max(1,Math.max(expected.scale(),expected.precision()-Math.min(0,expected.scale()))),Math.max(0,expected.scale()));
+                case "ARRAY"->RecordFieldType.ARRAY.getArrayDataType(RecordFieldType.STRING.getDataType());
+                default->throw new MappingException("SCHEMA_DRIFT","NULL来源类型无法确认");
+            };
+            fields.add(new RecordField(name,type,field.getDefaultValue(),field.getAliases(),true));proven.put(name,raw);
+        }
+        return new NullOnlyInput(proven.isEmpty()?schema:new SimpleRecordSchema(fields),Map.copyOf(proven));
+    }
     private static List<SchemaContract.Field> inputContract(RecordSchema schema,MappingEngine.Plan plan,boolean exactNumbers){
         var document=plan.document();var sourceNames=plan.sourceNames(schema.getFieldNames());
-        Map<String,String> jdbcDates=new HashMap<>();Set<String> binaryFields=new HashSet<>(),decimalFields=new HashSet<>();
+        Map<String,String> jdbcDates=new HashMap<>();Set<String> binaryFields=new HashSet<>(),decimalFields=new HashSet<>(),longFields=new HashSet<>();
         for(var declared:document.path("schemaContract").path("source")) {
             String logical=declared.path("logicalType").asText();
             if(exactNumbers&&ValueTypes.type(logical).equals("DECIMAL")){String physical=sourceNames.resolve(declared.path("name").asText());if(physical!=null)decimalFields.add(physical);}
+            if(exactNumbers&&ValueTypes.type(logical).equals("LONG")){String physical=sourceNames.resolve(declared.path("name").asText());if(physical!=null)longFields.add(physical);}
             if(ValueTypes.type(logical).equals("BINARY")){String physical=sourceNames.resolve(declared.path("name").asText());if(physical!=null)binaryFields.add(physical);}
             if(declared.path("dateContainsTime").asBoolean()&&declared.path("physicalType").asText().equalsIgnoreCase("DATE")
                     &&Set.of("DATE","DATETIME","INSTANT").contains(logical)){
@@ -284,6 +347,10 @@ public class HaitongTransformRecord extends AbstractProcessor {
             // The inferred DOUBLE describes JSON's old carrier, not the registered SQL NUMBER.
             // The exact codec restores numeric tokens; each value still passes the declared precision/scale checks.
             if(decimalFields.contains(field.getFieldName())&&Set.of("INT","LONG","DOUBLE","DECIMAL").contains(logical)){logical="DECIMAL";precision=0;scale=0;}
+            // JSON inference selects INT for small BIGINT tokens. In the exact-number
+            // codec every INT is losslessly representable by the declared LONG domain.
+            // Strings, floating values and LONG-to-INT narrowing keep strict checks.
+            if(longFields.contains(field.getFieldName())&&logical.equals("INT"))logical="LONG";
             result.add(new SchemaContract.Field(field.getFieldName(),logical,field.isNullable(),0,precision,scale));
         }return result;
     }

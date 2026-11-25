@@ -16,6 +16,9 @@
     { "key": "userPrincipal", "label": "用户 Principal", "type": "text", "group": "security" },
     { "key": "jdbcUrl", "label": "JDBC URL", "type": "text", "group": "advanced" },
     { "key": "table", "label": "路径/设备", "type": "table-picker", "required": true, "placeholder": "root.sg.device" },
+    {"key": "batchSize", "label": "单批最大条数", "type": "number", "group": "read", "help": "每个输出 FlowFile 最多包含的记录数（Max Rows Per FlowFile），不限制查询总量；取值 1～2147483647。", "default": 5000},
+    {"key": "maxRowsPerRun", "label": "JDBC 抓取批大小", "type": "number", "group": "read", "help": "驱动每次抓取的建议行数（Fetch Size），不限制本次查询总量；0 使用驱动默认值。保留既有配置键 maxRowsPerRun。", "default": 20000},
+    {"key": "queryLimit", "label": "单次最大行数", "type": "number", "group": "read", "help": "IoTDB SELECT 的 LIMIT，总返回行数上限；取值 1～2147483647，默认保留原有 10000。每轮查询相同范围，不表示增量分页。", "default": 10000},
     { "key": "schedulingPeriod", "label": "调度周期", "type": "duration", "default": "60 sec", "group": "schedule" }
   ],
   "compile": {
@@ -27,7 +30,7 @@
       "Password": "${config.password}"
     }}],
     "processors": [
-      { "localId": "query", "type": "org.apache.nifi.processors.standard.ExecuteSQLRecord", "schedulingPeriod": "${config.schedulingPeriod}", "schedulingStrategy": "TIMER_DRIVEN", "properties": { "Database Connection Pooling Service": "${cs.dbcp}", "SQL select query": "SELECT * FROM ${config.table} LIMIT 10000", "Record Writer": "${cs.jsonWriter}" } }
+      { "localId": "query", "type": "org.apache.nifi.processors.standard.ExecuteSQLRecord", "schedulingPeriod": "${config.schedulingPeriod}", "schedulingStrategy": "TIMER_DRIVEN", "properties": { "Database Connection Pooling Service": "${cs.dbcp}", "SQL select query": "SELECT * FROM ${config.table} LIMIT ${config.queryLimit}", "Record Writer": "${cs.jsonWriter}" } }
     ],
     "outlets": [{ "name": "default", "processorRef": "query", "relationship": "success" }]
   }

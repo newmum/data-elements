@@ -365,6 +365,7 @@ python tools/export-db.py --project haitong-data-pull
 - 来源集合沿用集合采集、字段快照、登记完成、接入申请与任务部署。MongoDB 来源按调度全量读取所选集合，`ObjectId` 以十六进制字符串进入字段映射。集合的字段快照来自最多 100 条样本文档。
 - 目标集合沿用 ODS 分域选择及物化预检。预览返回受限的集合创建指令，应用账号需能创建集合和索引，执行账号需能写入集合。任务会按已映射业务键更新或插入；没有可映射业务键时执行追加。全量读取不会向下游同步删除。
 - 在登记表或物化目标的“数据预览”中可分页查看集合文档，支持字段投影、排序、等值和包含过滤。
+- MongoDB 来源支持独立的每个 FlowFile 文档数、驱动抓取批大小和单次查询总文档数，三者不是同一限制。前两项默认均为 1000，查询总量留空不限制；查询、投影和排序沿用原生 BSON 文档。来源按调度重复读取选定查询范围，设置 Limit 不会自动产生增量水位或轮次翻页。各类来源的可用项与不适用项见[海通来源配置](data-elements-haitong.md#overview)。
 - NiFi 执行节点需加载 MongoDB NAR 和 MongoDB Controller Service。MongoDB 认证信息与连接端点分别传递。
 
 ### Oracle物理对象身份
@@ -382,6 +383,10 @@ ClickHouse的登记选择卡片、列表、类型筛选、字典选择、工作�
 数据源登记卡片及海通来源组件把ClickHouse排列在Elasticsearch之后，复用已登记连接、JDBC探查和接入任务链路。连接默认HTTP/JDBC端口8123、数据库与用户名default，生成`jdbc:clickhouse://主机:端口/数据库`；保留手工端口和已保存连接。账号未配置密码时可留空，仍由实际ClickHouse服务器验证认证；用户名和数据库不可为空。列表、类型筛选、登记审查和数据探查使用同一类型身份，不将已有ClickHouse卡片误判为其他数据库。界面发布使用选定低代码热刷新，不重建已登记源或来源表。
 
 ClickHouse的Int8/16/32/64和UInt8/16/32/64按原生完整值域生成数字字段，Nullable/LowCardinality包装保留原类型血缘与已有可空约束。Int8必须按来源解释，不能套用PostgreSQL的int8（BIGINT）别名。Int64默认Oracle NUMBER(19,0)、Hive BIGINT；UInt64默认Oracle NUMBER(20,0)、Hive DECIMAL(20,0)，不能因驱动样本或已有精度值较小而收窄成有符号64位。登记快照、建表模板、DDL及治理目标契约共同保持数值类型；用户明确选择其他类型时不再强行恢复来源类型。超出已适配的整数宽度仍返回可编辑的文本及未适配提示，不声称已获目标库原生数值支持。值域及别名参见[ClickHouse整数类型](https://clickhouse.com/docs/reference/data-types/int-uint)。
+
+ClickHouse 物理字段核验由集中 JDBC 元数据适配层查询原生 `system.columns`，按已完成租户、角色范围及逐 ID 授权的登记记录绑定数据库名与表名；不依赖驱动把数据库放在 `TABLE_SCHEM`。已验证的 JDBC 0.6.5 在服务端 23.3.15.29 上将数据库返回为 `TABLE_CAT` 且 `TABLE_SCHEM` 为空，不能因此把真实字段误判为缺失。每批合并去重后的精确数据库/表对仅执行一次 PreparedStatement，保持字段顺序、完整原生类型、数值精度及顶层可空性；名称作为参数值，不使用 LIKE 通配或整库扫描。`Array(Nullable(...))`、`Map(..., Nullable(...))` 的元素可空不等于字段本身可空。20/100 个授权引用须保持固定批量 SQL 数；越权、已删除或物理范围不匹配的任何引用仍拒绝。目录列定义见 [ClickHouse system.columns](https://clickhouse.com/docs/reference/system-tables/columns)。
+
+治理来源的逻辑类型与 JDBC 传输方式须一致：带 ClickHouse 产品上下文解析原生整数及 Nullable/LowCardinality 包装，`Int64` 为 `LONG`、`UInt64` 为精确 `DECIMAL(20,0)`；元数据的二进制位数不能当作十进制精度。`Float32`/`Float64` 分别生成目标单精度/双精度类型，治理逻辑使用 `DOUBLE`；`DateTime64` 保留时间类型及其小数秒声明。现有来源投影把 Map/Array 转为 JSON 文本，SQL NULL 保持 NULL，空集合仍为有效 JSON；来源契约使用 `STRING` 并保留完整原生物理类型。只对同一已授权物理字段上旧的原生类型提示修正逻辑类型，不覆盖显式类型转换、其他产品或不符的物理血缘。PostgreSQL `int8` 仍表示 `LONG`。旧流程的生效需通过停止态正式字段节点升级，保留原队列及来源水位；不能重新采集来替换失败输入。
 
 ### 登记接入申请字段
 
@@ -872,6 +877,7 @@ Use the released `my-db` page at `/register/register-sjkb/list` as the default v
 - Data tables use `db_table_t` as their only master table and `db_table_column_t.table_id` for field metadata. Preserve migrated table IDs in `db_table_t.tid`; do not create table rows in `da_asset_t`, `da_asset_table_column_t`, or `data_prop_t`.
 - Every data-table property used by registration, governance, preview, resource-center, or indexing logic must be represented by a physical `db_table_t` / `db_table_column_t` column. Do not add `data_type='table'` dynamic properties.
 - Data-source connection options and migration extensions belong in the valid JSON object stored in `db_datasource_t.pool_cfg`. Data-source metadata summaries belong in the physical `db_datasource_t` summary columns; data-source interfaces must not read or write `data_prop_t` for these values.
+- FTP/SFTP 与 MinIO 的结构化探查缓存同时绑定连接、认证、目录、登记表和文件筛选条件。单张登记表的探查结果不能作为整个目录或其他登记表的结果复用；切换 JSON、CSV、Excel 文件或工作表时按对应范围读取，重复读取同一范围可复用缓存。单表探查在 20/100 个候选文件中均只打开选中的文件，不因修复缓存而改为下载全部文件；租户及逐对象权限仍在命中缓存前校验。
 - 数据源登记的显式“保存”提交主记录后，对提供连接的数据库刷新一次概览，更新版本、表/视图/过程/用户数量和容量；不隐式全量登记表或逐表补查。远程采集失败保留已完成的保存并提示可重试；未提供连接的手工快照不执行物理探查。详情显式编辑保存遵循同一规则。
 - 数据推送服务与平台分别运行：海通的 FTP/Kafka 投递目标仅来自其本地 YAML，业务请求不回调平台或行业库。平台的推送来源独立解析当前租户 ODS/FJGHCC 绑定的文件存储，目录为 `根目录/登记源ID/表名/`；两侧须由部署配置对齐。手工登记按字段快照物化，不要求来源 SQL 方言。任务预检及生成均将 `receive/push` 解析为该文件来源，并校验文件存储的租户与角色范围。
 - 数据推送登记第一步使用“推送数据类型”，默认结构化数据；`db_datasource_t.pool_cfg.pushDataType` 保存 `STRUCTURED` / `UNSTRUCTURED`，缺失的历史值按结构化显示，不从旧频率推断。推送地址取当前接入网络对应的启用默认推送节点，结构化与非结构化统一使用 `/api/v1/data-push`，分别以POST JSON和PUT multipart区分；网络名称仅显示在地址右侧。未配置、停用或多个节点未指定默认时明确提示，不能回退到其他网络。节点配置一次读取，切换类型及网络不逐项请求。

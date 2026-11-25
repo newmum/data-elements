@@ -54,6 +54,9 @@ public final class PortableColumnType {
             case "INT32", "UINT16" -> Kind.INTEGER;
             case "INT64", "UINT32" -> Kind.BIGINT;
             case "UINT64" -> Kind.DECIMAL;
+            case "FLOAT32" -> Kind.FLOAT;
+            case "FLOAT64" -> Kind.DOUBLE;
+            case "DATETIME64" -> Kind.TIMESTAMP;
             default -> kind(clickHouseBase(raw));
         };
     }
@@ -179,6 +182,21 @@ public final class PortableColumnType {
             case BIGINT -> family == DdlDialect.Family.ORACLE ? integralPrecision > 0 ? "NUMBER" + numeric : "NUMBER(19)" : "BIGINT";
             case DECIMAL -> {
                 if (family == DdlDialect.Family.HIVE && (precision == null || precision <= 0 || precision > 38 || scale == null || scale < 0 || scale > precision)) yield "STRING";
+                if (family == DdlDialect.Family.ORACLE && Set.of("DECIMAL","DEC","NUMERIC","NUMBER").contains(base(raw))
+                        && (precision != null && precision > 38 || scale != null && (scale < -84 || scale > 127))) {
+                    // A fixed decimal's complete domain must survive, including sign,
+                    // fractional leading zeroes and the zeroes implied by negative scale.
+                    if (precision == null || precision <= 0) yield "CLOB";
+                    long fraction = scale == null ? 0 : scale;
+                    long characters = 1 + Math.max(1, (long) precision - fraction) + (fraction > 0 ? 1 + fraction : 0);
+                    if(fraction<0) {
+                        long exponent=(long)precision-fraction-1;
+                        long scientific=(long)precision+(precision>1?1:0)+3+Long.toString(exponent).length();
+                        characters=Math.max(characters,scientific);
+                    }
+                    var text = new ColumnInfo(); text.setLength(characters);
+                    yield PortableStringCapacity.render(config,text,"VARCHAR("+characters+")",Kind.VARCHAR).sql();
+                }
                 yield (family == DdlDialect.Family.ORACLE ? "NUMBER" : family == DdlDialect.Family.POSTGRES ? "NUMERIC" : "DECIMAL")
                         + (numeric.isEmpty() && family == DdlDialect.Family.MYSQL ? "(18,0)" : numeric);
             }
@@ -188,8 +206,8 @@ public final class PortableColumnType {
             case DATE -> "DATE";
             case TIME -> family == DdlDialect.Family.ORACLE || family == DdlDialect.Family.HIVE ? "TIMESTAMP" : "TIME";
             case TIMESTAMP -> raw.toUpperCase(Locale.ROOT).contains("WITH TIME ZONE") || Set.of("TIMESTAMPTZ","DATETIMEOFFSET").contains(base(raw))
-                    ? switch (family) { case POSTGRES, ORACLE -> "TIMESTAMP WITH TIME ZONE"; case SQLSERVER -> "DATETIMEOFFSET"; default -> textType(family); }
-                    : switch (family) { case MYSQL -> "DATETIME"; case SQLSERVER -> "DATETIME2"; default -> "TIMESTAMP"; };
+                    ? switch (family) { case POSTGRES, ORACLE -> "TIMESTAMP" + timestampPrecision(raw,family) + " WITH TIME ZONE"; case SQLSERVER -> "DATETIMEOFFSET" + timestampPrecision(raw,family); default -> textType(family); }
+                    : switch (family) { case MYSQL -> "DATETIME" + timestampPrecision(raw,family); case SQLSERVER -> "DATETIME2" + timestampPrecision(raw,family); case HIVE -> "TIMESTAMP"; default -> "TIMESTAMP" + timestampPrecision(raw,family); };
             case BINARY, BLOB -> target == DatabaseType.HETU ? "VARBINARY" : switch (family) {
                 case ORACLE -> kind == Kind.BINARY && size > 0 && size <= 2000 ? "RAW(" + size + ")" : "BLOB";
                 case POSTGRES -> "BYTEA";
@@ -203,6 +221,18 @@ public final class PortableColumnType {
             // Preserve a native extension if it belongs to the destination family. Otherwise use unbounded text.
             case UNKNOWN -> source.isBlank() || sameFamily(source, target) ? raw.trim() : textType(family);
         };
+    }
+
+    /** A fractional second count belongs to the native type, never the driver's display width. */
+    private static String timestampPrecision(String raw, DdlDialect.Family family) {
+        var argument = ARGS.matcher(raw);
+        if (!argument.find()) return "";
+        int fraction = Integer.parseInt(argument.group(1));
+        int maximum = switch (family) { case MYSQL, POSTGRES -> 6; case SQLSERVER -> 7; default -> 9; };
+        if (fraction < 0 || fraction > maximum) {
+            throw new IllegalArgumentException("目标时间类型最多支持" + maximum + "位小数秒，来源为" + fraction + "位；请显式选择转换规则或文本目标");
+        }
+        return "(" + fraction + ")";
     }
 
     public static String textType(DdlDialect.Family family) {

@@ -13,6 +13,29 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 class MappingRegisteredConnectionTest {
+    @Test void gaussProductsBindTheirSelectedVendorDriverAndNeverShareTheSamePrefixPool()throws Exception {
+        var open=mock(Driver.class);var huawei=mock(Driver.class);
+        var delegate=(Driver)Class.forName("org.h2.Driver").getDeclaredConstructor().newInstance();
+        String url="jdbc:opengauss://validation.invalid:15432/validation";
+        when(open.connect(eq(url),any(Properties.class))).thenAnswer(call->delegate.connect("jdbc:h2:mem:validation_mapping_gauss;DB_CLOSE_DELAY=-1",new Properties()));
+        var service=new UnifiedMappingService(mock(RegisteredDictionaryCatalog.class),new FieldMappingService());
+        var cfg=new LinkedHashMap<String,Object>(Map.of("dbType","GAUSSDB","gaussdbVariant","opengauss","jdbcURL",url));
+        var before=new LinkedHashMap<>(cfg);
+        try(var selected=mockStatic(AbstractMetadataExplorer.class)) {
+            selected.when(()->AbstractMetadataExplorer.loadGaussDriver("opengauss")).thenReturn(open);
+            selected.when(()->AbstractMetadataExplorer.loadGaussDriver("gaussdb")).thenReturn(huawei);
+            try {
+                var first=registeredPool(service,cfg);assertSame(open,first.getDriver());
+                for(int index=0;index<2;index++)try(var connection=service.openRegistered("db",Map.of("db",cfg))){assertFalse(connection.isClosed());}
+                assertSame(first,registeredPool(service,cfg));
+                var nativeCfg=new LinkedHashMap<String,Object>(cfg);nativeCfg.put("gaussdbVariant","gaussdb");
+                var nativePool=registeredPool(service,nativeCfg);assertNotSame(first,nativePool);assertSame(huawei,nativePool.getDriver());
+                selected.verify(()->AbstractMetadataExplorer.loadGaussDriver("opengauss"),times(1));
+                selected.verify(()->AbstractMetadataExplorer.loadGaussDriver("gaussdb"),times(1));
+                assertEquals(before,cfg);
+            }finally{service.close();}
+        }
+    }
     @Test void explicitOpenHiveBorrowsItsIsolatedDriverAndNeverFallsBackToTheBundledSameNameClass()throws Exception {
         var isolated=mock(Driver.class);String url="jdbc:hive2://validation.invalid:10000/validation";
         var delegate=(Driver)Class.forName("org.h2.Driver").getDeclaredConstructor().newInstance();
@@ -101,8 +124,21 @@ class MappingRegisteredConnectionTest {
     }
     @Test void missingEndpointsAndOtherProductsAreNotGuessed() {
         assertEquals("",UnifiedMappingService.registeredJdbcUrl(Map.of("dbType","SQLSERVER","database","validation")));
-        assertEquals("",UnifiedMappingService.registeredJdbcUrl(Map.of("dbType","MYSQL","host","validation.invalid","database","validation")));
+        assertEquals("",UnifiedMappingService.registeredJdbcUrl(Map.of("dbType","ORACLE","host","validation.invalid","database","validation")));
         assertEquals("",UnifiedMappingService.registeredJdbcUrl(Map.of("dbType","unknown","host","validation.invalid","database","validation")));
+    }
+    @Test void mysqlHostRegistrationUsesMetadataUrlRulesAndPreservesExplicitSettings() {
+        var config=new LinkedHashMap<String,Object>(Map.of("dbType","mysql","host","validation.invalid","database","validation","port",3307));
+        var before=new LinkedHashMap<>(config);
+        assertEquals("jdbc:mysql://validation.invalid:3307/validation?useSSL=false&serverTimezone=GMT%2B8&allowPublicKeyRetrieval=true",UnifiedMappingService.registeredJdbcUrl(config));
+        assertEquals(before,config);
+        config.put("extraParams","useSSL=true&serverTimezone=UTC");
+        assertEquals("jdbc:mysql://validation.invalid:3307/validation?useSSL=true&serverTimezone=UTC",UnifiedMappingService.registeredJdbcUrl(config));
+        config.put("jdbcURL","jdbc:mysql://explicit.invalid:3306/validation?useSSL=true");
+        assertEquals(config.get("jdbcURL"),UnifiedMappingService.registeredJdbcUrl(config));
+        for(String database:List.of("validation?user=other","validation/other","validation#other","validation;user=other"))
+            assertThrows(MappingException.class,()->UnifiedMappingService.registeredJdbcUrl(Map.of("dbType","MYSQL","host","validation.invalid","database",database)));
+        assertThrows(MappingException.class,()->UnifiedMappingService.registeredJdbcUrl(Map.of("dbType","MYSQL","host","validation.invalid","database","validation","port",0)));
     }
     @ParameterizedTest @ValueSource(strings={"0","65536","invalid"})
     void invalidPortsFailBeforeConnecting(String port) {

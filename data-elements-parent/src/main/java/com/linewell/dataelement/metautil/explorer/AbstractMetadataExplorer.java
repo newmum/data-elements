@@ -475,6 +475,21 @@ public abstract class AbstractMetadataExplorer implements MetadataExplorer {
         }
     }
 
+    /** Reuse the selected GaussDB product's driver, including an externally loaded openGauss client. */
+    public static Driver loadGaussDriver(String variant) {
+        DataSourceConfig config=new DataSourceConfig();
+        config.setDatabaseType(DatabaseType.GAUSSDB);
+        config.setGaussdbVariant(GaussDbVariant.resolve(variant).code());
+        String driverClass=config.getJdbcDriverClass();
+        if(ensureDriverVisible(config,driverClass)) {
+            try { return (Driver)Class.forName(driverClass).getDeclaredConstructor().newInstance(); }
+            catch(ReflectiveOperationException error) { throw new IllegalStateException("所选 GaussDB JDBC 驱动无法创建",error); }
+        }
+        Driver selected=EXTERNAL_DRIVER_INSTANCES.get(externalDriverKey(config,driverClass));
+        if(selected==null)throw new IllegalStateException("所选 GaussDB JDBC 驱动未加载");
+        return selected;
+    }
+
     /** Open-source Hive must never fall back to an MRS driver with the same class name. */
     public static Driver loadOpenSourceHiveDriver() {
         DataSourceConfig config = new DataSourceConfig();

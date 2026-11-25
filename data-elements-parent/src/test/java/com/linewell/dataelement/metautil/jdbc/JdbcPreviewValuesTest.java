@@ -16,6 +16,39 @@ import java.time.OffsetDateTime;
 import org.junit.jupiter.api.Test;
 
 class JdbcPreviewValuesTest {
+    @Test void nativeLocalTimestampFractionsDoNotPassThroughTheSecondsOnlyJsonDateFormatter()throws Exception {
+        var mapper=new com.fasterxml.jackson.databind.ObjectMapper().setDateFormat(new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss"));
+        var timestamp=java.sql.Timestamp.valueOf("2024-01-02 03:04:05.986123");
+        assertFalse(mapper.writeValueAsString(timestamp).contains("986123"));
+        for(DatabaseType type:new DatabaseType[]{DatabaseType.POSTGRESQL,DatabaseType.KINGBASE,DatabaseType.GAUSSDB,DatabaseType.HIGHGO,DatabaseType.DAMENG,DatabaseType.OCEANBASE_ORACLE})for(int count:new int[]{20,100}){
+            ResultSet result=mock(ResultSet.class);
+            for(int column=1;column<=count;column++){
+                when(result.getString(column)).thenReturn("2024-01-02 03:04:05.986123");
+                assertTrue(JdbcPreviewValues.isLocalTimestamp(type,"timestamp"));
+                assertTrue(JdbcPreviewValues.isLocalTimestamp(type,"TIMESTAMP(6) WITHOUT TIME ZONE"));
+                assertEquals("\"2024-01-02 03:04:05.986123\"",mapper.writeValueAsString(JdbcPreviewValues.read(result,column,true)));
+                verify(result).getString(column);
+            }
+            verifyNoMoreInteractions(result);
+        }
+    }
+    @Test void sqlServerDatetimeFractionsRemainLocalButBinaryAndOffsetTypesAreNeverReclassified()throws Exception {
+        ResultSet result=mock(ResultSet.class);when(result.getString(1)).thenReturn("2024-01-02 03:04:05.1234567");
+        assertTrue(JdbcPreviewValues.isLocalTimestamp(DatabaseType.SQLSERVER,"datetime2(7)"));
+        assertTrue(JdbcPreviewValues.isLocalTimestamp(DatabaseType.SQLSERVER,"DATETIME"));
+        assertEquals("2024-01-02 03:04:05.1234567",JdbcPreviewValues.read(result,1,true));
+        for(String type:new String[]{"TIMESTAMP","ROWVERSION","DATETIMEOFFSET(7)"})assertFalse(JdbcPreviewValues.isLocalTimestamp(DatabaseType.SQLSERVER,type));
+        assertFalse(JdbcPreviewValues.isLocalTimestamp(DatabaseType.POSTGRESQL,"timestamptz"));
+        assertFalse(JdbcPreviewValues.isLocalTimestamp(DatabaseType.POSTGRESQL,"TIMESTAMP WITH TIME ZONE"));
+        assertFalse(JdbcPreviewValues.isLocalTimestamp(null,"TIMESTAMP"));verify(result).getString(1);verifyNoMoreInteractions(result);
+    }
+    @Test void gaussMysqlVariantKeepsTheMysqlTimestampInstantContract(){
+        var config=new com.linewell.dataelement.metautil.model.dto.DataSourceConfig();config.setDatabaseType(DatabaseType.GAUSSDB);
+        config.setGaussdbVariant(com.linewell.dataelement.metautil.jdbc.GaussDbVariant.MYSQL.code());
+        assertEquals(DatabaseType.MYSQL,config.getEffectiveDatabaseType());
+        assertFalse(JdbcPreviewValues.isLocalTimestamp(config.getEffectiveDatabaseType(),"TIMESTAMP(6)"));
+        assertTrue(JdbcPreviewValues.isLocalTimestamp(config.getEffectiveDatabaseType(),"DATETIME(6)"));
+    }
     @Test
     void mysqlDateTimeFractionsStayInTheJdbcTextCarrierForTwentyAndHundredFields() throws Exception {
         for(int count:new int[]{20,100}) {

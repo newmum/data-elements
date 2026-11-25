@@ -138,6 +138,21 @@ public class PortableDdlConverter {
             String rendered = PortableColumnType.render(config, source, raw);
             column.setColumnType(rendered); column.setDataType(rendered.replaceAll("\\(.*$", ""));
             var kind=PortableColumnType.kind(raw,source.getSourceDatabaseType());
+            var renderedKind=PortableColumnType.kind(rendered);
+            boolean numericText=kind==PortableColumnType.Kind.DECIMAL&&Set.of(PortableColumnType.Kind.VARCHAR,PortableColumnType.Kind.TEXT).contains(renderedKind);
+            if(numericText) {
+                // Numeric precision is not a text length: the source domain and
+                // its scale remain on the unchanged source field and lineage.
+                var capacity=java.util.regex.Pattern.compile("^\\w+\\((\\d+)(?:\\s+(CHAR|BYTE))?\\)$").matcher(rendered);
+                boolean bounded=renderedKind==PortableColumnType.Kind.VARCHAR&&capacity.matches();
+                long length=bounded?Long.parseLong(capacity.group(1)):0;
+                String unit=bounded&&"BYTE".equals(capacity.group(2))?"BYTE":"CHAR";
+                column.setLength(length);column.setLengthSemantics(unit);
+                column.setCharacterLength(unit.equals("CHAR")&&length>0?length:null);
+                column.setByteLength(unit.equals("BYTE")?length:null);
+                column.setPrecision(null);column.setScale(null);
+                warnings.add(Map.of("field",source.getColumnName(),"message","来源精确小数 "+raw+" 超出目标数值范围，使用 "+rendered+" 保存完整十进制文本，不降低精度或截断；来源类型血缘保留","requiresEdit",false));
+            }
             int integralPrecision=PortableColumnType.integralPrecision(raw,source.getSourceDatabaseType());
             if(integralPrecision>0){column.setLength((long)integralPrecision);column.setPrecision(integralPrecision);column.setScale(0);}
             if(kind==PortableColumnType.Kind.UUID&&PortableColumnType.kind(rendered)==PortableColumnType.Kind.VARCHAR){column.setLength(36L);column.setLengthSemantics("CHAR");}
@@ -155,6 +170,8 @@ public class PortableDdlConverter {
                     &&(source.getCharset()==null||!PortableStringCapacity.charset(source.getCharset()).equals(PortableStringCapacity.charset(config.getCharset()))))
                 warnings.add(Map.of("field",source.getColumnName(),"message","目标字符集 "+config.getCharset()+" 不能保证表示来源的全部字符；扩展长度不能解决字符集不兼容，请确认目标字符集","requiresEdit",true));
             String defaultValue = source.getDefaultValue();
+            if(numericText&&defaultValue!=null&&defaultValue.strip().matches("[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[eE][+-]?\\d+)?"))
+                defaultValue="'"+defaultValue.strip()+"'";
             if (oracleFamily && Boolean.TRUE.equals(column.getAutoIncrement())) {
                 if (!NUMERIC_TYPES.contains(kind) || !NUMERIC_TYPES.contains(PortableColumnType.kind(rendered))) {
                     column.setAutoIncrement(false);

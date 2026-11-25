@@ -10,6 +10,37 @@ import static org.junit.jupiter.api.Assertions.*;
 class VendorDriverIsolationTest {
     @org.junit.jupiter.api.io.TempDir java.nio.file.Path directory;
 
+    @Test void gaussLoaderReusesTheSelectedExternalOpenGaussInstanceForMappingPools()throws Exception {
+        var source=directory.resolve("Driver.java");
+        java.nio.file.Files.writeString(source,"""
+            package org.opengauss;
+            public class Driver implements java.sql.Driver {
+                public java.sql.Connection connect(String url,java.util.Properties info){return null;}
+                public boolean acceptsURL(String url){return url.startsWith("jdbc:opengauss:");}
+                public java.sql.DriverPropertyInfo[] getPropertyInfo(String url,java.util.Properties info){return new java.sql.DriverPropertyInfo[0];}
+                public int getMajorVersion(){return 44;}
+                public int getMinorVersion(){return 0;}
+                public boolean jdbcCompliant(){return false;}
+                public java.util.logging.Logger getParentLogger(){return java.util.logging.Logger.getLogger("validation");}
+            }
+            """);
+        assertEquals(0,javax.tools.ToolProvider.getSystemJavaCompiler().run(null,null,null,
+                "-proc:none","-classpath",directory.toString(),"-encoding","UTF-8","-d",directory.toString(),source.toString()));
+        try(var jar=new java.util.jar.JarOutputStream(java.nio.file.Files.newOutputStream(directory.resolve("opengauss-jdbc-validation.jar")))) {
+            jar.putNextEntry(new java.util.jar.JarEntry("org/opengauss/Driver.class"));
+            java.nio.file.Files.copy(directory.resolve("org/opengauss/Driver.class"),jar);jar.closeEntry();
+        }
+        String previous=System.getProperty("data-elements.jdbc.driver-directory");
+        System.setProperty("data-elements.jdbc.driver-directory",directory.toString());
+        java.net.URLClassLoader loader=null;
+        try {
+            Driver driver=AbstractMetadataExplorer.loadGaussDriver("opengauss");
+            assertEquals(44,driver.getMajorVersion());assertTrue(driver.acceptsURL("jdbc:opengauss://validation.invalid/validation"));
+            assertSame(driver,AbstractMetadataExplorer.loadGaussDriver("opengauss"));
+            loader=(java.net.URLClassLoader)driver.getClass().getClassLoader();
+        }finally{restoreDirectory(previous);if(loader!=null)loader.close();}
+    }
+
     @Test void explicitOpenHiveCannotFallBackToBundledMrsClient() {
         String previous=System.getProperty("data-elements.jdbc.driver-directory");
         System.setProperty("data-elements.jdbc.driver-directory",directory.toString());

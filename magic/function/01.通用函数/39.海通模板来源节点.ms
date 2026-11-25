@@ -208,6 +208,15 @@ if (manifest == 'source.ftp' || manifest == 'source.sftp') {
     config.username = first(source, ['username', 'dbMetaUser'])
     config.password = first(source, ['password', 'dbMetaPassword'])
     config.dbType = datasourceType.configType(rawType, source)
+    if (manifest == 'source.minio') {
+        // 登记使用文件名通配符，画布使用正则；显式正则优先，与登记探查的匹配语义一致。
+        var registeredFileRegex = first(source, ['fileFilterRegex'])
+        var registeredFileGlob = first(source, ['minioFilePattern', 'filePattern'])
+        config.minioFilePattern = !blank(registeredFileRegex) ? '(?i)' + registeredFileRegex
+            : (blank(registeredFileGlob) ? '' : '(?i)^' + Pattern.quote(registeredFileGlob)
+                .replace('*', '\\E.*\\Q').replace('?', '\\E.\\Q') + '$')
+        config.minioFilePatternScope = 'FILE_NAME'
+    }
     if (manifest == 'source.oracle') {
         var endpointMode = first(source, ['connectionType', 'connection_type', 'jdbcType', 'jdbc_type'])
         var normalized = endpointMode == null ? '' : endpointMode.trim().toUpperCase(Locale.ROOT).replaceAll('[\\s_-]+', '')

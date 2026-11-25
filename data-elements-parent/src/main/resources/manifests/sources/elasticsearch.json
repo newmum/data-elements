@@ -25,7 +25,7 @@
     { "key": "password", "label": "密码", "type": "password", "visibleWhen": { "key": "authMethod", "equals": "BASIC" } },
     { "key": "apiKey", "label": "API Key", "type": "password", "visibleWhen": { "key": "authMethod", "equals": "API_KEY" } },
     { "key": "defaultIndex", "label": "索引", "type": "text", "required": true },
-    { "key": "queryJson", "label": "查询 DSL", "type": "json-editor", "default": "{\"query\":{\"match_all\":{}}}" },
+    { "key": "queryJson", "label": "查询 DSL", "type": "json-editor", "default": "{\"query\":{\"match_all\":{}}}", "help": "完整 Elasticsearch 查询 DSL；size 控制本次返回的文档数，from、sort、_source 控制偏移、排序和投影。当前使用非分页 JsonQueryElasticsearch，不存在独立驱动抓取批；未指定 size 时沿用服务器默认值，不能视为全量读取。" },
     { "key": "schedulingPeriod", "label": "调度周期", "type": "duration", "default": "60 sec", "group": "schedule" }
   ],
   "compile": {

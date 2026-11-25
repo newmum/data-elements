@@ -41,6 +41,7 @@ import java.lang.Integer
 import java.util.Locale
 import java.util.Objects
 import java.net.URI
+import java.util.regex.Pattern
 import '@/common/accesstemplate' as resolveAccessTemplate
 
 // POST /ods/job/fill 按来源表补齐接入任务。
@@ -1153,6 +1154,38 @@ var sourceRepairReasons = (dsl, registeredConfig, registeredTableName) => {
 }
 
 // 每个登记索引或主题只生成当前表对应的采集配置。
+// MinIO 登记配置转画布：解析精确对象定位，转换匹配规则，保留工作表和数据集定义。
+var applyMinioSourceConfig = (sourceNodeConfig, sourceCfg, sourceTableName) => {
+    var minioEndpoint = text(first(sourceCfg, ['minioEndpoint', 'endpoint', 'url'])).trim()
+    if (blank(minioEndpoint)) {
+        var minioUseSsl = text(first(sourceCfg, ['minioUseSSL', 'useSSL'])).trim().toLowerCase() == 'true'
+        minioEndpoint = (minioUseSsl ? 'https://' : 'http://')
+            + text(first(sourceCfg, ['host', 'dbMetaIp'])).trim() + ':'
+            + text(first(sourceCfg, ['port', 'dbMetaPort'])).trim()
+    }
+    var objectLocator = structuredFileProbe.resolveMinioObjectLocator(sourceCfg, text(sourceTableName))
+    sourceNodeConfig.minioEndpoint = minioEndpoint
+    sourceNodeConfig.minioAccessKey = first(sourceCfg, ['minioAccessKey', 'accessKey', 'username', 'dbMetaUser'])
+    sourceNodeConfig.minioSecretKey = first(sourceCfg, ['minioSecretKey', 'secretKey', 'password', 'dbMetaPassword'])
+    sourceNodeConfig.minioBucket = first(sourceCfg, ['minioBucket', 'bucket', 'database', 'dbName', 'serviceName'])
+    sourceNodeConfig.minioPrefix = first(sourceCfg, ['minioPrefix', 'objectPrefix', 'prefix'])
+    // 登记使用文件名通配符，画布使用正则；显式正则优先，与登记探查的匹配语义一致。
+    var registeredFileRegex = text(sourceCfg.fileFilterRegex)
+    var registeredFileGlob = text(first(sourceCfg, ['minioFilePattern', 'filePattern']))
+    sourceNodeConfig.minioFilePattern = !blank(registeredFileRegex) ? '(?i)' + registeredFileRegex
+        : (blank(registeredFileGlob) ? '' : '(?i)^' + Pattern.quote(registeredFileGlob)
+            .replace('*', '\\E.*\\Q').replace('?', '\\E.\\Q') + '$')
+    sourceNodeConfig.minioFilePatternScope = 'FILE_NAME'
+    sourceNodeConfig.minioObjectKey = objectLocator.objectKey
+    // 对象、工作表及JSON子数据集分别来自服务端探查，不拆展示路径，也不采纳前端任意位置。
+    sourceNodeConfig.fileFormat = objectLocator.format
+    sourceNodeConfig.excelSheetName = objectLocator.excelSheetName
+    sourceNodeConfig.jsonRecordPath = objectLocator.jsonRecordPath
+    sourceNodeConfig.csvDelimiter = objectLocator.delimiter
+    sourceNodeConfig.csvEncoding = 'UTF-8'
+    sourceNodeConfig.syncMode = 'FULL'
+}
+
 var applyIndexAndTopicSourceConfig = (manifestKey, sourceNodeConfig, sourceCfg, sourceTableName, tenantId, sourceTableId) => {
     if (manifestKey == 'source.elasticsearch') {
         sourceNodeConfig.putAll(resolveElasticsearchConnection(sourceCfg))
@@ -1215,7 +1248,7 @@ var instantiateTemplateFlow = (template, pipelineRows, taskRows) => {
         'protocol','hostname','remotePath','fileFilterRegex','sourceFileName','fileFormat','csvEncoding','csvDelimiter',
         'excelSheetName','jsonRecordPath','passiveMode','fileHeaderMode','fileConsumptionPolicy',
         'logicalSourceDatasourceId','pushStorageDomain','minioEndpoint','minioAccessKey','minioSecretKey','minioBucket',
-        'minioPrefix','minioFilePattern','minioObjectKey','url','method','requestBody','authHeader','requestHeaders',
+        'minioPrefix','minioFilePattern','minioFilePatternScope','minioObjectKey','url','method','requestBody','authHeader','requestHeaders',
         'pagination','paginationMode','pageParam','pageSizeParam','responsePath','bootstrapServers','topic','groupId',
         'securityProtocol','saslMechanism','saslUsername','saslPassword','credentialRef','principal','keytabPath',
         'nodes','defaultIndex','queryJson','zookeeperQuorum','clientConfigDir','kerberosPrincipal','path','rowStart','rowStop']
@@ -1243,6 +1276,10 @@ var instantiateTemplateFlow = (template, pipelineRows, taskRows) => {
             if (binding.startsWith('target:') && runtime.config.hiveConnectionMode == 'open-source') {
                 // Hive 认证来自已授权的登记连接，模板不得替换真实目标的认证方式。
                 for (field in ['authMode','userPrincipal','krb5ConfPath']) { config[field] = runtime.config[field] }
+                // 改绑开源 Hive 后，默认/华为 HDFS 写入随真实连接改用原生 PutHDFS；显式 JDBC 写入仍保留。
+                if (['','LINEWELL_HDFS','LINEWELL'].contains(text(config.hiveWriteMode).trim().toUpperCase())) {
+                    config.hiveWriteMode = 'HDFS_BATCH'
+                }
                 config.statementType = 'INSERT'
                 // 执行节点的 Hadoop 文件路径可在模板预设；登记目标有明确值时优先使用登记值。
                 for (field in ['clientConfigDir','hdfsDatabaseDirectory']) {
@@ -1299,6 +1336,21 @@ var instantiateTemplateFlow = (template, pipelineRows, taskRows) => {
     }
     return definition
 }
+
+// 新建任务调度：模板实例化及并行合并后，按最终来源标识分配每日错峰；仅处理本次新增流程。
+var applyNewTaskSchedules = pipelines => {
+    for (pipeline in pipelines) {
+        var createdDsl = parseGovernanceConfig(pipeline.dsl_json)
+        for (node in createdDsl.nodes) {
+            if (node.category == 'source' && node.config?.backfillSource != true) {
+                node.config = BatchSchedulePolicy.defaultConfig(tenantId, text(pipeline.id), text(node.id),
+                    text(node.manifestKey), node.config)
+            }
+        }
+        pipeline.dsl_json = poolJsons.toJsonStr(createdDsl)
+    }
+}
+// 新建任务调度结束；复用任务保留其原设计、水位和执行时刻。
 
 // 来源预检只使用已在事务中校验的登记对象，不创建任务或物化目标。
 var preflightRegisteredSource = (sourceDb, sourceTable, sourceTableId) => {
@@ -2073,29 +2125,7 @@ if (pushFileSource == null && sourceManifestKey == 'source.api') {
 // object-storage connection and the registered object key for the MinIO canvas
 // compiler; otherwise the generic MySQL fallback creates an empty task.
 if (sourceManifestKey == 'source.minio') {
-    var minioEndpoint = text(first(sourceCfg, ['minioEndpoint', 'endpoint', 'url'])).trim()
-    if (blank(minioEndpoint)) {
-        var minioUseSsl = text(first(sourceCfg, ['minioUseSSL', 'useSSL'])).trim().toLowerCase() == 'true'
-        minioEndpoint = (minioUseSsl ? 'https://' : 'http://')
-            + text(first(sourceCfg, ['host', 'dbMetaIp'])).trim() + ':'
-            + text(first(sourceCfg, ['port', 'dbMetaPort'])).trim()
-    }
-    var objectLocator = structuredFileProbe.resolveMinioObjectLocator(sourceCfg, text(sourceTableName))
-    var minioObjectKey = objectLocator.objectKey
-    sourceNodeConfig.minioEndpoint = minioEndpoint
-    sourceNodeConfig.minioAccessKey = first(sourceCfg, ['minioAccessKey', 'accessKey', 'username', 'dbMetaUser'])
-    sourceNodeConfig.minioSecretKey = first(sourceCfg, ['minioSecretKey', 'secretKey', 'password', 'dbMetaPassword'])
-    sourceNodeConfig.minioBucket = first(sourceCfg, ['minioBucket', 'bucket', 'database', 'dbName', 'serviceName'])
-    sourceNodeConfig.minioPrefix = first(sourceCfg, ['minioPrefix', 'objectPrefix', 'prefix'])
-    sourceNodeConfig.minioFilePattern = first(sourceCfg, ['minioFilePattern', 'filePattern', 'fileFilterRegex'])
-    sourceNodeConfig.minioObjectKey = minioObjectKey
-    // 对象、工作表及JSON子数据集分别来自服务端探查，不拆展示路径，也不采纳前端任意位置。
-    sourceNodeConfig.fileFormat = objectLocator.format
-    sourceNodeConfig.excelSheetName = objectLocator.excelSheetName
-    sourceNodeConfig.jsonRecordPath = objectLocator.jsonRecordPath
-    sourceNodeConfig.csvDelimiter = objectLocator.delimiter
-    sourceNodeConfig.csvEncoding = 'UTF-8'
-    sourceNodeConfig.syncMode = 'FULL'
+    applyMinioSourceConfig(sourceNodeConfig, sourceCfg, sourceTableName)
 }
 applyIndexAndTopicSourceConfig(sourceManifestKey, sourceNodeConfig, sourceCfg, sourceTableName, tenantId, sourceTableId)
 
@@ -2675,6 +2705,7 @@ if (templateParallel && pipelineRows.size() > 0) {
     taskRows = [primary]
     allMappings = allMappings.filter(mapping => mapping.task_id == primary.tid)
 }
+applyNewTaskSchedules(pipelineRows)
 try { capacityError = mappingStorage.validate(db, tenantId, allMappings) }
 catch (e) { exit 503, '暂时无法检查当前租户的字段映射存储结构，任务未保存，请稍后重试' }
 if (!blank(capacityError)) { exit 422, capacityError }

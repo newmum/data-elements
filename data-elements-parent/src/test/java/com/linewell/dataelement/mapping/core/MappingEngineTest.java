@@ -12,6 +12,33 @@ import static org.junit.jupiter.api.Assertions.*;
 class MappingEngineTest {
     private static final ObjectMapper JSON=new ObjectMapper();
     private static final ExecutionContext CONTEXT=new ExecutionContext(Instant.parse("2026-10-13T00:00:00Z"),ZoneId.of("Asia/Shanghai"),Locale.CHINA,"test-input");
+    private static MappingEngine.Plan jsonTextPlan(boolean insensitive)throws Exception{
+        var spec=JSON.readTree("""
+            {"schemaVersion":"2.0","schemaContract":{"source":[{"name":"DOC","logicalType":"JSON","physicalType":"json","nullable":true}]},"rules":[{"input":{"kind":"FIELD","name":"DOC"},"target":{"name":"TEXT","logicalType":"STRING","nullable":true}}]}
+            """);
+        ((com.fasterxml.jackson.databind.node.ObjectNode)spec).putObject("policies").put("caseSensitive",!insensitive);
+        return MappingEngine.compile(spec);
+    }
+    @Test void nativeJsonTextPreservesNumbersWhitespaceScalarsAndSqlNullAt20And100Rows()throws Exception{
+        List<String> values=Arrays.asList(null,"null","\"\"","true","  {\"n\":123456789012345678901234567890.12345678901234567890}  ","[1,false,null,\"中文\"]");
+        for(boolean insensitive:List.of(false,true))for(int count:List.of(20,100)){
+            var rows=new ArrayList<Map<String,Object>>();for(int i=0;i<count;i++){var row=new LinkedHashMap<String,Object>();row.put(insensitive?"doc":"DOC",values.get(i%values.size()));rows.add(row);}
+            var result=MappingEngine.execute(jsonTextPlan(insensitive),rows,0,CONTEXT,null);assertEquals(0,result.dictionaryBatches());assertEquals(count,result.rows().size());
+            for(int i=0;i<count;i++){assertTrue(result.rows().get(i).success());assertEquals(values.get(i%values.size()),result.rows().get(i).output().get("TEXT"));}
+        }
+    }
+    @Test void nativeJsonValidationRejectsMalformedOrMultipleValuesWithoutRewritingErrorPolicy()throws Exception{
+        var invalid=List.of(""," ","{","{\"x\":1} false","[1,]","{\"x\":NaN}","unquoted","\"unterminated");
+        for(String value:invalid){var result=MappingEngine.execute(jsonTextPlan(false),List.of(Map.of("DOC",value)),0,CONTEXT,null);assertFalse(result.rows().getFirst().success());assertEquals("INVALID_JSON",result.rows().getFirst().errors().getFirst().code());}
+        String large="{\"value\":\""+"x".repeat(300_000)+"\",\"n\":"+"9".repeat(1500)+"}";
+        var result=MappingEngine.execute(jsonTextPlan(false),List.of(Map.of("DOC",large)),0,CONTEXT,null);assertTrue(result.rows().getFirst().success());assertEquals(large,result.rows().getFirst().output().get("TEXT"));
+    }
+    @Test void jsonValidationFailureIsNotCachedAsSuccessAndOrdinaryTextRemainsOpaque()throws Exception{
+        var spec=jsonTextPlan(false).document();((com.fasterxml.jackson.databind.node.ObjectNode)spec.path("rules").get(0)).put("onError","NULL");var second=((com.fasterxml.jackson.databind.node.ArrayNode)spec.path("rules")).addObject();second.putObject("input").put("kind","FIELD").put("name","DOC");second.putObject("target").put("name","SECOND").put("logicalType","STRING");
+        var result=MappingEngine.execute(MappingEngine.compile(spec),List.of(Map.of("DOC","{broken")),0,CONTEXT,null);assertFalse(result.rows().getFirst().success());assertEquals("INVALID_JSON",result.rows().getFirst().errors().getFirst().code());
+        ((com.fasterxml.jackson.databind.node.ObjectNode)spec.path("schemaContract").path("source").get(0)).put("logicalType","STRING").put("physicalType","CLOB");
+        result=MappingEngine.execute(MappingEngine.compile(spec),List.of(Map.of("DOC","{ordinary text")),0,CONTEXT,null);assertTrue(result.rows().getFirst().success());assertEquals("{ordinary text",result.rows().getFirst().output().get("SECOND"));
+    }
     @Test void usesJavaFunctionsAndKeepsZeroAndFalse()throws Exception{
         var spec=JSON.readTree("""
             {"version":"1.0","mappings":[

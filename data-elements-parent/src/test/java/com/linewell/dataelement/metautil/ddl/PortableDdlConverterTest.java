@@ -18,6 +18,105 @@ import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 class PortableDdlConverterTest {
+    @ParameterizedTest
+    @CsvSource({"65,30,67", "65,0,66", "65,-1,71", "3,200,203", "3,-85,89"})
+    @SuppressWarnings("unchecked")
+    void widerExactDecimalsUseCompleteTextCapacityWithoutMutatingSource(int precision,int scale,long characters) {
+        var source=new ColumnInfo();source.setColumnName("amount");source.setSourceDatabaseType("mysql");
+        source.setColumnType("DECIMAL("+precision+","+scale+")");source.setDataType("DECIMAL");
+        source.setPrecision(precision);source.setScale(scale);source.setLength((long)precision);
+        source.setPrimaryKey(true);source.setNullable(false);
+        var maximum=new java.math.BigDecimal(new java.math.BigInteger("9".repeat(precision)),scale);
+        for(var number:List.of(maximum,maximum.negate())) {
+            String text=(String)com.linewell.dataelement.mapping.core.ValueTypes.cast(number,"STRING",0,0,java.math.RoundingMode.UNNECESSARY);
+            assertTrue(text.length()<=characters);assertEquals(0,number.compareTo(new java.math.BigDecimal(text)));
+        }
+        var converter=new PortableDdlConverter();
+        for(var target:List.of(DatabaseType.ORACLE,DatabaseType.HIVE)) {
+            var prepared=converter.prepare(List.of(source),target);var actual=((List<ColumnInfo>)prepared.get("columns")).getFirst();
+            assertEquals(target==DatabaseType.ORACLE?"VARCHAR2("+characters+" CHAR)":"STRING",actual.getColumnType());
+            assertEquals(target==DatabaseType.ORACLE?characters:0,actual.getLength());
+            assertNull(actual.getPrecision());assertNull(actual.getScale());assertTrue(actual.getPrimaryKey());assertFalse(actual.getNullable());
+            assertFalse(((List<Map<String,Object>>)prepared.get("warnings")).stream().anyMatch(row->Boolean.TRUE.equals(row.get("requiresEdit"))));
+            assertEquals(actual.getColumnType(),((List<ColumnInfo>)converter.prepare(List.of(actual),target).get("columns")).getFirst().getColumnType());
+        }
+        assertEquals("DECIMAL("+precision+","+scale+")",source.getColumnType());
+        assertEquals(precision,source.getPrecision());assertEquals(scale,source.getScale());assertEquals((long)precision,source.getLength());
+    }
+
+    @Test @SuppressWarnings("unchecked")
+    void exactNumericTextDefaultsNeverPassThroughAnOracleNumericLiteral() {
+        var source=new ColumnInfo();source.setColumnName("amount");source.setSourceDatabaseType("mysql");source.setColumnType("DECIMAL(65,30)");
+        String literal="-"+"9".repeat(35)+"."+"9".repeat(30);source.setDefaultValue(literal);
+        var converter=new PortableDdlConverter();var prepared=converter.prepare(List.of(source),DatabaseType.ORACLE);
+        var actual=((List<ColumnInfo>)prepared.get("columns")).getFirst();assertEquals("'"+literal+"'",actual.getDefaultValue());
+        assertEquals(literal,source.getDefaultValue());
+        assertEquals("decimal",converter.logicalType(source.getColumnType(),"mysql"));
+        assertEquals("DECIMAL(65,30)",converter.originTypeForEditor("decimal",source.getColumnType(),"mysql"));
+    }
+
+    @Test @SuppressWarnings("unchecked")
+    void unboundedTextIsHonestAboutUnsupportedKeysWhileRepresentableDecimalsKeepTheirNativeTypes() {
+        var source=new ColumnInfo();source.setColumnName("amount");source.setColumnType("DECIMAL(2000,0)");source.setSourceDatabaseType("postgresql");source.setPrimaryKey(true);
+        var converter=new PortableDdlConverter();var prepared=converter.prepare(List.of(source),DatabaseType.ORACLE);
+        assertEquals("CLOB",((List<ColumnInfo>)prepared.get("columns")).getFirst().getColumnType());
+        assertTrue(((List<Map<String,Object>>)prepared.get("warnings")).stream().anyMatch(row->Boolean.TRUE.equals(row.get("requiresEdit"))));
+        for(String raw:List.of("DECIMAL(38,30)","NUMERIC(38,-84)","NUMBER(38,127)"))
+            assertEquals(raw.replaceFirst("^(DECIMAL|NUMERIC)","NUMBER"),PortableColumnType.render(DatabaseType.ORACLE,null,raw));
+        assertEquals("DECIMAL(65,30)",PortableColumnType.render(DatabaseType.MYSQL,null,"DECIMAL(65,30)"));
+        assertEquals("NUMERIC(65,30)",PortableColumnType.render(DatabaseType.POSTGRESQL,null,"DECIMAL(65,30)"));
+    }
+
+    @Test
+    void fullSixtyFiveDigitValuesRoundTripThroughTheExistingStringMappingForTwentyAndHundredRows() throws Exception {
+        var json=new com.fasterxml.jackson.databind.ObjectMapper();var spec=json.createObjectNode().put("version","1.0");
+        spec.putArray("mappings").addObject().put("from","amount").put("to","amount").put("targetType","STRING");
+        var plan=com.linewell.dataelement.mapping.core.MappingEngine.compile(spec);
+        var maximum=new java.math.BigDecimal("9".repeat(35)+"."+"9".repeat(30));
+        var samples=java.util.Arrays.asList(maximum,maximum.negate(),java.math.BigDecimal.ZERO.setScale(30),new java.math.BigDecimal("1E-30"),null);
+        var context=new com.linewell.dataelement.mapping.core.ExecutionContext(java.time.Instant.EPOCH,java.time.ZoneId.of("Asia/Shanghai"),java.util.Locale.ROOT,"validation-numeric-text");
+        for(int count:List.of(20,100)) {
+            var input=IntStream.range(0,count).mapToObj(i->java.util.Collections.<String,Object>singletonMap("amount",samples.get(i%samples.size()))).toList();
+            var result=com.linewell.dataelement.mapping.core.MappingEngine.execute(plan,input,0,context,null);
+            assertEquals(count,result.rows().size());assertEquals(0,result.dictionaryBatches());
+            for(int i=0;i<count;i++) {
+                var row=result.rows().get(i);assertTrue(row.success());Object actual=row.output().get("amount");var expected=samples.get(i%samples.size());
+                if(expected==null)assertNull(actual);else {assertInstanceOf(String.class,actual);assertEquals(0,expected.compareTo(new java.math.BigDecimal((String)actual)));assertTrue(((String)actual).length()<=67);}
+            }
+        }
+    }
+
+    @Test
+    void configuredScopeTreatsVersionDotsAndHyphensAsOneLiteralName() {
+        for(String name:List.of("data_rover_4.1","data-rover-4","201_202_203_datadevs")) {
+            assertEquals(name,DdlDialect.single(name));
+            for(DatabaseType type:List.of(DatabaseType.MYSQL,DatabaseType.POSTGRESQL,DatabaseType.ORACLE,DatabaseType.HIVE,DatabaseType.SQLSERVER)) {
+                var config=new DataSourceConfig();config.setDatabaseType(type);config.setSchema(name);
+                assertEquals(name,DdlDialect.scope(config));
+                assertFalse(DdlDialect.quote(type,name).equals(name));
+            }
+        }
+        assertEquals("Mixed.Case",DdlDialect.single("\"Mixed.Case\""));
+        assertEquals(2,DdlDialect.names("data_rover_4.1").size());
+        for(String invalid:List.of("data_rover_4.1;DROP TABLE t","data_rover--comment","data_rover/*x*/","data_rover..x","data_rover WHERE 1=1","data_rover\u0000"))
+            assertThrows(IllegalArgumentException.class,()->DdlDialect.single(invalid),invalid);
+    }
+
+    @Test
+    void numericLeadingRegisteredIdentifiersRemainNamesAndAreQuotedForSql() {
+        assertEquals(List.of(new DdlDialect.Identifier("201_202_203_datadevs",false),new DdlDialect.Identifier("123table",false)),
+                DdlDialect.names("201_202_203_datadevs.123table"));
+        var config=new DataSourceConfig();config.setDatabaseType(DatabaseType.MYSQL);config.setDatabase("201_202_203_datadevs");
+        assertEquals("201_202_203_datadevs",DdlDialect.scope(config));
+        for(DatabaseType type:List.of(DatabaseType.MYSQL,DatabaseType.POSTGRESQL,DatabaseType.ORACLE,DatabaseType.HIVE,DatabaseType.SQLSERVER)) {
+            assertTrue(DdlDialect.requiresQuoting(type,"123table"));
+            assertNotEquals("123table",DdlDialect.quote(type,"123table"));
+        }
+        assertEquals("\"201_SCHEMA\".\"123TABLE\"",DdlDialect.oracleObjectName("201_schema.123table"));
+        for(String text:List.of("201db;DROP TABLE t","201db -- comment","201db/*x*/.t","201db..t","201db.t WHERE 1=1","201db.t\u0000"))
+            assertThrows(IllegalArgumentException.class,()->DdlDialect.names(text),text);
+    }
+
     @Test
     void oracleTargetAliasesUseTheByteLimitAndAvoidExistingNames() {
         var converter = new PortableDdlConverter();

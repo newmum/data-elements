@@ -16,6 +16,73 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ExactJsonNumberTransportTest {
+    @Test void nativeSqlJsonTextKeepsExactNestedNumbersScalarsAndSqlNullAcrossWindows()throws Exception{
+        var spec=JSON.readTree("""
+            {"schemaVersion":"2.0","schemaContract":{"source":[{"name":"doc","logicalType":"JSON","physicalType":"json","nullable":true}]},"rules":[{"input":{"kind":"FIELD","name":"doc"},"target":{"name":"DOC","logicalType":"STRING","nullable":true}}]}
+            """);
+        List<String> values=Arrays.asList(null,"null","\"\"","false","  {\"amount\":123456789012345678901234567890.12345678901234567890}  ","[1,null,true,\"中文\"]");
+        for(int count:List.of(20,100,600)){
+            var rows=new ArrayList<Map<String,Object>>();for(int i=0;i<count;i++){var row=new LinkedHashMap<String,Object>();row.put("doc",values.get(i%values.size()));rows.add(row);}
+            var runner=runner(spec);runner.enqueue(JSON.writeValueAsBytes(rows));runner.run();noFailure(runner);runner.assertTransferCount(HaitongTransformRecord.INVALID,0);int index=0;
+            for(var file:runner.getFlowFilesForRelationship(HaitongTransformRecord.SUCCESS))for(var row:JSON.readTree(file.toByteArray())){String expected=values.get(index++%values.size());if(expected==null)assertTrue(row.get("DOC").isNull());else assertEquals(expected,row.get("DOC").asText());}
+            assertEquals(count,index);runner.shutdown();
+        }
+    }
+    @Test void invalidJsonInALaterWindowRetainsTheWholeOriginalInput()throws Exception{
+        var spec=JSON.readTree("""
+            {"schemaVersion":"2.0","policies":{"recordErrorMode":"FAIL_FLOWFILE"},"schemaContract":{"source":[{"name":"doc","logicalType":"JSON","physicalType":"JSONB","nullable":true}]},"rules":[{"input":{"kind":"FIELD","name":"doc"},"target":{"name":"DOC","logicalType":"STRING"}}]}
+            """);
+        var rows=new ArrayList<Map<String,Object>>();for(int i=0;i<600;i++)rows.add(Map.of("doc",i==550?"{broken":"{\"amount\":12345678901234567890.123456789}"));byte[] original=JSON.writeValueAsBytes(rows);
+        var runner=runner(spec);runner.enqueue(original);runner.run();runner.assertTransferCount(HaitongTransformRecord.SUCCESS,0);runner.assertTransferCount(HaitongTransformRecord.INVALID,0);runner.assertTransferCount(HaitongTransformRecord.FAILURE,1);var failure=runner.getFlowFilesForRelationship(HaitongTransformRecord.FAILURE).getFirst();assertArrayEquals(original,failure.toByteArray());assertEquals("RECORD_INVALID",failure.getAttribute("ht.error.code"));runner.shutdown();
+    }
+    @Test void nativeJsonTextNullOnlyBatchIsNotAJsonLiteralNullString()throws Exception{
+        var spec=JSON.readTree("""
+            {"schemaVersion":"2.0","schemaContract":{"source":[{"name":"doc","logicalType":"JSON","physicalType":"json","nullable":true}]},"rules":[{"input":{"kind":"FIELD","name":"doc"},"target":{"name":"DOC","logicalType":"STRING","nullable":true}}]}
+            """);
+        var row=new LinkedHashMap<String,Object>();row.put("doc",null);var runner=runner(spec);runner.enqueue(JSON.writeValueAsBytes(Collections.nCopies(20,row)));runner.run();noFailure(runner);var output=JSON.readTree(runner.getFlowFilesForRelationship(HaitongTransformRecord.SUCCESS).getFirst().toByteArray());assertEquals(20,output.size());for(var record:output)assertTrue(record.get("DOC").isNull());runner.shutdown();
+    }
+    @Test void mysqlZeroFillDeclaredSourceUsesExactNumericReaderDomains() throws Exception {
+        for(int count:List.of(20,100,600)){
+            var spec=JSON.readTree("""
+                {"schemaVersion":"2.0","policies":{"recordErrorMode":"FAIL_FLOWFILE"},"schemaContract":{"source":[{"name":"flag","logicalType":"INT UNSIGNED ZEROFILL","physicalType":"int(1) unsigned zerofill","nullable":false},{"name":"large","logicalType":"BIGINT UNSIGNED ZEROFILL","physicalType":"bigint(20) unsigned zerofill","precision":20,"scale":0,"nullable":false}]},"rules":[{"input":{"kind":"FIELD","name":"flag"},"target":{"name":"FLAG","logicalType":"DECIMAL","precision":10,"scale":0}},{"input":{"kind":"FIELD","name":"large"},"target":{"name":"LARGE","logicalType":"DECIMAL","precision":20,"scale":0}}]}
+                """);
+            var runner=runner(spec);runner.setProperty(HaitongTransformRecord.EXACT_JSON_NUMBERS,"true");
+            var rows=new ArrayList<Map<String,Object>>();for(int i=0;i<count;i++)rows.add(Map.of("flag",i%2==0?0L:4294967295L,"large",new BigDecimal("18446744073709551615")));
+            runner.enqueue(JSON.writeValueAsBytes(rows));runner.run();noFailure(runner);runner.assertTransferCount(HaitongTransformRecord.INVALID,0);
+            int index=0;for(var ff:runner.getFlowFilesForRelationship(HaitongTransformRecord.SUCCESS))for(var row:JSON.readTree(ff.toByteArray())){
+                assertEquals(new BigDecimal(index++%2==0?"0":"4294967295"),row.path("FLAG").decimalValue());
+                assertEquals(new BigDecimal("18446744073709551615"),row.path("LARGE").decimalValue());
+            }
+            assertEquals(count,index);runner.shutdown();
+        }
+    }
+    @Test void zeroFillDoesNotAdmitBooleanTextFractionOrUnknownModifierCarriers() throws Exception {
+        var spec=JSON.readTree("""
+            {"schemaVersion":"2.0","policies":{"recordErrorMode":"FAIL_FLOWFILE"},"schemaContract":{"source":[{"name":"flag","logicalType":"INT UNSIGNED ZEROFILL","physicalType":"int(1) unsigned zerofill","nullable":false}]},"rules":[{"input":{"kind":"FIELD","name":"flag"},"target":{"name":"FLAG","logicalType":"DECIMAL","precision":10,"scale":0}}]}
+            """);
+        for(String value:List.of("true","\"1\"","1.25","null")){
+            var runner=runner(spec);runner.setProperty(HaitongTransformRecord.EXACT_JSON_NUMBERS,"true");byte[] original=("[{\"flag\":"+value+"}]").getBytes(StandardCharsets.UTF_8);runner.enqueue(original);runner.run();
+            runner.assertTransferCount(HaitongTransformRecord.SUCCESS,0);runner.assertTransferCount(HaitongTransformRecord.INVALID,0);runner.assertTransferCount(HaitongTransformRecord.FAILURE,1);
+            assertArrayEquals(original,runner.getFlowFilesForRelationship(HaitongTransformRecord.FAILURE).getFirst().toByteArray());runner.shutdown();
+        }
+    }
+    @Test void declaredIsoDateRestorationKeepsReaderFilteringNestedValuesAndOtherFormats()throws Exception {
+        var date=java.sql.Date.valueOf("1899-12-31");var nested=new LinkedHashMap<String,Object>();nested.put("day",date);
+        var row=new LinkedHashMap<String,Object>();row.put("day",date);row.put("other",date);row.put("custom",date);row.put("nested",nested);
+        String wire="{\"day\":\"1900-01-01\",\"other\":\"1900-01-01\",\"custom\":\"01/01/1900\",\"nested\":{\"day\":\"1900-01-01\"},\"filtered\":\"1900-01-01\"}";
+        try(var exact=new ExactJsonNumbers(new ByteArrayInputStream(wire.getBytes(StandardCharsets.UTF_8)))){
+            exact.trackIsoDateFields(List.of("day","custom","filtered"));exact.restore(row);exact.requireEnd();
+        }
+        assertEquals("1900-01-01",row.get("day"));assertSame(date,row.get("other"));assertSame(date,row.get("custom"));assertSame(date,nested.get("day"));assertFalse(row.containsKey("filtered"));
+    }
+    @Test void duplicateDeclaredDateCannotChooseAnArbitraryOriginalValueAndTrackingIsBounded()throws Exception {
+        String wire="{\"day\":\"1900-01-01\",\"day\":\"2000-01-01\"}";
+        try(var exact=new ExactJsonNumbers(new ByteArrayInputStream(wire.getBytes(StandardCharsets.UTF_8)))){
+            exact.trackIsoDateFields(List.of("day"));var row=new HashMap<String,Object>();row.put("day",java.sql.Date.valueOf("2000-01-01"));
+            assertEquals("AMBIGUOUS_FIELD",assertThrows(com.linewell.dataelement.mapping.core.MappingException.class,()->exact.restore(row)).code());
+            assertEquals("BUDGET_EXCEEDED",assertThrows(com.linewell.dataelement.mapping.core.MappingException.class,()->exact.trackIsoDateFields(java.util.stream.IntStream.range(0,2001).mapToObj(i->"day"+i).toList())).code());
+        }
+    }
     private static final ObjectMapper JSON=new ObjectMapper().enable(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS);
     private static final String[] NUMBERS={"12.1234567890123456","123.1234567890123456",
             "99999999999999999999999999999999999999","9007199254740993","0.00000000000000000000000000000000000001","null"};

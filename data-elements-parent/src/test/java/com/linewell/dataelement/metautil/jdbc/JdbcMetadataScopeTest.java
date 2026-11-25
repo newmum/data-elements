@@ -8,6 +8,16 @@ import static org.mockito.Mockito.*;
 import static org.mockito.ArgumentMatchers.*;
 
 class JdbcMetadataScopeTest {
+    @Test void configuredLiteralScopesPreserveDotsCaseAndAliasPriorityWithoutJdbcFallback()throws Exception {
+        var connection=mock(Connection.class);
+        for(String key:List.of("schema","defaultSchema","currentSchema"))for(String name:List.of("data_rover_4.1","data-rover-4","\"Mixed.Case\"")) {
+            assertEquals(name.replace("\"",""),JdbcMetadataScope.schema(connection,Map.of(key,name,"dbType","MYSQL"),null));
+            assertThrows(IllegalArgumentException.class,()->JdbcMetadataScope.configuredSchema(Map.of(key,"name\u0000")));
+        }
+        assertEquals("data_rover_4.1",JdbcMetadataScope.configuredSchema(Map.of("schema"," ","defaultSchema","data_rover_4.1","currentSchema","other")));
+        verifyNoInteractions(connection);
+    }
+
     @Test void configuredAndLiveSchemaAvoidAllFallbackQueries()throws Exception {
         var connection=mock(Connection.class);
         assertEquals("A.B",JdbcMetadataScope.schema(connection,Map.of("schema","\"A.B\"","defaultSchema","OTHER"),null));

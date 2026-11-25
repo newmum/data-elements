@@ -44,7 +44,7 @@ final class FtpsSourceCompiler {
         properties.put("ftps.recursive",text(config,"ftpRecursive","false"));
         properties.put("ftps.passive",text(config,"ftpPassiveMode","true"));
         properties.put("ftps.filter",text(config,"fileFilterRegex",text(config,"ftpFilePattern","(?i).*\\.(csv|json|xlsx|xls|txt)$")));
-        properties.put("ftps.maxFiles","100");
+        properties.put("ftps.maxFiles",text(config,"maxFilesPerRun","100"));
         properties.put("ftps.completedOnly",Boolean.toString(FileConsumptionCompiler.enabled(config)));
         properties.put("ftps.trustStorePath",text(config,"nifiTrustStorePath",text(config,"trustStorePath","")));
         properties.put("ftps.trustStorePassword",text(config,"trustStorePassword",""));

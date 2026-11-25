@@ -123,4 +123,45 @@ class NifiAttributeSyncTest {
         config.putObject("properties").put("manual-property", "preserved");
         return entity;
     }
+
+    @ParameterizedTest @ValueSource(ints={20,100})
+    void mongoBatchAndFetchUseCorrectNativePropertiesWithOneBulkRead(int count) {
+        var nodes=new ArrayList<Pipeline.Node>();
+        var ids=new LinkedHashMap<String,String>();var reverse=new LinkedHashMap<String,String>();
+        var baselines=new LinkedHashMap<String,Map<String,NifiNodeMapping.AttributeBaseline>>();
+        var flow=JSON.objectNode();var processors=flow.putArray("processors");
+        for(int i=0;i<count;i++) {
+            String id="processor-"+i, node="node-"+i;
+            nodes.add(new Pipeline.Node(node,"source.mongodb",node,"source",0,0,Map.of("batchSize",7,"fetchSize",13)));
+            ids.put(node,id);reverse.put(id,node);
+            baselines.put(node,Map.of("batchSize",new NifiNodeMapping.AttributeBaseline(id,"1000","1000"),"fetchSize",new NifiNodeMapping.AttributeBaseline(id,"1000","1000")));
+            var entity=processor(id,"60 sec");var component=(ObjectNode)entity.path("component");component.put("type","org.apache.nifi.processors.mongodb.GetMongo");
+            component.withObjectProperty("config").withObjectProperty("properties").put("Results Per FlowFile","1000").put("Batch Size","1000");processors.add(entity);
+        }
+        Pipeline pipeline=new Pipeline("flow","validation",null,1L,1L,new Pipeline.Dsl(1,nodes,List.of()),"bound-group",PipelineStatus.STOPPED,"previous",1L,null,new NifiNodeMapping(ids,reverse,Map.of()).withAttributes(baselines),0L);
+        when(nifi.get(LIST,JsonNode.class)).thenReturn(flow);
+        var changes=sync.preview(pipeline).changes();
+        assertThat(changes).hasSize(count*2).allMatch(row -> "READY".equals(row.status()));
+        assertThat(changes).filteredOn(row -> "fetchSize".equals(row.field())).allMatch(row -> "1000".equals(row.currentValue()) && "13".equals(row.designValue()));
+        verify(nifi).get(LIST,JsonNode.class);verifyNoMoreInteractions(nifi);clearInvocations(nifi);
+        when(nifi.put(startsWith("/processors/"),any(ObjectNode.class),eq(JsonNode.class))).thenAnswer(call -> {
+            String id=call.<String>getArgument(0).substring("/processors/".length());ObjectNode payload=call.getArgument(1);
+            assertThat(payload.path("component").path("config").path("properties").path("Results Per FlowFile").asText()).isEqualTo("7");
+            var entity=processor(id,"60 sec");((ObjectNode)entity.path("component")).put("type","org.apache.nifi.processors.mongodb.GetMongo");
+            ((ObjectNode)entity.path("component").path("config")).set("properties",payload.path("component").path("config").path("properties"));return entity;
+        });
+        var result=sync.apply(pipeline,new NifiAttributeSync.Request("bound-group",changes.stream().filter(row -> "batchSize".equals(row.field())).map(row -> selection(row,false)).toList()));
+        assertThat(result.results()).hasSize(count).allMatch(row -> "SYNCED".equals(row.status()));
+        verify(nifi).get(LIST,JsonNode.class);verify(nifi,times(count)).put(startsWith("/processors/"),any(ObjectNode.class),eq(JsonNode.class));verifyNoMoreInteractions(nifi);
+    }
+
+    @Test void nonJdbcSourcesDoNotOfferDormantInheritedJdbcControls() {
+        for(String key:List.of("source.kafka","source.minio","source.ftp","source.sftp","source.hdfs","source.hbase","source.elasticsearch","source.api")) {
+            clearInvocations(nifi);Pipeline old=pipeline(1);var node=new Pipeline.Node("node-0",key,"validation","source",0,0,Map.of("batchSize",5000,"maxRowsPerRun",20000));
+            var mapping=new NifiNodeMapping(Map.of("node-0","processor-0"),Map.of("processor-0","node-0"),Map.of());
+            Pipeline flow=new Pipeline("flow","validation",null,1L,1L,new Pipeline.Dsl(1,List.of(node),List.of()),"bound-group",PipelineStatus.STOPPED,"previous",1L,null,mapping,0L);
+            var nativeGraph=JSON.objectNode();nativeGraph.putArray("processors").add(processor("processor-0","60 sec"));when(nifi.get(LIST,JsonNode.class)).thenReturn(nativeGraph);
+            assertThat(sync.preview(flow).changes()).isEmpty();verify(nifi).get(LIST,JsonNode.class);verifyNoMoreInteractions(nifi);
+        }
+    }
 }

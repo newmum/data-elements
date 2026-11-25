@@ -22,6 +22,22 @@ import org.junit.jupiter.api.Test;
 class DslCompilerJdbcWriterTest {
 
     @Test
+    void exactReaderAvailabilityIsCheckedOnceForTwentyAndHundredNativeJdbcTargets() {
+        for (int count : List.of(20, 100)) {
+            var nifi = mockNifi();
+            var nodes = java.util.stream.IntStream.range(0, count).mapToObj(i -> new Pipeline.Node(
+                    "validation-decimal-" + i, "sink.jdbc", "精确目标", "sink", 0, 0,
+                    Map.<String,Object>of("dbType", "MYSQL", "writerType", "NIFI_PUT_DATABASE_RECORD",
+                            "targetColumns", List.of(Map.of("columnName", "amount", "columnType", "DECIMAL(20,6)"))))).toList();
+            new DslCompiler(nifi, mock(ManifestRegistry.class), mock(FieldMappingService.class), mock(HiveModule.class))
+                    .preflightWriters(new Pipeline("validation-exact", "精确字段", null, null, null,
+                            new Pipeline.Dsl(1, nodes, List.of()), null, null, null, null, null, null, null));
+            verify(nifi, times(1)).get(eq("/flow/controller-service-types"), eq(com.fasterxml.jackson.databind.JsonNode.class));
+            verify(nifi, never()).createProcessGroup(anyString(), anyString(), anyDouble(), anyDouble());
+        }
+    }
+
+    @Test
     void bothJdbcWritersQuoteOracleUidInItsActualRegisteredCase() throws Exception {
         for (String writer : List.of("LINEWELL_PUT_DATABASE_RECORD", "NIFI_PUT_DATABASE_RECORD")) {
             for (String name : List.of("uid", "UID", "1231313")) {

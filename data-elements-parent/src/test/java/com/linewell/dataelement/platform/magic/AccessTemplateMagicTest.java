@@ -104,6 +104,49 @@ class AccessTemplateMagicTest {
         public String toJSONStr(Object value) { return JSONUtil.toJsonStr(value); }
     }
 
+    @Test void newlyInsertedTasksApplyDailyScheduleAfterTemplateInstantiationWithoutChangingExplicitOrReplayPolicies() throws Exception {
+        String canonical = source("api/03.数据接入/03.接入任务/05.按来源表补齐接入任务.ms");
+        int start = canonical.indexOf("// 新建任务调度："), end = canonical.indexOf("// 新建任务调度结束", start);
+        assertThat(canonical.indexOf("applyNewTaskSchedules(pipelineRows)"))
+                .isGreaterThan(canonical.indexOf("primaryPipeline.dsl_json ="));
+        String program = """
+                import cn.hutool.json.JSONUtil as poolJsons
+                import com.linewell.dataelement.integration.nifi.canvas.pipeline.BatchSchedulePolicy
+                var text = value => value == null ? '' : value.toString()
+                var parseGovernanceConfig = value => poolJsons.parseObj(value)
+                """ + canonical.substring(start, end) + "\napplyNewTaskSchedules(pipelineRows)\nreturn poolJsons.toJsonStr(pipelineRows)";
+        for (int size : List.of(20, 100)) {
+            var pipelines = new java.util.ArrayList<Map<String, Object>>();
+            for (int i = 0; i < size; i++) {
+                var nodes = List.of(
+                        Map.of("id", "source-final-" + i, "manifestKey", "source.mysql", "category", "source", "config", Map.of("schedulingPeriod", "60 sec")),
+                        Map.of("id", "custom", "manifestKey", "source.api", "category", "source", "config", Map.of("batchSchedulePolicy", "CUSTOM", "schedulingPeriod", "10 min")),
+                        Map.of("id", "immediate", "manifestKey", "source.sftp", "category", "source", "config", Map.of("batchSchedulePolicy", "DAILY_IMMEDIATE", "schedulingPeriod", "1 day")),
+                        Map.of("id", "kafka", "manifestKey", "source.kafka", "category", "source", "config", Map.of("schedulingPeriod", "0 sec")),
+                        Map.of("id", "backfill", "manifestKey", "source.mysql", "category", "source", "config", Map.of("backfillSource", true, "enabled", false, "schedulingPeriod", "60 sec")));
+                pipelines.add(new HashMap<>(Map.of("id", "validation-pipeline-" + i, "dsl_json", JSONUtil.toJsonStr(Map.of("nodes", nodes)))));
+            }
+            var context = Map.<String, Object>of("tenantId", "trusted-tenant", "pipelineRows", pipelines);
+            var rows = JSONUtil.parseArray(MagicScript.create(program, null).execute(new MagicScriptContext(context)).toString());
+            assertThat(rows).hasSize(size);
+            var clocks = new java.util.HashSet<String>();
+            for (int i = 0; i < size; i++) {
+                var nodes = JSONUtil.parseObj(rows.getJSONObject(i).getStr("dsl_json")).getJSONArray("nodes");
+                var generated = nodes.getJSONObject(0).getJSONObject("config");
+                assertThat(generated.getStr("batchSchedulePolicy")).isEqualTo("DAILY_STAGGERED");
+                assertThat(generated.getStr("schedulingStrategy")).isEqualTo("CRON_DRIVEN");
+                assertThat(generated.getStr("batchScheduleZone")).isEqualTo("Asia/Shanghai");
+                clocks.add(generated.getStr("schedulingPeriod"));
+                assertThat(nodes.getJSONObject(1).getJSONObject("config").getStr("schedulingPeriod")).isEqualTo("10 min");
+                assertThat(nodes.getJSONObject(2).getJSONObject("config").getStr("batchSchedulePolicy")).isEqualTo("DAILY_IMMEDIATE");
+                assertThat(nodes.getJSONObject(3).getJSONObject("config").getStr("schedulingPeriod")).isEqualTo("0 sec");
+                assertThat(nodes.getJSONObject(4).getJSONObject("config").getStr("schedulingPeriod")).isEqualTo("60 sec");
+                assertThat(nodes.getJSONObject(4).getJSONObject("config").getBool("enabled")).isFalse();
+            }
+            assertThat(clocks.size()).isGreaterThan(size * 9 / 10);
+        }
+    }
+
     @Test void sharedGovernanceBindsEveryTargetAndOptionalBackfillUsesOnlyTheAuthorizedSource() throws Exception {
         String canonical=source("api/03.数据接入/03.接入任务/05.按来源表补齐接入任务.ms");
         int start=canonical.indexOf("var applyTemplateSourceDefaults ="),end=canonical.indexOf("return db.transaction",start);
@@ -455,14 +498,14 @@ class AccessTemplateMagicTest {
             var spec=JSONUtil.parseObj("""
                     {"sourceType":"ANY","sourceSchedule":"REGISTERED","intervalSeconds":60,"fetchSize":5000,
                      "flow":{"version":1,"nodes":[
-                     {"id":"source","manifestKey":"source.mysql","category":"source","config":{"templateBinding":"source","hostname":"wrong","topic":"wrong","remotePath":"wrong","schedulingPeriod":"999 sec"}},
+                     {"id":"source","manifestKey":"source.mysql","category":"source","config":{"templateBinding":"source","hostname":"wrong","topic":"wrong","remotePath":"wrong","schedulingPeriod":"999 sec","minioFilePatternScope":"OBJECT_KEY"}},
                      {"id":"sink","manifestKey":"sink.jdbc","category":"sink","config":{"templateBinding":"target:0","writerType":"","statementType":"MERGE"}}],
                      "edges":[{"id":"edge","source":"source","target":"sink"}]}}
                     """);
             var runtime=new java.util.LinkedHashMap<String,Object>(Map.<String,Object>of("hostname","registered-host","remotePath","/registered/events","topic","registered-topic",
                     "schedulingPeriod",type.equals("kafka")?"0 sec":"15 min","fileConsumptionPolicy","DELETE_AFTER_DATABASE_COMMIT",
                     "fileFormat","json","fileHeaderMode","registered-chinese","minioBucket","registered-bucket"));
-            runtime.putAll(Map.of("minioObjectKey","registered/Report#2026.xlsx","excelSheetName","月#统计","jsonRecordPath","$.data.people"));
+            runtime.putAll(Map.of("minioObjectKey","registered/Report#2026.xlsx","excelSheetName","月#统计","jsonRecordPath","$.data.people","minioFilePatternScope","FILE_NAME"));
             var dsl=Map.of("nodes",List.of(Map.of("id","source","manifestKey","source."+type,"category","source","config",runtime),
                     Map.of("id","sink","manifestKey","sink.jdbc","category","sink","config",Map.of("targetTableId","authorized",
                             "writerType","LINEWELL_PUT_DATABASE_RECORD","statementType","INSERT","updateKeys",""))));
@@ -476,6 +519,35 @@ class AccessTemplateMagicTest {
             var target=result.getJSONArray("nodes").getJSONObject(1).getJSONObject("config");
             assertThat(target.getStr("statementType")).isEqualTo("INSERT");
             assertThat(target.getStr("writerType")).isEqualTo("LINEWELL_PUT_DATABASE_RECORD");
+        }
+    }
+
+    @Test void reboundOpenSourceHiveUsesNativeHdfsWithoutReplacingExplicitJdbcOrRegisteredAuthentication() throws Exception {
+        String canonical=source("api/03.数据接入/03.接入任务/05.按来源表补齐接入任务.ms");
+        int start=canonical.indexOf("var applyTemplateSourceDefaults ="),end=canonical.indexOf("return db.transaction",start);
+        String program="import cn.hutool.json.JSONUtil as poolJsons\nvar text = value => value == null ? '' : value.toString()\n"
+                +"var blank = value => value == null || text(value).trim() == ''\n"
+                +"var first = (row,keys) => { for(key in keys) { if(!blank(row[key])) { return row[key] } }; return null }\n"
+                +"var parseGovernanceConfig = value => poolJsons.parseObj(value)\n"+canonical.substring(start,end)
+                +"\nreturn poolJsons.toJsonStr(instantiateTemplateFlow(template,pipelines,tasks))";
+        for(String mode:List.of("","LINEWELL_HDFS","LINEWELL","HDFS_BATCH","HIVE_RECORD_PUT")) {
+            var preset=Map.of("templateBinding","target:0","hiveWriteMode",mode,"authMode","KERBEROS",
+                    "clientConfigDir","/preset/hadoop","hdfsDatabaseDirectory","hdfs://preset/warehouse");
+            var flow=Map.of("nodes",List.of(Map.of("id","source","manifestKey","source.mysql","category","source","config",Map.of("templateBinding","source")),
+                    Map.of("id","sink","manifestKey","sink.hive","category","sink","config",preset)),"edges",List.of());
+            var runtime=Map.of("targetTableId","authorized-target","hiveConnectionMode","open-source","authMode","none",
+                    "clientConfigDir","/registered/hadoop","hdfsDatabaseDirectory","hdfs://registered/database.db");
+            var dsl=Map.of("nodes",List.of(Map.of("id","old-source","manifestKey","source.mysql","category","source","config",Map.of()),
+                    Map.of("id","old-target","manifestKey","sink.hive","category","sink","config",runtime)));
+            var result=JSONUtil.parseObj(MagicScript.create(program,null).execute(new MagicScriptContext(Map.of(
+                    "template",Map.of("spec",Map.of("flow",flow)),"pipelines",List.of(Map.of("dsl_json",JSONUtil.toJsonStr(dsl))),
+                    "tasks",List.of(Map.of("tid","validation"))))).toString());
+            var cfg=result.getJSONArray("nodes").getJSONObject(1).getJSONObject("config");
+            assertThat(cfg.getStr("hiveWriteMode")).isEqualTo(mode.equals("HIVE_RECORD_PUT")?mode:"HDFS_BATCH");
+            assertThat(cfg.getStr("authMode")).isEqualTo("none");
+            assertThat(cfg.getStr("clientConfigDir")).isEqualTo("/registered/hadoop");
+            assertThat(cfg.getStr("hdfsDatabaseDirectory")).isEqualTo("hdfs://registered/database.db");
+            assertThat(cfg.getStr("targetTableId")).isEqualTo("authorized-target");
         }
     }
 

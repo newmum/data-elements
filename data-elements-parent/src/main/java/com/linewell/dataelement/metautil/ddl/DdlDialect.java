@@ -90,6 +90,7 @@ public final class DdlDialect {
     /** Handles dots inside quoted identifiers, Unicode, escaped quotes and SQL Server catalog.schema.table. */
     public static List<Identifier> names(String value) {
         if (value == null || value.isBlank()) throw new IllegalArgumentException("表名不能为空");
+        if (value.codePoints().anyMatch(Character::isISOControl)) throw new IllegalArgumentException("表名不合法");
         List<Identifier> parts = new ArrayList<>();
         int pos = 0;
         while (pos < value.length()) {
@@ -114,7 +115,8 @@ public final class DdlDialect {
             } else {
                 while (pos < value.length() && value.charAt(pos) != '.') token.append(value.charAt(pos++));
                 String raw = token.toString().trim();
-                if (!raw.matches("[\\p{L}_][\\p{L}\\p{N}_$#]*")) throw new IllegalArgumentException("表名不合法");
+                // 登记元数据可以包含数字开头的库/表名；这里只拆名称，SQL 输出仍由方言逐段引用。
+                if (!raw.matches("[\\p{L}\\p{N}_][\\p{L}\\p{N}_$#]*")) throw new IllegalArgumentException("表名不合法");
                 token.setLength(0); token.append(raw);
             }
             if (token.isEmpty() || token.toString().codePoints().anyMatch(Character::isISOControl))
@@ -129,6 +131,9 @@ public final class DdlDialect {
     }
 
     public static String single(String value) {
+        if(value!=null&&value.codePoints().anyMatch(Character::isISOControl))throw new IllegalArgumentException("Schema包含控制字符");
+        // 配置里的库/Schema本身是单个名称；点号和连字符不是SQL限定符。
+        if(value!=null&&value.trim().matches("[\\p{L}\\p{N}_][\\p{L}\\p{N}_$#]*(?:[.-][\\p{L}\\p{N}_$#]+)*"))return value.trim();
         List<Identifier> names = names(value);
         if (names.size() != 1) throw new IllegalArgumentException("Schema必须是单个名称");
         return names.getFirst().value();

@@ -22,6 +22,193 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 class RegisteredMappingSchemaServiceTest {
+    @Test void clickHouseNativeFamiliesMatchProjectedJdbcContractsAtTwentyAndHundred()throws Exception {
+        var types=new LinkedHashMap<String,String>();
+        types.put("Int8","INT");types.put("Nullable(Int16)","INT");types.put("UInt16","INT");types.put("Int32","INT");
+        types.put("Int64","LONG");types.put("LowCardinality(Nullable(UInt32))","LONG");types.put("UInt64","DECIMAL");
+        types.put("Float32","DOUBLE");types.put("Nullable(Float64)","DOUBLE");types.put("DateTime64(9)","DATETIME");
+        types.put("Map(String, String)","STRING");types.put("Array(String)","STRING");types.put("LowCardinality(Nullable(String))","STRING");
+        for(int count:List.of(20,100)){
+            Fixture f=clickHouseCatalogFixture(count);f.columns=new ArrayList<>();var entries=new ArrayList<>(types.entrySet());
+            for(int i=0;i<count;i++){
+                var type=entries.get(i%entries.size());var column=new HashMap<String,Object>(column("table-"+i,"id"));column.put("data_type",type.getKey());column.put("length",0);
+                column.put("precision_length",type.getKey().equals("UInt64")?20:0);f.columns.add(column);
+                f.physicalRows.get(i).put("TYPE_NAME",type.getKey());f.physicalRows.get(i).put("COLUMN_SIZE",type.getKey().equals("UInt64")?64:0);
+            }
+            try(var tenant=TenantContext.use("tenant-A")){
+                var registered=f.service.resolve(f.references);var actual=f.service.physicalBatch(registered);
+                for(int i=0;i<count;i++){
+                    var type=entries.get(i%entries.size());var r=registered.get("ref-"+i).fields().get(0);var p=actual.get("ref-"+i).get(0);
+                    assertEquals(type.getValue(),r.path("logicalType").asText());assertEquals(type.getValue(),p.path("logicalType").asText());
+                    assertEquals(type.getKey(),r.path("physicalType").asText());assertEquals(type.getKey(),p.path("physicalType").asText());
+                    if(type.getKey().equals("UInt64")){assertEquals(20,r.path("precision").asInt());assertEquals(20,p.path("precision").asInt());assertEquals(0,p.path("scale").asInt());}
+                }
+            }
+            verify(f.jdbc,times(2)).queryForList(anyString(),any(Object[].class));verify(f.statement).executeQuery();verify(f.sources).resolveBatch(eq("tenant-A"),eq(Set.of("db")),anyString());
+        }
+    }
+    @Test void clickHouseStaleNativeSourceNamesAreCanonicalizedOnlyAfterAuthorizedResolution()throws Exception {
+        for(boolean physical:List.of(false,true))for(String type:List.of("Int64","Map(String, String)","Array(String)")){
+            Fixture f=clickHouseCatalogFixture(1);var col=new HashMap<String,Object>(column("table-0","id"));col.put("data_type",type);col.put("length",0);f.columns=List.of(col);f.physicalRows.get(0).put("TYPE_NAME",type);
+            var contract=JSON.createObjectNode();contract.set("sourceRef",f.references.get("ref-0"));
+            contract.putArray("source").addObject().put("name","id").put("physicalType",type).put("logicalType",com.linewell.dataelement.mapping.core.ValueTypes.type(type)).put("nullable",true);
+            try(var tenant=TenantContext.use("tenant-A")){
+                if(physical)f.service.checkContracts(Map.of("node",contract));else f.service.checkRegisteredContracts(Map.of("node",contract));
+                assertEquals(type.equals("Int64")?"LONG":"STRING",contract.path("source").get(0).path("logicalType").asText());
+                assertEquals(type,contract.path("source").get(0).path("physicalType").asText());
+            }
+            verify(f.jdbc,times(2)).queryForList(anyString(),any(Object[].class));
+            if(!physical)verify(f.engine,never()).openRegistered(anyString(),anyMap());
+        }
+    }
+    @Test void clickHouseTypeRepairCannotHideExplicitTypesForeignIdsOrOtherProducts()throws Exception {
+        for(String mode:List.of("explicit","physical","forbidden","postgres")){
+            Fixture f=clickHouseCatalogFixture(1);var col=new HashMap<String,Object>(column("table-0","id"));col.put("data_type",mode.equals("postgres")?"int8":"Int64");col.put("length",0);f.columns=List.of(col);f.physicalRows.get(0).put("TYPE_NAME",col.get("data_type"));
+            if(mode.equals("postgres")){f.config=Map.of("db",Map.of("dbType","POSTGRESQL","defaultSchema","default"));when(f.metadata.getDatabaseProductName()).thenReturn("PostgreSQL");}
+            var contract=JSON.createObjectNode();contract.set("sourceRef",f.references.get("ref-0"));
+            var field=contract.putArray("source").addObject().put("name","id").put("physicalType",mode.equals("physical")?"OTHER":"Int64").put("logicalType",mode.equals("explicit")?"STRING":"INT64").put("nullable",true);
+            if(mode.equals("forbidden"))f.tables.clear();
+            try(var tenant=TenantContext.use("tenant-A")){
+                if(mode.equals("forbidden"))assertEquals("RESOURCE_FORBIDDEN",assertThrows(MappingException.class,()->f.service.checkRegisteredContracts(Map.of("node",contract))).code());
+                else if(mode.equals("explicit")||mode.equals("physical"))assertEquals("SCHEMA_DRIFT",assertThrows(MappingException.class,()->f.service.checkContracts(Map.of("node",contract))).code());
+                else {assertEquals("LONG",f.service.resolve(f.references).get("ref-0").fields().get(0).path("logicalType").asText());f.service.checkRegisteredContracts(Map.of("node",contract));assertEquals("INT64",field.path("logicalType").asText());}
+            }
+        }
+    }
+    @Test void clickHouseCatalogOnlyMetadataUsesOneExactPreparedQueryAtTwentyAndHundred()throws Exception {
+        for(int count:List.of(20,100)){
+            Fixture f=clickHouseCatalogFixture(count);
+            try(var tenant=TenantContext.use("tenant-A")){
+                var result=f.service.physicalBatch(f.service.resolve(f.references));assertEquals(count,result.size());
+                for(var fields:result.values()){
+                    assertEquals(1,fields.size());assertEquals("String",fields.get(0).path("physicalType").asText());
+                    assertEquals("STRING",fields.get(0).path("logicalType").asText());assertEquals(0,fields.get(0).path("length").asInt());
+                }
+            }
+            verify(f.jdbc,times(2)).queryForList(anyString(),any(Object[].class));verify(f.sources).resolveBatch(eq("tenant-A"),eq(Set.of("db")),anyString());
+            verify(f.engine).openRegistered(eq("db"),anyMap());verify(f.physical).prepareStatement(argThat(sql->sql.contains("FROM system.columns c")&&sql.contains("c.database=? AND c.table=?")));
+            verify(f.statement).executeQuery();verify(f.statement,times(count*2)).setString(anyInt(),anyString());verify(f.metadata,never()).getColumns(any(),any(),any(),any());
+            verify(f.statement).setString(1,"default");verify(f.statement).setString(2,"table_0");
+        }
+    }
+    @Test void clickHouseMetadataRejectsUnexpectedPhysicalScopesAndEveryForbiddenReference()throws Exception {
+        for(int count:List.of(20,100))for(String mode:List.of("schema","table","forbidden")){
+            Fixture f=clickHouseCatalogFixture(count);
+            if(mode.equals("forbidden"))f.tables.removeLast();
+            else f.physicalRows.add(jdbcColumn("default",mode.equals("schema")?"foreign":"default",mode.equals("table")?"foreign_table":"table_0","secret"));
+            try(var tenant=TenantContext.use("tenant-A")){
+                String expected=mode.equals("forbidden")?"RESOURCE_FORBIDDEN":"SCHEMA_RESULT_MISMATCH";
+                assertEquals(expected,assertThrows(MappingException.class,()->f.service.physicalBatch(f.service.resolve(f.references))).code());
+            }
+            if(mode.equals("forbidden"))verify(f.engine,never()).openRegistered(anyString(),anyMap());
+            else verify(f.statement).executeQuery();
+        }
+    }
+    @Test void clickHouseExactMetadataNamesAreBoundValuesRatherThanLikePatterns()throws Exception {
+        Fixture f=clickHouseCatalogFixture(1);String table="table_%_quoted";
+        f.tables.set(0,table("table-0","db","default.`"+table+"`"));
+        var physical=new HashMap<String,Object>(jdbcColumn("default","default",table,"id"));physical.put("TYPE_NAME","String");physical.put("COLUMN_SIZE",0);f.physicalRows=List.of(physical);
+        try(var tenant=TenantContext.use("tenant-A")){
+            assertEquals(1,f.service.physicalBatch(f.service.resolve(f.references)).size());
+        }
+        verify(f.statement).setString(2,table);verify(f.physical).prepareStatement(argThat(sql->!sql.contains(table)&&!sql.toUpperCase(Locale.ROOT).contains(" LIKE ")));
+    }
+    private static Fixture clickHouseCatalogFixture(int count)throws Exception {
+        Fixture f=new Fixture(count);f.config=Map.of("db",Map.of("dbType","CLICKHOUSE","jdbcURL","jdbc:clickhouse://validation.invalid/default","defaultSchema","default"));
+        when(f.metadata.getDatabaseProductName()).thenReturn("ClickHouse");when(f.physical.getCatalog()).thenReturn("default");when(f.physical.getSchema()).thenReturn(null);when(f.metadata.supportsCatalogsInTableDefinitions()).thenReturn(true);
+        f.physicalRows=new ArrayList<>();var driverRows=new ArrayList<Map<String,Object>>();
+        for(int i=0;i<count;i++){
+            var row=new HashMap<String,Object>(jdbcColumn("default","default","table_"+i,"id"));row.put("TYPE_NAME","String");row.put("COLUMN_SIZE",0);f.physicalRows.add(row);
+            var driver=new HashMap<>(row);driver.put("TABLE_SCHEM",null);driverRows.add(driver);
+        }
+        when(f.metadata.getColumns(any(),any(),any(),any())).thenAnswer(call->rows(driverRows));return f;
+    }
+    @Test void sharedPhysicalNamesUseAuthorizedLineageWithConstantTwentyAndHundredTableReads()throws Exception {
+        for(int count:List.of(20,100)){
+            Fixture f=new Fixture(count);f.columns=new ArrayList<>();
+            for(int i=0;i<count;i++){var field=new HashMap<String,Object>(column("table-"+i,i==0?"C_SHORT":"long_physical_name_"+i));field.put("source_table_column_id","registered-origin");f.columns.add(field);}
+            Map<String,JsonNode> contracts=new LinkedHashMap<>();var branches=new ArrayList<JsonNode>();
+            for(int i=1;i<count;i++){
+                var contract=JSON.createObjectNode();contract.set("targetRef",f.references.get("ref-0"));
+                var branch=contract.putArray("targets").addObject().put("nodeId","sink-"+i);branch.set("reference",f.references.get("ref-"+i));branch.putObject("outputAliases").put("secret","forged");
+                contracts.put("mapping-"+i,contract);branches.add(branch);
+            }
+            try(var tenant=TenantContext.use("tenant-A")){f.service.checkRegisteredContracts(contracts);}
+            for(int i=1;i<count;i++){var aliases=branches.get(i-1).path("outputAliases");assertEquals(1,aliases.size());assertEquals("long_physical_name_"+i,aliases.path("C_SHORT").asText());}
+            verify(f.sources).resolveBatch(eq("tenant-A"),eq(Set.of("db")),anyString());
+            verify(f.jdbc,times(2)).queryForList(anyString(),any(Object[].class));verifyNoInteractions(f.engine);
+        }
+    }
+    @Test void clientAliasCannotReplaceMissingOrAmbiguousRegisteredLineage()throws Exception {
+        for(String mode:List.of("missing","different","duplicate","foreign")){
+            Fixture f=new Fixture(2);var primary=new HashMap<String,Object>(column("table-0","C_SHORT"));primary.put("source_table_column_id","origin");
+            var target=new HashMap<String,Object>(column("table-1","long_physical_name"));if(!mode.equals("missing"))target.put("source_table_column_id",mode.equals("different")?"other":"origin");
+            f.columns=new ArrayList<>(List.of(primary,target));if(mode.equals("duplicate")){var duplicate=new HashMap<>(target);duplicate.put("column_name","second_name");f.columns.add(duplicate);}
+            var contract=JSON.createObjectNode();contract.set("targetRef",f.references.get("ref-0"));var branch=contract.putArray("targets").addObject().put("nodeId","sink");
+            var reference=f.references.get("ref-1").deepCopy();if(mode.equals("foreign"))((com.fasterxml.jackson.databind.node.ObjectNode)reference).put("tableId","foreign-table");branch.set("reference",reference);
+            branch.putObject("outputAliases").put("C_SHORT","secret");
+            try(var tenant=TenantContext.use("tenant-A")){
+                if(mode.equals("foreign")||mode.equals("duplicate"))assertEquals(mode.equals("foreign")?"RESOURCE_FORBIDDEN":"AMBIGUOUS_FIELD",assertThrows(MappingException.class,()->f.service.checkRegisteredContracts(Map.of("shared",contract))).code());
+                else {f.service.checkRegisteredContracts(Map.of("shared",contract));assertTrue(branch.path("outputAliases").isMissingNode());}
+            }
+        }
+    }
+    @Test void literalCatalogPunctuationKeepsExactScopeAndConstantAuthorizedBatchReads()throws Exception {
+        for(int count:List.of(20,100))for(String catalog:List.of("data_rover_4.1","Mixed.Case","data-rover-4")) {
+            Fixture f=new Fixture(count);f.config=Map.of("db",Map.of("dbType","MYSQL","defaultSchema",catalog));f.physicalRows=new ArrayList<>();
+            when(f.metadata.supportsMixedCaseIdentifiers()).thenReturn(true);
+            for(int i=0;i<count;i++)f.physicalRows.add(mysqlColumn(catalog,"table_"+i,"id"));
+            f.physicalRows.add(mysqlColumn("foreign","table_0","secret"));
+            try(var tenant=TenantContext.use("tenant-A")) {
+                var registered=f.service.resolve(f.references);
+                assertTrue(registered.values().stream().allMatch(row->row.schema().equals(catalog)&&row.schemaQuoted()));
+                var actual=f.service.physicalBatch(registered);assertEquals(count,actual.size());assertFalse(actual.toString().contains("secret"));
+            }
+            verify(f.sources,times(1)).resolveBatch(eq("tenant-A"),eq(Set.of("db")),anyString());
+            verify(f.jdbc,times(2)).queryForList(anyString(),any(Object[].class));
+            verify(f.engine,times(1)).openRegistered(eq("db"),anyMap());verify(f.statement,times(1)).executeQuery();
+            verify(f.statement,times(count*2)).setString(anyInt(),anyString());verify(f.statement).setString(1,catalog);
+            verify(f.metadata,never()).getColumns(any(),any(),any(),any());
+        }
+    }
+
+    @Test void numericLeadingCatalogsUseTheSameAuthorizedTwentyAndHundredItemBatch()throws Exception {
+        for(int count:List.of(20,100)) {
+            Fixture f=new Fixture(count);String catalog="201_202_203_datadevs";
+            f.config=Map.of("db",Map.of("dbType","MYSQL","defaultSchema",catalog));
+            f.tables=new ArrayList<>();f.physicalRows=new ArrayList<>();
+            for(int i=0;i<count;i++) {
+                f.tables.add(table("table-"+i,"db",catalog+".table_"+i));
+                f.physicalRows.add(mysqlColumn(catalog,"table_"+i,"id"));
+            }
+            f.physicalRows.add(mysqlColumn("foreign","table_0","secret"));
+            try(var tenant=TenantContext.use("tenant-A")) {
+                var actual=f.service.physicalBatch(f.service.resolve(f.references));
+                assertEquals(count,actual.size());assertFalse(actual.toString().contains("secret"));
+            }
+            verify(f.sources,times(1)).resolveBatch(eq("tenant-A"),eq(Set.of("db")),anyString());
+            verify(f.jdbc,times(2)).queryForList(anyString(),any(Object[].class));
+            verify(f.engine,times(1)).openRegistered(eq("db"),anyMap());verify(f.statement,times(1)).executeQuery();
+            verify(f.statement,times(count*2)).setString(anyInt(),anyString());
+            verify(f.metadata,never()).getColumns(any(),any(),any(),any());
+        }
+    }
+
+    @Test void booleanCarrierHintsAreBoundFromTheAuthorizedHiveTypeWithConstantBatchReads()throws Exception {
+        for(int count:List.of(20,100))for(String type:List.of("HIVE","POSTGRESQL","MONGODB")){
+            Fixture f=new Fixture(count);f.config=Map.of("db",Map.of("dbType",type,"defaultSchema","registered"));
+            Map<String,com.fasterxml.jackson.databind.JsonNode> contracts=new LinkedHashMap<>();
+            f.references.forEach((id,reference)->{
+                var contract=JSON.createObjectNode().put("targetBooleanNumberCarrier",!type.equals("HIVE")).put("dbType","HIVE");
+                contract.set("targetRef",reference);contracts.put(id,contract);
+            });
+            try(var tenant=TenantContext.use("tenant-A")){f.service.checkRegisteredContracts(contracts);}
+            assertTrue(contracts.values().stream().allMatch(c->c.path("targetBooleanNumberCarrier").asBoolean()==type.equals("HIVE")));
+            verify(f.sources,times(1)).resolveBatch(eq("tenant-A"),eq(Set.of("db")),anyString());
+            verify(f.jdbc,times(2)).queryForList(anyString(),any(Object[].class));
+            verifyNoInteractions(f.engine);
+        }
+    }
     @Test void nativeHiveStringSentinelIsUnboundedForTwentyAndHundredPhysicalTables()throws Exception {
         for(int count:List.of(20,100))for(int sentinel:List.of(0,Integer.MAX_VALUE)){
             Fixture f=hiveTextFixture(count,"STRING",sentinel);

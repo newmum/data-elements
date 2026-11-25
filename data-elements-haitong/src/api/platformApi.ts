@@ -65,9 +65,12 @@ function uploadRequest(url: string, body: FormData, headers: Record<string, stri
 /** Shared platform contract. Tenant identity comes only from the backend token session. */
 export async function platformApi<T>(path: string, body?: unknown, options: RequestOptions = {}): Promise<T> {
   if (!path.startsWith('/') || path.startsWith('//')) throw new PlatformApiError(path, '接口路径无效');
-  const sessionRevision = getSessionRevision();
+  let sessionRevision = getSessionRevision();
   const token = await getPlatformSessionToken();
-  if(getSessionRevision()!==sessionRevision)throw new PlatformApiError(path,'登录会话已切换，旧请求结果已丢弃',401);
+  const readyRevision = getSessionRevision();
+  // Revision zero is the first trusted INIT; subsequent rotations still invalidate this request.
+  if(sessionRevision!==0&&readyRevision!==sessionRevision)throw new PlatformApiError(path,'登录会话已切换，旧请求结果已丢弃',401);
+  sessionRevision = readyRevision;
   if (!token) {
     redirectToPlatformLogin();
     throw new PlatformApiError(path, '数据中台登录已失效，正在前往登录页', 401);

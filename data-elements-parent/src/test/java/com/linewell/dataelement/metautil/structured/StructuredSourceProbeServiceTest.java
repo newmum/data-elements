@@ -28,6 +28,97 @@ import static org.mockito.Mockito.doReturn;
 
 class StructuredSourceProbeServiceTest {
 
+    @Test
+    void ftpCacheKeepsSelectedDatasetAndNativeFileFilterSeparateForTwentyAndHundredFiles() throws Exception {
+        for (int size : List.of(20, 100)) {
+            var files = java.util.stream.IntStream.range(0, size)
+                    .mapToObj(i -> new StructuredSourceProbeService.RemoteFile(
+                            "/managed/validation_" + i + ".json", "validation_" + i + ".json", 16))
+                    .toList();
+            var opens = new AtomicInteger();
+            var scoped = new StructuredSourceProbeService(new ObjectMapper()) {
+                @Override StructuredProbeResult probeFtp(Map<String, Object> source) {
+                    var result = new StructuredProbeResult();
+                    try {
+                        parseRemoteFiles(source, files, file -> {
+                            opens.incrementAndGet();
+                            return new ByteArrayInputStream("[{\"id\":7}]".getBytes(StandardCharsets.UTF_8));
+                        }, result);
+                    } catch (Exception e) { throw new IllegalStateException(e); }
+                    return result;
+                }
+            };
+            var source = Map.<String,Object>of("dbType", "ftp", "ftpHost", "validation.invalid");
+            assertThat(scoped.getTableInfo(source, "validation_7").getTableName()).isEqualTo("validation_7");
+            assertThat(scoped.getColumns(source, "validation_7")).hasSize(1);
+            assertThat(scoped.getTableInfo(source, "validation_8").getTableName()).isEqualTo("validation_8");
+            for (int index : List.of(7, 8)) {
+                var filtered = new LinkedHashMap<String,Object>(source);
+                filtered.put("fileFilterRegex", "^validation_" + index + "\\.json$");
+                assertThat(scoped.probe(filtered, false).getTables()).singleElement()
+                        .satisfies(table -> assertThat(table.getTable().getTableName()).isEqualTo("validation_" + index));
+                scoped.probe(filtered, false);
+            }
+            assertThat(opens.get()).as("Only the four distinct selected scopes open a file among %s candidates", size)
+                    .isEqualTo(4);
+        }
+    }
+
+    @Test
+    void minioCacheKeepsSelectedDatasetAndNativeFileFilterSeparateForTwentyAndHundredObjects() throws Exception {
+        for (int size : List.of(20, 100)) {
+            var reads = new AtomicInteger();
+            var lists = new AtomicInteger();
+            var locations = new AtomicInteger();
+            var server = com.sun.net.httpserver.HttpServer.create(new java.net.InetSocketAddress("127.0.0.1", 0), 0);
+            server.createContext("/", exchange -> {
+                String query = exchange.getRequestURI().getRawQuery();
+                String response;
+                if (query != null && query.contains("location")) {
+                    locations.incrementAndGet();
+                    response = "<LocationConstraint xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"></LocationConstraint>";
+                } else if (query != null && query.contains("list-type")) {
+                    lists.incrementAndGet();
+                    var body = new StringBuilder("<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">"
+                            + "<Name>validation</Name><Prefix></Prefix><KeyCount>" + size
+                            + "</KeyCount><MaxKeys>1000</MaxKeys><IsTruncated>false</IsTruncated>");
+                    for (int i = 0; i < size; i++) body.append("<Contents><Key>validation_").append(i)
+                            .append(".json</Key><LastModified>2026-11-01T00:00:00.000Z</LastModified>"
+                                    + "<ETag>validation</ETag><Size>10</Size><StorageClass>STANDARD</StorageClass></Contents>");
+                    response = body.append("</ListBucketResult>").toString();
+                } else {
+                    reads.incrementAndGet();
+                    response = "[{\"id\":7}]";
+                }
+                byte[] bytes = response.getBytes(StandardCharsets.UTF_8);
+                exchange.getResponseHeaders().set("Content-Type", query == null ? "application/json" : "application/xml");
+                exchange.getResponseHeaders().set("x-amz-bucket-region", "us-east-1");
+                exchange.sendResponseHeaders(200, bytes.length);
+                try (var output = exchange.getResponseBody()) { output.write(bytes); }
+            });
+            server.start();
+            try {
+                var scoped = new StructuredSourceProbeService(new ObjectMapper());
+                var source = Map.<String,Object>of("dbType", "minio", "minioEndpoint",
+                        "http://127.0.0.1:" + server.getAddress().getPort(), "minioBucket", "validation",
+                        "minioAccessKey", "validation-key", "minioSecretKey", "validation-secret");
+                assertThat(scoped.getTableInfo(source, "validation_7").getTableName()).isEqualTo("validation_7");
+                assertThat(scoped.getColumns(source, "validation_7")).hasSize(1);
+                assertThat(scoped.getTableInfo(source, "validation_8").getTableName()).isEqualTo("validation_8");
+                for (int index : List.of(7, 8)) {
+                    var filtered = new LinkedHashMap<String,Object>(source);
+                    filtered.put("fileFilterRegex", "^validation_" + index + "\\.json$");
+                    assertThat(scoped.probe(filtered, false).getTables()).singleElement()
+                            .satisfies(table -> assertThat(table.getTable().getTableName()).isEqualTo("validation_" + index));
+                    scoped.probe(filtered, false);
+                }
+                assertThat(reads.get()).isEqualTo(4);
+                assertThat(lists.get()).isEqualTo(4);
+                assertThat(locations.get()).isEqualTo(4);
+            } finally { server.stop(0); }
+        }
+    }
+
     @Test void rawPathsAndFlatHeadersAreAuthoritativeAndCannotBeOverwrittenByPolicy() throws Exception {
         var sample=service.parseRemoteFileSampleForTest("nested.json",100,"[{\"@timestamp\":\"time\",\"agent\":{\"id\":\"a\"},\"tags\":[\"x\",null]}]".getBytes(StandardCharsets.UTF_8));
         var shape=sample.getTables().getFirst().getRecordShape();

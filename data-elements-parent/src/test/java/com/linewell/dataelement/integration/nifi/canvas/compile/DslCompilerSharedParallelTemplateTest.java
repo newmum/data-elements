@@ -31,6 +31,54 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 class DslCompilerSharedParallelTemplateTest {
+    @Test void sharedBlobKeepsJdbcBinaryAndAddsOnlyHiveBase64Projection() throws Exception {
+        plan=MappingEngine.compile(JSON.readTree("""
+          {"schemaVersion":"2.0","rules":[
+           {"input":{"kind":"FIELD","name":"image"},"target":{"name":"IMAGE","logicalType":"BINARY"}},
+           {"input":{"kind":"FIELD","name":"text"},"target":{"name":"CLOB_TEXT","logicalType":"STRING"}},
+           {"input":{"kind":"FIELD","name":"uuid"},"target":{"name":"ODS_UUID","logicalType":"STRING"}}],
+           "schemaContract":{"targets":[{"nodeId":"hive","reference":{"datasourceId":"validation-hive-db","tableId":"validation-hive-table"},"fields":[
+            {"name":"image","logicalType":"BINARY","physicalType":"BINARY"},{"name":"clob_text","logicalType":"STRING","physicalType":"STRING"},{"name":"ods_uuid","logicalType":"STRING","physicalType":"STRING"}]}]}}
+          """));
+        var mapping=new Pipeline.Node("mapping","transform.field-enrichment","共享治理","transform",500,0,Map.of("mappings",plan.document()));
+        var oracle=jdbc(Map.of("targetColumns",List.of(Map.of("columnName","IMAGE","dataType","BLOB"),Map.of("columnName","CLOB_TEXT","dataType","CLOB"),Map.of("columnName","ODS_UUID","dataType","VARCHAR2"))));
+        var hive=hive(Map.of("targetColumns",List.of(Map.of("columnName","image","dataType","BINARY"),Map.of("columnName","clob_text","dataType","STRING"),Map.of("columnName","ods_uuid","dataType","STRING"))));
+        var result=compiler.compile(flow(List.of(source("source",Map.of()),mapping,oracle,hive),List.of(edge("sm","source","mapping"),edge("mj","mapping","jdbc"),edge("mh","mapping","hive"))));
+        var shared=processor("共享治理");var projection=processor("Hive目标/目标字段投影");
+        assertThat(shared.properties()).doesNotContainKey("binary-output-encoding");assertThat(projection.properties()).containsEntry("binary-output-encoding","BASE64_TEXT");
+        assertThat(result.nodes().get("hive").inletProcessorId).isEqualTo(projection.id());
+        assertThat(processors.stream().filter(p->p.type().endsWith("HaitongTransformRecord"))).hasSize(2);
+        var projected=JSON.readTree(projection.properties().get("execution-plan"));assertThat(projected.path("rules").size()).isEqualTo(3);
+        assertThat(projected.toString()).doesNotContain("UUID_RANDOM","LOCALTIMESTAMP");
+        assertThat(projected.path("rules").get(2).path("input").path("name").asText()).isEqualTo("ODS_UUID");
+        assertThat(projected.path("rules").get(1).path("target").path("logicalType").asText()).isEqualTo("STRING");
+        verify(nifi).createConnection(eq("pg"),eq(shared.id()),eq("PROCESSOR"),eq(result.nodes().get("jdbc").inletProcessorId),eq("PROCESSOR"),eq(List.of("success")));
+        verify(nifi).createBufferedConnection("pg",shared.id(),projection.id(),"PROCESSOR",List.of("success"));
+        verify(nifi).createConnection(eq("pg"),eq(projection.id()),eq("PROCESSOR"),eq(projection.id()),eq("PROCESSOR"),eq(List.of("failure","retry")));
+    }
+    @ParameterizedTest @ValueSource(strings={"jdbc","hive"})
+    void authorizedPhysicalProjectionPrecedesTheSinkAndPreservesSharedAudit(String destination)throws Exception {
+        var document=plan.document();var branch=document.withObject("/schemaContract").putArray("targets").addObject().put("nodeId",destination);
+        branch.putObject("outputAliases").put("ID","long_physical_name");
+        var fields=branch.putArray("fields");fields.addObject().put("name","long_physical_name").put("logicalType","STRING");
+        fields.addObject().put("name","ods_uuid").put("logicalType","STRING");fields.addObject().put("name","ods_rksj").put("logicalType","DATETIME");plan=MappingEngine.compile(document);
+        var columns=List.of(Map.of("columnName","long_physical_name","dataType","STRING"),Map.of("columnName","ods_uuid","dataType","STRING"),Map.of("columnName","ods_rksj","dataType","TIMESTAMP"));
+        var target=destination.equals("jdbc")?jdbc(Map.of("targetColumns",columns)):hive(Map.of("targetColumns",columns));
+        var nodes=List.of(source("source",Map.of()),new Pipeline.Node("mapping","transform.field-enrichment","共享治理","transform",500,0,Map.of("mappings",plan.document())),target);
+        var pipeline=flow(nodes,List.of(edge("sm","source","mapping"),edge("mt","mapping",destination)));
+        var result=compiler.compile(pipeline);var projection=processor(target.label()+"/目标字段投影");
+        assertThat(result.nodes().get(destination).inletProcessorId).isEqualTo(projection.id());
+        var execution=JSON.readTree(projection.properties().get("execution-plan"));
+        assertThat(execution.path("rules").get(0).path("input").path("name").asText()).isEqualTo("ID");
+        assertThat(execution.path("rules").get(0).path("target").path("name").asText()).isEqualTo("long_physical_name");
+        assertThat(execution.toString()).doesNotContain("UUID_RANDOM","LOCALTIMESTAMP");
+        assertThat(projection.properties()).containsEntry("preserve-json-numbers","true");
+        if(destination.equals("hive"))verify(nifi).createBufferedConnection("pg",result.nodes().get("mapping").inletProcessorId,projection.id(),"PROCESSOR",List.of("success"));
+        else verify(nifi).createConnection("pg",result.nodes().get("mapping").inletProcessorId,"PROCESSOR",projection.id(),"PROCESSOR",List.of("success"));
+        verify(nifi).createConnection(eq("pg"),eq(projection.id()),eq("PROCESSOR"),eq(projection.id()),eq("PROCESSOR"),eq(List.of("failure","retry")));
+        verify(nifi,times(1)).listControllerServices("root");
+        assertThat(target.config()).doesNotContainKey("_runtimeTargetProjectionFields");
+    }
     private static final String TIMESTAMP_TYPE="com.linewell.microservice.processor.record.TimestampFormatProcessor";
     private static final String EXACT_READER="com.linewell.dataelement.nifi.HaitongJdbcRecordReader";
     private static final ObjectMapper JSON=new ObjectMapper();
@@ -514,6 +562,23 @@ class DslCompilerSharedParallelTemplateTest {
         assertThat(processor("Oracle目标/normalize").properties()).containsEntry("Record Reader","global-json-reader");
         verify(nifi,times(1)).get("/flow/controller-service-types",JsonNode.class);
         assertThat(target.config()).containsEntry("_runtimeJdbcTimestampReader","untrusted-service");
+    }
+
+    @ParameterizedTest @ValueSource(strings={"MySQL","KINGBASE","DM","Oracle"})
+    void nativeJdbcWritersReadRegisteredDecimalsAndFractionalTimestampsExactly(String database) {
+        var columns=List.of(Map.of("columnName","ID","dataType","VARCHAR","primaryKey",true),
+                Map.of("columnName","AMOUNT","dataType","DECIMAL(20,6)"),
+                Map.of("columnName","EVENT_TIME","dataType","TIMESTAMP(3)"));
+        var origin=source("source",Map.of("sourceColumns",columns));
+        var target=jdbc(Map.of("dbType",database,"writerType","NIFI_PUT_DATABASE_RECORD","targetColumns",columns));
+        var result=compiler.compile(flow(List.of(origin,target),List.of(edge("delivery","source","jdbc"))));
+        String reader=result.nodes().get("jdbc").csIds.get("jdbc-value-reader");
+        assertThat(reader).isNotBlank();
+        assertThat(service(reader).type()).isEqualTo("com.linewell.dataelement.nifi.HaitongJdbcRecordReader");
+        assertThat(service(reader).properties()).containsEntry("number-fields","[\"AMOUNT\"]")
+                .containsEntry("timestamp-fields","[\"EVENT_TIME\"]");
+        assertThat(processor("Oracle目标/put").properties()).containsEntry("Record Reader",reader);
+        assertThat(processor("source/execute").properties()).containsEntry("Record Writer","global-timestamp9");
     }
 
     @Test void configuredMergeAgeIsAppliedWithoutChangingExistingDefaultSizes() {

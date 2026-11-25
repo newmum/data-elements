@@ -51,6 +51,12 @@
       "type": "text",
       "required": true
     },
+    {"key": "batchSize", "label": "单批最大条数", "type": "number", "group": "read", "help": "每个输出 FlowFile 的文档数（Results Per FlowFile），取值 1～2147483647。", "default": 1000},
+    {"key": "fetchSize", "label": "MongoDB 抓取批大小", "type": "number", "group": "read", "help": "MongoDB 驱动每次从服务器获取的文档数（Batch Size），不限制查询总量；取值 1～2147483647。", "default": 1000},
+    {"key": "queryLimit", "label": "单次最大文档数", "type": "number", "group": "read", "help": "单次查询返回的文档总上限（Limit）；留空不设上限。周期查询会重复读取相同范围，不能用本项代替增量水位。"},
+    {"key": "queryJson", "label": "查询条件", "type": "json-editor", "group": "read", "help": "MongoDB BSON/JSON 查询文档；默认读取完整集合。", "default": "{}"},
+    {"key": "projectionJson", "label": "字段投影", "type": "json-editor", "group": "read", "help": "MongoDB 投影文档，例如 {\"name\":1,\"_id\":0}；排除已登记治理字段前须同步调整映射。"},
+    {"key": "sortJson", "label": "排序", "type": "json-editor", "group": "read", "help": "MongoDB 排序文档，例如 {\"_id\":1}；设置查询总上限时建议同时指定稳定排序。"},
     {
       "key": "schedulingPeriod",
       "label": "调度周期",
@@ -81,11 +87,14 @@
           "Client Service": "${cs.mongo}",
           "Mongo Database Name": "${config.database}",
           "Mongo Collection Name": "${config.table}",
-          "Query": "{}",
+          "Query": "${config.queryJson}",
+          "Projection": "${config.projectionJson}",
+          "Sort": "${config.sortJson}",
+          "Limit": "${config.queryLimit}",
           "JSON Type": "Standard",
           "Date Format": "yyyy-MM-dd'T'HH:mm:ss.SSSXXX",
-          "Batch Size": "1000",
-          "Results Per FlowFile": "1000"
+          "Batch Size": "${config.fetchSize}",
+          "Results Per FlowFile": "${config.batchSize}"
         }
       }
     ],

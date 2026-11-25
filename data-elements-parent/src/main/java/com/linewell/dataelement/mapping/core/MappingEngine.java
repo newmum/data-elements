@@ -11,7 +11,7 @@ import java.util.*;
 
 /** Immutable compiled plans and bounded, staged lookup execution used by both backend and NiFi. */
 public final class MappingEngine {
-    public static final String VERSION="1.1.47";
+    public static final String VERSION="1.1.54";
     public static String engineVersion(){return VERSION;}
     public static final int WINDOW_RECORDS=512;
     public static final long WINDOW_BYTES=RecordBudget.WINDOW_BYTES;
@@ -35,7 +35,7 @@ public final class MappingEngine {
         private final Map<String,DictionarySpec> dictionaries;
         private final String hash,recordMode,missingPolicy;
         private final boolean passthrough,caseSensitive;
-        private final Set<String> excludes,declaredSourceFields;
+        private final Set<String> excludes,declaredSourceFields,jsonTextSources;
         private Plan(ObjectNode doc,List<Rule> rules,Map<String,DictionarySpec> dicts){
             this.document=doc.deepCopy();this.diagnostics=new MappingDiagnostics.Catalog(this.document);this.rules=List.copyOf(rules);this.dictionaries=Collections.unmodifiableMap(new LinkedHashMap<>(dicts));
             hash=MappingEngine.hash(doc);recordMode=doc.path("policies").path("recordErrorMode").asText("FAIL_FLOWFILE");
@@ -44,6 +44,7 @@ public final class MappingEngine {
             caseSensitive=doc.path("policies").path("caseSensitive").asBoolean(true);
             Set<String> excluded=new HashSet<>();doc.path("exclude").forEach(n->excluded.add(ValueTypes.field(n.asText())));excludes=Set.copyOf(excluded);
             Set<String> declared=new HashSet<>();doc.path("schemaContract").path("source").forEach(field->declared.add(field.path("name").asText()));rules.forEach(rule->declared.addAll(rule.sources));declaredSourceFields=Set.copyOf(declared);
+            jsonTextSources=SchemaContract.jsonTextSources(doc.path("schemaContract").path("source"));
         }
         public ObjectNode document(){return document.deepCopy();}
         public String hash(){return hash;}
@@ -70,16 +71,18 @@ public final class MappingEngine {
         final ExecutionContext context;final long index;final Map<String,Map<DictionarySpec.Key,DictionarySpec.LookupValue>> values;
         final Set<String> done=new HashSet<>();final List<Issue> errors=new ArrayList<>();String rule="",step="";Object current,ruleInput;JsonNode diagnosticStep;final Map<String,Object> usedSources=new LinkedHashMap<>();
         private final SourceFieldNames sourceNames;
+        private final Set<String> jsonTextSources=new HashSet<>(),validatedJsonText=new HashSet<>();
         private final RecordBudget.Output outputBudget;
         Frame(Plan p,Map<String,Object> row,long index,ExecutionContext context,Map<String,Map<DictionarySpec.Key,DictionarySpec.LookupValue>>values,RecordBudget.OutputWindow outputWindow){
             this.plan=p;this.original=row;this.index=index;this.context=context;this.values=values;
             sourceNames=new SourceFieldNames(row.keySet(),p.caseSensitive);
+            for(String field:p.jsonTextSources){String physical=sourceNames.resolve(field);if(physical!=null&&(physical.equals(field)||!p.declaredSourceFields.contains(physical)))jsonTextSources.add(physical);}
             if(p.passthrough)row.forEach((k,v)->{if(!p.excludes.contains(k))output.put(k,v);});
             outputBudget=new RecordBudget.Output(output,outputWindow);
         }
         public Object source(String name){
             Object value=sourceRaw(name);usedSources.put(name,value);
-            if(value!=ValueTypes.MISSING)return value;
+            if(value!=ValueTypes.MISSING){String physical=sourceNames.resolve(name);if(jsonTextSources.contains(physical)&&!validatedJsonText.contains(physical)){SchemaContract.requireJsonText(value);validatedJsonText.add(physical);}return value;}
             if(plan.missingPolicy.equals("NULL"))return null;
             throw new MappingException("MISSING_SOURCE","来源记录缺少已引用字段");
         }

@@ -10,7 +10,9 @@
     { "key": "minioSecretKey", "label": "Secret Key", "type": "password", "required": true },
     { "key": "minioBucket", "label": "存储桶", "type": "text", "required": true },
     { "key": "minioPrefix", "label": "对象前缀", "type": "text", "placeholder": "例如 mysql/" },
-    { "key": "minioFilePattern", "label": "文件匹配", "type": "text", "default": "(?i).*\\.(csv|json|xlsx|xls)$" },
+    { "key": "minioFilePattern", "label": "文件匹配", "type": "text", "default": "(?i).*\\.(csv|json|xlsx|xls)$", "help": "正则表达式，按下方匹配范围筛选；登记页的文件名通配符由任务生成入口自动转换。" },
+    { "key": "minioFilePatternScope", "label": "文件匹配范围", "type": "select", "group": "read", "default": "OBJECT_KEY", "options": [{"label": "完整对象键（含目录）", "value": "OBJECT_KEY"}, {"label": "仅文件名", "value": "FILE_NAME"}], "help": "已登记任务按文件名匹配，目录由对象前缀与精确对象定位控制。旧画布默认保留完整对象键正则；更改匹配范围须按停止后的受控部署流程处理。" },
+    {"key": "listingBatchSize", "label": "清单输出批大小", "type": "number", "group": "read", "help": "每批转交的对象清单数量（Listing Batch Size），影响清单延迟和内存，不限制本轮对象总量或文件内记录数。", "default": 100},
     { "key": "schedulingPeriod", "label": "调度周期", "type": "duration", "default": "60 sec", "group": "schedule" }
   ],
   "compile": {

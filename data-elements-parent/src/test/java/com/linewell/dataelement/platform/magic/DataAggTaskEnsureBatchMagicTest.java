@@ -40,6 +40,48 @@ import org.ssssssss.script.runtime.ExitValue;
 
 /** Executes the canonical ensure API against H2 to guard its multi-target read path. */
 class DataAggTaskEnsureBatchMagicTest {
+    @ParameterizedTest @ValueSource(ints={20,100})
+    void minioRegisteredGlobBecomesCanvasRegexWithoutPerTargetReadsOrRegistrationChanges(int count) throws Exception {
+        var fixture=Fixture.forCreation(count);
+        String pool="{\"host\":\"validation.invalid\",\"minioBucket\":\"registered\",\"minioFilePattern\":\"person*.json\"}";
+        fixture.jdbc.update("update db_datasource_t set db_type='minio',pool_cfg=? where tid='source-db'",pool);
+        assertInstanceOf(Map.class,fixture.run());
+        var dsls=fixture.jdbc.queryForList("select dsl_json from nifi_pipeline_t",String.class);
+        assertEquals(count,dsls.size());
+        int minioSources=0;
+        for(String dsl:dsls) {
+            var source=cn.hutool.json.JSONUtil.parseObj(dsl).getJSONArray("nodes").getJSONObject(0);
+            if(!"source.minio".equals(source.getStr("manifestKey")))continue;
+            minioSources++;
+            var config=source.getJSONObject("config");
+            var pattern=java.util.regex.Pattern.compile(config.getStr("minioFilePattern"));
+            assertTrue(pattern.matcher("PERSON.JSON").matches());
+            assertFalse(pattern.matcher("person.json.xlsx").matches());
+            assertEquals("FILE_NAME",config.getStr("minioFilePatternScope"));
+            assertEquals("registered/nested/person.json",config.getStr("minioObjectKey"));
+        }
+        assertEquals(1,minioSources,"Serial targets retain one original MinIO read followed by target-to-target hops");
+        assertEquals(pool,fixture.jdbc.queryForObject("select pool_cfg from db_datasource_t where tid='source-db'",String.class));
+        assertEquals(13,fixture.readCount(),"20/100 targets retain the same bounded source/target reads");
+        assertEquals(0,fixture.jdbc.queryForObject("select count(*) from nifi_pipeline_t where tenant_id<>'police'",Integer.class));
+    }
+
+    @Test void minioExplicitRegexPrecedesGlobAndLiteralGlobCharactersDoNotBecomeRegexOperators() throws Exception {
+        for(boolean explicit:List.of(false,true)) {
+            var fixture=Fixture.forCreation(1);
+            var config=new LinkedHashMap<String,Object>(Map.of("host","validation.invalid","minioBucket","registered","minioFilePattern","report[1]_?.xlsx"));
+            if(explicit)config.put("fileFilterRegex","^only[0-9]\\.json$");
+            fixture.jdbc.update("update db_datasource_t set db_type='minio',pool_cfg=? where tid='source-db'",cn.hutool.json.JSONUtil.toJsonStr(config));
+            assertInstanceOf(Map.class,fixture.run());
+            var dsl=cn.hutool.json.JSONUtil.parseObj(fixture.jdbc.queryForObject("select dsl_json from nifi_pipeline_t",String.class));
+            var pattern=java.util.regex.Pattern.compile(dsl.getJSONArray("nodes").getJSONObject(0).getJSONObject("config").getStr("minioFilePattern"));
+            assertEquals(!explicit,pattern.matcher("REPORT[1]_A.XLSX").matches());
+            assertEquals(explicit,pattern.matcher("ONLY2.JSON").matches());
+            assertFalse(pattern.matcher("report1_A.xlsx").matches());
+            assertFalse(pattern.matcher("report[1]_AB.xlsx").matches());
+        }
+    }
+
     @Test void generatedAuditRulesRetainTheActualTargetSpellingForHiveStyleLowercaseFields() throws Exception {
         var f=Fixture.forCreation(1);
         f.jdbc.execute("alter table db_table_column_t add data_type varchar(64)");

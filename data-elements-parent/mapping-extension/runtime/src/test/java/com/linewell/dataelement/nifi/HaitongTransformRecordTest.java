@@ -61,6 +61,33 @@ class HaitongTransformRecordTest {
         runner.setProperty(HaitongTransformRecord.PLAN,plan.document().toString());
         runner.setProperty(HaitongTransformRecord.EXACT_JSON_NUMBERS,Boolean.toString(exact));return runner;
     }
+    @Test void registeredSqlDateTextAndNullsSurviveNativeJsonWhileInvalidDatesRemainIsolated()throws Exception {
+        for(int count:List.of(20,100)) {
+            var spec=JSON.readTree("""
+                {"schemaVersion":"2.0","policies":{"zoneId":"Asia/Shanghai","recordErrorMode":"ROUTE_INVALID"},
+                 "schemaContract":{"source":[{"name":"day","logicalType":"DATE","physicalType":"DATE","registeredFormat":"DATE"}]},
+                 "rules":[{"input":{"kind":"FIELD","name":"day"},"target":{"name":"day","logicalType":"DATE"},
+                   "steps":[{"operator":"DATE_PARSE","args":{"pattern":"AUTO","logicalType":"DATE"}}]}]}
+                """);
+            var plan=MappingEngine.compile(spec);var runner=TestRunners.newTestRunner(HaitongTransformRecord.class);
+            var reader=new org.apache.nifi.json.JsonTreeReader();runner.addControllerService("reader",reader);
+            runner.setProperty(reader,"Schema Access Strategy","infer-schema");runner.enableControllerService(reader);
+            var writer=new org.apache.nifi.json.JsonRecordSetWriter();runner.addControllerService("writer",writer);
+            runner.setProperty(writer,"Schema Access Strategy","inherit-record-schema");
+            runner.setProperty(writer,"Date Format","yyyy-MM-dd");runner.setProperty(writer,"Timestamp Format","yyyy-MM-dd HH:mm:ss.SSS");
+            runner.setProperty(writer,"Suppress Null Values","never-suppress");runner.enableControllerService(writer);
+            runner.setProperty(HaitongTransformRecord.READER,"reader");runner.setProperty(HaitongTransformRecord.WRITER,"writer");
+            runner.setProperty(HaitongTransformRecord.PLAN,plan.document().toString());
+            runner.setProperty(HaitongTransformRecord.TIMESTAMP_TEXT,"true");
+            var rows=new ArrayList<Map<String,Object>>();var dates=Arrays.asList("2026-11-25","1970-01-01","1969-12-31",null);
+            for(int i=0;i<count;i++)rows.add(Collections.singletonMap("day",dates.get(i%dates.size())));
+            rows.add(Map.of("day","2026-02-29"));runner.enqueue(JSON.writeValueAsBytes(rows));runner.run();
+            runner.assertTransferCount(HaitongTransformRecord.FAILURE,0);runner.assertTransferCount(HaitongTransformRecord.SUCCESS,1);runner.assertTransferCount(HaitongTransformRecord.INVALID,1);
+            var values=JSON.readTree(runner.getFlowFilesForRelationship(HaitongTransformRecord.SUCCESS).getFirst().toByteArray());assertEquals(count,values.size());
+            for(int i=0;i<count;i++)if(dates.get(i%dates.size())==null)assertTrue(values.get(i).path("day").isNull());else assertEquals(dates.get(i%dates.size()),values.get(i).path("day").asText());
+            var invalid=JSON.readTree(runner.getFlowFilesForRelationship(HaitongTransformRecord.INVALID).getFirst().toByteArray());assertEquals("DATE_INVALID",invalid.path("errors").get(0).path("code").asText());runner.shutdown();
+        }
+    }
     @Test void nativeJsonBooleansWriteExactSingleDigitDecimalNumbersAndRetainInvalidText() throws Exception {
         for (String mode : List.of("target", "expression", "function")) for (int count : List.of(20, 100)) {
             var spec = JSON.createObjectNode().put("version", "1.0").put("recordErrorMode", "ROUTE_INVALID");

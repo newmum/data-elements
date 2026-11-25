@@ -853,6 +853,7 @@ Hive文本写入分支的登记数值字段使用任务内`HaitongJdbcRecordRead
 - `typed-record-reader` 兼容属性也引用同一个全局 Reader；遗留 `mergeSchemaText` 不再创建专用 JSON Reader，实际读取策略由全局服务配置决定。
 - 日期、时间、Schema、输出分组等属性以选中的全局服务当前配置为准。平台不覆盖这些属性，不启停全局服务，也不额外创建 Schema 服务。
 - CSV、Excel、Avro、数据库连接池及字典服务仍按自身类型与用途配置；JSON 统一引用不改变它们的服务类型。
+- 精确 JSON 数值模式下，读取器根据当前整数值推断出的 INT 可以作为已声明 LONG／BIGINT 的无损载体，避免 BIGINT 的小值被误报为 Schema 漂移。只允许 INT 到声明 LONG 的范围扩展；字符串、布尔、小数、浮点以及 LONG 到 INT 的收窄仍按原合同拒绝。关闭精确 JSON 模式时保持严格读取器 Schema 校验，不修改登记字段或目标物理类型。
 - 完整精度 JDBC 时间已经由 JSON Writer 输出九位小数文本；Hive 写入保留该文本，不再追加旧秒级时间格式处理器。CSV Reader 对这类值保持 STRING，因此不会再次通过 CSV Writer 的毫秒格式截断。显式来源 Schema 只在已启用时间文本编解码模式、物理类型明确为 DATETIME / TIMESTAMP 时允许 STRING 传输载体，逐值转换仍校验；其他类型漂移继续拒绝。
 - Linewell 的默认时间文本转换不能直接承担九位小数秒。完整精度链路在最终 JDBC 写入端使用现有 `HaitongJdbcRecordReader` 的 `timestamp-fields` 白名单，按已登记目标物理时间列转换为带纳秒的 `java.sql.Timestamp`；空值保留，不按字符串外观或字段名称猜测日期、epoch 或偏移。该 Reader 同时保留声明的精确数值和二进制。中间 QueryRecord、JSON 和 Hive CSV 继续保留时间文本；INSERT 与 MERGE 最终写入端使用同一白名单 Reader，草稿中的运行服务 ID 不作为绑定依据。
 
@@ -1052,7 +1053,9 @@ Hive 作为目标库时的原始写入发布规则见[详细设计第27章](data
 
 <a id="mapping-extension--当前版本1129"></a>
 
-### 当前版本（1.1.33）
+### 当前版本（1.1.51）
+
+本机后端执行内核、函数库与新安装的 NiFi 扩展统一为1.1.51。相对1.1.49新增共享 BOOLEAN 的 Oracle 数字载体/Hive 布尔分支兼容、JDBC 无时区时间预览的小数精度保护，以及数字首字符及含点号、连字符物理名称的解析与引用兼容，以及原始 JSON 显式 NULL 的已登记可空类型契约保护；严格条件和支持类型在本章 JDBC 契约中说明。SDK 2.9/2.11 分别构建，NiFi 2.9 已并存安装，旧版处理器继续保留原引用。完整回归为源码与实际后端包各3952项、两个SDK复用同一份已验证的1.1.51 NAR、各115项，均零失败错误；源码/后端各8项、SDK各1项既有跳过。本机包保留共享1.1.49基包的其他内容，未发布其他 Magic 或低代码差异。
 
 物理浮点类型与治理逻辑类型共用别名契约：Oracle的`BINARY_FLOAT`／`BINARY_DOUBLE`及PG家族`FLOAT4`／`FLOAT8`归一为既有`DOUBLE`数值类型，适用于旧映射、2.0规则、目标Schema及显式CAST；DDL仍保留各数据库原生类型，不改成文本。有限的IEEE数值及NULL沿原有数值路径传递，双精度上下界和负零保留；NaN、Infinity及超出双精度范围的值继续作为类型错误独立保留，未知类型不放行。此别名补全须配套更新后端和NAR，旧版NAR不能因后端已更新而自动获得能力；已有invalid只按失败目标单支路受控恢复，已成功目标不追加。
 
@@ -1094,7 +1097,7 @@ Hive 作为目标库时的原始写入发布规则见[详细设计第27章](data
 
 摘要自动计算，用于诊断，不作为队列重放门槛。升级或修正规则后，排队的原输入和有效错误信封按当前规则处理，保留原记录下标、类型、输入身份与时钟。实际计划格式、函数与字段规则、字典绑定权限仍校验；未支持的协议或无效输入不会被当成空规则执行。平台发布及启动继续校验当前租户、角色、流程归属与已发布引用。
 
-匹配 NiFi 2.9.0 的构建包位于 `logs/field-mapping-extension/nifi-2.9.0/haitong-mapping-nar/haitong-mapping-nar-1.1.33.nar`，生产各节点安装相同包。新后端与 NAR 同步更新；既有组件的 Bundle 使用 NiFi 原位切换或平台字段节点升级入口调整，并重新编译具有权威目标 Schema 的计划，保留队列、来源 ID 和增量水位。旧版本文件保留并存，不覆盖1.1.32。仅安装 NAR 不能从旧的无契约 BLOB 计划推断 JDBC 目标实际为 CLOB；禁止通过清队列或重建业务表规避该步骤。NiFi 自身及 GenerateDateTableFetch 继续使用2.9.0。多节点请求语义依据 [NiFi 2.9.0 FlowResource](https://github.com/apache/nifi/blob/rel/nifi-2.9.0/nifi-framework-bundle/nifi-framework/nifi-web/nifi-web-api/src/main/java/org/apache/nifi/web/api/FlowResource.java) 与 [DocumentedTypesMerger](https://github.com/apache/nifi/blob/rel/nifi-2.9.0/nifi-framework-bundle/nifi-framework-cluster/src/main/java/org/apache/nifi/cluster/manager/DocumentedTypesMerger.java)。生产尚未安装此包，不能把本地 SDK/隔离 JDBC 回归宣称为生产多节点或最终落库验收。
+匹配 NiFi 2.9.0 的构建包位于 `logs/server-datasource-validation/boolean50-extension29/haitong-mapping-nar/haitong-mapping-nar-1.1.50.nar`，生产各节点安装相同包。新后端与 NAR 同步更新；既有组件的 Bundle 使用 NiFi 原位切换或平台字段节点升级入口调整，并重新编译具有权威目标 Schema 的计划，保留队列、来源 ID 和增量水位。旧版本文件保留并存，不覆盖1.1.32。仅安装 NAR 不能从旧的无契约 BLOB 计划推断 JDBC 目标实际为 CLOB；禁止通过清队列或重建业务表规避该步骤。NiFi 自身及 GenerateDateTableFetch 继续使用2.9.0。多节点请求语义依据 [NiFi 2.9.0 FlowResource](https://github.com/apache/nifi/blob/rel/nifi-2.9.0/nifi-framework-bundle/nifi-framework/nifi-web/nifi-web-api/src/main/java/org/apache/nifi/web/api/FlowResource.java) 与 [DocumentedTypesMerger](https://github.com/apache/nifi/blob/rel/nifi-2.9.0/nifi-framework-bundle/nifi-framework-cluster/src/main/java/org/apache/nifi/cluster/manager/DocumentedTypesMerger.java)。生产尚未安装此包，不能把本地 SDK/隔离 JDBC 回归宣称为生产多节点或最终落库验收。
 
 
 <a id="mapping-extension--上一版1125"></a>
@@ -1412,7 +1415,19 @@ restore-draft、upgrade-runtime、start-published 共用 SerializedNifiMutation 
 
 精确 NUMBER/DECIMAL 的 JSON 传输不能先转为二进制 Double 再恢复 BigDecimal。平台确认公共 JsonTreeReader 使用顶层记录及 infer-schema 后，为生成的治理节点显式开启 `preserve-json-numbers`；它沿原内容流读取数字 token，以 BigDecimal/原生整数恢复当前记录中的数值，Reader 的文本、布尔、NULL、日期时间和二进制载体保持。只创建会话内共享内容声明的临时读取句柄，不复制整份内容、不增加来源查询，结束即移除；按记录流式处理并沿用字节、深度和窗口预算。原生错误信封已有精确数值解码，直接保留记录索引及类型标签。未知、CSV、Avro或自定义Reader默认关闭此选项，不能把JSON假设套到其它格式。目标精度、scale、非空及溢出校验继续生效；Reader与原JSON记录边界不一致时保留完整输入并撤销本次会话输出，不能静默漏行。此能力不修改共享Reader本身，也不改变历史时间载体的语义。
 
+登记为可空数值、BOOLEAN 或 ARRAY 的来源列，在整个 JSON 批次均为显式 NULL 时，infer-schema 可能将其推断为 STRING。开启原始 JSON 数值适配的治理节点沿同一记录流核对原始 NULL token，只对已登记的可空类型恢复输入契约；逐条记录继续验证原值为 NULL，缺字段、重复名称、字符串 `"null"`、Reader 将非空值丢成 NULL，以及后续非空错型均拒绝。跨窗口失败撤销本次会话全部输出并保留原输入。无来源契约的历史计划、关闭该适配的 Reader 和其他格式沿原有行为；时间及二进制文本载体继续使用既有声明规则。不新增查询、预扫描或整批缓存，沿用记录和窗口预算。
+
+固定 DECIMAL/NUMERIC/NUMBER 的声明超出 Oracle 38 位精度或 -84～127 的 scale 范围时，默认使用精确十进制文本，不降低精度或截断。短文本容量按完整声明域计算，包含符号、小数前导零、负 scale 的补零及现有科学记数载体；再由共用字符串容量适配选择 VARCHAR2 或 CLOB。Hive 对无法表示的精确小数沿用 STRING，目标文本不再沿用来源 precision 作为字符串长度。来源字段、精度、scale 和字段血缘保持，目标登记和治理使用真实文本契约；目标的排序及聚合采用文本语义，数值计算须显式选择可承载其精度的转换；默认数字字面量引用为文本，避免先由目标数值解析器舍入。能用短文本承载的主键和唯一约束保持；需要大文本而目标不支持该键时继续明确要求处理，不取消原键或假报可执行。已能表示的数值类型及其严格精度检查不变。转换在内存完成，不查询或扫描业务值。
+
 Oracle JDBC 目标中的物理 NUMBER、DECIMAL、NUMERIC 字段还须在最后一次 JSON 读取时保持精确。编译器为该目标创建独立 `HaitongJdbcRecordReader`，按目标登记列配置 `number-fields`，在 JSON 数值节点创建前使用 BigDecimal；INSERT 的 QueryRecord 投影及最终写入器引用同一服务，不能只修复治理输出而让下游公共 Reader 再次转成 Double。该服务复制已有公共 Reader 的日期、时间、时间戳格式、字符串上限及注释设置，其他字段沿原推断语义；同目标的 BLOB 以 `binary-fields` 恢复原字节，不能把数组文本交给 JDBC。物理字段类型、精度和容量不变，非法数值或字节载体明确失败。此能力只支持可核验的顶层 infer-schema JSON，不能静默替换未知 Reader。已部署旧图不会因安装新 NAR 自动改变引用；升级须保护原来源 ID、完整持久状态及队列，带失败数据的任务先以原输入受控恢复，不清水位或重跑已成功分支。
+
+共享治理的零 scale 有界 DECIMAL 直映射同时连接有符号 INT32/BIGINT 目标时，按已授权目标的共同整数范围加入严格 CAST，再保留原 DECIMAL 输出。分数和双向溢出在任一写入分支前拒绝，现有会话回滚保留原输入；不以非 SQL 抽样或来源类型提示冒充范围证明。不改来源字段、目标物理类型或保存的规则，已发布执行计划展示该范围校验。只处理无条件、无默认值/回退及无已有处理步骤的直接字段规则；窄于32位、无界/非零scale、未知/无符号物理整数和无法兼容的其他目标继续拒绝。显式且唯一的严格 INT/LONG CAST 也可证明输出范围，额外步骤、回退或任意 SQL 表达式不获得该证明。该能力复用现有1.1.51 CAST协议，不需要更换NAR，所有字段及分支检查均在已批量读取的Schema内完成。
+
+共享治理将已核验的原生 BOOLEAN 直接映射到 Oracle NUMBER(1,0) 时，输出域严格为0/1，允许同一输出分支写入 Hive BOOLEAN。只有可信登记来源、无表达式/默认值/条件/处理步骤且采用失败即拒绝的直接映射可以使用该证明；未核验来源、自定义SQL和一般数值均不能借用。目标承载标记由服务端按已授权登记数据源的真实 Hive 类型覆盖生成，前端标记无效，其他目标不得借用。Hive 最终及中间 JSON Reader 按已登记物理 BOOLEAN 列配置 `boolean-fields`，只将精确数值0/1还原为原生布尔值，保留原生 true/false 和 NULL，拒绝字符串、其他数字及结构值；CSV 输出为布尔字面量，不依赖 Hive 将数字文本解释为布尔。数值、二进制、时间和布尔声明不得重叠，其他字段及已有 JDBC 边界语义保持。
+
+JDBC 预览对已识别的无时区时间使用驱动原始文本，保留全部小数秒，避免 `java.sql.Timestamp` 经公共秒级 JSON 日期格式器截断精度或引入历史夏令时换算。支持 Oracle、Hive、PostgreSQL、金仓、openGauss 的 PostgreSQL 分支、瀚高、达梦和 OceanBase Oracle 的本地 TIMESTAMP，MySQL/MariaDB 的 DATETIME，以及 SQL Server 的 DATETIME/DATETIME2。带时区时间、MySQL TIMESTAMP 和 SQL Server 二进制 TIMESTAMP/ROWVERSION 沿用原类型读取；openGauss MySQL 分支按实际 MySQL 类型处理。接口响应结构及权限不变，数值与 NULL 载体保持，读取次数不随返回行数增加。此逻辑属于 JDBC 类型适配，继续由 Java 元数据适配器提供；未新增业务路由、Controller 或数据库结构，Mock 的既有 DATETIME 文本契约无需复制该底层实现。
+
+登记的物理库、Schema 和表可以数字开头。共享名称解析器对表引用按名称段拆分，方言层负责逐段引用，SQL 下推沿用相同的数字首字符边界；名称不能作为表达式直接执行。配置中的库名、Schema 本身是单个名称，版本点号和连字符按字面值保留，不能将 `data_rover_4.1` 当成两段限定符。特殊名称按精确大小写匹配，避免 Oracle 兼容探查回退到另一个折叠名称。分号、注释、谓词、控制字符、空段及超出三段的表引用继续拒绝，显式引用中的点号和转义保持原语义。此兼容不改变租户和逐 ID 权限，MySQL 物理字段仍按已授权表一次批量读取；实际库名无需另造来源表或修改登记身份。
 
 
 <a id="mapping-extension--早期111已确认与待完成验证"></a>
@@ -1570,7 +1585,7 @@ ClickHouse来源使用登记字段快照，为Map/Array及其Nullable/LowCardina
 
 端口以真实实例为准。华为 GaussDB 应安装其数据库版本配套的官方驱动，不能因为类名或协议相似而替换为普通 PostgreSQL JAR；DWS 允许 PostgreSQL JDBC，具体支持范围见 [GaussDB 驱动说明](https://support.huaweicloud.com/centralized-devg-v10-gaussdb/gaussdb-42-0080.html)、[openGauss JDBC](https://docs.opengauss.org/en/docs/7.0.0/getting_started/java.html) 和 [DWS 驱动说明](https://support.huaweicloud.com/mgtg-dws/dws_01_0032.html)。文件名是部署约定，节点可配置其他版本的完整 JAR 路径。未保存产品的历史记录保留原协议，编辑时选择真实产品；不自动重建运行任务或清空水位。
 
-后端优先使用应用 classpath 中所选产品的驱动；外置厂商驱动以 `JDBC_DRIVER_DIRECTORY` 或 JVM 参数 `data-elements.jdbc.driver-directory` 定位，加载前核对 JAR 内的实际驱动类。不同 GaussDB 驱动直接绑定到各自连接池，避免多个驱动接受 `jdbc:opengauss` 时由全局 DriverManager 随机选择。开源 Hive 必须在该目录的 `open-source-hive/` 安装 Apache Hive JDBC standalone 客户端，连接测试、表/字段探查和连接池共用同一个隔离驱动实例；缺少客户端时明确报错，不能回退到同名的华为 HiveDriver。华为客户端继续放在隔离的 `huawei-mrs/`，二者不混用 Hadoop/ZooKeeper 依赖。开源连接测试使用与登记、接入相同的 URL 构造器，保留 HTTP、TLS 和 NoSASL 配置，无认证模式显式传入 `auth=none`。
+后端优先使用应用 classpath 中所选产品的驱动；外置厂商驱动以 `JDBC_DRIVER_DIRECTORY` 或 JVM 参数 `data-elements.jdbc.driver-directory` 定位，加载前核对 JAR 内的实际驱动类。不同 GaussDB 驱动直接绑定到各自连接池，避免多个驱动接受 `jdbc:opengauss` 时由全局 DriverManager 随机选择。字段治理的物理 Schema 探查与字典读取也复用该产品驱动实例；GaussDB 产品变化进入连接池缓存键，不能复用同协议前缀下另一产品的会话。开源 Hive 必须在该目录的 `open-source-hive/` 安装 Apache Hive JDBC standalone 客户端，连接测试、表/字段探查和连接池共用同一个隔离驱动实例；缺少客户端时明确报错，不能回退到同名的华为 HiveDriver。华为客户端继续放在隔离的 `huawei-mrs/`，二者不混用 Hadoop/ZooKeeper 依赖。开源连接测试使用与登记、接入相同的 URL 构造器，保留 HTTP、TLS 和 NoSASL 配置，无认证模式显式传入 `auth=none`。
 
 服务端 Hive 元数据工具保留真实 `HiveMetaStoreClient` 的批量目录读取能力，其运行时依赖同一 MRS 版本的 `org.apache.hive:hive-storage-api`。该依赖提供 `ValidWriteIdList` / `ValidTxnList`，不能因 Metastore 传递依赖被排除而省略，也不能只凭 JDBC 可连接或 Maven 编译成功判断齐全。`HiveMetastoreRuntimeTest` 使用本机 Thrift 测试端核验真实客户端的20/100分区单次批量请求；交付 JAR 后另执行 `python tools/check-backend-hive-runtime.py --jar <完整后端JAR> --test-classes <本次Maven输出目录>/test-classes`，只向 Spring Boot 类加载器加入无测试框架依赖的探针，核对真实 `HiveModule.partitionLocations` 的完整调用。此项检查不连接生产 Hive，不代替现场 Kerberos、Metastore 权限和数据验证。画布发布现按用户选择对分区和非分区目标统一生成普通基础流程，不调用上述分区目录读取；分区路由及目录由操作员在 NiFi 原生画布维护，具体规则见海通主文档。
 
@@ -1645,6 +1660,10 @@ NiFi发布使用调用范围内的HTTP客户端，避免逐组件重新创建TLS
 原生入口使用现有Magic `GET /nifi/flow/link` 校验行业、画布和现有ALL数据范围，调用现有协议客户端按保存的 `runtimeNodeId` 生成节点原生地址，不请求NiFi、不回退默认节点，也不返回节点凭据。响应 `directNode=true, readOnly=false, authenticatedByBackend=false`；浏览器直接使用NiFi自身登录与权限，可使用完整原生界面。旧只读代理 `NifiNativeUiProxyController`、`NifiNativeView` 和专用properties退役：删除2个生产Java文件／类、1个Controller及1个专用测试文件，原生跳转与边界覆盖并入现有Magic、运行节点和前端测试。无数据库结构变更。此链路尚未纳入根Mock；接口契约核查结果同步在Mock接手说明，真实节点连通性仍需独立验证。原生配置不自动回写海通DSL，重新部署前须核对原生修改。
 
 根工具 `tools/package-nifi-deployment.py` 从已校验的 Apache NiFi 2.9.0 完整发行 ZIP、匹配的厂商 NAR、海通字段治理 NAR、Linux x86_64 JDK21和驱动清单生成独立完整包。参数通过工具 `--help` 查看，发行文件使用官方SHA-512校验，JDK和驱动使用已登记SHA-256校验，所有自定义NAR核对坐标、父依赖和完整性。输出包含逐文件二进制校验清单、`extensions.json`、驱动版本清单及现场绝对路径映射生成入口，厂商二进制与运行配置继续留在仓库外。
+
+只补充 JDBC 时使用 `tools/package-nifi-jdbc-bundle.py`，不重发 NiFi、JDK 或 NAR。工具从带摘要清单的归档驱动、Maven 原件及指定的已验证驱动目录取件，逐个校验 JAR，按数据库隔离完整依赖，并在 JDK21 检查每组驱动类、构造与 URL 协议；该检查不建立数据库连接，不能代替实库验收。输出包含原件摘要、驱动类、依赖组合、版本选择说明和安装入口。ClickHouse 受管 0.6.5 必须同时提供主 JAR 与 all JAR；开源 Hive 与 MRS 的同名驱动分开，GaussDB 原生、华为 openGauss、社区 openGauss 与 DWS 按实际产品和协议选择。Oracle、Hive 兼容适配 JAR 必须与原厂驱动配套，兼容 URL 与原生 URL 也分别列明。
+
+解压驱动包后执行 `bash install-jdbc.sh <NiFi安装目录>`，要求 Python3.6+；脚本校验全部驱动摘要后复制到新的独立驱动目录，生成 NiFi 本机的绝对路径映射，不编辑流程、配置、队列或启停服务。集群每个执行节点使用相同路径。拷贝完成还须将所选驱动类和完整 JAR 路径配置到接入节点与对应 DBCP 服务，已有服务不会因为文件已复制而自动切换驱动。禁止把所有厂商、所有版本放进同一个连接池类路径。缺少可核验厂商原件的产品在清单中明确排除，不能以兼容产品驱动冒充。驱动原件、厂商授权资料和构建产物保存在仓库外；包内不含现场账号、认证文件或连接凭据。
 
 当前构建的匹配组合含9个NAR，包括`haitong-mapping-nar:1.1.30`，以及2.9.0的`datadevs-database`、`datadevs-record`、`datadevs-record-service-api`、`datadevs-record-redis-service`、`datadevs-avro`、`datadevs-encrypt`、`linewell-hadoop-libraries`和`linewell-hadoop`。同版本厂商原件在临时NiFi 2.9.0 / JDK21实例及上述34节点核对20类自定义Processor和2类Controller Service注册，覆盖此前保存的公司节点全部自定义类型；56当前已通过API复核注册，但SSH认证受阻，不能将历史磁盘清单当作当前文件证明。注册验证不等同于现场数据库、Hadoop或Kerberos业务流验收。
 

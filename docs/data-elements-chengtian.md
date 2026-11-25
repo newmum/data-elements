@@ -81,7 +81,7 @@ NACOS_CONFIG_IMPORTS=optional:nacos:data-element_ct.yml?group=DEFAULT_GROUP&refr
 
 接入与分发任务共用 `data-convergence` 的树、筛选、表格和任务抽屉。分发入口 `data-convergence-hive` 显式选择分发模式，两端分别沿用原路由、默认排序、状态页签和服务端分页、树统计接口。分发模式保留“驳回修改”和分发建表配置。
 
-两个任务页将实时连接状态放在左侧树标题旁；右侧查询框前的数据源类型筛选与数据源管理共用 `datasource-type-filter`，统一图标、名称和数量角标；筛选名称精简为“全部类型”“人大金仓”“Elasticsearch”“其他类型”，任务页控件宽164px，状态页签保留在左侧；默认提示为“请选择数据源类型”。类型与搜索组成按内容占宽的右对齐筛选组，换行后同样贴右；任务表操作列宽98px，操作内容保持居中。切换树节点保留类型、任务状态和关键词，查询与类型清除均重置到第一页。
+两个任务页将实时连接状态放在左侧树标题旁；右侧查询框前的数据源类型筛选与数据源管理共用 `datasource-type-filter`，统一图标、名称和数量角标，已知类型按数据抽取登记卡片排列，登记入口之外的历史类型排在后面；筛选名称精简为“全部类型”“人大金仓”“Elasticsearch”“其他类型”，任务页控件宽164px，状态页签保留在左侧；默认提示为“请选择数据源类型”。类型与搜索组成按内容占宽的右对齐筛选组，换行后同样贴右；任务表操作列宽98px，操作内容保持居中。切换树节点保留类型、任务状态和关键词，查询与类型清除均重置到第一页。
 
 `/ods/ingest/page`、`/ods/dist/tables` 的表级分页支持 `datasourceType` 和 `includeDatasourceTypeStatistics=true`，同一响应返回 `datasourceTypeStatistics`。任务页角标按当前租户有效、已登记且属于本任务类别的数据表记录计数（unit=table），跟随树选择、表名关键词和任务状态，自身类型条件不参与角标计算；未选类型时“全部类型”与分页总数一致，选择类型后该类型角标与分页总数一致。数据源管理继续按数据源个数统计。接入任务排除 ODS 绑定库，分发任务只保留 ODS 绑定库。显式选择空部门或空业务系统返回零，不扩大到全部范围。统计与分页共用同一 SQL 条件，额外一次按数据源分组的 COUNT 聚合，归入各类型，不按表行或类型发起补查。兼容驱动别名及推送、上报、代理接入方式；失败显示未知统计并提供重试，过期响应不覆盖新筛选结果。原有当前租户、有效候选与任务关联校验保持生效。
 
@@ -230,6 +230,8 @@ http://localhost:3000/
 <a id="overview--部署建议"></a>
 
 ### 部署建议
+
+公安MySQL R3需要补上海通数据集成中心时，使用 `tools/package-police-haitong-overlay.py --base <R3完整包.zip> --frontend <海通构建目录> --component <任务配置编译结果.json> --output <增补包.zip>`。海通采用与R3接口同期的 `dcc7f6db` 快照，使用 `--base=./`，并设置 `VITE_DATA_ELEMENTS_API_BASE_URL=../prod-api`、`VITE_APP_BASE_API=../prod-api/nifi`、`VITE_APP_DATAASSETS_API=../prod-api`、`VITE_SOURCE_PLATFORM_HOME_URL=../#/`、`VITE_SOURCE_PLATFORM_STORAGE_PREFIX=police-mysql`。增补包包含海通静态站点、Caddy路由、源平台导航地址模块和现行外部中间件启动器；不包含JAR、数据库、NiFi或中间件二进制，不写Magic或业务数据；按R3摘要仅更新控制库中的 `schedule-setting` 源码、JS和CSS，修复内嵌画布会话。驱动从原JAR提取，凭据从原外部控制库配置读取，不写入日志。执行 `bash install.sh <原部署根目录>` 前检查目标文件摘要；不覆盖自定义网关或未知版本，通过后仅停止web/backend、备份并复制所选文件，写入失败回退文件。原外部连接、端口、身份密钥和账号保持原文件，安装后运行 `bash check.sh`、`bash start.sh` 并强制刷新浏览器。入口按当前前缀打开 `haitong/#/integration/overview`，兼容直接端口及 `/wanxiang/`，会话使用原公安命名空间，不把token写入URL；NiFi仍使用原数据抽取节点配置。宿主通过 `__DATA_ELEMENTS_GET_PLATFORM_TOKEN__` 向所选低代码提供当前会话；画布等待受信父页面INIT，初次握手建立会话版本不视为账号切换，后续切换仍丢弃旧请求。组件持久化更新后通过R3原冷启动刷新缓存；接口契约、分页和角色范围不变，无需复制Mock业务场景。
 
 自备MySQL、Redis和Elasticsearch的公安MySQL部署，使用 `python tools/package-police-external-overlay.py --output <覆盖补丁.zip>` 生成只含脚本及配置示例的覆盖包，应用于已交付的Linux x86_64 MySQL R3目录。先覆盖后执行新版 `bash stop.sh`，再复制 `config/external-services.json.example` 为受限的 `config/external-services.json`，分别填写控制库、公安业务库、Redis及HTTP ES节点的连接；`bash check.sh` 只验证格式、原密钥和TCP可达性，`bash start.sh` / `bash stop.sh` 只管理backend和web。原 `config/application.yml`、网页端口、网关配置、前后端文件和数据保持原文件；连接通过进程环境覆盖旧本机地址，沿用原IDAAS密钥，不重新初始化管理员。启动器不安装或启停中间件，不执行SQL、初始化或迁移外部数据库；已有数据应先由管理员备份迁移，禁止全量导入已有业务库。旧脚本已经启动的中间件须由管理员确认后单独停用，旧二进制和数据不会被覆盖包自动删除。R3自定义ES客户端只支持HTTP主机:端口，HTTPS及IPv6地址在配置检查时明确拒绝；仅脚本补丁不宣称扩展后端协议支持。覆盖包不含JAR、前端、业务初始化数据或中间件发行件，不能脱离原完整目录单独运行。
 

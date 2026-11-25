@@ -79,21 +79,23 @@ const names: Record<string, string> = {
   oracle: "Oracle",
   oceanbasemysql: "OceanBase MySQL",
   oceanbaseoracle: "OceanBase Oracle",
-  gaussdb: "GaussDB",
-  gbase8a: "GBase 8a",
-  sqlserver: "SQL Server",
-  hive: "Hive",
-  vertica: "Vertica",
-  dameng: "达梦数据库",
-  postgresql: "PostgreSQL",
   kingbase8: "人大金仓",
-  maxcompute: "MaxCompute",
-  minio: "MinIO",
+  postgresql: "PostgreSQL",
+  dameng: "达梦数据库",
+  hive: "Hive",
+  gaussdb: "GaussDB",
   ftp: "FTP",
-  api: "API",
   kafka: "Kafka",
+  minio: "MinIO",
   elasticsearch: "Elasticsearch",
   clickhouse: "ClickHouse",
+  mongodb: "MongoDB",
+  gbase8a: "GBase 8a",
+  sqlserver: "SQL Server",
+  vertica: "Vertica",
+  // 登记抽取方式之外的历史类型仍允许筛选，排在登记类型之后。
+  maxcompute: "MaxCompute",
+  api: "API",
 };
 const modes: Record<string, { label: string; icon: string; color: string }> = {
   "mode:receive": { label: "数据推送方式", icon: "el-icon-Download", color: "#079669" },
@@ -102,16 +104,12 @@ const modes: Record<string, { label: string; icon: string; color: string }> = {
 };
 const normalize = (value: string) => value.toLowerCase().replace(/[\s_-]/g, "");
 const displayedOptions = computed<TypeOption[]>(() => {
-  if (props.options) {
-    return props.options.map((option) => ({
-      ...option,
-      label: names[option.value] || (option.value === "other" ? "其他类型" : option.label),
-    }));
-  }
+  const supplied = new Map((props.options || []).map(option => [option.value, option]));
   const keys = new Set([
     ...Object.keys(names),
     ...Object.keys(modes),
     "other",
+    ...supplied.keys(),
     ...Object.keys(props.counts),
   ]);
   return [...keys].map((value) => ({
@@ -121,10 +119,10 @@ const displayedOptions = computed<TypeOption[]>(() => {
       names[value] ||
       (value === "other"
         ? "其他类型"
-        : Object.keys(props.dbTypes).find((raw) => normalize(raw) === value) || value),
-    icon: modes[value]?.icon || (names[value] ? value : "database-network"),
-    color: modes[value]?.color || "#1677ff",
-    count: Number(props.counts[value] || 0),
+        : supplied.get(value)?.label || Object.keys(props.dbTypes).find((raw) => normalize(raw) === value) || value),
+    icon: modes[value]?.icon || (names[value] ? value : supplied.get(value)?.icon || "database-network"),
+    color: modes[value]?.color || supplied.get(value)?.color || "#1677ff",
+    count: Number(supplied.get(value)?.count ?? props.counts[value] ?? 0),
   }));
 });
 const selected = computed(() =>

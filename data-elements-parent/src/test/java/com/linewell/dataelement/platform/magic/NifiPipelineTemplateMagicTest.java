@@ -36,6 +36,28 @@ import org.ssssssss.script.MagicScriptContext;
 import org.ssssssss.script.runtime.function.MagicScriptLambdaFunction;
 
 class NifiPipelineTemplateMagicTest {
+    @Test void minioNodeTemplateUsesTheSameRegisteredFilenameMatchingSemantics() throws Exception {
+        var fixture=new Fixture();
+        for(boolean explicit:List.of(false,true)) {
+            var config=new LinkedHashMap<String,Object>(Map.of("minioBucket","registered","minioFilePattern","report[1]_?.xlsx"));
+            if(explicit)config.put("fileFilterRegex","^only[0-9]\\.json$");
+            fixture.jdbc.update("UPDATE db_datasource_t SET db_type='minio',pool_cfg=? WHERE tid='source-db'",JSON.writeValueAsString(config));
+            fixture.sql.reads=0;
+            var response=fixture.node(Map.of("key","source.minio","tableId","source-table"));
+            assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+            var node=JSON.valueToTree(response.getBody());
+            assertThat(node.path("config").path("minioFilePatternScope").asText()).isEqualTo("FILE_NAME");
+            var pattern=java.util.regex.Pattern.compile(node.path("config").path("minioFilePattern").asText());
+            assertThat(pattern.matcher("REPORT[1]_A.XLSX").matches()).isEqualTo(!explicit);
+            assertThat(pattern.matcher("ONLY2.JSON").matches()).isEqualTo(explicit);
+            assertThat(pattern.matcher("report1_A.xlsx").matches()).isFalse();
+            assertThat(pattern.matcher("report[1]_AB.xlsx").matches()).isFalse();
+            assertThat(fixture.sql.reads).isEqualTo(4);
+        }
+        fixture.denied="source-db";
+        assertThat(fixture.node(Map.of("key","source.minio","tableId","source-table")).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        verifyNoInteractions(fixture.explorer);
+    }
     @Test
     void returnsRawNodeConfigAndPreservesRegisteredTimestampAndTargetKeys() throws Exception {
         var fixture = new Fixture();

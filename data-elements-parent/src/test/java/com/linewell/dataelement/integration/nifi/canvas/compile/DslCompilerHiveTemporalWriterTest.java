@@ -25,6 +25,23 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 class DslCompilerHiveTemporalWriterTest {
+    @ParameterizedTest @org.junit.jupiter.params.provider.CsvSource({"true,LINEWELL_HDFS","false,LINEWELL_HDFS","true,HDFS_BATCH","false,HDFS_BATCH","true,HIVE_RECORD_PUT","false,HIVE_RECORD_PUT"})
+    void onlyRegisteredHiveBooleanTargetsReceiveTheStrictBooleanReader(boolean registered,String mode) {
+        if(mode.equals("HDFS_BATCH"))when(nifi.findProcessorType("PutHDFS")).thenReturn(java.util.Optional.of("org.apache.nifi.processors.hadoop.PutHDFS"));
+        var cfg=new LinkedHashMap<String,Object>(hiveSink("hive").config());
+        cfg.put("hiveWriteMode",mode);cfg.put("jdbcUrl","jdbc:hive2://validation.invalid/default");
+        cfg.put("targetColumns",List.of(Map.of("columnName","FLAG","dataType","boolean","columnType","BOOLEAN")));
+        if(registered){cfg.put("targetDbId","validation-db");cfg.put("targetTableId","validation-table");}
+        var sink=new Pipeline.Node("hive","sink.hive","Hive目标","sink",600,0,cfg);
+        compiler.compile(hiveTargetFlow(List.of(source("source","postgresql",Map.of()),sink),List.of(new Pipeline.Edge("source-hive","source","hive","default"))));
+        var readers=services.stream().filter(s->s.type().equals("com.linewell.dataelement.nifi.HaitongJdbcRecordReader")).toList();
+        if(registered){
+            assertThat(readers).hasSize(1);
+            assertThat(readers.getFirst().properties()).containsEntry("number-fields","[]").containsEntry("boolean-fields","[\"FLAG\"]");
+            assertThat(namedProcessor(mode.equals("HIVE_RECORD_PUT")?"Hive目标/put":"Hive目标/convert").properties()).containsEntry("Record Reader",readers.getFirst().id());
+        }else assertThat(readers).isEmpty();
+        verify(nifi,times(1)).listControllerServices("root");
+    }
     @ParameterizedTest @ValueSource(strings={"Oracle 12+","OCEANBASE_ORACLE","ORACLE12"})
     void oracleDialectAliasesKeepTheirPhysicalNumberReader(String databaseType) {
         var sink=new Pipeline.Node("jdbc","sink.jdbc","Oracle目标","sink",600,0,Map.of("dbType",databaseType,
@@ -154,6 +171,7 @@ class DslCompilerHiveTemporalWriterTest {
                 "jdbcUrl", "jdbc:hive2://hive.example:10000/default", "hiveConnectionMode", "JDBC",
                 "clientConfigDir","/opt/mrs/client","keytabPath","/opt/mrs/client/user.keytab","krb5ConfPath","/opt/mrs/client/krb5.conf","userPrincipal","service_user"));
         when(nifi.findProcessorType("PutHwHDFS")).thenReturn(java.util.Optional.of("com.linewell.microservice.processor.hadoop.PutHwHDFS"));
+        HiveServiceFixtures.stubGlobals(nifi);
         when(nifi.listControllerServices("root")).thenReturn(HiveServiceFixtures.withCsv(json.valueToTree(Map.of("component",Map.of(
                 "id","csv-service-id","name","PUBLIC-WRITER-CSV-HDFS","type","org.apache.nifi.csv.CSVRecordSetWriter",
                 "properties",Map.of("Include Header Line","false","Value Separator","\\u0001"))))));

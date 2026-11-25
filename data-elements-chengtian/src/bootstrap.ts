@@ -5,6 +5,7 @@ import setupPlugins from "@/plugins";
 import "./utils/platformSessionChannel";
 import { useUserStoreHook } from "./store/modules/user-store";
 import { capabilityCenterBases, identityCenterBase, fengchiCenterBase } from "./utils/capabilityCenters";
+import { AuthStorage } from "./utils/auth";
 
 // Element Plus 基础样式（先加载，后用自定义主题覆盖）
 import "element-plus/theme-chalk/index.css";
@@ -26,6 +27,7 @@ declare global {
     __DATA_ELEMENTS_SEARCH_BASE_URL__?: string;
     __DATA_ELEMENTS_IDAAS_BASE_URL__?: string;
     __DATA_ELEMENTS_FENGCHI_BASE_URL__?: string;
+    __DATA_ELEMENTS_GET_PLATFORM_TOKEN__?: () => string;
   }
 }
 
@@ -37,6 +39,8 @@ window.__DATA_ELEMENTS_HAITONG_BASE_URL__ = capabilityCenterBases.haitong;
 window.__DATA_ELEMENTS_SEARCH_BASE_URL__ = capabilityCenterBases.search;
 window.__DATA_ELEMENTS_IDAAS_BASE_URL__ = identityCenterBase;
 window.__DATA_ELEMENTS_FENGCHI_BASE_URL__ = fengchiCenterBase;
+// Low-code cannot read Vite's storage namespace; use the host's current session.
+window.__DATA_ELEMENTS_GET_PLATFORM_TOKEN__ = () => AuthStorage.getAccessToken();
 
 const app = createApp(App);
 

@@ -16,6 +16,26 @@ import org.junit.jupiter.params.provider.CsvSource;
 /** Exercises the public, connection-free DDL path used by materialization preview. */
 class NativeMaterializationDdlTest {
     @ParameterizedTest
+    @CsvSource({"MYSQL,DATETIME(3)","ORACLE,TIMESTAMP(3)","DAMENG,TIMESTAMP(3)",
+            "KINGBASE,TIMESTAMP(3)","POSTGRESQL,TIMESTAMP(3)","SQLSERVER,DATETIME2(3)","HIVE,TIMESTAMP"})
+    void registeredFractionalSecondsSurviveTargetDdl(DatabaseType target, String expected) {
+        var event=column("event_time","datetime(3)",0);
+        event.setSourceDatabaseType("mysql");
+        event.setPrecision(0);event.setScale(0);
+        String ddl=new MySqlMetadataExplorer().generateCreateTableDdl(config(target),"validation_fraction",List.of(event),null);
+        assertThat(ddl.replace("`", "").replace("\"", "")).contains("event_time " + expected);
+        assertThat(event.getColumnType()).isEqualTo("datetime(3)");
+    }
+
+    @Test
+    void targetTimestampCannotSilentlyDiscardUnsupportedFractionalSeconds() {
+        var event=column("event_time","timestamp(9)",0);
+        event.setSourceDatabaseType("oracle");
+        assertThatThrownBy(()->new MySqlMetadataExplorer().generateCreateTableDdl(config(DatabaseType.MYSQL),"validation_fraction",List.of(event),null))
+                .hasMessageContaining("小数秒");
+    }
+
+    @ParameterizedTest
     @CsvSource({"smallint,SMALLINT", "int,INT", "bigint,BIGINT", "int8,BIGINT"})
     void damengIdentityUsesNativeIntegerAndSupportsPreservedSourceIds(String sourceType, String expected) {
         var id = column("id", sourceType, 0);

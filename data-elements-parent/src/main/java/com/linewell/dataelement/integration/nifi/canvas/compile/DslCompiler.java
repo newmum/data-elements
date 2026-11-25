@@ -154,11 +154,12 @@ public class DslCompiler {
     }
 
     public void preflightMapping(Pipeline pipeline){
-        Map<String,JsonNode> specs=javaMappingSpecifications(HiveSinkPublicationPolicy.forPublication(pipeline));
+        pipeline=HiveSinkPublicationPolicy.forPublication(pipeline);
+        Map<String,JsonNode> specs=javaMappingSpecifications(pipeline);
         if(!specs.isEmpty()){if(unifiedMappingService==null)throw new IllegalStateException("统一字段规则服务未配置");
-            var plans=unifiedMappingService.compileBatch(specs);nifi.requireMappingExtension();
+            var plans=unifiedMappingService.compileBatch(specs);sharedTargetProjections(pipeline,plans);nifi.requireMappingExtension();
             var textNumbers=hiveNumericTextFields(pipeline,plans);
-            if(!textNumbers.isEmpty())requireHiveExactReader(pipeline.dsl().nodes().stream()
+            if(!textNumbers.isEmpty())requireExactJdbcReader(pipeline.dsl().nodes().stream()
                     .filter(node->textNumbers.containsKey(node.id())).findFirst().orElseThrow());
         }
     }
@@ -186,6 +187,7 @@ public class DslCompiler {
 
     /** Validate all source configurations in memory, then query installed extensions once per publication. */
     public void preflightSources(Pipeline pipeline) {
+        validateSourceReadConfigurations(pipeline);
         if (validateDateFetchConfigurations(pipeline)) nifi.requireDateFetchExtension();
         preflightScriptProcesses(pipeline);
         Map<String,JsonNode> sourceShapes=registeredSourceShapes(pipeline);
@@ -210,7 +212,7 @@ public class DslCompiler {
         boolean linewell = false;
         boolean timestampFormatter = false;
         boolean backfillProcessor = false;
-        Pipeline.Node exactHiveReaderNode=null;
+        Pipeline.Node exactReaderNode=null;
         for (Pipeline.Node node : pipeline.dsl().nodes()) {
             Map<String, Object> config = node.config() == null ? Map.of() : node.config();
             boolean manualBackfill=Boolean.parseBoolean(configText(config,"manualBackfill"));
@@ -229,6 +231,7 @@ public class DslCompiler {
                     throw new NodeConfigException(node.id(),node.label(),"customQuery","补数查询只支持 SELECT 或 WITH 查询",null);
             }
             if ("sink.jdbc".equals(node.manifestKey())) {
+                if (exactReaderNode == null && !jdbcNumberColumns(config).isEmpty()) exactReaderNode = node;
                 linewell |= LINEWELL_DATABASE_RECORD_MODE.equals(effectiveJdbcWriterType(config));
                 if (Boolean.parseBoolean(configText(config, "insertThenMerge"))) {
                     Map<String,Object> fallback = new LinkedHashMap<>(config);
@@ -242,11 +245,10 @@ public class DslCompiler {
                     && (!hiveTimestampFields(config).isEmpty()||!hiveDateFields(config,Set.of()).isEmpty()))
                 timestampFormatter = true;
             if(HiveSinkPublicationPolicy.usesHdfsMerge(node))hiveMergeMaxAge(config);
-            if(exactHiveReaderNode==null&&"sink.hive".equals(node.manifestKey())
-                    &&HiveSinkPublicationPolicy.isHdfsWriteMode(configText(config,"hiveWriteMode"))
-                    &&!hiveNumberFields(config,Set.of()).isEmpty())exactHiveReaderNode=node;
+            if(exactReaderNode==null&&"sink.hive".equals(node.manifestKey())
+                    &&(!hiveNumberFields(config,Set.of()).isEmpty()||!hiveBooleanFields(config,Set.of()).isEmpty()))exactReaderNode=node;
         }
-        if(exactHiveReaderNode!=null)requireHiveExactReader(exactHiveReaderNode);
+        if(exactReaderNode!=null)requireExactJdbcReader(exactReaderNode);
         if (linewell) nifi.requireLinewellDatabaseRecordExtension();
         if (backfillProcessor && nifi.findProcessorType("org.apache.nifi.processors.standard.QueryDatabaseTableRecord").isEmpty())
             throw new IllegalStateException("当前 NiFi 节点缺少 QueryDatabaseTableRecord，无法生成备用补数入口；旧流程已保留");
@@ -254,7 +256,7 @@ public class DslCompiler {
             throw new IllegalStateException("当前 NiFi 节点缺少 TimestampFormatProcessor，无法生成 Hive 分支时间格式转换；旧流程已保留");
     }
 
-    private void requireHiveExactReader(Pipeline.Node node) {
+    private void requireExactJdbcReader(Pipeline.Node node) {
         JsonNode response=nifi.get("/flow/controller-service-types",JsonNode.class);
         String version=com.linewell.dataelement.mapping.core.MappingEngine.engineVersion();
         int matches=0;
@@ -392,6 +394,7 @@ public class DslCompiler {
         Objects.requireNonNull(pipeline.dsl(), "Pipeline DSL is required");
         Pipeline.Node periodicSource = SyncPolicy.periodicSource(pipeline);
         if (periodicSource != null) validatePeriodicPolicy(pipeline, periodicSource);
+        validateSourceReadConfigurations(pipeline);
         validateDateFetchConfigurations(pipeline);
         FileConsumptionCompiler.validate(pipeline);
         try (var runtime = nifi.bindRuntimeNode()) {
@@ -409,17 +412,18 @@ public class DslCompiler {
         if(!sourceShapes.isEmpty())nifi.requireMappingExtension();
         Map<String,JsonNode> javaSpecs=javaMappingSpecifications(pipeline);
         Map<String,UnifiedMappingService.Compiled> preparedJavaPlans=javaSpecs.isEmpty()?Map.of():unifiedMappingService.compileBatch(javaSpecs);
+        var targetProjections=sharedTargetProjections(pipeline,preparedJavaPlans);
         Map<String,List<String>> hiveNumericText=hiveNumericTextFields(pipeline,preparedJavaPlans);
         Pipeline.Node timestampSink=null;
         Set<String> timestampNodes=JdbcTimestampJsonPolicy.writerNodes(pipeline);
         for(var node:pipeline.dsl().nodes())if("sink.jdbc".equals(node.manifestKey())&&timestampNodes.contains(node.id())
-                &&node.config()!=null&&usesLinewellJdbcWriter(node.config())){
+                &&node.config()!=null){
             for(var column:targetColumnMetadata(node.config()))if("DATETIME".equals(com.linewell.dataelement.mapping.core.JdbcTemporalTypes.logicalType(column.type(),node.config()))){timestampSink=node;break;}
             if(timestampSink!=null)break;
         }
         if(timestampSink!=null||!hiveNumericText.isEmpty()&&pipeline.dsl().nodes().stream().noneMatch(node->"sink.hive".equals(node.manifestKey())
                 &&!hiveNumberFields(node.config(),Set.of()).isEmpty()))
-            requireHiveExactReader(timestampSink!=null?timestampSink:pipeline.dsl().nodes().stream().filter(node->hiveNumericText.containsKey(node.id())).findFirst().orElseThrow());
+            requireExactJdbcReader(timestampSink!=null?timestampSink:pipeline.dsl().nodes().stream().filter(node->hiveNumericText.containsKey(node.id())).findFirst().orElseThrow());
         GlobalJsonRecordServices globalJson = GlobalJsonRecordServices.resolve(nifi, pipeline, usesSqlSourceRecordWriter(pipeline));
         if(!hiveNumericText.isEmpty())globalJson.jdbcReaderFormatProperties();
         String parentId = layout == null ? nifi.getRootProcessGroupId() : layout.parentId();
@@ -649,6 +653,9 @@ public class DslCompiler {
                 compiled.get(n.id()).csIds.put("sql-dbcp", cs.id());
             }
         }
+        // Hidden runtime hints are always replaced from the just-authorized plans.
+        cfgByNode.values().forEach(config->config.remove("_runtimeTargetProjectionFields"));
+        targetProjections.forEach((node,plan)->cfgByNode.get(node).put("_runtimeTargetProjectionFields",plan.outputFields()));
         applyGovernedAuditFields(pipeline,cfgByNode,fieldMappingPlans);
         Map<String,com.linewell.dataelement.mapping.core.MappingEngine.Plan> archivedPlans=new LinkedHashMap<>();javaMappingPlans.forEach((node,plan)->archivedPlans.put(node,plan.plan()));
         Map<String,String> planVersionIds=mappingVersions==null?Map.of():mappingVersions.archive(pipeline,archivedPlans);
@@ -670,12 +677,20 @@ public class DslCompiler {
         // Other fields retain the selected public JSON codec's inference and time settings.
         for (var node : pipeline.dsl().nodes()) {
             if (!"sink.jdbc".equals(manifestByNode.get(node.id()).key())) continue;
-            List<String> binary = oracleBlobColumns(cfgByNode.get(node.id()));
-            List<String> numbers = oracleNumberColumns(cfgByNode.get(node.id()));
-            if(!numbers.isEmpty()){
+            Map<String,Object> cfg = cfgByNode.get(node.id());
+            List<String> binary = oracleBlobColumns(cfg);
+            List<String> numbers = jdbcNumberColumns(cfg);
+            List<String> timestamps = new ArrayList<>();
+            if (!usesLinewellJdbcWriter(cfg) && globalJson.timestampNodes().contains(node.id())) {
+                for (var column : targetColumnMetadata(cfg)) {
+                    if ("DATETIME".equals(com.linewell.dataelement.mapping.core.JdbcTemporalTypes.logicalType(column.type(),cfg))) timestamps.add(column.name());
+                }
+            }
+            if(!numbers.isEmpty() || !timestamps.isEmpty()){
                 Map<String,String> properties=new LinkedHashMap<>(globalJson.jdbcReaderFormatProperties());
                 properties.put("number-fields",MAPPER.valueToTree(numbers).toString());
                 if(!binary.isEmpty())properties.put("binary-fields",MAPPER.valueToTree(binary).toString());
+                if(!timestamps.isEmpty())properties.put("timestamp-fields",MAPPER.valueToTree(timestamps).toString());
                 var service=nifi.createControllerService(pgId,"com.linewell.dataelement.nifi.HaitongJdbcRecordReader",node.label()+"/JDBC精确字段Reader",properties);
                 compiled.get(node.id()).csIds.put("jdbc-value-reader",service.id());continue;
             }
@@ -684,7 +699,7 @@ public class DslCompiler {
                     node.label()+"/二进制字段Reader", Map.of("delegate-reader",globalJson.readerId(),"binary-fields",MAPPER.valueToTree(binary).toString()));
             compiled.get(node.id()).csIds.put("jdbc-value-reader", service.id());
         }
-        // Only the final Linewell boundary receives Timestamp carriers. Intermediate
+        // The final Linewell boundary receives the same exact Timestamp carriers. Intermediate
         // QueryRecord/JSON steps keep full-fraction text rather than coercing it through SQL timestamps.
         for(var node:pipeline.dsl().nodes()){
             Map<String,Object> cfg=cfgByNode.get(node.id());
@@ -693,7 +708,7 @@ public class DslCompiler {
             for(var column:targetColumnMetadata(cfg))if("DATETIME".equals(com.linewell.dataelement.mapping.core.JdbcTemporalTypes.logicalType(column.type(),cfg)))timestamps.add(column.name());
             if(timestamps.isEmpty())continue;
             Map<String,String> properties=new LinkedHashMap<>(globalJson.jdbcReaderFormatProperties());
-            properties.put("number-fields",MAPPER.valueToTree(oracleNumberColumns(cfg)).toString());
+            properties.put("number-fields",MAPPER.valueToTree(jdbcNumberColumns(cfg)).toString());
             List<String> binary=oracleBlobColumns(cfg);if(!binary.isEmpty())properties.put("binary-fields",MAPPER.valueToTree(binary).toString());
             properties.put("timestamp-fields",MAPPER.valueToTree(timestamps).toString());
             String id=nifi.createControllerService(pgId,"com.linewell.dataelement.nifi.HaitongJdbcRecordReader",node.label()+"/JDBC完整时间Reader",properties).id();
@@ -702,16 +717,22 @@ public class DslCompiler {
         // Every Hive JSON reread must preserve the same authorized canonical numeric fields.
         // Create the branch reader before the shared enable phase, never inside processor creation.
         for(Pipeline.Node node:pipeline.dsl().nodes()) {
-            if(!isHiveBatchPutHdfs(manifestByNode.get(node.id()),"put",cfgByNode.get(node.id())))continue;
-            List<String> numbers;
-            try { numbers=hiveNumberFields(cfgByNode.get(node.id()),resolveUpstreamOutputFields(pipeline,node.id(),manifestByNode,cfgByNode,fieldMappingPlans)); }
+            if(!"sink.hive".equals(manifestByNode.get(node.id()).key()))continue;
+            List<String> numbers,booleans;
+            try {
+                var fields=resolveUpstreamOutputFields(pipeline,node.id(),manifestByNode,cfgByNode,fieldMappingPlans);
+                numbers=hiveNumberFields(cfgByNode.get(node.id()),fields);
+                booleans=hiveBooleanFields(cfgByNode.get(node.id()),fields);
+            }
             catch(IllegalStateException error){throw new NodeConfigException(node.id(),node.label(),"targetColumns",error.getMessage(),error);}
             var exact=new LinkedHashSet<>(numbers);exact.addAll(hiveNumericText.getOrDefault(node.id(),List.of()));numbers=List.copyOf(exact);
-            if(numbers.isEmpty())continue;
+            if(numbers.isEmpty()&&booleans.isEmpty())continue;
             Map<String,String> properties=new LinkedHashMap<>(globalJson.jdbcReaderFormatProperties());
             properties.put("number-fields",MAPPER.valueToTree(numbers).toString());
+            if(!booleans.isEmpty())properties.put("boolean-fields",MAPPER.valueToTree(booleans).toString());
             NifiEntity reader=nifi.createControllerService(pgId,"com.linewell.dataelement.nifi.HaitongJdbcRecordReader",node.label()+"/Hive精确数值Reader",properties);
             compiled.get(node.id()).csIds.put("hive-value-reader",reader.id());
+            compiled.get(node.id()).csIds.put("jsonReader",reader.id());
         }
         // Resolve once per deployment. Several Hive targets can share one
         // server-managed writer without a NiFi read per sink.
@@ -956,6 +977,7 @@ public class DslCompiler {
             }
         }
 
+        prependSharedTargetProjections(pgId,pipeline,compiled,targetProjections,globalJson);
         // Normalize the authorized source once, before any filter, branch or target mapping.
         for(var source:sourceShapes.entrySet()) {
             Pipeline.Node node=pipeline.dsl().nodes().stream().filter(item->item.id().equals(source.getKey())).findFirst().orElseThrow();
@@ -1132,6 +1154,14 @@ public class DslCompiler {
             }
         }
         if (saved != null) config.putAll(saved);
+        if (manifest.fields() != null) for (var field : manifest.fields()) {
+            if ("read".equals(field.group()) && field.defaultValue() != null && configText(config, field.key()).isBlank())
+                config.put(field.key(), field.defaultValue());
+            if ("read".equals(field.group()) && "number".equals(field.type()) && !configText(config, field.key()).isBlank()) {
+                try { config.put(field.key(), Integer.toString(new java.math.BigDecimal(configText(config, field.key())).intValueExact())); }
+                catch (NumberFormatException | ArithmeticException ignored) { /* Preflight reports the field-specific error. */ }
+            }
+        }
         return config;
     }
 
@@ -1367,6 +1397,8 @@ public class DslCompiler {
         fetchProperties.put("Password", configText(cfg, "password"));
         fetchProperties.put("Remote Path", remotePath);
         fetchProperties.put("File Filter Regex", fileFilter);
+        fetchProperties.put("Remote Poll Batch Size", configText(cfg, "remotePollBatchSize"));
+        fetchProperties.put("Max Selects", configText(cfg, "maxFilesPerRun"));
         // Ingestion is a read of the registered source, not ownership of its
         // lifecycle. NiFi defaults to deleting successfully fetched files.
         fetchProperties.put("Delete Original", "false");
@@ -1480,6 +1512,7 @@ public class DslCompiler {
         }
 
         Map<String, String> listProperties = minioS3Properties(endpoint, bucket, nc.csIds.get("minioCredentials"));
+        listProperties.put("Listing Batch Size", configText(cfg, "listingBatchSize"));
         if (!prefix.isBlank()) listProperties.put("Prefix", prefix);
         double x = nodeOriginX(nodeLayout);
         double y = nodeOriginY(nodeLayout);
@@ -1520,6 +1553,14 @@ public class DslCompiler {
         String textFormat = firstNonBlankStatic(configText(cfg, "fileFormat"), "csv");
         if ("csv".equals(textFormat) || "json".equals(textFormat))
             routes.put(textFormat, "${filename:toLower():matches('.*\\.(" + textFormat + "|txt)$')}");
+        String filePattern = configText(cfg, "minioFilePattern");
+        if (!filePattern.isBlank()) {
+            String encodedPattern = java.util.Base64.getEncoder().encodeToString(filePattern.getBytes(StandardCharsets.UTF_8));
+            String subject = "FILE_NAME".equalsIgnoreCase(configText(cfg, "minioFilePatternScope"))
+                    ? "filename:substringAfterLast('/')" : "filename";
+            String selectedFile = "${" + subject + ":matches(${literal('" + encodedPattern + "'):base64Decode()})}";
+            routes.replaceAll((name, condition) -> condition.substring(0, condition.length() - 1) + ":and(" + selectedFile + ")}");
+        }
         NifiEntity route = nifi.createProcessor(pgId, ROUTE_ON_ATTRIBUTE_TYPE,
                 node.label() + "/文件类型分流", x, y + (2 + selectedOffset) * PROCESSOR_ROW_GAP,
                 routes, null, null);
@@ -1782,6 +1823,54 @@ public class DslCompiler {
         compiled.usedOutgoing.put(processor.id(),new LinkedHashSet<>(List.of("failure","invalid","retry")));
     }
     public record MappingReplacement(NodeCompilation node,String planId) {}
+    static Map<String,com.linewell.dataelement.mapping.core.MappingEngine.Plan> sharedTargetProjections(Map<String,UnifiedMappingService.Compiled> plans){
+        Map<String,com.linewell.dataelement.mapping.core.MappingEngine.Plan> result=new LinkedHashMap<>();
+        plans.values().forEach(compiled->{for(JsonNode branch:compiled.plan().document().path("schemaContract").path("targets")){
+            String node=branch.path("nodeId").asText();var projection=UnifiedMappingService.sharedTargetProjection(compiled.plan(),node);if(projection==null)continue;
+            var previous=result.putIfAbsent(node,projection);
+            if(previous!=null&&!previous.hash().equals(projection.hash()))throw new MappingException("AMBIGUOUS_FIELD","目标分支不能接收不同字段投影");
+        }});return result;
+    }
+    /** Shared BINARY values stay binary for JDBC; only Hive's text branch gets Base64 transport. */
+    private Map<String,com.linewell.dataelement.mapping.core.MappingEngine.Plan> sharedTargetProjections(
+            Pipeline pipeline,Map<String,UnifiedMappingService.Compiled> plans){
+        var result=sharedTargetProjections(plans);
+        for(var entry:plans.entrySet()){
+            var shared=entry.getValue().plan();
+            if(shared.outputContracts().values().stream().noneMatch(type->type.logicalType().equals("BINARY")))continue;
+            List<String> hiveTargets=new ArrayList<>();boolean otherTarget=false;
+            for(var edge:pipeline.dsl().edges()){
+                if(!entry.getKey().equals(edge.source())||Set.of("failure","retry","invalid").contains(Objects.toString(edge.outlet(),"").toLowerCase(Locale.ROOT)))continue;
+                Pipeline.Node target=pipeline.dsl().nodes().stream().filter(node->node.id().equals(edge.target())).findFirst().orElse(null);
+                ComponentManifest manifest=target==null?null:registry.get(effectiveManifestKey(target));
+                if(manifest!=null&&isHiveBatchPutHdfs(manifest,"put",manifestConfig(manifest,target.config())))hiveTargets.add(target.id());else otherTarget=true;
+            }
+            if(!otherTarget)continue;
+            for(String target:hiveTargets){
+                var projection=UnifiedMappingService.sharedTargetProjection(shared,target,true);
+                if(projection==null)throw new MappingException("INVALID_SCHEMA","Hive二进制传输目标缺少已校验的字段契约");
+                var previous=result.putIfAbsent(target,projection);
+                if(previous!=null&&!previous.hash().equals(projection.hash()))throw new MappingException("AMBIGUOUS_FIELD","目标分支不能接收不同字段投影");
+            }
+        }
+        return result;
+    }
+    private void prependSharedTargetProjections(String group,Pipeline pipeline,Map<String,NodeCompilation> compiled,
+            Map<String,com.linewell.dataelement.mapping.core.MappingEngine.Plan> projections,GlobalJsonRecordServices globalJson){
+        for(Pipeline.Node sink:pipeline.dsl().nodes()){
+            var plan=projections.get(sink.id());if(plan==null)continue;
+            NodeCompilation target=compiled.get(sink.id()),projection=new NodeCompilation();
+            projection.csIds.put("jsonReader",globalJson.readerId());projection.csIds.put("typed-json-reader",globalJson.readerId());
+            projection.csIds.put("typed-json-writer",globalJson.writerForNode(sink.id()));
+            var node=new Pipeline.Node(sink.id(),"transform.field-enrichment",sink.label()+"/目标字段投影","transform",sink.x()-PROCESSOR_COLUMN_GAP,sink.y(),Map.of());
+            buildJavaMapping(group,node,projection,new UnifiedMappingService.Compiled(plan,Map.of()),Map.of(),null,
+                    pipeline.id()+":"+sink.id()+":physical-fields",Map.of(),hiveBinaryTextOutput(pipeline,sink.id(),new UnifiedMappingService.Compiled(plan,Map.of())),globalJson);
+            var output=projection.outlets.get("default");connectInternal(group,projection,output.processorId(),target.inletProcessorId,output.relationship());
+            projection.processorIds.forEach((id,value)->target.processorIds.put("target-projection-"+id,value));
+            projection.usedOutgoing.forEach((id,relationships)->target.usedOutgoing.computeIfAbsent(id,key->new LinkedHashSet<>()).addAll(relationships));
+            target.inletProcessorId=projection.inletProcessorId;
+        }
+    }
     /** Field-only upgrade: resolve public JSON codecs; keep source processors and their state. */
     public MappingReplacement createMappingReplacement(Pipeline pipeline,Pipeline.Node node,String group,String reader,String typedReader,String writer,UnifiedMappingService.Compiled prepared){
         if(HiveSinkPublicationPolicy.forPublication(pipeline).dsl().nodes().stream().noneMatch(candidate->candidate.id().equals(node.id())))
@@ -1796,6 +1885,9 @@ public class DslCompiler {
     }
     private boolean hiveBinaryTextOutput(Pipeline pipeline,String nodeId,UnifiedMappingService.Compiled plan){
         if(plan.plan().outputContracts().values().stream().noneMatch(type->type.logicalType().equals("BINARY")))return false;
+        Pipeline.Node self=pipeline.dsl().nodes().stream().filter(node->node.id().equals(nodeId)).findFirst().orElse(null);
+        ComponentManifest selfManifest=self==null?null:registry.get(effectiveManifestKey(self));
+        if(selfManifest!=null&&isHiveBatchPutHdfs(selfManifest,"put",manifestConfig(selfManifest,self.config())))return true;
         boolean textTarget=false,otherTarget=false;
         for(Pipeline.Edge edge:pipeline.dsl().edges()){
             if(!nodeId.equals(edge.source()))continue;
@@ -1804,8 +1896,7 @@ public class DslCompiler {
             boolean text=manifest!=null&&isHiveBatchPutHdfs(manifest,"put",manifestConfig(manifest,target.config()));
             textTarget|=text;otherTarget|=!text;
         }
-        if(textTarget&&otherTarget)throw new IllegalStateException("二进制字段需要独立的Hive文本写入分支，不能和其他目标共享同一传输编码");
-        return textTarget;
+        return textTarget&&!otherTarget;
     }
     /** Only a direct JDBC source emits wire aliases. Downstream mapping nodes
      * already receive restored names and must not reinterpret their output keys. */
@@ -1863,8 +1954,7 @@ public class DslCompiler {
         }
         return List.copyOf(result);
     }
-    private List<String> oracleNumberColumns(Map<String,Object> cfg) {
-        if(!isLinewellOracleWriterTarget(configText(cfg,"dbType")))return List.of();
+    private List<String> jdbcNumberColumns(Map<String,Object> cfg) {
         if(!(cfg.get("targetColumns") instanceof List<?> columns))return List.of();
         Set<String> result=new LinkedHashSet<>();
         for(Object raw:columns){Map<String,Object> column=objectMap(raw);
@@ -1997,6 +2087,8 @@ public class DslCompiler {
                                                     Map<String, ComponentManifest> manifestByNode,
                                                     Map<String, Map<String, Object>> cfgByNode,
                                                     Map<String, FieldMappingService.CompiledMapping> mappingPlans) {
+        Object projected=cfgByNode.getOrDefault(targetNodeId,Map.of()).get("_runtimeTargetProjectionFields");
+        if(projected instanceof Collection<?> names){Set<String> result=new LinkedHashSet<>();names.forEach(name->result.add(Objects.toString(name)));return result;}
         return resolveInputFields(pipeline, targetNodeId, manifestByNode, cfgByNode, mappingPlans,
                 new LinkedHashSet<>());
     }
@@ -3691,7 +3783,7 @@ public class DslCompiler {
         List<String> identifiers = new ArrayList<>();
         for (String part : parts) {
             String value = part.trim();
-            if (!value.matches("[A-Za-z_][A-Za-z0-9_$]*")) {
+            if (!value.matches("[A-Za-z0-9_][A-Za-z0-9_$]*")) {
                 throw new IllegalStateException("来源表名不支持来源 SQL 下推: " + table);
             }
             identifiers.add(sourceSqlIdentifier(value, sourceCfg));
@@ -3914,6 +4006,12 @@ public class DslCompiler {
         Map<String, String> props = new LinkedHashMap<>();
         JdbcDriverSpec driver = jdbcDriverSpec(sourceCfg);
         String jdbcUrl = jdbcConnectionUrl(sourceCfg);
+        if (jdbcUrl.startsWith("jdbc:mysql:") && !configText(sourceCfg, "defaultFetchSize").isBlank()) {
+            String fetch = sourceRowCount(Collections.singletonMap("maxRowsPerRun", sourceCfg.get("defaultFetchSize")), "maxRowsPerRun");
+            jdbcUrl = jdbcUrl.replaceAll("(?i)([?&])defaultFetchSize=[^&]*", "$1defaultFetchSize=" + fetch);
+            jdbcUrl = appendJdbcParamIfMissing(jdbcUrl, "defaultFetchSize", fetch);
+            jdbcUrl = appendJdbcParamIfMissing(jdbcUrl, "useCursorFetch", "true");
+        }
         boolean openSourceHive = "HIVE".equalsIgnoreCase(configText(sourceCfg, "dbType"))
                 && "open-source".equalsIgnoreCase(configText(sourceCfg, "hiveConnectionMode"));
         if (openSourceHive) {
@@ -4367,6 +4465,7 @@ public class DslCompiler {
     /** Numeric shared outputs remain exact even when Hive stores them in textual columns. */
     private Map<String,List<String>> hiveNumericTextFields(Pipeline pipeline,Map<String,UnifiedMappingService.Compiled> plans){
         if(plans.isEmpty())return Map.of();
+        var projections=sharedTargetProjections(pipeline,plans);
         Map<String,Pipeline.Node> nodes=new LinkedHashMap<>();pipeline.dsl().nodes().forEach(node->nodes.put(node.id(),node));
         Map<String,List<String>> incoming=new LinkedHashMap<>();
         for(var edge:pipeline.dsl().edges()==null?List.<Pipeline.Edge>of():pipeline.dsl().edges())if(!Set.of("failure","retry").contains(Objects.toString(edge.outlet(),"").toLowerCase(Locale.ROOT)))
@@ -4376,6 +4475,8 @@ public class DslCompiler {
             if(!"sink.hive".equals(sink.manifestKey())||sink.config()==null
                     ||!HiveSinkPublicationPolicy.isHdfsWriteMode(configText(sink.config(),"hiveWriteMode")))continue;
             Set<String> numeric=new LinkedHashSet<>(),visited=new HashSet<>();var pending=new ArrayDeque<>(incoming.getOrDefault(sink.id(),List.of()));
+            var projection=projections.get(sink.id());
+            if(projection!=null){projection.outputContracts().forEach((name,type)->{if(Set.of("INT","LONG","DECIMAL").contains(type.logicalType()))numeric.add(name);});pending.clear();}
             while(!pending.isEmpty()){
                 String id=pending.removeFirst();if(!visited.add(id))continue;
                 var plan=plans.get(id);
@@ -4400,21 +4501,27 @@ public class DslCompiler {
         return result;
     }
     private List<String> hiveNumberFields(Map<String,Object> config,Set<String> availableFields) {
+        return hiveExactFields(config,availableFields,Set.of("INT","LONG","DECIMAL"),"数值");
+    }
+    private List<String> hiveBooleanFields(Map<String,Object> config,Set<String> availableFields) {
+        return hiveExactFields(config,availableFields,Set.of("BOOLEAN"),"布尔");
+    }
+    private List<String> hiveExactFields(Map<String,Object> config,Set<String> availableFields,Set<String> types,String label) {
         if(firstNonBlankStatic(configText(config,"targetDbId"),configText(config,"registeredDatasourceId"),configText(config,"selectedDatabaseId"),configText(config,"datasourceId"),configText(config,"dataSourceId"),configText(config,"dbId")).isBlank()
                 ||firstNonBlankStatic(configText(config,"targetTableId"),configText(config,"tableId")).isBlank())return List.of();
         Set<String> fields=new LinkedHashSet<>();
         for(TargetColumnMetadata column:targetColumnMetadata(config)) {
-            if(!Set.of("INT","LONG","DECIMAL").contains(com.linewell.dataelement.mapping.core.ValueTypes.type(column.type())))continue;
+            if(!types.contains(com.linewell.dataelement.mapping.core.ValueTypes.type(column.type())))continue;
             String canonical=column.name();
             if(!availableFields.contains(canonical)) {
                 List<String> matches=availableFields.stream().filter(name->name.equalsIgnoreCase(column.name())).toList();
-                if(matches.size()>1)throw new IllegalStateException("Hive 数值字段在共享记录中存在大小写歧义："+column.name());
+                if(matches.size()>1)throw new IllegalStateException("Hive "+label+"字段在共享记录中存在大小写歧义："+column.name());
                 if(!availableFields.isEmpty()&&matches.isEmpty())continue;
                 if(!matches.isEmpty())canonical=matches.getFirst();
             }
             fields.add(com.linewell.dataelement.mapping.core.ValueTypes.field(canonical));
         }
-        if(fields.size()>1000)throw new IllegalStateException("Hive 精确数值字段超过1000项，请缩小登记输出字段范围");
+        if(fields.size()>1000)throw new IllegalStateException("Hive 精确"+label+"字段超过1000项，请缩小登记输出字段范围");
         return List.copyOf(fields);
     }
     private List<String> hiveTimestampFields(Map<String,Object> cfg,Set<String> availableFields) {
@@ -4967,8 +5074,57 @@ public class DslCompiler {
             if (count < (batch ? 1 : 0)) throw new ArithmeticException();
             return Integer.toString(count);
         } catch (NumberFormatException | ArithmeticException ex) {
-            throw new IllegalStateException((batch ? "单批最大条数" : "单次最大行数")
+            throw new IllegalStateException((batch ? "单批最大条数" : "JDBC 抓取批大小")
                     + "必须为" + (batch ? "1" : "0") + "～2147483647 的整数", ex);
+        }
+    }
+
+    /** Read knobs belong to the source processor, independently of watermark support. No database reads. */
+    private void validateSourceReadConfigurations(Pipeline pipeline) {
+        for (var node : pipeline.dsl().nodes()) {
+            if (!"source".equals(node.category())) continue;
+            var manifest = registry.get(effectiveManifestKey(node));
+            if (manifest == null || manifest.fields() == null) continue;
+            var config = manifestConfig(manifest, node.config());
+            if ("source.minio".equals(manifest.key()) && !configText(config, "minioFilePattern").isBlank()) {
+                try { Pattern.compile(configText(config, "minioFilePattern")); }
+                catch (java.util.regex.PatternSyntaxException ex) {
+                    throw new NodeConfigException(node.id(), node.label(), "minioFilePattern", "文件匹配必须是有效的正则表达式", ex);
+                }
+            }
+            if ("source.minio".equals(manifest.key())) {
+                String scope = configText(config, "minioFilePatternScope");
+                if (!scope.isBlank() && !Set.of("OBJECT_KEY", "FILE_NAME").contains(scope.toUpperCase(Locale.ROOT))) {
+                    throw new NodeConfigException(node.id(), node.label(), "minioFilePatternScope", "文件匹配范围必须为完整对象键或仅文件名", null);
+                }
+            }
+            for (var field : manifest.fields()) {
+                if (!"read".equals(field.group()) || !"number".equals(field.type())) continue;
+                boolean ftps = FtpsSourceCompiler.enabled(config);
+                if ("maxFilesPerRun".equals(field.key()) && !ftps && FileConsumptionCompiler.enabled(config)) continue;
+                if ("remotePollBatchSize".equals(field.key()) && (ftps || FileConsumptionCompiler.enabled(config))) continue;
+                String text = configText(config, field.key());
+                if (text.isBlank()) continue;
+                int minimum = Set.of("maxRowsPerRun", "defaultFetchSize").contains(field.key()) ? 0 : 1;
+                int maximum = "maxFilesPerRun".equals(field.key()) && ftps ? 100 : Integer.MAX_VALUE;
+                try {
+                    int count = new java.math.BigDecimal(text).intValueExact();
+                    if (count < minimum || count > maximum) throw new ArithmeticException();
+                } catch (NumberFormatException | ArithmeticException ex) {
+                    throw new NodeConfigException(node.id(), node.label(), field.key(),
+                            field.label() + "必须为" + minimum + "～" + maximum + " 的整数", ex);
+                }
+            }
+            if ("source.mongodb".equals(manifest.key())) {
+                for (String key : List.of("queryJson", "projectionJson", "sortJson")) {
+                    String text = configText(config, key);
+                    if (text.isBlank()) continue;
+                    try { org.bson.Document.parse(text); }
+                    catch (RuntimeException ex) {
+                        throw new NodeConfigException(node.id(), node.label(), key, "MongoDB 查询、投影和排序必须是有效的 BSON/JSON 文档", ex);
+                    }
+                }
+            }
         }
     }
 

@@ -17,8 +17,11 @@ public final class JdbcMetadataScope {
 
     /** Empty optional keys must not hide a later, populated registration property. */
     public static String configuredSchema(Map<String, ?> config) {
-        String value=text(config,"schema","defaultSchema","currentSchema");
-        return value==null?null:identifier(value);
+        if(config!=null)for(String key:new String[]{"schema","defaultSchema","currentSchema"}) {
+            Object value=config.get(key);
+            if(value!=null&&!value.toString().isBlank())return identifier(value.toString());
+        }
+        return null;
     }
 
     /**
@@ -99,9 +102,7 @@ public final class JdbcMetadataScope {
     }
 
     private static String identifier(String value) {
-        var names=DdlDialect.names(value);
-        if(names.size()!=1)throw new IllegalArgumentException("Schema须为单个标识符，请将库名与表名分别配置");
-        return names.getFirst().value();
+        return DdlDialect.single(value);
     }
     private static String text(Map<String, ?> config,String... keys) {
         if(config!=null)for(String key:keys){Object value=config.get(key);if(value!=null&&!value.toString().isBlank())return value.toString().trim();}

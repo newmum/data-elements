@@ -38,7 +38,7 @@ class NifiPublicationTransportTest {
             row.putObject("component").put("id",id).put("parentGroupId","group").put("state","DISABLED");
         }
         var ready=initial.deepCopy();ready.path("controllerServices").forEach(row->((com.fasterxml.jackson.databind.node.ObjectNode)row.path("component")).put("state","ENABLED"));
-        String path="/flow/process-groups/group/controller-services?includeAncestorGroups=true&includeDescendantGroups=false";
+        String path="/flow/process-groups/group/controller-services?includeAncestorGroups=true&includeDescendantGroups=false&includeReferencingComponents=false";
         doReturn(initial,ready).when(client).get(path,JsonNode.class);
         doReturn(mapper.createObjectNode()).when(client).put(eq("/flow/process-groups/group/controller-services"),any(),eq(JsonNode.class));
         client.enableControllerServices("group",ids,Set.of(),1000);
@@ -47,6 +47,26 @@ class NifiPublicationTransportTest {
         verify(client).put(eq("/flow/process-groups/group/controller-services"),request.capture(),eq(JsonNode.class));
         assertThat(((JsonNode)request.getValue()).path("components").size()).isEqualTo(count);
         verify(client,never()).get(startsWith("/controller-services/"),eq(JsonNode.class));
+    }
+    @Test void slowAcceptedActivationIsReadBackBeforeReportingTimeoutWithoutRepeatingTheWrite() {
+        for(boolean enabled:List.of(true,false)) {
+            var client=spy(new NifiClient(mock(NifiNodeRuntimeResolver.class),mapper));
+            var initial=mapper.createObjectNode();var row=initial.putArray("controllerServices").addObject();
+            row.putObject("revision").put("version",2);
+            row.putObject("component").put("id","service").put("parentGroupId","group").put("state","DISABLED");
+            var observed=initial.deepCopy();
+            ((com.fasterxml.jackson.databind.node.ObjectNode)observed.path("controllerServices").get(0).path("component"))
+                    .put("state",enabled?"ENABLED":"ENABLING");
+            String path="/flow/process-groups/group/controller-services?includeAncestorGroups=true&includeDescendantGroups=false&includeReferencingComponents=false";
+            doReturn(initial,observed).when(client).get(path,JsonNode.class);
+            doAnswer(call->{Thread.sleep(10);return mapper.createObjectNode();})
+                    .when(client).put(eq("/flow/process-groups/group/controller-services"),any(),eq(JsonNode.class));
+            if(enabled)client.enableControllerServices("group",Set.of("service"),Set.of(),1);
+            else assertThatThrownBy(()->client.enableControllerServices("group",Set.of("service"),Set.of(),1))
+                    .isInstanceOf(NifiException.class).hasMessageContaining("仍有1项");
+            verify(client,times(2)).get(path,JsonNode.class);
+            verify(client,times(1)).put(eq("/flow/process-groups/group/controller-services"),any(),eq(JsonNode.class));
+        }
     }
     @Test void readyPublicWriterIsObservedWithoutAnyMutationAndMissingIdsFailClosed() {
         var client=spy(new NifiClient(mock(NifiNodeRuntimeResolver.class),mapper));

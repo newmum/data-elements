@@ -32,6 +32,41 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 class HaitongHistoricalTimestampTest {
+    @Test void registeredIsoSqlDateTextPreservesCalendarAcrossReaderModesJvmsAliasesAndWindows()throws Exception {
+        TimeZone previous=TimeZone.getDefault();
+        try {
+            for(String zone:List.of("UTC","Asia/Shanghai","Pacific/Kiritimati","America/Los_Angeles")){
+                TimeZone.setDefault(TimeZone.getTimeZone(zone));
+                for(boolean explicit:List.of(false,true))for(boolean aliased:List.of(false,true))for(int count:List.of(20,100)){
+                    var runner=registeredDateRunner(explicit,aliased);String field=aliased?"_ht_0123456789abcdef":"day";var rows=new ArrayList<Map<String,Object>>();
+                    for(int i=0;i<count;i++)rows.add(java.util.Collections.singletonMap(field,i%4==0?null:i%4==1?"1900-01-01":i%4==2?"1970-01-01":"2024-02-29"));
+                    try{
+                        runner.enqueue(JSON.writeValueAsBytes(rows));runner.run();runner.assertTransferCount(HaitongTransformRecord.SUCCESS,1);runner.assertTransferCount(HaitongTransformRecord.FAILURE,0);runner.assertTransferCount(HaitongTransformRecord.INVALID,0);
+                        var output=JSON.readTree(runner.getFlowFilesForRelationship(HaitongTransformRecord.SUCCESS).getFirst().toByteArray());assertEquals(count,output.size());
+                        for(int i=0;i<count;i++)if(rows.get(i).get(field)==null)assertTrue(output.get(i).path("day").isNull());else assertEquals(rows.get(i).get(field),output.get(i).path("day").asText(),zone+", explicit="+explicit+", alias="+aliased);
+                    }finally{runner.shutdown();}
+                }
+            }
+        }finally{TimeZone.setDefault(previous);}
+    }
+    @Test void invalidOrDuplicateDatesAfterTheWindowBoundaryKeepTheEntireOriginalInput()throws Exception {
+        for(String last:List.of("{\"day\":\"2024-02-30\"}","{\"day\":\"1900-01-01\",\"day\":\"2000-01-01\"}")){
+            var runner=registeredDateRunner(false,false);String input="["+"{\"day\":\"1900-01-01\"},".repeat(513)+last+"]";
+            try{runner.enqueue(input);runner.run();runner.assertTransferCount(HaitongTransformRecord.SUCCESS,0);runner.assertTransferCount(HaitongTransformRecord.FAILURE,1);runner.getFlowFilesForRelationship(HaitongTransformRecord.FAILURE).getFirst().assertContentEquals(input);}finally{runner.shutdown();}
+        }
+    }
+    private TestRunner registeredDateRunner(boolean explicit,boolean aliased)throws Exception {
+        var spec=JSON.readTree("""
+          {"schemaVersion":"2.0","policies":{"zoneId":"Asia/Shanghai","recordErrorMode":"FAIL_FLOWFILE"},
+           "schemaContract":{"source":[{"name":"day","logicalType":"DATE","physicalType":"DATE","registeredFormat":"DATE","nullable":true}]},
+           "rules":[{"input":{"kind":"FIELD","name":"day"},"target":{"name":"day","logicalType":"DATE","nullable":true},"steps":[]}]}
+          """);
+        var runner=TestRunners.newTestRunner(HaitongTransformRecord.class);var reader=new JsonTreeReader();var writer=new JsonRecordSetWriter();
+        runner.addControllerService("reader",reader);runner.setProperty(reader,"Schema Access Strategy","infer-schema");if(explicit)runner.setProperty(reader,"Date Format","yyyy-MM-dd");runner.enableControllerService(reader);
+        runner.addControllerService("writer",writer);runner.setProperty(writer,"Schema Access Strategy","inherit-record-schema");runner.setProperty(writer,"Date Format","yyyy-MM-dd");runner.enableControllerService(writer);
+        runner.setProperty(HaitongTransformRecord.READER,"reader");runner.setProperty(HaitongTransformRecord.WRITER,"writer");runner.setProperty(HaitongTransformRecord.PLAN,com.linewell.dataelement.mapping.core.MappingEngine.compile(spec).document().toString());
+        runner.setProperty(HaitongTransformRecord.TIMESTAMP_TEXT,"true");runner.setProperty(HaitongTransformRecord.EXACT_JSON_NUMBERS,"true");if(aliased)runner.setProperty(HaitongTransformRecord.JDBC_ALIASES,"{\"day\":\"_ht_0123456789abcdef\"}");return runner;
+    }
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final String PATTERN = "yyyy-MM-dd HH:mm:ss.SSSSSSSSS";
     private static final DateTimeFormatter WIRE = DateTimeFormatter.ofPattern(PATTERN);

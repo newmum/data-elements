@@ -11,7 +11,7 @@ export function incrementalFieldVisible(key: string, config: Record<string, unkn
 export function incrementalConfigurationError(dsl: CanvasDsl): string | undefined {
   for (const node of dsl.nodes) {
     if (node.category !== 'source' || ['source.api', 'source.ftp', 'source.sftp', 'source.kafka', 'source.minio',
-      'source.hdfs', 'source.hbase', 'source.elasticsearch', 'source.iotdb'].includes(node.manifestKey)) continue;
+      'source.mongodb', 'source.hdfs', 'source.hbase', 'source.elasticsearch', 'source.iotdb'].includes(node.manifestKey)) continue;
     const error = syncSettingsError(node.config, syncSettings(node.config));
     if (error) return `${node.label}：${error}`;
   }

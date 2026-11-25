@@ -1,10 +1,11 @@
 import { normalizeSourceManifestKey, sinkDbType, buildJdbcUrl, connectionProductPatch, connectionFieldVisible } from "./registeredDatasourceType";
 ﻿import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
-import { AutoComplete, Divider, Drawer, Form, Input, InputNumber, Select, Switch, Button, Space, Spin, App as AntdApp } from 'antd';
+import { AutoComplete, Divider, Drawer, Form, Input, InputNumber, Select, Switch, Button, Space, Spin, Modal, Tabs, Table, Tooltip, App as AntdApp } from 'antd';
 import ConfigFieldLabel from './ConfigFieldLabel';
 import ConfigSections from './ConfigSections';
 import { syncModes, syncSettings, syncSettingsPatch, syncSettingsError } from '../utils/syncSettings';
 import { incrementalFieldVisible } from '../utils/incrementalFields';
+import { sourceReadConfigurationError, sourceReadFieldVisible } from '../utils/sourceReadSettings';
 import { DAILY_IMMEDIATE, DAILY_STAGGERED, automaticSchedule, immediateScheduleDefaults, staggeredScheduleDefaults, isBatchSource, scheduleFieldVisible } from '../utils/batchSchedule';
 import { governanceNodeLabel } from '../utils/fieldGovernancePresentation';
 import { hiveHdfsMergeUnavailable, isHiveSink } from '../utils/hiveSinkPolicy';
@@ -19,6 +20,7 @@ import {
   SaveOutlined,
   SwapOutlined,
   PlusOutlined,
+  TableOutlined,
 } from '@ant-design/icons';
 import CodeMirror from '@uiw/react-codemirror';
 import { sql } from '@codemirror/lang-sql';
@@ -352,6 +354,7 @@ function buildTargetColumnsPatch(config: Record<string, unknown>, columns: Probe
 }
 
 function isVisible(field: FieldSchema, config: Record<string, unknown>): boolean {
+  if (!sourceReadFieldVisible(field.key, config)) return false;
   if (field.group === 'incremental') return incrementalFieldVisible(field.key, config);
   if (!field.visibleWhen) return true;
   if (field.visibleWhen.key === 'tableMode') {
@@ -367,6 +370,7 @@ const GROUP_LABELS: Record<string, string> = {
   security: 'Kerberos 认证',
   schema: '数据结构',
   query: '查询条件',
+  read: '读取与批量',
   incremental: '增量配置',
   schedule: '调度策略',
   advanced: '高级选项',
@@ -478,22 +482,6 @@ function expandIncrementalField(field: FieldSchema): FieldSchema[] {
       help: '避免读取过新的未稳定数据。',
     },
     {
-      key: 'batchSize',
-      label: '单批最大条数',
-      type: 'number',
-      default: 5000,
-      group: 'incremental',
-      help: '对应 ExecuteSQLRecord 的 Max Rows Per FlowFile，控制每个输出 FlowFile 的记录数；首节点 Partition Size 固定为 10000。',
-    },
-    {
-      key: 'maxRowsPerRun',
-      label: '单次最大行数',
-      type: 'number',
-      default: 20000,
-      group: 'incremental',
-      help: '对应 ExecuteSQLRecord 的 Fetch Size（JDBC 每次抓取的建议行数），不限制本次查询总行数；0 使用驱动默认值。',
-    },
-    {
       key: 'customWherePredicate',
       label: '自定义 WHERE',
       type: 'text',
@@ -532,6 +520,7 @@ function isIncrementalVisible(field: FieldSchema, config: Record<string, unknown
 
 export default function ConfigDrawer() {
   const [mappingView,setMappingView]=useState<'list'|'visual'|'dsl'>('list');
+  const [targetFieldsOpen,setTargetFieldsOpen]=useState(false);
   const sqlEditorRef = useRef<CustomSqlEditorHandle>(null);
   const [sqlGenerating, setSqlGenerating] = useState(false);
   const { message } = AntdApp.useApp();
@@ -774,7 +763,7 @@ export default function ConfigDrawer() {
       if (!map.has(g)) map.set(g, []);
       map.get(g)!.push(f);
     });
-    const order = ['default', 'connection', 'query', 'schema', 'incremental', 'schedule', 'advanced'];
+    const order = ['default', 'connection', 'query', 'schema', 'read', 'incremental', 'schedule', 'advanced'];
     const sortedKeys = Array.from(map.keys()).sort((a, b) => {
       const ia = order.indexOf(a);
       const ib = order.indexOf(b);
@@ -1688,6 +1677,10 @@ export default function ConfigDrawer() {
 
   const handleSave = () => {
     if (!node || !manifest) return;
+    if (manifest.category === 'source') {
+      const error = sourceReadConfigurationError(enhancedFields, node.config);
+      if (error) { message.error(error); return false; }
+    }
     if (isScriptDrawer) {
       const error = scriptProcessError(manifest.key, node.config);
       if (error) { message.error(error); return false; }
@@ -1890,6 +1883,7 @@ export default function ConfigDrawer() {
                 自动生成语句
               </Button>
             )}
+            {isFieldMappingDrawer && (columnMeta?.targets?.length ?? 0) > 1 && <Tooltip title="查看各目标字段（规则以第一个目标为参考）"><Button aria-label="查看各目标字段" icon={<TableOutlined />} onClick={() => setTargetFieldsOpen(true)} /></Tooltip>}
             {isTopActionDrawer && (
               <Button
                 type="primary"
@@ -1905,6 +1899,11 @@ export default function ConfigDrawer() {
             )}
             <Button type="text" aria-label="关闭节点配置" icon={<CloseOutlined />} onClick={() => openDrawer(null)} />
           </div>
+
+          {isFieldMappingDrawer && <Modal open={targetFieldsOpen} title="各目标表字段" footer={null} onCancel={() => setTargetFieldsOpen(false)} getContainer={getNifiOverlayContainer} destroyOnClose>
+            <p>列表规则以第一个目标为参考；各目标按各自字段结构适配。</p>
+            <Tabs items={(columnMeta?.targets ?? []).map((target, index) => ({ key: target.nodeId, label: `${target.label}${index === 0 ? '（参考）' : ''}`, children: <Table size="small" rowKey={(field, fieldIndex) => `${field.name}-${fieldIndex}`} pagination={{ pageSize: 20 }} dataSource={target.fields} columns={[{ title: '字段名', dataIndex: 'name' }, { title: '类型', dataIndex: 'type' }]} /> }))} />
+          </Modal>}
 
           <div className="coze-drawer-body">
             {/* 按配置分组展示字段。 */}

@@ -19,6 +19,13 @@ public final class JdbcColumnBatchQuery {
                     + (url.startsWith("jdbc:dm:")?"c.DATA_DEFAULT":"CASE WHEN c.DEFAULT_LENGTH>0 THEN 'DEFAULT' ELSE NULL END")
                     + " AS COLUMN_DEF,'NO' AS IS_AUTOINCREMENT FROM ALL_TAB_COLUMNS c";
             schema = "c.OWNER"; table = "c.TABLE_NAME"; order = "c.OWNER,c.TABLE_NAME,c.COLUMN_ID";
+        } else if (url.startsWith("jdbc:clickhouse:") || name.contains("clickhouse")) {
+            // ClickHouse database lives in TABLE_CAT in JDBC; bind native database/table pairs directly.
+            select = "SELECT c.database AS TABLE_SCHEM,c.table AS TABLE_NAME,c.name AS COLUMN_NAME,c.type AS TYPE_NAME,"
+                    + "COALESCE(c.character_octet_length,c.numeric_precision,0) AS COLUMN_SIZE,c.numeric_scale AS DECIMAL_DIGITS,"
+                    + "CASE WHEN startsWith(c.type,'Nullable(') OR startsWith(c.type,'LowCardinality(Nullable(') THEN 1 ELSE 0 END AS NULLABLE,"
+                    + "nullIf(c.default_expression,'') AS COLUMN_DEF,'NO' AS IS_AUTOINCREMENT FROM system.columns c";
+            schema = "c.database"; table = "c.table"; order = "c.database,c.table,c.position";
         } else if (url.startsWith("jdbc:postgresql:") || url.startsWith("jdbc:kingbase")
                 || url.startsWith("jdbc:opengauss:") || url.startsWith("jdbc:gaussdb:") || url.startsWith("jdbc:highgo:")) {
             select = "SELECT c.table_schema AS TABLE_SCHEM,c.table_name AS TABLE_NAME,c.column_name AS COLUMN_NAME,c.data_type AS TYPE_NAME,"

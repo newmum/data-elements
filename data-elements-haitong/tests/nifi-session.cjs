@@ -25,6 +25,65 @@ function loadTypeScript(file, dependencies, environment={ DEV:true }) {
   return result.exports;
 }
 
+test('police deployment reads only the source namespace for remembered and per-tab sessions', async () => {
+  const previous = {window:global.window,localStorage:global.localStorage,sessionStorage:global.sessionStorage};
+  const local = new Map([['token','unrelated-session'], ['remember_me','true']]);
+  const tab = new Map([['data-elements:police-mysql:token',JSON.stringify('validation-police-tab')]]);
+  global.localStorage = {getItem:key=>local.get(key)||null};
+  global.sessionStorage = {getItem:key=>tab.get(key)||null};
+  const window = {location:{href:'https://validation-platform.test/wanxiang/haitong/#/overview',origin:'https://validation-platform.test'}};
+  window.parent=window;global.window=window;
+  try {
+    const api=loadTypeScript('src/services/platformSession.ts',{'../nifi/api/bridgeSession':{}},
+      {DEV:false,VITE_SOURCE_PLATFORM_HOME_URL:'../#/',VITE_SOURCE_PLATFORM_STORAGE_PREFIX:'police-mysql'});
+    assert.equal(await api.getPlatformSessionToken(),'validation-police-tab');
+    assert.equal(api.getPlatformHomeUrl(),'https://validation-platform.test/wanxiang/#/');
+    local.set('data-elements:police-mysql:remember_me','true');
+    local.set('data-elements:police-mysql:token','validation-police-remembered');
+    assert.equal(await api.getPlatformSessionToken(),'validation-police-remembered');
+    assert.equal(local.get('token'),'unrelated-session');
+    const login=new URL(api.getPlatformLoginUrl());
+    assert.equal(login.pathname,'/wanxiang/');
+    assert.equal(login.hash.startsWith('#/login?redirect='),true);
+    assert.equal(login.href.includes('validation-police-'),false);
+  } finally {Object.assign(global,previous);}
+});
+
+test('embedded API waits for the trusted parent handshake and never reads another stored account', async () => {
+  const previous={window:global.window,localStorage:global.localStorage,sessionStorage:global.sessionStorage};
+  const parent={};global.window={parent,location:{href:'https://validation.test/wanxiang/haitong/#/development/canvas',origin:'https://validation.test'}};
+  global.localStorage={getItem:()=>{throw new Error('embedded storage must not select an identity');}};
+  global.sessionStorage=global.localStorage;
+  let release;let called=0;
+  try{
+    const api=loadTypeScript('src/services/platformSession.ts',{'../nifi/api/bridgeSession':{
+      waitForToken:()=>{called++;return new Promise(resolve=>{release=resolve;});}
+    }},{DEV:false,VITE_SOURCE_PLATFORM_HOME_URL:'../#/',VITE_SOURCE_PLATFORM_STORAGE_PREFIX:'police-mysql'});
+    let settled=false;const pending=api.getPlatformSessionToken().then(value=>{settled=true;return value;});
+    await new Promise(resolve=>setImmediate(resolve));assert.equal(called,1);assert.equal(settled,false);
+    release('validation-parent-session');assert.equal(await pending,'validation-parent-session');
+    assert.equal(settled,true);
+  }finally{Object.assign(global,previous);}
+});
+
+test('first INIT enables one authenticated platform request while later session changes remain rejected', async () => {
+  const previous={window:global.window,fetch:global.fetch};global.window={location:{hash:'#/development/canvas'}};
+  let revision=0,release,calls=0;
+  const api=loadTypeScript('src/api/platformApi.ts',{
+    '../services/platformSession':{getPlatformSessionToken:()=>new Promise(resolve=>{release=resolve;}),
+      reconcilePlatformSessionToken:(token,expected)=>token==='validation-parent'&&expected===revision,
+      redirectToPlatformLogin:()=>{throw new Error('initial INIT must not cause login redirect');}},
+    '../nifi/api/bridgeSession':{getSessionRevision:()=>revision}
+  });
+  global.fetch=async(_url,options)=>{calls++;assert.equal(options.headers.token,'validation-parent');return new Response(JSON.stringify({code:200,data:{ready:true}}));};
+  try{
+    const request=api.platformApi('/portal/sso/session');await new Promise(resolve=>setImmediate(resolve));assert.equal(calls,0);
+    revision=1;release('validation-parent');assert.deepEqual(await request,{ready:true});assert.equal(calls,1);
+    const switched=api.platformApi('/portal/sso/session');await new Promise(resolve=>setImmediate(resolve));
+    revision=2;release('validation-parent');await assert.rejects(switched,/旧请求结果已丢弃/);assert.equal(calls,1);
+  }finally{Object.assign(global,previous);}
+});
+
 test('production platform adapter returns root home and keeps a configured source application prefix',()=>{
   const previousWindow=global.window;
   global.window={location:{href:'http://validation-platform.test:82/haitong/#/overview'}};
