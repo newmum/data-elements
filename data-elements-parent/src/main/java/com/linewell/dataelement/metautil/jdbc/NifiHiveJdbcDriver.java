@@ -14,7 +14,8 @@ import java.util.logging.Logger;
 public final class NifiHiveJdbcDriver implements Driver {
     public static final String URL_PREFIX = "jdbc:haitong:hive2:";
     public static final String NATIVE_URL_PREFIX = "jdbc:hive2:";
-    public static final String ASSET_NAME = "haitong-hive-jdbc-compat-1.0.0.jar";
+    public static final String ASSET_NAME = "haitong-hive-jdbc-compat-1.0.1.jar";
+    public static final String LEGACY_ASSET_NAME = "haitong-hive-jdbc-compat-1.0.0.jar";
     private static final String NATIVE_DRIVER = "org.apache.hive.jdbc.HiveDriver";
 
     static {
@@ -27,7 +28,7 @@ public final class NifiHiveJdbcDriver implements Driver {
     @Override public Connection connect(String url, Properties properties) throws SQLException {
         if (!acceptsURL(url)) return null;
         // A distinct protocol prevents DriverManager from selecting the unwrapped Hive driver first.
-        Connection connection = nativeDriver().connect(nativeUrl(url), properties);
+        Connection connection = HiveKerberosSupport.connect(nativeDriver(), nativeUrl(url), properties);
         return connection == null ? null : wrap(connection);
     }
 

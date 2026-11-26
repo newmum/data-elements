@@ -4019,8 +4019,12 @@ public class DslCompiler {
             String compatiblePrefix = com.linewell.dataelement.metautil.jdbc.NifiHiveJdbcDriver.URL_PREFIX;
             if (jdbcUrl.startsWith(nativePrefix)) jdbcUrl = compatiblePrefix + jdbcUrl.substring(nativePrefix.length());
             else if (!jdbcUrl.startsWith(compatiblePrefix)) throw new IllegalStateException("开源Hive来源需要HiveServer2 JDBC地址");
-            if (nifiNodeRuntimeResolver != null && !java.util.Objects.toString(driver.driverLocations(), "").contains(
-                    com.linewell.dataelement.metautil.jdbc.NifiHiveJdbcDriver.ASSET_NAME))
+            String locations=java.util.Objects.toString(driver.driverLocations(), "");
+            boolean kerberos="KERBEROS".equalsIgnoreCase(configText(sourceCfg,"authMode"))
+                    || jdbcUrl.matches("(?is).*;(?:principal=[^;?]+|auth=KERBEROS)(?:[;?].*)?");
+            boolean compatible=locations.contains(com.linewell.dataelement.metautil.jdbc.NifiHiveJdbcDriver.ASSET_NAME)
+                    || !kerberos&&locations.contains(com.linewell.dataelement.metautil.jdbc.NifiHiveJdbcDriver.LEGACY_ASSET_NAME);
+            if (nifiNodeRuntimeResolver != null && !compatible)
                 throw new IllegalStateException("开源Hive来源需要在节点HIVE_OPEN_SOURCE驱动路径中同时配置原生Hive客户端和"
                         + com.linewell.dataelement.metautil.jdbc.NifiHiveJdbcDriver.ASSET_NAME);
         }
@@ -4028,6 +4032,15 @@ public class DslCompiler {
         props.put("Database Driver Class Name", openSourceHive
                 ? com.linewell.dataelement.metautil.jdbc.NifiHiveJdbcDriver.class.getName() : driver.driverClass());
         props.put("Database Driver Locations", requiredJdbcDriverLocation(sourceCfg, driver.driverLocations()));
+        if(openSourceHive) {
+            for(var setting:Map.of(
+                    com.linewell.dataelement.metautil.jdbc.HiveKerberosSupport.USER_PRINCIPAL,"userPrincipal",
+                    com.linewell.dataelement.metautil.jdbc.HiveKerberosSupport.KEYTAB,"keytabPath",
+                    com.linewell.dataelement.metautil.jdbc.HiveKerberosSupport.KRB5_CONF,"krb5ConfPath").entrySet()) {
+                String value=configText(sourceCfg,setting.getValue());
+                if(!value.isBlank())props.put(setting.getKey(),value);
+            }
+        }
         // NiFi's optional credentials reject an explicit empty value. Omit
         // absent credentials instead of turning Java null into the password
         // "null"; preserve every character of a configured nonempty secret.

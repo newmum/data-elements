@@ -422,6 +422,12 @@ public abstract class AbstractMetadataExplorer implements MetadataExplorer {
         }
         JdbcDriverPropertyResolver.resolve(config.getJdbcProperties()).forEach(
                 hikariConfig::addDataSourceProperty);
+        if(config.getDatabaseType()==DatabaseType.HIVE&&"open-source".equalsIgnoreCase(config.getHiveConnectionMode())
+                &&"KERBEROS".equalsIgnoreCase(config.getAuthMode())){
+            hikariConfig.addDataSourceProperty(com.linewell.dataelement.metautil.jdbc.HiveKerberosSupport.USER_PRINCIPAL,normalize(config.getUserPrincipal()));
+            hikariConfig.addDataSourceProperty(com.linewell.dataelement.metautil.jdbc.HiveKerberosSupport.KEYTAB,normalize(config.getKeytabPath()));
+            hikariConfig.addDataSourceProperty(com.linewell.dataelement.metautil.jdbc.HiveKerberosSupport.KRB5_CONF,normalize(config.getKrb5ConfPath()));
+        }
         if (driverVisible && driverClass != null && !driverClass.isBlank()) {
             hikariConfig.setDriverClassName(driverClass);
         }
@@ -521,10 +527,13 @@ public abstract class AbstractMetadataExplorer implements MetadataExplorer {
         }
         try {
             URLClassLoader classLoader = databaseType == DatabaseType.HIVE
-                    ? new HiveClientClassLoader(driverUrls(jar), Thread.currentThread().getContextClassLoader())
+                    ? new HiveClientClassLoader(driverUrls(jar), Thread.currentThread().getContextClassLoader(),
+                            "open-source".equalsIgnoreCase(config.getHiveConnectionMode()))
                     : new URLClassLoader(new URL[]{jar.toURI().toURL()}, Thread.currentThread().getContextClassLoader());
             Class<?> driverType = Class.forName(driverClass, true, classLoader);
             Driver driver = (Driver) driverType.getDeclaredConstructor().newInstance();
+            if(databaseType==DatabaseType.HIVE&&"open-source".equalsIgnoreCase(config.getHiveConnectionMode()))
+                driver=com.linewell.dataelement.metautil.jdbc.HiveKerberosSupport.wrap(driver);
             DriverManager.registerDriver(new DriverShim(driver));
             EXTERNAL_DRIVER_INSTANCES.put(cacheKey,driver);
             REGISTERED_EXTERNAL_DRIVERS.add(cacheKey);
@@ -598,7 +607,8 @@ public abstract class AbstractMetadataExplorer implements MetadataExplorer {
             }
         } else if(databaseType==DatabaseType.HIVE && "open-source".equalsIgnoreCase(config.getHiveConnectionMode())) {
             File openHiveDir=new File(dir,"open-source-hive");
-            if (!openHiveDir.isDirectory()) return null;
+            if (!openHiveDir.isDirectory()) return configured==null||configured.isBlank()
+                    ? com.linewell.dataelement.metautil.jdbc.BundledHiveClient.openSourceJar().toFile() : null;
             dir=openHiveDir;
         }
         File[] files = dir.isDirectory() ? dir.listFiles((d, name) -> name.toLowerCase(Locale.ROOT).endsWith(".jar")) : null;
@@ -617,6 +627,8 @@ public abstract class AbstractMetadataExplorer implements MetadataExplorer {
                 }
             }
         }
+        if(databaseType==DatabaseType.HIVE&&"open-source".equalsIgnoreCase(config.getHiveConnectionMode())
+                &&(configured==null||configured.isBlank()))return com.linewell.dataelement.metautil.jdbc.BundledHiveClient.openSourceJar().toFile();
         return null;
     }
 
@@ -658,8 +670,20 @@ public abstract class AbstractMetadataExplorer implements MetadataExplorer {
      * own classes first while JDBC interfaces continue to come from the parent JVM.
      */
     private static final class HiveClientClassLoader extends URLClassLoader {
-        private HiveClientClassLoader(URL[] urls, ClassLoader parent) {
+        private final boolean isolatedConfiguration;
+        private static final Set<String> SITE_CONFIGURATIONS=Set.of("core-site.xml","hdfs-site.xml","hive-site.xml","yarn-site.xml","mapred-site.xml");
+
+        private HiveClientClassLoader(URL[] urls, ClassLoader parent, boolean isolatedConfiguration) {
             super(urls, parent);
+            this.isolatedConfiguration=isolatedConfiguration;
+        }
+
+        @Override public URL getResource(String name) {
+            return isolatedConfiguration&&SITE_CONFIGURATIONS.contains(name)?findResource(name):super.getResource(name);
+        }
+
+        @Override public Enumeration<URL> getResources(String name)throws java.io.IOException {
+            return isolatedConfiguration&&SITE_CONFIGURATIONS.contains(name)?findResources(name):super.getResources(name);
         }
 
         @Override
@@ -667,7 +691,8 @@ public abstract class AbstractMetadataExplorer implements MetadataExplorer {
             if (name.startsWith("org.apache.hive.")
                     || name.startsWith("org.apache.hadoop.")
                     || name.startsWith("org.apache.zookeeper.")
-                    || name.startsWith("org.apache.curator.")) {
+                    || name.startsWith("org.apache.curator.")
+                    || name.startsWith("com.google.common.")) {
                 Class<?> loaded = findLoadedClass(name);
                 if (loaded == null) {
                     try {

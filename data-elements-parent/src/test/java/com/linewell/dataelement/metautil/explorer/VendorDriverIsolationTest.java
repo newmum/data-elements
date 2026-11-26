@@ -82,7 +82,7 @@ class VendorDriverIsolationTest {
             assertEquals(42,driver.getMajorVersion());
             assertTrue(driver.acceptsURL("jdbc:hive2://validation.invalid/business"));
             assertSame(driver,AbstractMetadataExplorer.loadOpenSourceHiveDriver());
-            loader=(java.net.URLClassLoader)driver.getClass().getClassLoader();
+            loader=(java.net.URLClassLoader)com.linewell.dataelement.metautil.jdbc.HiveKerberosSupport.nativeDriver(driver).getClass().getClassLoader();
         } finally {restoreDirectory(previous);if(loader!=null)loader.close();}
     }
 

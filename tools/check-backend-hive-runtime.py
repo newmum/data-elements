@@ -9,6 +9,7 @@ import argparse
 import hashlib
 import os
 from pathlib import Path
+from backend_hive_assets import verify_bundled_hive_client
 import shutil
 import subprocess
 import tempfile
@@ -21,6 +22,7 @@ def main():
     parser.add_argument('--java', help='Java 21 executable; defaults to JAVA_HOME/bin/java or PATH')
     args = parser.parse_args()
     jar = args.jar.resolve(strict=True)
+    verify_bundled_hive_client(jar)
     identity = 'com.linewell.dataelement.platform.magic.module.HiveMetastoreRuntimeProbe'
     relative = Path(*identity.split('.')).with_suffix('.class')
     probe = (args.test_classes / relative).resolve(strict=True)
@@ -41,7 +43,7 @@ def main():
                        '-cp', str(jar), 'org.springframework.boot.loader.launch.PropertiesLauncher',
                        str(workspace / ('metadata-' + str(count))), str(count)]
             result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                    text=True, timeout=45, check=False)
+                                    text=True, encoding='utf8', errors='replace', timeout=45, check=False, cwd=workspace)
             if result.returncode:
                 print(result.stdout)
                 raise SystemExit(result.returncode)
@@ -49,6 +51,18 @@ def main():
             if marker not in result.stdout:
                 raise SystemExit('The packaged runtime did not confirm a complete partition RPC')
             print(marker)
+        jdbc_identity = 'com.linewell.dataelement.metautil.explorer.HiveJdbcRuntimeProbe'
+        jdbc_relative = Path(*jdbc_identity.split('.')).with_suffix('.class')
+        jdbc_destination = classes / jdbc_relative
+        jdbc_destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(args.test_classes / jdbc_relative, jdbc_destination)
+        result = subprocess.run([java, '-Dloader.path=' + str(classes), '-Dloader.main=' + jdbc_identity,
+                                 '-cp', str(jar), 'org.springframework.boot.loader.launch.PropertiesLauncher'],
+                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf8', errors='replace', timeout=45, cwd=workspace)
+        if result.returncode or 'PASS packaged Apache/Huawei Hive isolation;' not in result.stdout:
+            print(result.stdout)
+            raise SystemExit(result.returncode or 'Packaged Apache/Huawei isolation check failed')
+        print('PASS packaged Apache/Huawei Hive isolation and complete JDBC payload')
     digest = hashlib.sha256()
     with jar.open('rb') as stream:
         for block in iter(lambda: stream.read(1024 * 1024), b''):

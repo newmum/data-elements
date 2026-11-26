@@ -193,11 +193,11 @@ class DslCompilerJdbcDriverLocationTest {
         assertThat(properties.get("Columns to Return")).doesNotContain("CAST(`inst_id`");
     }
 
-    @ParameterizedTest @ValueSource(strings = {"missing", "installed"})
+    @ParameterizedTest @ValueSource(strings = {"missing", "installed", "current", "secure-legacy", "secure-current"})
     void openHiveSourceRequiresItsSmallCompatibilityAssetBesideTheOriginalClient(String state) throws Exception {
         String nativeJar = "/opt/nifi/drivers/hive-jdbc-standalone.jar";
-        String bridgeJar = "/opt/nifi/drivers/haitong-hive-jdbc-compat-1.0.0.jar";
-        String locations = state.equals("installed") ? bridgeJar + "," + nativeJar : nativeJar;
+        String bridgeJar = "/opt/nifi/drivers/haitong-hive-jdbc-compat-"+(state.endsWith("current")?"1.0.1":"1.0.0")+".jar";
+        String locations = !state.equals("missing") ? bridgeJar + "," + nativeJar : nativeJar;
         NifiClient nifi = configuredNifi("HIVE_OPEN_SOURCE=" + locations);
         ManifestRegistry registry = mock(ManifestRegistry.class);
         try (var stream = getClass().getResourceAsStream("/manifests/sources/hive.json")) {
@@ -205,16 +205,25 @@ class DslCompilerJdbcDriverLocationTest {
         }
         var compiler = new DslCompiler(nifi, mock(NifiNodeRuntimeResolver.class), registry,
                 mock(FieldMappingService.class), mock(HiveModule.class), "");
-        var pipeline = credentialPipeline("source.hive", Map.of("dbType", "HIVE", "hiveConnectionMode", "open-source",
+        var configuration=new java.util.LinkedHashMap<String,Object>(Map.of("dbType", "HIVE", "hiveConnectionMode", "open-source",
                 "host", "validation.invalid", "database", "business", "table", "source_table", "incrementalColumn", "updated_at"));
-        if (state.equals("missing")) {
-            assertThatThrownBy(() -> compiler.compile(pipeline)).hasMessageContaining("haitong-hive-jdbc-compat-1.0.0.jar");
+        if(state.startsWith("secure-")){
+            configuration.putAll(Map.of("authMode","KERBEROS","principal","hive/validation.invalid@VALIDATION.TEST",
+                    "userPrincipal","validation@VALIDATION.TEST","keytabPath","/validation/client.keytab","krb5ConfPath","/validation/krb5.conf"));
+        }
+        var pipeline = credentialPipeline("source.hive",configuration);
+        if (state.equals("missing")||state.equals("secure-legacy")) {
+            assertThatThrownBy(() -> compiler.compile(pipeline)).hasMessageContaining("haitong-hive-jdbc-compat-1.0.1.jar");
         } else {
             compiler.compile(pipeline);
             @SuppressWarnings("unchecked") ArgumentCaptor<Map<String, String>> properties = ArgumentCaptor.forClass(Map.class);
             verify(nifi).createControllerService(eq("pg"), eq("org.apache.nifi.dbcp.DBCPConnectionPool"), eq("来源/dbcp"), properties.capture());
             assertThat(properties.getValue()).containsEntry("Database Driver Locations", locations)
                     .containsEntry("Database Driver Class Name", "com.linewell.dataelement.metautil.jdbc.NifiHiveJdbcDriver");
+            if(state.startsWith("secure-"))assertThat(properties.getValue().get("Database Connection URL"))
+                    .contains("user.keytab=/validation/client.keytab");
+            if(state.startsWith("secure-"))assertThat(properties.getValue())
+                    .containsEntry(com.linewell.dataelement.metautil.jdbc.HiveKerberosSupport.KRB5_CONF,"/validation/krb5.conf");
         }
     }
 

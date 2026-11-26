@@ -10,6 +10,7 @@ import subprocess
 import sys
 from zipfile import ZipFile, ZIP_DEFLATED, ZIP_STORED
 import pymysql
+from backend_hive_assets import verify_bundled_hive_client
 
 ROOT=Path(__file__).resolve().parents[1]
 TENANT='2084109831682699264'
@@ -34,6 +35,7 @@ def main():
     p.add_argument('--mysql-vendor',type=Path,required=True)
     p.add_argument('--config',type=Path,default=Path.home()/'.codex/private/data-elements/resources.local.json')
     a=p.parse_args()
+    hive_client=verify_bundled_hive_client(a.backend)
     stage=ROOT/'logs/police-mysql-release/stage'
     for name in ('db','tools','config','backend','www','vendor'):(stage/name).mkdir(parents=True,exist_ok=True)
     cfg=json.loads(a.config.read_text(encoding='utf-8-sig'))
@@ -122,7 +124,7 @@ def main():
     for name in ('java21.tar.gz','mysql.tar.xz','mysql-libs.tar.gz','redis.tar.gz','caddy.tar.gz','elasticsearch.tar.gz'):
         source=a.mysql_vendor/name if name.startswith(('mysql','elasticsearch')) else ROOT/'logs/haitong-linux-standalone/vendor'/name
         shutil.copy2(source,stage/'vendor'/name)
-    report=dict(magic=magic_count,lowcode=len(components),forms=len(forms),organizations=len(orgs),menus=len(menus),tenantSchema=schema)
+    report=dict(magic=magic_count,lowcode=len(components),forms=len(forms),organizations=len(orgs),menus=len(menus),tenantSchema=schema,hiveClient=hive_client)
     (stage/'release.json').write_text(json.dumps(report,indent=2),encoding='utf8')
     notes='源数据管理平台 公安单租户 MySQL8 / Linux x86_64 完整包\n\n解压后执行 bash start.sh，首次启动自动初始化数据库和账号。\n停止 bash stop.sh，状态 bash status.sh。\n账号admin，随机密码在data/local/admin-login.txt。默认网页18291端口。\n需要系统Python3.6或更新版本；MySQL、JDK21、Valkey、Caddy、Elasticsearch7.17.29均内置。\nroot运行时自动创建本目录专用服务用户；普通用户须有部署目录读写权限。\n端口设置在config/ports.json，数据位于data/local，日志位于logs。ES19210/19310、数据库及缓存仅本机访问。\nMagic、低代码、动态表单、业务导航、字典和公安组织机构均自动导入。\n首次启动自动创建独立的公安资产与申请索引；不会连接旧环境或复制旧资产。\n不初始化独立的租户管理和菜单管理菜单入口；权限管理中的菜单维护和全部相关组件、接口均保留。\n数据库初始化仅用于包内新实例，禁止用全量初始化覆盖已有库。\nNiFi及其他外部业务连接通过节点配置等对应页面配置。\n'
     (stage/'部署说明.txt').write_text(notes,encoding='utf8')

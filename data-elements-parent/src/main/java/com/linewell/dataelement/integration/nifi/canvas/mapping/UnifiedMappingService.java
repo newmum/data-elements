@@ -541,7 +541,13 @@ public class UnifiedMappingService {
                 // Druid 1.2.20 does not infer Vertica's driver from its JDBC URL.
                 ds.setDriverClassName(com.linewell.dataelement.metautil.model.enums.DatabaseType.VERTICA.getDriverClass());
             }
-            Properties properties=new Properties();jdbcProperties.forEach(properties::setProperty);ds.setConnectProperties(properties);
+            Properties properties=new Properties();jdbcProperties.forEach(properties::setProperty);
+            if(hiveMode.equals("open-source")&&"KERBEROS".equalsIgnoreCase(text(cfg,"authMode","auth_mode"))){
+                properties.setProperty(com.linewell.dataelement.metautil.jdbc.HiveKerberosSupport.USER_PRINCIPAL,text(cfg,"userPrincipal","clientPrincipal"));
+                properties.setProperty(com.linewell.dataelement.metautil.jdbc.HiveKerberosSupport.KEYTAB,text(cfg,"keytabPath","keytab"));
+                properties.setProperty(com.linewell.dataelement.metautil.jdbc.HiveKerberosSupport.KRB5_CONF,text(cfg,"krb5ConfPath"));
+            }
+            ds.setConnectProperties(properties);
             // Hive's isolated client cold-connects in roughly 30 seconds; retain a bounded first-borrow budget.
             boolean hive=url.startsWith("jdbc:hive2:")||url.startsWith("jdbc:hive:");
             ds.setMaxActive(4);ds.setMinIdle(0);ds.setMaxWait(hive?45000:10000);ds.setTestOnBorrow(false);ds.setTestWhileIdle(false);

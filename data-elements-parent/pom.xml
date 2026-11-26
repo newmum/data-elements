@@ -704,6 +704,24 @@
 		<directory>${backend.build.directory}</directory>
 		<finalName>data-element</finalName>
 		<plugins>
+			<!-- Keep the Apache Hive client as data, outside BOOT-INF/lib: its Hive/Hadoop
+			     classes must be loaded in isolation from the Huawei MRS client. -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-dependency-plugin</artifactId>
+				<version>3.8.1</version>
+				<executions><execution><id>isolated-apache-hive-client</id><phase>generate-resources</phase><goals><goal>copy</goal></goals>
+					<configuration><artifactItems>
+						<artifactItem><groupId>org.apache.hive</groupId><artifactId>hive-jdbc</artifactId><version>3.1.3</version><classifier>standalone</classifier><type>jar</type><outputDirectory>${project.build.outputDirectory}/jdbc-clients/open-source-hive</outputDirectory></artifactItem>
+						<artifactItem><groupId>org.apache.hadoop</groupId><artifactId>hadoop-common</artifactId><version>3.1.0</version><type>jar</type><outputDirectory>${project.build.outputDirectory}/jdbc-clients/open-source-hive</outputDirectory></artifactItem>
+						<!-- Hadoop 3.1 auth reflects into JDK-private Kerberos APIs. This compatible
+						     maintenance client uses the public JAAS/GSS APIs required by Java 21. -->
+						<artifactItem><groupId>org.apache.hadoop</groupId><artifactId>hadoop-auth</artifactId><version>3.3.6</version><type>jar</type><outputDirectory>${project.build.outputDirectory}/jdbc-clients/open-source-hive</outputDirectory></artifactItem>
+						<artifactItem><groupId>org.apache.hadoop</groupId><artifactId>hadoop-annotations</artifactId><version>3.1.0</version><type>jar</type><outputDirectory>${project.build.outputDirectory}/jdbc-clients/open-source-hive</outputDirectory></artifactItem>
+						<artifactItem><groupId>com.google.guava</groupId><artifactId>guava</artifactId><version>19.0</version><type>jar</type><outputDirectory>${project.build.outputDirectory}/jdbc-clients/open-source-hive</outputDirectory></artifactItem>
+					</artifactItems></configuration>
+				</execution></executions>
+			</plugin>
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-surefire-plugin</artifactId>
