@@ -537,6 +537,10 @@ public class UnifiedMappingService {
                 // Its UGI belongs to that client loader; no application-wide Hadoop authentication is changed.
                 ds.setDriver(com.linewell.dataelement.metautil.explorer.AbstractMetadataExplorer.loadOpenSourceHiveDriver());
             } else if(!driver.isBlank())ds.setDriverClassName(driver);
+            else if(family.equals("VERTICA")) {
+                // Druid 1.2.20 does not infer Vertica's driver from its JDBC URL.
+                ds.setDriverClassName(com.linewell.dataelement.metautil.model.enums.DatabaseType.VERTICA.getDriverClass());
+            }
             Properties properties=new Properties();jdbcProperties.forEach(properties::setProperty);ds.setConnectProperties(properties);
             // Hive's isolated client cold-connects in roughly 30 seconds; retain a bounded first-borrow budget.
             boolean hive=url.startsWith("jdbc:hive2:")||url.startsWith("jdbc:hive:");
@@ -545,7 +549,7 @@ public class UnifiedMappingService {
             return ds;
         });
     }
-    /** Assemble host-mode MySQL/SQL Server registrations using the metadata connector's URL rules.
+    /** Assemble host-mode MySQL/SQL Server/Vertica registrations using the metadata connector's URL rules.
      * Explicit JDBC URLs and every other product retain their existing behavior. No registry write or source query. */
     static String registeredJdbcUrl(Map<String,Object> cfg) {
         String explicit=text(cfg,"jdbcURL","jdbcUrl","url");if(!explicit.isBlank())return explicit;
@@ -553,12 +557,14 @@ public class UnifiedMappingService {
         try{type=com.linewell.dataelement.metautil.model.enums.DatabaseType.fromCode(text(cfg,"dbType","databaseType"));}
         catch(IllegalArgumentException unknown){return "";}
         if(type!=com.linewell.dataelement.metautil.model.enums.DatabaseType.SQLSERVER
-                &&type!=com.linewell.dataelement.metautil.model.enums.DatabaseType.MYSQL)return "";
+                &&type!=com.linewell.dataelement.metautil.model.enums.DatabaseType.MYSQL
+                &&type!=com.linewell.dataelement.metautil.model.enums.DatabaseType.VERTICA)return "";
         String host=text(cfg,"host","dbMetaIp","dbIp","hostname"),database=text(cfg,"database","dbMetaDbName","dbName");
         if(host.isBlank()||database.isBlank())return "";
         String product=type.getDisplayName();
         if(!host.matches("[A-Za-z0-9_.:\\[\\]-]+")||database.matches("(?s).*[;{}\\r\\n].*")
-                ||type==com.linewell.dataelement.metautil.model.enums.DatabaseType.MYSQL&&database.matches("(?s).*[/?#\\\\].*"))
+                ||(type==com.linewell.dataelement.metautil.model.enums.DatabaseType.MYSQL
+                   ||type==com.linewell.dataelement.metautil.model.enums.DatabaseType.VERTICA)&&database.matches("(?s).*[/?#\\\\].*"))
             throw new MappingException("DICTIONARY_UNAVAILABLE",product+"主机或数据库名称不适用于主机模式，请配置明确的JDBC连接地址");
         var connection=new com.linewell.dataelement.metautil.model.dto.DataSourceConfig();connection.setDatabaseType(type);
         connection.setHost(host);connection.setDatabase(database);connection.setConnectorProperties(cfg);

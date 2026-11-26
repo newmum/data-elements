@@ -16,6 +16,7 @@ function contextFixture(t: TestContext, sourceCount: number, options: { foreignR
     href: 'http://report.test/haitong/#/report?datasourceId=foreign-source', origin: 'http://report.test',
     hash: '#/report?datasourceId=foreign-source', search: '?datasourceId=legacy-source',
   } } });
+  Object.defineProperty(window, 'parent', { configurable: true, value: window });
   for (const key of ['localStorage', 'sessionStorage']) Object.defineProperty(globalThis, key, { configurable: true, value: storage });
   globalThis.fetch = async (input, init) => {
     const path = new URL(String(input), 'http://report.test').pathname.replace(/^\/(?:prod|dev)-api/, '');
@@ -88,6 +89,7 @@ test('上报工作台按数据源分组和分页读取表，而不是逐个数�
       configurable: true,
       value: { location: { href: 'http://report.test/report/', origin: 'http://report.test', hash: '#/report', search: '' } },
     });
+    Object.defineProperty(window, 'parent', { configurable: true, value: window });
     Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: storage });
     Object.defineProperty(globalThis, 'sessionStorage', { configurable: true, value: storage });
     globalThis.fetch = async (input, options) => {

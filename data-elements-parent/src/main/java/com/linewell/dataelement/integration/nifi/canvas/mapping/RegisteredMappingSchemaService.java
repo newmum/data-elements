@@ -31,6 +31,7 @@ public class RegisteredMappingSchemaService {
     private final com.linewell.dataelement.platform.persistence.TenantIdentifierSql identifiers;
     public RegisteredMappingSchemaService(JdbcTemplate jdbc,DataSourceConnectionPropertyResolver sources,UnifiedMappingService engine){this.jdbc=jdbc;this.sources=sources;this.engine=engine;identifiers=new com.linewell.dataelement.platform.persistence.TenantIdentifierSql(jdbc);}
     private static String jdbcLogicalType(String physicalType,Map<String,?> config) {
+        if(databaseType(config,DatabaseType.VERTICA)&&PortableColumnType.kind(physicalType,"VERTICA")==PortableColumnType.Kind.BIGINT)return "LONG";
         if(clickHouse(config))return switch(PortableColumnType.kind(physicalType,"CLICKHOUSE")){
             case SMALLINT,INTEGER -> "INT";
             case BIGINT -> "LONG";
@@ -46,20 +47,25 @@ public class RegisteredMappingSchemaService {
         return JdbcTemporalTypes.logicalType(SqlServerIdentityTypes.forConnection(physicalType,config),config);
     }
     private static boolean clickHouse(Map<String,?> config){
+        return databaseType(config,DatabaseType.CLICKHOUSE);
+    }
+    private static boolean databaseType(Map<String,?> config,DatabaseType expected){
         if(config==null)return false;
         for(String key:List.of("dbType","db_type","databaseType","database_type")){
             Object value=config.get(key);if(value==null||value.toString().isBlank())continue;
-            try{return DatabaseType.fromCode(value.toString())==DatabaseType.CLICKHOUSE;}
+            try{return DatabaseType.fromCode(value.toString())==expected;}
             catch(IllegalArgumentException unknown){/* JDBC protocol remains authoritative for unknown labels. */}
         }
         for(String key:List.of("jdbcURL","jdbcUrl","url")){
-            Object value=config.get(key);if(value!=null&&value.toString().toLowerCase(Locale.ROOT).startsWith("jdbc:clickhouse:"))return true;
+            Object value=config.get(key);if(value!=null&&value.toString().toLowerCase(Locale.ROOT).startsWith("jdbc:"+expected.getCode()+":"))return true;
         }
         return false;
     }
-    /** Repair only the old raw-type hint from the same authorized physical ClickHouse column. */
-    private static void repairClickHouseSource(ObjectNode field,JsonNode trusted,Map<String,?> config){
-        if(!clickHouse(config)||!field.path("physicalType").asText().equalsIgnoreCase(trusted.path("physicalType").asText())
+    /** Repair only a stale native alias from the same authorized physical column. */
+    private static void repairNativeSource(ObjectNode field,JsonNode trusted,Map<String,?> config){
+        boolean vendorAlias=clickHouse(config)||databaseType(config,DatabaseType.VERTICA)
+                &&PortableColumnType.kind(trusted.path("physicalType").asText(),"VERTICA")==PortableColumnType.Kind.BIGINT;
+        if(!vendorAlias||!field.path("physicalType").asText().equalsIgnoreCase(trusted.path("physicalType").asText())
                 ||!ValueTypes.type(field.path("logicalType").asText()).equals(ValueTypes.type(field.path("physicalType").asText())))return;
         field.set("logicalType",trusted.path("logicalType"));
         if("DECIMAL".equals(trusted.path("logicalType").asText())&&PortableColumnType.integralPrecision(trusted.path("physicalType").asText(),"CLICKHOUSE")>0)
@@ -409,7 +415,7 @@ public class RegisteredMappingSchemaService {
                 if(field instanceof ObjectNode object){
                     if(side.equals("source")){
                         Resolved resolved=registered.get(MappingEngine.hash(reference));
-                        repairClickHouseSource(object,found,resolved.connections().get(resolved.datasourceId()));
+                        repairNativeSource(object,found,resolved.connections().get(resolved.datasourceId()));
                     }
                     repairNativeString(object,found);
                     object.put("comment",found.path("comment").asText());
@@ -508,7 +514,7 @@ public class RegisteredMappingSchemaService {
             for(JsonNode field:contract.getValue().path(side)){JsonNode found=physical.get(field.path("name").asText());if(field instanceof ObjectNode object&&found!=null){
                 if(side.equals("source")){
                     Resolved resolved=registered.get(MappingEngine.hash(reference));
-                    repairClickHouseSource(object,found,resolved.connections().get(resolved.datasourceId()));
+                    repairNativeSource(object,found,resolved.connections().get(resolved.datasourceId()));
                 }
                 repairNativeString(object,found);
                 object.put("comment",found.path("comment").asText());

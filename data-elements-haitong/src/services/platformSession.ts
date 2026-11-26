@@ -52,7 +52,7 @@ export function redirectToPlatformLogin(): boolean {
 
 /** Match the source platform's optional deployment namespace without copying credentials. */
 function platformStorageKey(key: string): string {
-  const prefix = (import.meta.env.VITE_SOURCE_PLATFORM_STORAGE_PREFIX || '').trim();
+  const prefix = ((import.meta.env ?? {}).VITE_SOURCE_PLATFORM_STORAGE_PREFIX || '').trim();
   return prefix ? `data-elements:${prefix}:${key}` : key;
 }
 

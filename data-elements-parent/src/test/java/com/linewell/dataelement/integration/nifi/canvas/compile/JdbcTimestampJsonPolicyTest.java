@@ -10,19 +10,20 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.CsvSource;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class JdbcTimestampJsonPolicyTest {
-    @ParameterizedTest @ValueSource(ints = {20,100})
-    void fullFractionBranchesReuseOneExistingRootServiceWithNoWrites(int count) {
+    @ParameterizedTest @CsvSource({"20,DATETIME(6)","100,DATETIME(6)","20,DATE","100,DATE"})
+    void fullFractionAndDateOnlyBranchesReuseOneExistingRootServiceWithNoWrites(int count,String physicalType) {
         var client = mock(NifiClient.class);
         var services = services(JdbcTimestampJsonPolicy.TIMESTAMP_FORMAT);
         when(client.get("/flow/process-groups/root", JsonNode.class)).thenReturn(HiveServiceFixtures.rootFlow());
         when(client.listControllerServices("root")).thenReturn(services);
         var nodes = new ArrayList<Pipeline.Node>(); var edges = new ArrayList<Pipeline.Edge>();
         for (int index = 0; index < count; index++) {
-            nodes.add(source("sql"+index,"source.mysql",Map.of("dbType","MYSQL","sourceColumns",List.of(Map.of("columnName","created_at","dataType","datetime(6)")))));
+            nodes.add(source("sql"+index,"source.mysql",Map.of("dbType","MYSQL","sourceColumns",List.of(Map.of("columnName","created_at","dataType",physicalType)))));
             nodes.add(new Pipeline.Node("gov"+index,"transform.field-mapping","mapping","transform",0,0,Map.of()));
             edges.add(new Pipeline.Edge("e"+index,"sql"+index,"gov"+index,"default"));
         }
@@ -52,10 +53,18 @@ class JdbcTimestampJsonPolicyTest {
     }
 
     @Test void dateTimeAndTimestampLookingTextDoNotRequestTimestampCodec() {
-        for (String type : List.of("DATE","TIME","VARCHAR(255)","STRING","JSON"))
+        for (String type : List.of("TIME","VARCHAR(255)","STRING","JSON"))
             assertThat(JdbcTimestampJsonPolicy.hasTimestamps(Map.of("dbType","MYSQL","sourceColumns",List.of(Map.of("dataType",type))))).isFalse();
         for (String type : List.of("DATETIME","DATETIME(6)","TIMESTAMP(9)","TIMESTAMP WITH TIME ZONE"))
             assertThat(JdbcTimestampJsonPolicy.hasTimestamps(Map.of("dbType","MYSQL","sourceColumns",List.of(Map.of("dataType",type))))).isTrue();
+    }
+
+    @ParameterizedTest @ValueSource(strings={"MYSQL","POSTGRESQL","KINGBASE","DM","SQLSERVER","CLICKHOUSE"})
+    void nativeDateWithoutAnyTimestampStillUsesDeclaredDateTextContract(String database) {
+        assertThat(JdbcTimestampJsonPolicy.hasTimestamps(Map.of("dbType",database,"sourceColumns",List.of(Map.of("dataType","DATE"))))).isTrue();
+        assertThat(JdbcTimestampJsonPolicy.hasTimestamps(Map.of("dbType",database,"sourceColumns",List.of(Map.of("dataType","VARCHAR(10)","logicalType","DATE"))))).isFalse();
+        assertThat(JdbcTimestampJsonPolicy.hasTimestamps(Map.of("dbType","ORACLE","sourceColumns",List.of(Map.of("dataType","DATE"))))).isFalse();
+        assertThat(JdbcTimestampJsonPolicy.hasTimestamps(Map.of("dbType","OCEANBASE_ORACLE","sourceColumns",List.of(Map.of("dataType","DATE"))))).isFalse();
     }
 
     private static List<JsonNode> services(String format) {

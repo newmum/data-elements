@@ -140,6 +140,36 @@ class MappingRegisteredConnectionTest {
             assertThrows(MappingException.class,()->UnifiedMappingService.registeredJdbcUrl(Map.of("dbType","MYSQL","host","validation.invalid","database",database)));
         assertThrows(MappingException.class,()->UnifiedMappingService.registeredJdbcUrl(Map.of("dbType","MYSQL","host","validation.invalid","database","validation","port",0)));
     }
+    @Test void verticaHostRegistrationUsesItsOwnDefaultPortAndRetainsDeclaredOptions() {
+        var config=new LinkedHashMap<String,Object>(Map.of("dbType","vertica","host","validation.invalid","database","validation","currentSchema","public"));
+        var before=new LinkedHashMap<>(config);
+        assertEquals("jdbc:vertica://validation.invalid:5433/validation",UnifiedMappingService.registeredJdbcUrl(config));
+        assertEquals(before,config);
+        config.put("port",15433);config.put("extraParams","SSL=true&ConnectionLoadBalance=false");
+        assertEquals("jdbc:vertica://validation.invalid:15433/validation?SSL=true&ConnectionLoadBalance=false",UnifiedMappingService.registeredJdbcUrl(config));
+        config.put("jdbcURL","jdbc:vertica://explicit.invalid:5434/validation_explicit");
+        assertEquals(config.get("jdbcURL"),UnifiedMappingService.registeredJdbcUrl(config));
+        assertEquals("",UnifiedMappingService.registeredJdbcUrl(Map.of("dbType","VERTICA","database","validation")));
+        assertEquals("",UnifiedMappingService.registeredJdbcUrl(Map.of("dbType","VERTICA","host","validation.invalid")));
+    }
+    @Test void verticaHostModeRejectsInvalidPortsAndUrlPathInjectionBeforeAnyConnection() {
+        for(String database:List.of("validation?user=other","validation/other","validation#other","validation;user=other","validation\\other"))
+            assertThrows(MappingException.class,()->UnifiedMappingService.registeredJdbcUrl(Map.of("dbType","VERTICA","host","validation.invalid","database",database)));
+        for(String port:List.of("0","65536","invalid"))
+            assertThrows(MappingException.class,()->UnifiedMappingService.registeredJdbcUrl(Map.of("dbType","VERTICA","host","validation.invalid","database","validation","port",port)));
+        assertThrows(MappingException.class,()->UnifiedMappingService.registeredJdbcUrl(Map.of("dbType","VERTICA","host","validation.invalid?user=other","database","validation")));
+    }
+    @Test void verticaPoolInitializesItsRealDeclaredDriverWithoutUrlInferenceOrOpeningConnections()throws Exception {
+        var service=new UnifiedMappingService(mock(RegisteredDictionaryCatalog.class),new FieldMappingService());
+        try {
+            var pool=registeredPool(service,Map.of("dbType","vertica","host","validation.invalid","database","validation"));
+            assertDoesNotThrow(pool::init);
+            assertEquals("com.vertica.jdbc.Driver",pool.getDriverClassName());
+            assertEquals("com.vertica.jdbc.Driver",pool.getDriver().getClass().getName());
+            assertEquals(0,pool.getPoolingCount());
+            assertEquals(0,pool.getActiveCount());
+        } finally {service.close();}
+    }
     @ParameterizedTest @ValueSource(strings={"0","65536","invalid"})
     void invalidPortsFailBeforeConnecting(String port) {
         assertThrows(MappingException.class,()->UnifiedMappingService.registeredJdbcUrl(Map.of("dbType","SQLSERVER","host","validation.invalid","database","validation","port",port)));

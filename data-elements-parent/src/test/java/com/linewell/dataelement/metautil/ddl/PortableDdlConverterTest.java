@@ -18,6 +18,19 @@ import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 class PortableDdlConverterTest {
+    @Test void verticaIntegerAliasesRetainTheirWholeSigned64BitRangeInBothTargets() {
+        for(String raw:List.of("INT","Integer","INT8","BIGINT","SMALLINT","TINYINT")) {
+            var column=new ColumnInfo();column.setSourceDatabaseType("vertica");column.setColumnType(raw);column.setDataType(raw);column.setPrecision(19);
+            assertEquals(PortableColumnType.Kind.BIGINT,PortableColumnType.kind(raw,"vertica"));
+            assertEquals("NUMBER(19)",PortableColumnType.render(DatabaseType.ORACLE,column,raw));
+            assertEquals("BIGINT",PortableColumnType.render(DatabaseType.HIVE,column,raw));
+            assertEquals(raw,column.getColumnType());
+        }
+        assertEquals(PortableColumnType.Kind.INTEGER,PortableColumnType.kind("INTEGER","mysql"));
+        assertEquals(PortableColumnType.Kind.SMALLINT,PortableColumnType.kind("TINYINT","mysql"));
+        assertEquals(PortableColumnType.Kind.INTEGER,PortableColumnType.kind("INTEGER","postgresql"));
+        assertEquals(PortableColumnType.Kind.SMALLINT,PortableColumnType.kind("INT8","clickhouse"));
+    }
     @ParameterizedTest
     @CsvSource({"65,30,67", "65,0,66", "65,-1,71", "3,200,203", "3,-85,89"})
     @SuppressWarnings("unchecked")
@@ -280,7 +293,7 @@ class PortableDdlConverterTest {
     void everyRegisteredSourceCanRenderSnapshotFieldsWithoutAConnection(DatabaseType source) {
         var converter = new PortableDdlConverter();
         assertEquals("varchar", converter.logicalType("varchar(36)", source.getCode()));
-        assertEquals("int", converter.logicalType("integer", source.getCode()));
+        assertEquals(source == DatabaseType.VERTICA ? "bigint" : "int", converter.logicalType("integer", source.getCode()));
         assertEquals("json", converter.logicalType("json", source.getCode()));
         assertEquals("text", converter.logicalType("vendor_extension", source.getCode()));
         assertEquals("uuid", converter.originTypeForEditor("varchar", "uuid", source.getCode()));

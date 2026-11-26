@@ -22,6 +22,41 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 class RegisteredMappingSchemaServiceTest {
+    @Test void verticaIntegerRegistrationAndPhysicalMetadataUseLongAtTwentyAndHundred()throws Exception {
+        for(int count:List.of(20,100)) {
+            Fixture f=new Fixture(count);f.config=Map.of("db",Map.of("dbType","VERTICA","defaultSchema","schema"));
+            when(f.metadata.getDatabaseProductName()).thenReturn("Vertica Analytic Database");
+            when(f.metadata.getURL()).thenReturn("jdbc:vertica://validation.invalid:5433/validation");
+            when(f.metadata.getColumns(any(),any(),any(),any())).thenAnswer(ignored->rows(f.physicalRows));
+            f.columns=new ArrayList<>();
+            for(int i=0;i<count;i++) {
+                var col=new HashMap<String,Object>(column("table-"+i,"id"));col.put("data_type","Integer");col.put("precision_length",19);f.columns.add(col);
+                var nativeColumn=new HashMap<String,Object>(jdbcColumn("catalog","schema","table_"+i,"id"));nativeColumn.put("TYPE_NAME","Integer");nativeColumn.put("DATA_TYPE",Types.BIGINT);nativeColumn.put("COLUMN_SIZE",19);f.physicalRows.set(i,nativeColumn);
+            }
+            try(var tenant=TenantContext.use("tenant-A")) {
+                var resolved=f.service.resolve(f.references);var physical=f.service.physicalBatch(resolved);
+                for(int i=0;i<count;i++) {
+                    assertEquals("LONG",resolved.get("ref-"+i).fields().get(0).path("logicalType").asText());
+                    assertEquals("LONG",physical.get("ref-"+i).get(0).path("logicalType").asText());
+                    assertEquals("Integer",resolved.get("ref-"+i).fields().get(0).path("physicalType").asText());
+                }
+            }
+            verify(f.jdbc,times(2)).queryForList(anyString(),any(Object[].class));verify(f.sources,times(1)).resolveBatch(eq("tenant-A"),eq(Set.of("db")),anyString());verify(f.engine,times(1)).openRegistered(eq("db"),anyMap());verify(f.metadata,times(1)).getColumns(any(),any(),any(),any());
+        }
+    }
+    @Test void verticaStaleIntegerInputHintIsRepairedWithoutChangingTheNativeType()throws Exception {
+        for(boolean physical:List.of(false,true)) {
+            Fixture f=new Fixture(1);f.config=Map.of("db",Map.of("dbType","VERTICA","defaultSchema","schema"));
+            when(f.metadata.getDatabaseProductName()).thenReturn("Vertica");when(f.metadata.getURL()).thenReturn("jdbc:vertica://validation.invalid:5433/validation");
+            when(f.metadata.getColumns(any(),any(),any(),any())).thenAnswer(ignored->rows(f.physicalRows));
+            var col=new HashMap<String,Object>(column("table-0","id"));col.put("data_type","Integer");col.put("precision_length",19);f.columns=List.of(col);var nativeColumn=new HashMap<String,Object>(jdbcColumn("catalog","schema","table_0","id"));nativeColumn.put("TYPE_NAME","Integer");f.physicalRows=List.of(nativeColumn);
+            var contract=JSON.createObjectNode();contract.set("sourceRef",f.references.get("ref-0"));contract.putArray("source").addObject().put("name","id").put("physicalType","Integer").put("logicalType","INT").put("nullable",true);
+            try(var tenant=TenantContext.use("tenant-A")) {
+                if(physical)f.service.checkContracts(Map.of("node",contract));else f.service.checkRegisteredContracts(Map.of("node",contract));
+                assertEquals("LONG",contract.path("source").get(0).path("logicalType").asText());assertEquals("Integer",contract.path("source").get(0).path("physicalType").asText());
+            }
+        }
+    }
     @Test void clickHouseNativeFamiliesMatchProjectedJdbcContractsAtTwentyAndHundred()throws Exception {
         var types=new LinkedHashMap<String,String>();
         types.put("Int8","INT");types.put("Nullable(Int16)","INT");types.put("UInt16","INT");types.put("Int32","INT");

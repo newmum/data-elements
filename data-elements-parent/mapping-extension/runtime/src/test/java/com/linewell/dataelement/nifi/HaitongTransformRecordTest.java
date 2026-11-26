@@ -17,6 +17,29 @@ import static org.mockito.Mockito.*;
 
 class HaitongTransformRecordTest {
     private static final ObjectMapper JSON=new ObjectMapper();
+    @Test void nativeSqlTimeNullAndStrictTextSurviveJsonWithoutRelaxingInvalidValues()throws Exception {
+        for(boolean exact:List.of(false,true))for(int count:List.of(20,100)){
+            var spec=JSON.readTree("""
+                {"schemaVersion":"2.0","policies":{"recordErrorMode":"ROUTE_INVALID","onMissingSource":"FAIL"},
+                 "schemaContract":{"allowAdditionalSourceFields":false,"source":[{"name":"clock_value","logicalType":"TIME","physicalType":"Time"}]},
+                 "rules":[{"input":{"kind":"FIELD","name":"clock_value"},"target":{"name":"text","logicalType":"STRING"}}]}
+                """);
+            var plan=MappingEngine.compile(spec);var runner=TestRunners.newTestRunner(HaitongTransformRecord.class);
+            var reader=new org.apache.nifi.json.JsonTreeReader();runner.addControllerService("reader",reader);
+            runner.setProperty(reader,"Schema Access Strategy","infer-schema");runner.enableControllerService(reader);
+            var writer=new org.apache.nifi.json.JsonRecordSetWriter();runner.addControllerService("writer",writer);
+            runner.setProperty(writer,"Schema Access Strategy","inherit-record-schema");runner.setProperty(writer,"Suppress Null Values","never-suppress");runner.enableControllerService(writer);
+            runner.setProperty(HaitongTransformRecord.READER,"reader");runner.setProperty(HaitongTransformRecord.WRITER,"writer");
+            runner.setProperty(HaitongTransformRecord.PLAN,plan.document().toString());runner.setProperty(HaitongTransformRecord.EXACT_JSON_NUMBERS,Boolean.toString(exact));
+            var nulls=new ArrayList<Map<String,Object>>();for(int i=0;i<count;i++)nulls.add(Collections.singletonMap("clock_value",null));
+            runner.enqueue(JSON.writeValueAsBytes(nulls));runner.run();runner.assertTransferCount(HaitongTransformRecord.SUCCESS,1);runner.assertTransferCount(HaitongTransformRecord.FAILURE,0);
+            var output=JSON.readTree(runner.getFlowFilesForRelationship(HaitongTransformRecord.SUCCESS).getFirst().toByteArray());assertEquals(count,output.size());for(var row:output)assertTrue(row.path("text").isNull());runner.clearTransferState();
+            runner.enqueue("[{\"clock_value\":\"23:59:59.123456\"},{\"clock_value\":null},{\"clock_value\":\"24:00:00\"},{\"clock_value\":\"2026-11-26T12:00:00\"}]");runner.run();
+            runner.assertTransferCount(HaitongTransformRecord.SUCCESS,1);runner.assertTransferCount(HaitongTransformRecord.INVALID,1);runner.assertTransferCount(HaitongTransformRecord.FAILURE,0);
+            output=JSON.readTree(runner.getFlowFilesForRelationship(HaitongTransformRecord.SUCCESS).getFirst().toByteArray());assertEquals(2,output.size());assertEquals("23:59:59.123456",output.get(0).path("text").asText());assertTrue(output.get(1).path("text").isNull());
+            var invalid=JSON.readTree(runner.getFlowFilesForRelationship(HaitongTransformRecord.INVALID).getFirst().toByteArray());assertEquals("DATE_INVALID",invalid.path("errors").get(0).path("code").asText());runner.shutdown();
+        }
+    }
     @Test void emptyRecordBatchesDoNotValidateMissingSchemaGenerateRowsOrLoopWarnings()throws Exception {
         for(boolean exact:List.of(false,true))for(int count:List.of(20,100)){
             var runner=emptyAwareJsonRunner(exact);

@@ -4,6 +4,7 @@ import com.linewell.dataelement.integration.nifi.canvas.pipeline.Pipeline;
 import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.linewell.dataelement.mapping.core.ValueTypes;
+import com.linewell.dataelement.mapping.core.JdbcTemporalTypes;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -12,7 +13,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-/** Select an existing root codec for registered JDBC timestamps without changing public services. */
+/** Select an existing text codec for registered JDBC timestamps and native calendar dates. */
 public final class JdbcTimestampJsonPolicy {
     public static final String WRITER_NAME = "PUBLIC-WRITER-JSON-TIMESTAMP9";
     public static final String TIMESTAMP_FORMAT = "yyyy-MM-dd HH:mm:ss.SSSSSSSSS";
@@ -67,7 +68,9 @@ public final class JdbcTimestampJsonPolicy {
                 if (field.get(key) != null && !field.get(key).toString().isBlank()) { type = field.get(key).toString(); break; }
             if(database==com.linewell.dataelement.metautil.model.enums.DatabaseType.SQLSERVER
                     &&type.trim().matches("(?i)^(timestamp|rowversion)$"))continue;
-            if (Set.of("DATETIME", "INSTANT").contains(ValueTypes.type(type))) return true;
+            String logical = ValueTypes.type(type);
+            if (Set.of("DATETIME", "INSTANT").contains(logical)
+                    || "DATE".equals(logical) && !JdbcTemporalTypes.oracleDateHasTime(config)) return true;
         }
         return false;
     }

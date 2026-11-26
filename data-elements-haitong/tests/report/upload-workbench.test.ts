@@ -22,6 +22,7 @@ function contextFixture(t:TestContext,count:number){
  const descriptors=['window','localStorage','sessionStorage'].map(key=>[key,Object.getOwnPropertyDescriptor(globalThis,key)] as const),previousFetch=globalThis.fetch;
  const stored=new Map([['token','test-platform-token']]);const storage={getItem:(key:string)=>stored.get(key)??null,setItem:(key:string,value:string)=>stored.set(key,value),removeItem:(key:string)=>stored.delete(key)};
  Object.defineProperty(globalThis,'window',{configurable:true,value:{location:{href:'http://report.test/#/report',origin:'http://report.test',hash:'#/report',search:''}}});
+ Object.defineProperty(window,'parent',{configurable:true,value:window});
  for(const key of ['localStorage','sessionStorage'])Object.defineProperty(globalThis,key,{configurable:true,value:storage});
  const requests:string[]=[];globalThis.fetch=async input=>{const path=new URL(String(input),'http://report.test').pathname.replace(/^\/(?:prod|dev)-api/,'');requests.push(path);
   const data=path==='/sym/user/me'?{id:'user'}:path==='/portal/sso/session'?{tid:'tenant'}:{list:Array.from({length:count},(_,i)=>({tid:'source-'+i,dbName:'数据源'+i,accessMode:'upload'}))};return new Response(JSON.stringify({code:0,data}));};

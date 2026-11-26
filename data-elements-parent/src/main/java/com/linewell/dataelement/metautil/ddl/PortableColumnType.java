@@ -48,6 +48,8 @@ public final class PortableColumnType {
     public static Kind kind(String raw, String sourceCode) {
         DatabaseType source = optionalSourceType(text(sourceCode));
         if (source == DatabaseType.SQLSERVER) return kind(SqlServerIdentityTypes.baseType(raw));
+        if (source == DatabaseType.VERTICA && Set.of("INT", "INTEGER", "INT8", "BIGINT", "SMALLINT", "TINYINT").contains(base(raw)))
+            return Kind.BIGINT;
         if (source != DatabaseType.CLICKHOUSE) return kind(raw);
         return switch (clickHouseBase(raw)) {
             case "INT8", "INT16", "UINT8" -> Kind.SMALLINT;

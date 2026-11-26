@@ -3254,6 +3254,12 @@ Kafka登记表名是便于元数据检索的规范名称，实际主题保持原
 
 Linux x86_64 和 aarch64（ARM64）单机版使用同一个无 Nacos 构建，打包时传入 `--bundle --linux-runtime-dir <对应架构的运行组件目录> --linux-arch x86_64|aarch64`，并用两个 `--nifi-extension` 参数传入与 NiFi 2.9.0 匹配的 `haitong-mapping-nar` 和 `datadevs-database-nar`。运行组件目录提供 `java21.tar.gz`、`mysql.tar.xz`、`redis.tar.gz`、官方 `nifi.zip`、`caddy.tar.gz` 和 `mysql-libs.tar.gz`。打包器检查 Java、MySQL、Valkey 及其加载器、Caddy 和 MySQL 补充库的 ELF 架构，再把两个扩展加入 NiFi 的 `extensions/`，并核对字段映射版本与后端一致。解压后执行 `python3 tools/standalone.py start`，启动器按 `config/runtime.json` 核对宿主机架构和选择 Valkey 加载器，离线初始化控制库、海通租户库和账号，并确认两个扩展已注册。各架构包内的 `部署说明.md` 给出目标系统要求和启停命令。
 
+已有 ARM/MySQL 单机实例使用 `tools/package-haitong-increment.py` 生成差异升级，不能重跑全量初始化。打包输入为原发行 ZIP、本次无 Nacos 后端、最新海通前端、匹配 NiFi2.9 的治理 NAR、需要的配套扩展、带摘要的 JDBC 目录及可移植模板定义。打包器逐类确认后端与 NAR 的共享治理字节码一致，比较旧包与当前完整结构，保留独立租户默认值，只生成实际结构差异；资源按原包行标识、路径和内容摘要登记更新及退役计划。首次发布及后续生产自定义变化均须在预检中核对，不能用历史脚本覆盖现场编辑。
+
+解压增量包到安装目录之外，执行 `bash upgrade.sh check <原安装目录>` 只读预检，维护窗口执行 `bash upgrade.sh apply <原安装目录>`。脚本只短时停止本实例网页和后端，备份选定 Magic 和原前后端，再执行结构差异及所选资源更新；原 MySQL、缓存、NiFi 进程、账户、密钥、端口与连接配置继续使用。扩展并存安装并核对注册，不清理旧流程、队列或 NAR。回退入口为同目录 `bash upgrade.sh rollback <原安装目录>`，恢复原应用与所选 Magic，新增结构和已有数据保留；备份位于受限 `data/local/upgrades/`。对外部 NiFi 节点不能套用内置节点的磁盘路径。
+
+模板导出只读选定来源租户当前已发布版本，保留逻辑拓扑、目标类型、治理与写入策略；不分发开发目标 ID、连接目录、HDFS 目录、凭据或原生快照。导入为独立海通租户的草稿版本，保持生产已有模板、默认模板和任务绑定。管理员在新增“模板管理”入口绑定生产目标、补充现场目录后发布，并按需设为默认。模板功能使用既有结构增量 `000012` 和 `000015` 的完整目标结构；结构与模板数据分别交付，不把业务模板 INSERT 混入根 `db/` 的结构初始化文件。
+
 麒麟 V10 的无 Nacos DM8 版在打包时加 `--dm8-runtime-dir <下载目录>`。该目录提供 Linux x86_64、ARM64 的 JDK 21 和网页入口发行包及发布校验信息，打包器校验 SHA-256。部署者直接编辑 `config/application.yml` 中的 DM8 控制库、租户库和 Redis，执行 `bash start.sh`、`bash status.sh`、`bash stop.sh`。已有数据的升级沿用原模式、租户配置和数据目录。`db/new-install-only/` 仅用于空模式新装，不参与启动。见[麒麟 DM8 版部署说明](../tools/haitong-deployment/linux-dm8/deployment.md)。
 
 数据库脚本用于独立空库，包含控制库 `baseline`、单一租户库 `baseline_haitong` 和现有平台登录种子。菜单由 `www/haitong/deployment.js` 的 `enabledRoutes` 控制。具体配置和初始化步骤见[独立部署说明](../tools/haitong-deployment/deployment.md)，样例流程见[操作手册](../tools/haitong-deployment/operations.md)。

@@ -91,6 +91,11 @@ public final class SchemaContract {
         // the contract; referenced values are syntax-checked without rewriting.
         actual=actual.stream().map(field->jsonText.contains(field.name())&&"STRING".equals(field.logicalType())
                 ?new Field(field.name(),declaredTypes.get(field.name()),field.nullable(),field.length(),field.precision(),field.scale()):field).toList();
+        // JSON has no SQL TIME scalar; even an all-NULL TIME column is inferred as STRING.
+        // Only an explicitly declared native clock field receives this carrier allowance.
+        Set<String> timeText=timeTextSources(contract.path("source"));
+        actual=actual.stream().map(field->timeText.contains(field.name())&&"STRING".equals(field.logicalType())
+                ?new Field(field.name(),"TIME",field.nullable(),field.length(),field.precision(),field.scale()):field).toList();
         Set<String> jdbcMillisFields=new HashSet<>();
         for(JsonNode field:contract.path("source"))if(field.path("dateContainsTime").asBoolean()
                 &&ValueTypes.type(field.path("physicalType").asText()).equals("DATE"))jdbcMillisFields.add(field.path("name").asText());
@@ -129,6 +134,24 @@ public final class SchemaContract {
                     &&Set.of("JSON","JSONB").contains(ValueTypes.type(field.path("physicalType").asText())))
                 names.add(field.path("name").asText());
         return Set.copyOf(names);
+    }
+    static Set<String> timeTextSources(JsonNode fields){
+        Set<String> names=new HashSet<>();
+        for(JsonNode field:fields){
+            String physical=field.path("physicalType").asText().trim().toUpperCase(Locale.ROOT);
+            if("TIME".equals(ValueTypes.type(field.path("logicalType").asText()))
+                    &&physical.matches("TIME(?:\\([0-9]+\\))?(?:\\s+WITHOUT\\s+TIME\\s+ZONE)?"))
+                names.add(field.path("name").asText());
+        }
+        return Set.copyOf(names);
+    }
+    static void requireTimeText(Object value){
+        if(value==null||value==ValueTypes.MISSING||value instanceof java.time.LocalTime||value instanceof java.sql.Time)return;
+        if(value instanceof String text){
+            try{java.time.LocalTime.parse(text,java.time.format.DateTimeFormatter.ISO_LOCAL_TIME);return;}
+            catch(java.time.format.DateTimeParseException invalid){/* Preserve the original value in diagnostics. */}
+        }
+        throw new MappingException("DATE_INVALID","已登记TIME来源字段需要有效的不含日期和时区的时间值");
     }
     static void requireJsonText(Object value){
         if(value==null||value==ValueTypes.MISSING)return;
