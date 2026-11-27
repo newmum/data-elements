@@ -1,6 +1,7 @@
 package com.linewell.dataelement.integration.nifi.canvas.mapping;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.linewell.dataelement.mapping.core.MultiValueTokens;
 import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.Types;
@@ -49,9 +50,7 @@ public final class MultiValueTranslation {
     }
 
     public static List<String> tokens(Object raw, String separator) {
-        if (raw == null) return List.of();
-        return Arrays.stream(String.valueOf(raw).split(Pattern.quote(separator), -1))
-                .map(String::trim).filter(value -> !value.isEmpty()).toList();
+        return MultiValueTokens.split(raw, separator);
     }
 
     /** Retains the qualified table and category/status filters of the old generated query. */

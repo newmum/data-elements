@@ -27,7 +27,7 @@ export function safeDiagnostic(value: unknown): string {
 function causeSummary(detail: string): string | undefined {
   const lines = detail.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
   const causes = lines.filter(line => /^Caused by:/i.test(line));
-  const reason = causes.at(-1)?.replace(/^Caused by:\s*/i, '')
+  const reason = causes[causes.length - 1]?.replace(/^Caused by:\s*/i, '')
     || lines.find(line => !/^(?:at\s|\.\.\.|\^)/.test(line));
   return reason ? reason.replace(/^(?:[\w$]+\.)*[\w$]*(?:Exception|Error):\s*/, '').slice(0, 600) : undefined;
 }

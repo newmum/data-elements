@@ -11,7 +11,7 @@ import java.util.*;
 
 /** Immutable compiled plans and bounded, staged lookup execution used by both backend and NiFi. */
 public final class MappingEngine {
-    public static final String VERSION="1.1.55";
+    public static final String VERSION="1.1.56";
     public static String engineVersion(){return VERSION;}
     public static final int WINDOW_RECORDS=512;
     public static final long WINDOW_BYTES=RecordBudget.WINDOW_BYTES;
@@ -220,7 +220,7 @@ public final class MappingEngine {
     private static Object lookup(Frame f,String id,DictionarySpec dict,List<Expressions.Expr>bindings,JsonNode args,boolean multi,String separator){
         Object raw=f.current;if(raw==null)return null;
         List<Object> tokens;
-        if(multi){tokens=new ArrayList<>();if(raw instanceof Collection<?> array)tokens.addAll(array);else Collections.addAll(tokens,raw.toString().split(java.util.regex.Pattern.quote(separator),-1));tokens.replaceAll(v->v==null?"":v.toString().trim());tokens.removeIf(v->v.toString().isEmpty());if(tokens.size()>1000)throw new MappingException("BUDGET_EXCEEDED","单字段多值编码超过1000");}
+        if(multi)tokens=new ArrayList<>(MultiValueTokens.split(raw,separator));
         else tokens=List.of(raw);
         List<Object> result=new ArrayList<>();boolean any=false;Map<String,Object> inline=args.path("values").isObject()?JSON.convertValue(args.path("values"),new TypeReference<Map<String,Object>>() {}):null;
         Set<DictionarySpec.Key> waiting=new LinkedHashSet<>();

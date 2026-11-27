@@ -43,7 +43,7 @@ class RecordLookupScriptTest {
                     "dataSource", Map.of("dbType", "POSTGRESQL")));
             var plan = new FieldMappingService().compilePlan(Map.of("version", "1.0", "mappings", List.of(rule)));
             var properties = RecordLookupScript.properties(plan.lookups(), "reader", "writer", ignored -> "dbcp");
-            List<String> inputs = Collections.nCopies(size, "1,bad,2,1,3");
+            List<String> inputs = Collections.nCopies(size, "1，bad 2；1、3");
             var output = execute(properties.get("Script Body"), inputs, Map.of("dictionary0", Map.of("connection", connection)), false);
             assertThat(output).hasSize(size).allSatisfy(record -> assertThat(record.getValue("labels")).isEqualTo("一,bad,二,一,3"));
             assertThat(reads.get()).isEqualTo(1 + (size + 99) / 100);

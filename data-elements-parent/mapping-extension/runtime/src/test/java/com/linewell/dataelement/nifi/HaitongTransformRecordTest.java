@@ -17,6 +17,26 @@ import static org.mockito.Mockito.*;
 
 class HaitongTransformRecordTest {
     private static final ObjectMapper JSON=new ObjectMapper();
+    @Test void mixedDictionaryDelimitersSurviveRealJsonReaderAndWriterFor20And100Rows()throws Exception {
+        var plan=MappingEngine.compile(JSON.readTree("""
+            {"version":"1.0","mappings":[{"from":"/codes","to":"/labels","lookup":{"multiValue":true,"values":{"A":"甲","B":"乙"}}}]}
+            """));
+        for(int count:List.of(20,100)){
+            var runner=TestRunners.newTestRunner(HaitongTransformRecord.class);
+            var reader=new org.apache.nifi.json.JsonTreeReader();runner.addControllerService("reader",reader);
+            runner.setProperty(reader,"Schema Access Strategy","infer-schema");runner.enableControllerService(reader);
+            var writer=new org.apache.nifi.json.JsonRecordSetWriter();runner.addControllerService("writer",writer);
+            runner.setProperty(writer,"Schema Access Strategy","inherit-record-schema");runner.enableControllerService(writer);
+            runner.setProperty(HaitongTransformRecord.READER,"reader");runner.setProperty(HaitongTransformRecord.WRITER,"writer");
+            runner.setProperty(HaitongTransformRecord.PLAN,plan.document().toString());runner.setProperty(HaitongTransformRecord.HASH,plan.hash());
+            var inputs=List.of("A,X,A,B","A，X A；B","A\tX\u3000A、B","A\u00a0X;A，B");
+            var rows=new ArrayList<Map<String,Object>>();for(int i=0;i<count;i++)rows.add(Map.of("codes",inputs.get(i%inputs.size())));
+            runner.enqueue(JSON.writeValueAsBytes(rows));runner.run();runner.assertTransferCount(HaitongTransformRecord.SUCCESS,1);
+            runner.assertTransferCount(HaitongTransformRecord.INVALID,0);runner.assertTransferCount(HaitongTransformRecord.FAILURE,0);
+            var result=JSON.readTree(runner.getFlowFilesForRelationship(HaitongTransformRecord.SUCCESS).getFirst().toByteArray());
+            assertEquals(count,result.size());for(var row:result)assertEquals("甲,X,甲,乙",row.path("labels").asText());runner.shutdown();
+        }
+    }
     @Test void nativeSqlTimeNullAndStrictTextSurviveJsonWithoutRelaxingInvalidValues()throws Exception {
         for(boolean exact:List.of(false,true))for(int count:List.of(20,100)){
             var spec=JSON.readTree("""

@@ -31,11 +31,11 @@ export default defineConfig(({ command, isPreview }) => ({
   preview: { host: '127.0.0.1', port: 4173 },
   // Reporting parses workbooks off the UI thread and loads XLSX on demand.
   worker: { format: 'es' },
-  // Production workstations include Chrome 100. Syntax lowering does not
+  // Production workstations include Chrome 90. Syntax lowering does not
   // polyfill DOM APIs or selectors; keep runtime styles compatible as well.
   build: {
-    target: 'chrome100',
-    cssTarget: 'chrome100',
+    target: 'chrome90',
+    cssTarget: 'chrome90',
     chunkSizeWarningLimit: 1200,
     reportCompressedSize: false,
   },

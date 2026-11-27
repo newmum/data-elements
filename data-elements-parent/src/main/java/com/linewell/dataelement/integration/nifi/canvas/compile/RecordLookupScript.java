@@ -24,6 +24,7 @@ final class RecordLookupScript {
             data.put("source", lookup.parameterRecordFields().getFirst());
             data.put("target", lookup.targetField());
             data.put("separator", rule.separator());
+            data.put("splitPattern", com.linewell.dataelement.mapping.core.MultiValueTokens.pattern(rule.separator()).pattern());
             data.put("onMissing", lookup.onMissing());
             data.put("values", rule.values());
             data.put("query", rule.query());

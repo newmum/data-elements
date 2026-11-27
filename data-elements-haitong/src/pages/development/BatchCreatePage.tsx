@@ -1,3 +1,4 @@
+import { reportRandomId } from '../../report/core/browserId';
 import { useServerSort } from '../../components/serverSort';
 import { Alert, App, Button, Checkbox, Form, Input, Select, Space, Tag } from 'antd';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -143,7 +144,7 @@ export default function BatchCreatePage() {
     if (running.current || !rows.length) return;
     if (rows.length > 500) { message.warning('每个作业最多 500 张表，请分批选择'); return; }
     const fingerprint = JSON.stringify({ source, target, prefix, remove, suffix, ids: rows.map(row => row.id) });
-    if (pendingSubmit.current?.fingerprint !== fingerprint) pendingSubmit.current = { fingerprint, requestKey: crypto.randomUUID() };
+    if (pendingSubmit.current?.fingerprint !== fingerprint) pendingSubmit.current = { fingerprint, requestKey: reportRandomId() };
     const request: BatchCreateRequest = {
       requestKey: pendingSubmit.current.requestKey,
       jobName: `批量创建任务 · ${new Date().toLocaleDateString('zh-CN')}`,

@@ -12,6 +12,19 @@ class MultiValueTranslationTest {
     private static final ObjectMapper JSON = new ObjectMapper();
 
     @Test
+    void commonSeparatorsAreRecognizedTogetherAndCustomSeparatorsKeepCodesIntact() {
+        var rule=MultiValueTranslation.rule(JSON.valueToTree(Map.of("multiValue",true,
+                "values",Map.of("A","甲","B","乙"))));
+        for(String raw:List.of("A,B","A，B","A B","A\u3000B","A\tB","A\u00a0B","A、B","A;B","A；B"))
+            assertThat(MultiValueTranslation.translate(raw,rule,rule.values())).as(raw).isEqualTo("甲,乙");
+        assertThat(MultiValueTranslation.translate(" A，X A；B、 ",rule,rule.values())).isEqualTo("甲,X,甲,乙");
+        assertThat(MultiValueTranslation.translate(List.of("A","B","A"),rule,rule.values())).isEqualTo("甲,乙,甲");
+        var custom=MultiValueTranslation.rule(JSON.valueToTree(Map.of("multiValue",true,"multiValueSeparator","||",
+                "values",Map.of("A B","带空格编码","C","丙"))));
+        assertThat(MultiValueTranslation.translate("A B||C",custom,custom.values())).isEqualTo("带空格编码||丙");
+    }
+
+    @Test
     void standardPreviewPreservesOrderDuplicatesUnknownsAndLiteralSeparators() throws Exception {
         var lookup = Map.of("multiValue", true, "values", Map.of("U", "未知", "F", "女'性"),
                 "multiValueSeparator", "||");

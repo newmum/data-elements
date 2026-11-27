@@ -1,3 +1,4 @@
+import { cloneConfiguration } from '../../utils/browserCompat.ts';
 import type { FieldMappingSpec, FieldMeta, FunctionParameter, FunctionParameterSchema, MappingRule, MappingSchemaContract, UnifiedMappingDraft, UnifiedMappingRule } from '../api/fieldMapping';
 
 export function functionParameterSlots(schema:FunctionParameterSchema,parameters:unknown[]):FunctionParameter[] {
@@ -105,7 +106,7 @@ export function createRule(template:string,id:string):UnifiedMappingRule {
   return rule;
 }
 export function setConditional(rule:UnifiedMappingRule,enabled:boolean):UnifiedMappingRule {
-  if(enabled){if(rule.when!=null)return rule;return {...rule,when:{op:'eq',left:{kind:'FIELD',name:rule.input.name??''},right:{kind:'LITERAL',value:''}},then:{input:structuredClone(rule.input),steps:structuredClone(rule.steps)},else:{input:{kind:'LITERAL',value:null},steps:[]}};}
+  if(enabled){if(rule.when!=null)return rule;return {...rule,when:{op:'eq',left:{kind:'FIELD',name:rule.input.name??''},right:{kind:'LITERAL',value:''}},then:{input:cloneConfiguration(rule.input),steps:cloneConfiguration(rule.steps)},else:{input:{kind:'LITERAL',value:null},steps:[]}};}
   const result={...rule};delete result.when;delete result.then;delete result.else;return result;
 }
 export function nullHandling(body:RuleBody){return {blankToNull:body.steps.some(s=>s.uiRole==='EMPTY_TO_NULL'),useDefault:body.steps.some(s=>s.uiRole==='NULL_DEFAULT'),defaultValue:body.steps.find(s=>s.uiRole==='NULL_DEFAULT')?.args?.parameters instanceof Array?(body.steps.find(s=>s.uiRole==='NULL_DEFAULT')!.args!.parameters as unknown[])[0]:''};}

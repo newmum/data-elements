@@ -71,7 +71,22 @@ class MappingEngineTest {
              "mappings":[{"from":"/codes","to":"/labels","lookup":{"dictionaryId":"dict","multiValue":true,"multiValueSeparator":",","onMissing":"KEEP_SOURCE"}}]}
             """);
         int[] calls={0};DictionarySpec.Provider provider=(d,keys)->{calls[0]++;assertEquals(3,keys.size());Map<DictionarySpec.Key,DictionarySpec.LookupValue>out=new HashMap<>();out.put(new DictionarySpec.Key(List.of("A")),new DictionarySpec.LookupValue(true,"甲"));out.put(new DictionarySpec.Key(List.of("B")),new DictionarySpec.LookupValue(true,"乙"));return out;};
-        var result=MappingEngine.execute(MappingEngine.compile(spec),List.of(Map.of("codes","A,,X,A,B")),0,CONTEXT,provider);assertEquals(1,calls[0]);assertEquals("甲,X,甲,乙",result.rows().getFirst().output().get("labels"));
+        for(int count:List.of(20,100)){
+            calls[0]=0;var result=MappingEngine.execute(MappingEngine.compile(spec),Collections.nCopies(count,Map.of("codes","A，X A；B")),0,CONTEXT,provider);
+            assertEquals(1,calls[0]);assertEquals(count,result.rows().size());for(var row:result.rows())assertEquals("甲,X,甲,乙",row.output().get("labels"));
+        }
+    }
+    @Test void commonMultiValueSeparatorsMatchTheRegistrationPreview()throws Exception{
+        var spec=JSON.readTree("""
+            {"version":"1.0","mappings":[{"from":"/codes","to":"/labels","lookup":{"multiValue":true,"values":{"A":"甲","B":"乙"}}}]}
+            """);
+        var plan=MappingEngine.compile(spec);
+        for(String raw:List.of("A,B","A，B","A B","A\u3000B","A\tB","A\u00a0B","A、B","A;B","A；B")){
+            var result=MappingEngine.execute(plan,List.of(Map.of("codes",raw)),0,CONTEXT,null);
+            assertTrue(result.rows().getFirst().success());assertEquals("甲,乙",result.rows().getFirst().output().get("labels"),raw);
+        }
+        var result=MappingEngine.execute(plan,List.of(Map.of("codes"," A，X A；B、 ")),0,CONTEXT,null);
+        assertEquals("甲,X,甲,乙",result.rows().getFirst().output().get("labels"));
     }
     @Test void targetDependenciesAndCyclesAreExplicit()throws Exception{
         var spec=JSON.readTree("""

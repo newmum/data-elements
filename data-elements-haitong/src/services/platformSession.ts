@@ -1,3 +1,4 @@
+import { reportRandomId } from '../report/core/browserId';
 import { getBridgeToken,getSessionRevision,setBridgeToken,waitForToken } from '../nifi/api/bridgeSession';
 import {sourcePlatformBaseUrl,sourcePlatformHomeUrl,sourcePlatformLoginUrl} from './platformLocation';
 import { deploymentLanding, standaloneDeployment } from '../app/deployment';
@@ -102,7 +103,7 @@ export async function getPlatformSessionToken(): Promise<string> {
   if (portal.origin === window.location.origin) return sameOriginToken();
   const frame = await platformBridge(portal);
   return new Promise((resolve, reject) => {
-    const nonce = crypto.randomUUID();
+    const nonce = reportRandomId();
     const dispose = () => {
       window.clearTimeout(timeout);
       window.removeEventListener('message', receive);
@@ -144,7 +145,7 @@ export function logoutPlatformSession(): Promise<void> {
     }
     const frame = await platformBridge(portal);
     await new Promise<void>((resolve, reject) => {
-      const nonce = crypto.randomUUID();
+      const nonce = reportRandomId();
       const dispose = () => { window.clearTimeout(timeout); window.removeEventListener('message', receive); };
       const receive = (event: MessageEvent) => {
         if (event.origin !== portal.origin || event.source !== frame.contentWindow ||

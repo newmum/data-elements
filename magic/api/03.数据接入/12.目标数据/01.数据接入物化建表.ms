@@ -438,7 +438,7 @@ var dictionaryRelations = (sourceTable) => {
                 relationKind: 'MANDATORY_STANDARD',
                 standardValues: standardValues,
                 multiValue: text(relation.multiValue).toLowerCase() == 'true',
-                multiValueSeparator: blank(relation.multiValueSeparator) ? ',' : text(relation.multiValueSeparator)
+                multiValueSeparator: relation.multiValueSeparator == null || (relation.multiValueSeparator + '') == '' ? ',' : (relation.multiValueSeparator + '')
             }
         } else if (relation != null && text(relation.enabled).toLowerCase() != 'false' && sourceType != 'enum'
             && safeIdentifier(sourceName) && safeIdentifier(dictionaryTable)
@@ -450,7 +450,7 @@ var dictionaryRelations = (sourceTable) => {
                 dictionaryKeyField: keyField,
                 dictionaryLabelField: labelField,
                 multiValue: text(relation.multiValue).toLowerCase() == 'true',
-                multiValueSeparator: blank(relation.multiValueSeparator) ? ',' : text(relation.multiValueSeparator)
+                multiValueSeparator: relation.multiValueSeparator == null || (relation.multiValueSeparator + '') == '' ? ',' : (relation.multiValueSeparator + '')
             }
         }
     }

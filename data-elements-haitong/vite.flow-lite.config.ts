@@ -7,7 +7,7 @@ export default defineConfig({
   publicDir: false,
   resolve: { alias: { '@': path.resolve(__dirname, 'src/nifi') } },
   build: {
-    target: 'chrome100',
+    target: 'chrome90',
     outDir: '../logs/haitong-flow-lite/frontend-build',
     emptyOutDir: true,
     rollupOptions: { input: path.resolve(__dirname, 'flow-lite.html') },

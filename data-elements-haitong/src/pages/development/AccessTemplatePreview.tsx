@@ -24,7 +24,7 @@ function FlowDiagram({ nodes, edges, onSelect }: {
     const ids = new Set(nodes.map(node => node.id));
     for (const node of nodes) {
       graph.addNode({ id: node.id, x: node.x, y: node.y, width: 220, height: 62,
-        label: node.label + '\n' + (node.type.split('.').at(-1) || ''),
+        label: node.label + '\n' + (node.type.split('.').slice(-1)[0] || ''),
         attrs: { body: { fill: '#fff', stroke: '#91b7e4', rx: 8, ry: 8 },
           label: { fill: '#1b3557', fontSize: 12, textWrap: { width: 205, height: 54, ellipsis: true } } } });
     }

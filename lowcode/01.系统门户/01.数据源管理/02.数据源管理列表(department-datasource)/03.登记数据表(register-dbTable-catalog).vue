@@ -1387,7 +1387,7 @@
                 maxlength="8"
                 @input="refreshGeneratedSqlIfNeeded"
               />
-              <span>如 004,003，翻译结果按原分隔符拼接</span>
+              <span>中英文逗号、顿号、分号和空白可混用；自定义符号按原文拆分，结果按此分隔符拼接</span>
             </template>
           </div>
         </div>
@@ -4237,9 +4237,10 @@ function splitRelationValues(value, relation) {
   const raw = String(value ?? "");
   if (!relation?.multiValue) return raw ? [raw] : [];
   const separator = relationSeparator(relation);
-  return raw
-    .split(separator)
-    .map((item) => item.trim())
+  const common = /^[,，、;；\s\p{Z}]$/u.test(separator);
+  const values = Array.isArray(value) ? value : raw.split(common ? /[,，、;；\s\p{Z}]+/u : separator);
+  return values
+    .map((item) => String(item ?? "").trim())
     .filter(Boolean);
 }
 
@@ -10072,18 +10073,31 @@ button.preview-count-pill:hover {
 }
 
 .relation-source-main {
+  flex: 1 1 0;
   min-width: 0;
+
+  strong {
+    overflow-wrap: anywhere;
+  }
 }
 
 .relation-source-mapping {
   display: flex;
+  flex: 0 0 auto;
+  max-width: 56%;
   align-items: center;
   min-width: 0;
   margin-left: auto;
   gap: 10px;
 
   > div {
-    min-width: 0;
+    flex: 1 1 0;
+    min-width: 80px;
+    max-width: 190px;
+  }
+
+  small {
+    white-space: nowrap;
   }
 
   strong {

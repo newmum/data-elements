@@ -723,6 +723,22 @@ class DataAggTaskEnsureBatchMagicTest {
         assertFalse(dsl.contains("GROUP_CONCAT"));
     }
 
+    @ParameterizedTest
+    @ValueSource(strings={",","，"," ","\t","||"})
+    void multiValueSeparatorSurvivesSavedRegistrationAndTaskGeneration(String separator) throws Exception {
+        Fixture fixture=Fixture.forCreation(1);
+        fixture.jdbc.update("update db_table_t set field_governance_config=? where tid='source-1'",
+                cn.hutool.json.JSONUtil.toJsonStr(Map.of("fields",List.of(Map.of("columnName","person_id",
+                        "dictionaryRelation",Map.of("enabled",true,"sourceType","enum","multiValue",true,
+                                "multiValueSeparator",separator,"enumItems",List.of(Map.of("value","A","label","甲"))))))));
+        fixture.jdbc.update("insert into db_table_column_t values('translated','police','target-0','person_id_cn',null,2,0)");
+        assertInstanceOf(Map.class,fixture.run());
+        String dsl=fixture.jdbc.queryForObject("select dsl_json from nifi_pipeline_t",String.class);
+        String spec=cn.hutool.json.JSONUtil.parseObj(dsl).getJSONArray("nodes").getJSONObject(1).getJSONObject("config").getStr("mappings");
+        var lookup=cn.hutool.json.JSONUtil.parseObj(spec).getJSONArray("mappings").getJSONObject(1).getJSONObject("lookup");
+        assertTrue(lookup.getBool("multiValue"));assertEquals(separator,lookup.getStr("multiValueSeparator"));
+    }
+
     @Test
     void multiDictionaryTaskReadsStayBatchedAndKeepRegisteredDictionaryType() throws Exception {
         List<Integer> counts = new ArrayList<>();

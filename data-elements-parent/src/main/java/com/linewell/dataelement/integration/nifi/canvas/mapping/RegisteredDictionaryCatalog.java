@@ -99,9 +99,21 @@ public class RegisteredDictionaryCatalog {
             while(matcher.find()){String name="__input_"+(index++);fieldRefs.put(name,ValueTypes.field(matcher.group(1)));matcher.appendReplacement(text,name);}matcher.appendTail(text);
             var statement=CCJSqlParserUtil.parse(text.toString());if(!(statement instanceof PlainSelect select)||!(select.getFromItem() instanceof Table table)||select.getJoins()!=null&&!select.getJoins().isEmpty()||select.getGroupBy()!=null||select.getHaving()!=null||select.getDistinct()!=null||select.getLimit()!=null||select.getOffset()!=null||select.getWithItemsList()!=null&&!select.getWithItemsList().isEmpty())throw invalid();
             ObjectNode d=JSON.createObjectNode().put("datasourceId",sourceId).put("table",unquote(table.getName())).put("schema",table.getSchemaName()==null?"":unquote(table.getSchemaName()));
-            String result=lookup.path("resultColumn").asText();Column value=null;
-            for(var item:select.getSelectItems()){if(!(item.getExpression() instanceof Column column))throw invalid();if(value==null)value=column;if(!result.isBlank()&&(item.getAlias()!=null&&result.equals(item.getAlias().getName())||result.equals(unquote(column.getColumnName())))){value=column;break;}}
-            if(value==null)throw invalid();d.put("valueColumn",unquote(value.getColumnName()));ArrayNode keyColumns=d.putArray("keyColumns");ArrayNode keyBindings=lookup.putArray("keyBindings");List<JsonNode>filters=new ArrayList<>();extract(select.getWhere(),keyColumns,keyBindings,filters,fieldRefs,0);
+            String result=lookup.path("resultColumn").asText();Column value=null;List<Column>projections=new ArrayList<>();
+            for(var item:select.getSelectItems()){
+                if(!(item.getExpression() instanceof Column column))throw invalid();projections.add(column);
+                if(!result.isBlank()&&(item.getAlias()!=null&&result.equalsIgnoreCase(unquote(item.getAlias().getName()))||result.equalsIgnoreCase(unquote(column.getColumnName()))))value=column;
+            }
+            ArrayNode keyColumns=d.putArray("keyColumns");ArrayNode keyBindings=lookup.putArray("keyBindings");List<JsonNode>filters=new ArrayList<>();extract(select.getWhere(),keyColumns,keyBindings,filters,fieldRefs,0);
+            if(value==null){
+                // Generated batch queries project key,label, while resultColumn names the target alias
+                // from the single-key SQL. Never silently use the projected key as the translated value.
+                if(lookup.path("multiValue").asBoolean()&&projections.size()>1){
+                    if(projections.size()!=2||keyColumns.size()!=1||!unquote(projections.getFirst().getColumnName()).equalsIgnoreCase(keyColumns.get(0).asText()))throw invalid();
+                    value=projections.get(1);
+                }else if(!projections.isEmpty())value=projections.getFirst();
+            }
+            if(value==null)throw invalid();d.put("valueColumn",unquote(value.getColumnName()));
             if(keyColumns.isEmpty())throw new MappingException("DICTIONARY_MIGRATION_REQUIRED","字典查询须能证明为参数化键查询");if(!filters.isEmpty()){ObjectNode filter=d.putObject("filter").put("op","AND");ArrayNode children=filter.putArray("children");filters.forEach(children::add);}
             d.put("duplicatePolicy",lookup.path("multiValue").asBoolean()?"LEGACY_MAX_LABEL":"ERROR");return d;
         }catch(MappingException ex){throw ex;}catch(Exception ex){throw new MappingException("DICTIONARY_MIGRATION_REQUIRED","复杂字典SQL无法自动迁移，请配置结构化字典关联");}

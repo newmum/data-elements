@@ -9,10 +9,15 @@ import java.util.regex.Pattern
 
 // Injected base64 JSON contains rule metadata and service aliases, never credentials.
 def rules = new JsonSlurper().parseText(new String(Base64.decoder.decode('__RULES_BASE64__'), 'UTF-8'))
+rules.each { it.tokenPattern = Pattern.compile(it.splitPattern) }
 def flowFile = session.get()
 if (!flowFile) return
-def tokens = { raw, separator ->
-    raw == null ? [] : raw.toString().split(Pattern.quote(separator), -1).collect { it.trim() }.findAll { !it.isEmpty() }
+def tokens = { raw, rule ->
+    if (raw == null) return []
+    def values = raw instanceof Collection || raw.getClass().isArray() ? raw.toList() : rule.tokenPattern.split(raw.toString(), -1).toList()
+    def result = values.collect { it == null ? '' : it.toString().replaceAll('^[\\s\\p{Z}\\uFEFF]+|[\\s\\p{Z}\\uFEFF]+$', '') }.findAll { !it.isEmpty() }
+    if (result.size() > 1000) throw new IllegalStateException('单字段多值编码超过1000')
+    return result
 }
 def parameter = { code, type ->
     if (type in [Types.TINYINT, Types.SMALLINT, Types.INTEGER, Types.BIGINT, Types.NUMERIC,
@@ -52,7 +57,7 @@ try {
                 def dictionaries = [:]
                 rules.findAll { it.query }.groupBy { [it.service, it.query] }.each { group, groupRules ->
                     def codes = new LinkedHashSet()
-                    groupRules.each { rule -> batch.each { row -> codes.addAll(tokens(row[rule.source], rule.separator)) } }
+                    groupRules.each { rule -> batch.each { row -> codes.addAll(tokens(row[rule.source], rule)) } }
                     def values = [:]
                     if (!codes.isEmpty()) {
                         def connection = SQL[group[0]].connection
@@ -102,7 +107,7 @@ try {
                 batch.each { row ->
                     rules.each { rule ->
                         def dictionary = rule.query ? dictionaries[[rule.service, rule.query]] : rule.values
-                        def codes = tokens(row[rule.source], rule.separator)
+                        def codes = tokens(row[rule.source], rule)
                         def matched = codes.any { dictionary[it] != null && dictionary[it] != '' }
                         def value = matched ? codes.collect { dictionary[it] == null || dictionary[it] == '' ? it : dictionary[it] }.join(rule.separator) : null
                         if (value == null && rule.onMissing == 'KEEP_SOURCE') value = row[rule.source]

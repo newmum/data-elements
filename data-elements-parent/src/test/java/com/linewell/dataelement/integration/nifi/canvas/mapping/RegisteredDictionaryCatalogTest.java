@@ -13,6 +13,35 @@ import static org.mockito.Mockito.*;
 import static org.mockito.ArgumentMatchers.*;
 
 class RegisteredDictionaryCatalogTest {
+    @Test void generatedMultiValueQueryUsesLabelProjectionAndOneBatchAt20And100Rows()throws Exception {
+        for(int count:List.of(20,100)) {
+            var jdbc=mock(JdbcTemplate.class);var sources=mock(DataSourceConnectionPropertyResolver.class);
+            when(sources.resolveBatch(eq("tenant"),anyCollection(),anyString())).thenReturn(Map.of("db",Map.of("defaultSchema","")));
+            when(jdbc.queryForList(contains("FROM db_table_t"),any(Object[].class))).thenReturn(List.of(Map.of("tid","t","datasource_id","db","table_name","dictionary")));
+            when(jdbc.queryForList(contains("FROM db_table_column_t"),any(Object[].class))).thenReturn(List.of(
+                    Map.of("table_id","t","column_name","code","data_type","VARCHAR"),Map.of("table_id","t","column_name","label","data_type","VARCHAR"),
+                    Map.of("table_id","t","column_name","enabled","data_type","INT")));
+            var spec=new ObjectMapper().createObjectNode().put("version","1.0");
+            var lookup=spec.putArray("mappings").addObject().put("from","codes").put("to","CODES_CN").putObject("lookup")
+                    .put("sql","SELECT label AS CODES_CN FROM dictionary WHERE code = ? AND enabled = 1")
+                    .put("query","SELECT code, label FROM dictionary WHERE code IN (:codes) AND enabled = 1")
+                    .put("resultColumn","CODES_CN").put("multiValue",true).put("multiValueSeparator",",");
+            lookup.putObject("dataSource").put("datasourceId","db");
+            String url="jdbc:h2:mem:registeredMulti"+count+";DB_CLOSE_DELAY=-1";
+            try(var connection=java.sql.DriverManager.getConnection(url);var statement=connection.createStatement()) {
+                statement.execute("CREATE TABLE \"dictionary\"(\"code\" VARCHAR,\"label\" VARCHAR,\"enabled\" INT)");
+                statement.execute("INSERT INTO \"dictionary\" VALUES('A','甲',1),('B','乙',1),('X','禁用值',0)");
+            }
+            try(var tenant=TenantContext.use("tenant");var reader=new com.linewell.dataelement.mapping.jdbc.BatchDictionaryReader(id->java.sql.DriverManager.getConnection(url))) {
+                var compiled=new UnifiedMappingService(new RegisteredDictionaryCatalog(jdbc,sources,mock(DataQualityMapper.class)),new FieldMappingService()).compile(spec);
+                assertEquals("label",compiled.plan().document().path("dictionaryBindings").elements().next().path("valueColumn").asText());
+                var context=new com.linewell.dataelement.mapping.core.ExecutionContext(java.time.Instant.EPOCH,java.time.ZoneId.of("Asia/Shanghai"),Locale.CHINA,"multi");
+                var result=com.linewell.dataelement.mapping.core.MappingEngine.execute(compiled.plan(),Collections.nCopies(count,Map.of("codes","A，X A；B")),0,context,reader);
+                assertEquals(count,result.rows().size());assertTrue(result.rows().stream().allMatch(row->row.success()&&"甲,X,甲,乙".equals(row.output().get("CODES_CN"))));assertEquals(1,reader.queries());
+            }
+            verify(sources,times(1)).resolveBatch(eq("tenant"),eq(Set.of("db")),anyString());verify(jdbc,times(2)).queryForList(anyString(),any(Object[].class));
+        }
+    }
     @Test void legacyUnqualifiedAndCaseFoldedNamesBindToOneAuthoritativeQualifiedRegistration()throws Exception {
         var json=new ObjectMapper();
         for(String query:List.of("SELECT label FROM dict WHERE code = ?","SELECT label FROM app.dict WHERE code = ?")) {

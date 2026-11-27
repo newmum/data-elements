@@ -16,7 +16,7 @@
 .fm-rule-modal .ant-modal-header { margin:0; height:var(--canvas-toolbar-height,56px); padding:0 20px; display:flex; align-items:center; border-bottom:1px solid var(--node-border,#e8ebf0); }
 .fm-rule-modal .ant-modal-title { font-size:16px; line-height:24px; }
 .fm-rule-modal .ant-modal-close { top:12px; right:16px; }
-.fm-rule-modal .ant-modal-body { max-height:calc(100dvh - 176px); overflow:auto; padding:20px; }
+.fm-rule-modal .ant-modal-body { max-height:calc(100vh - 176px); max-height:calc(100dvh - 176px); overflow:auto; padding:20px; }
 .fm-rule-modal .ant-modal-footer { margin:0; padding:12px 20px; border-top:1px solid var(--node-border,#e8ebf0); }
 .fm-rule-main { display:flex; flex-direction:column; gap:24px; }
 .fm-rule-choice { display:flex; flex-direction:column; gap:10px; }
@@ -51,7 +51,7 @@
   .unified-form-grid { grid-template-columns:1fr; }
   .fm-rule-modal { top:12px; max-width:calc(100vw - 24px); padding-bottom:12px; }
   .fm-rule-modal .ant-modal-header,.fm-rule-modal .ant-modal-body,.fm-rule-modal .ant-modal-footer { padding:16px; }
-  .fm-rule-modal .ant-modal-body { max-height:calc(100dvh - 172px); }
+  .fm-rule-modal .ant-modal-body { max-height:calc(100vh - 172px); max-height:calc(100dvh - 172px); }
   .fm-rule-footer { flex-wrap:wrap; }
   .fm-single-editor .fm-topbar-right { margin-left:0; justify-content:flex-start; }
 }
@@ -119,7 +119,7 @@
 .nifi-workspace .ant-modal-confirm .ant-modal-confirm-body { display:block; padding:0 20px 20px; }
 .nifi-workspace .ant-modal-confirm .ant-modal-confirm-body>.anticon { position:absolute; top:20px; left:20px; }
 .nifi-workspace .ant-modal-confirm .ant-modal-confirm-title { display:flex; align-items:center; min-height:var(--canvas-toolbar-height,56px); margin:0 -20px 16px; padding:0 20px 0 52px; border-bottom:1px solid var(--node-border); font-size:16px; }
-.nifi-workspace .ant-modal-confirm .ant-modal-confirm-content { margin-inline-start:0; max-height:calc(100dvh - 200px); overflow:auto; }
+.nifi-workspace .ant-modal-confirm .ant-modal-confirm-content { margin-inline-start:0; max-height:calc(100vh - 200px); max-height:calc(100dvh - 200px); overflow:auto; }
 .nifi-workspace .ant-modal-confirm .ant-modal-confirm-btns { margin-top:0; padding:12px 20px; border-top:1px solid var(--node-border); }
 
 /* Rule selection stays visible while the denser configuration form scrolls independently. */

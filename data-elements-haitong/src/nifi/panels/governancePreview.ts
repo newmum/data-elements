@@ -29,7 +29,7 @@ export function previewValue(value: unknown): string {
   return typeof value === 'object' ? JSON.stringify(value) : String(value);
 }
 export function previewCell(record: Record<string, unknown>, name: string): unknown {
-  return Object.hasOwn(record, name) ? record[name] : undefined;
+  return Object.prototype.hasOwnProperty.call(record, name) ? record[name] : undefined;
 }
 
 export interface PreviewTableRow { key: string; sequence: number; record: Record<string, unknown> }

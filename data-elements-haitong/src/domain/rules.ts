@@ -1,6 +1,8 @@
+import { cloneConfiguration } from '../utils/browserCompat';
+import { reportRandomId } from '../report/core/browserId';
 import type { Bill, Check, DataTable, Difference, FieldMapping, Flow, Row, Task, TaskDefinition, Workspace } from './types';
-export const uid = (prefix = 'id') => `${prefix}-${crypto.randomUUID()}`;
-export const clone = <T,>(x: T): T => structuredClone(x);
+export const uid = (prefix = 'id') => `${prefix}-${reportRandomId()}`;
+export const clone = <T,>(x: T): T => cloneConfiguration(x);
 /** Typed canonical values preserve null, numeric strings and field order. Never parse Int64 through Number. */
 export const canonical = (value: unknown): string => value === undefined ? '["missing"]' : value === null ? '["null"]' : JSON.stringify([typeof value, value]);
 export const rowSignature = (row: Row, fields: string[]) => JSON.stringify(fields.map(f => [f, canonical(row[f])]));

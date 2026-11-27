@@ -1,3 +1,4 @@
+import { cloneConfiguration } from '../utils/browserCompat';
 import { execute, type Action } from '../domain/engine';
 import { createSeed } from '../domain/seed';
 import type { Workspace } from '../domain/types';
@@ -18,7 +19,7 @@ function db():Promise<IDBDatabase>{
 export async function readWorkspace():Promise<Workspace>{
  const d=await db();return new Promise((resolve,reject)=>{const tx=d.transaction(STORE,'readwrite');const req=tx.objectStore(STORE).get(KEY);let state:Workspace;
   req.onsuccess=()=>{state=req.result as Workspace;if(!state){state=createSeed();tx.objectStore(STORE).put(state,KEY);}};
-  tx.oncomplete=()=>resolve(structuredClone(state));tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||new Error('读取事务中止'));});
+  tx.oncomplete=()=>resolve(cloneConfiguration(state));tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||new Error('读取事务中止'));});
 }
 export async function dispatch(action:Action):Promise<Workspace>{
  const d=await db();return new Promise((resolve,reject)=>{const tx=d.transaction(STORE,'readwrite');const req=tx.objectStore(STORE).get(KEY);let state:Workspace;let error:unknown;
@@ -36,7 +37,7 @@ export function validateBackup(data:unknown):asserts data is Workspace {
  const clusterIds=new Set(d.clusters.map(c=>c.id));
  for(const t of d.tasks){if(!t.flow||!Array.isArray(t.flow.nodes)||!Array.isArray(t.flow.edges)||!Array.isArray(t.mappings)||!clusterIds.has(t.clusterId)||!t.schedule)throw new Error('任务结构无效');for(const m of t.mappings)if(!tableIds.has(m.sourceTableId)||!tableIds.has(m.targetTableId)||!Array.isArray(m.fields))throw new Error('任务映射引用无效');}
 }
-export async function restoreWorkspace(raw:unknown){validateBackup(raw);const data=structuredClone(raw);data.tasks.forEach(t=>{t.paused=true;});data.runs.filter(r=>['QUEUED','RUNNING'].includes(r.status)).forEach(r=>{r.status='CANCELLED';r.finishedAt=new Date().toISOString();});data.batches.filter(b=>b.status==='RUNNING').forEach(b=>b.status='CANCELLED');const d=await db();return new Promise<void>((resolve,reject)=>{const tx=d.transaction(STORE,'readwrite');tx.objectStore(STORE).put(data,KEY);tx.oncomplete=()=>{notify();resolve();};tx.onerror=()=>reject(tx.error);});}
+export async function restoreWorkspace(raw:unknown){validateBackup(raw);const data=cloneConfiguration(raw);data.tasks.forEach(t=>{t.paused=true;});data.runs.filter(r=>['QUEUED','RUNNING'].includes(r.status)).forEach(r=>{r.status='CANCELLED';r.finishedAt=new Date().toISOString();});data.batches.filter(b=>b.status==='RUNNING').forEach(b=>b.status='CANCELLED');const d=await db();return new Promise<void>((resolve,reject)=>{const tx=d.transaction(STORE,'readwrite');tx.objectStore(STORE).put(data,KEY);tx.oncomplete=()=>{notify();resolve();};tx.onerror=()=>reject(tx.error);});}
 export function downloadText(name:string,text:string,mime='text/plain;charset=utf-8'){
  const u=URL.createObjectURL(new Blob([text],{type:mime})),a=document.createElement('a');a.href=u;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),2000);
 }

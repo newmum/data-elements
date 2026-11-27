@@ -46,7 +46,7 @@ function readNativePreset(file: string): { defaults: Partial<Spec>; summary: str
   }
   const processors: NativeProcessor[] = flow.processors;
   const connections: NativeEdge[] = flow.connections;
-  const nameOf = (item: NativeProcessor) => item.type?.split('.').at(-1);
+  const nameOf = (item: NativeProcessor) => item.type?.split('.').slice(-1)[0];
   const source = processors.find(item => nameOf(item) === 'GenerateDateTableFetch');
   const hive = processors.find(item => nameOf(item) === 'PutHwHDFS');
   const relational = processors.filter(item => nameOf(item) === 'LinewellPutDatabaseRecord');

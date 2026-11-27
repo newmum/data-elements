@@ -1,3 +1,4 @@
+import { cloneConfiguration } from '../../utils/browserCompat';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, App, Button, Checkbox, Dropdown, Empty, Skeleton, Space, Tooltip, Typography } from 'antd';
 import { AppstoreOutlined, BulbOutlined, CodeOutlined, DeleteOutlined, DownOutlined, EyeOutlined, MoreOutlined, PlusOutlined, SettingOutlined, SwapOutlined, UnorderedListOutlined, UpOutlined } from '@ant-design/icons';
@@ -118,7 +119,7 @@ function FieldMappingEditorContent({value,onChange,columnMeta,datasources=EMPTY_
     return ()=>{active=false;clearTimeout(timer);};
   },[boundDraft,sourceSchema,targetSchema,validationRetry]);
   function update(next:UnifiedMappingDraft,contract=sharedContract){const bound=withFieldNamePolicy(contract?{...next,schemaContract:{...(next.schemaContract as Record<string,unknown>??{}),...contract}}:next);setDraft(bound);onChange(JSON.stringify({...bound,executionEngine:'JAVA_RECORD'},null,2));}
-  function openRule(rule:UnifiedMappingRule){setEditing(structuredClone(rule));}
+  function openRule(rule:UnifiedMappingRule){setEditing(cloneConfiguration(rule));}
   function add(template='DIRECT'){setEditing(createRule(template,nanoid()));}
   function updateRule(rule:UnifiedMappingRule){update({...draft,rules:draft.rules.map(item=>item.ruleId===rule.ruleId?rule:item)});}
   function createMapping(source:string,target:string){const current=draft.rules.find(rule=>identifierMatchKey(rule.target.name)===identifierMatchKey(target));if(current){openRule(current);return;}const rule=createRule('DIRECT',nanoid());rule.input.name=source;const field=targetSchema.find(field=>field.name===target);rule.target={...rule.target,name:target,...(field?{logicalType:logicalFieldType(field),nullable:field.nullable,length:field.length,precision:field.precision,scale:field.scale}:{})};openRule(rule);}

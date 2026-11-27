@@ -42,7 +42,7 @@ export default function MaterializeTableModal({ open, target, databaseLabel, dat
   const [generating, setGenerating] = useState(false);
   const [generationNote, setGenerationNote] = useState('');
   const defaultTargetTableName = (sourceTableName?: string) => {
-    const sourceName = String(sourceTableName ?? '').trim().split('.').at(-1)?.replace(/^[`"\[]|[`"\]]$/g, '') ?? '';
+    const sourceName = String(sourceTableName ?? '').trim().split('.').slice(-1)[0]?.replace(/^[`"\[]|[`"\]]$/g, '') ?? '';
     if (!sourceName) return initialTableName;
     return /^ODS_/i.test(sourceName) ? sourceName : `ODS_${sourceName}`;
   };

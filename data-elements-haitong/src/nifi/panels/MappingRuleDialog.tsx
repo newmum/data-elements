@@ -1,3 +1,4 @@
+import { cloneConfiguration } from '../../utils/browserCompat';
 import { useCallback, useRef, useState } from 'react';
 import { App, AutoComplete, Button, Checkbox, Collapse, ConfigProvider, Input, InputNumber, Modal, Space, Typography } from 'antd';
 import { nanoid } from 'nanoid';
@@ -27,7 +28,7 @@ interface Props {
 /** Both the table configuration link and the toolbar add button use this form. */
 export default function MappingRuleDialog(props:Props) {
   const {modal}=App.useApp();
-  const [rule,setRule]=useState(()=>structuredClone(props.initial));
+  const [rule,setRule]=useState(()=>cloneConfiguration(props.initial));
   const [errors,setErrors]=useState<string[]>([]);
   const [expanded,setExpanded]=useState<string[]>(['steps','advanced']);
   const detailRef=useRef<HTMLDivElement>(null);
